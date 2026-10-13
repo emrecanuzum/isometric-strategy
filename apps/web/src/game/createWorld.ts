@@ -243,13 +243,11 @@ export async function createWorld(
   // The territory lines lie on the ground: buildings and walkers stand over them.
   // Armies stay in sight at every zoom (the caravans' layer hides when zoomed out), their routes on the ground.
   const armyRoutes = new Graphics()
-  const armyLayer = new Container()
-  armyLayer.sortableChildren = true
   const armyLabels = new Container()
   // Trees lifted out of the ground painting to sway, above the ground and below everything that stands on it.
   const treeLayer = new Container()
   treeLayer.sortableChildren = true
-  camera.addChild(ground, treeLayer, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, armyLayer, ambient.sky, cursor, highlight)
+  camera.addChild(ground, treeLayer, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, ambient.sky, cursor, highlight)
   app.stage.addChild(camera)
   // Day and night: the whole map is multiplied by the colour of the light at this hour of the game day. Lit windows
   // and the labels sit above it, in a layer that follows the camera, so night never dims them.
@@ -274,7 +272,8 @@ export async function createWorld(
   }
   const above = new Container()
   above.addChild(halo, glow, plotLabels.dock, plotLabels.trade, rivalLabels, kingdomLabel, armyLabels, floats)
-  const armies = createArmies(world, armyLayer, armyRoutes, armyLabels)
+  // Armies stand in the same layer as buildings and walkers, so a wall or a house in front of an army hides it.
+  const armies = createArmies(world, caravans.layer, armyRoutes, armyLabels)
   app.stage.addChild(light, above)
   for (const inn of world.inns) {
     const lit = lightsOf(innLook(world, inn).sprite)
@@ -347,7 +346,7 @@ export async function createWorld(
     // Zoomed far out, walkers, caravans and animals are left out but the buildings (which share their layer, to hide
     // whoever walks behind them) stay; zoomed back in, each walker's own update shows it again.
     if (scale < CARAVAN_MIN_ZOOM) {
-      for (const child of caravans.layer.children) child.visible = child.label === 'occluder'
+      for (const child of caravans.layer.children) child.visible = child.label === 'occluder' || child.label.startsWith('army')
       return
     }
     const margin = 40
@@ -915,7 +914,7 @@ export async function createWorld(
   function sortWalkers() {
     if (occluders.length === 0) return
     for (const child of caravans.layer.children) {
-      if (!child.visible || child.label === 'occluder') continue
+      if (!child.visible || child.label === 'occluder' || child.label === 'army-ring') continue
       const { x: px, y: py } = child.position
       for (const o of occluders) {
         if (px < o.left || px > o.right || py < o.top || py > o.sy + 2) continue

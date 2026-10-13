@@ -72,10 +72,21 @@ export const standing = (p: Point, at: number, morale: number, familiarity: numb
 
 // Sets the army off from where it is at `at` to `dest`.
 // Armies walk around buildings (`blocked`, from every kingdom of the lobby) and stop beside one rather than on it.
-// `halt`: tiles it stops before (a besieged kingdom's walls).
-export function march(world: LobbyWorld, army: ArmyRow, owner: Kingdom, at: number, dest: Point, goal: ArmyRow['goal'], blocked?: (x: number, y: number) => boolean, halt?: (x: number, y: number) => boolean) {
+// `halt`: tiles it stops before (a besieged kingdom's walls). `standOff`: tiles it may pass but not stop on (its own
+// gates, so it never ends up standing in a gateway); `blocked` when not given.
+export function march(
+  world: LobbyWorld,
+  army: ArmyRow,
+  owner: Kingdom,
+  at: number,
+  dest: Point,
+  goal: ArmyRow['goal'],
+  blocked?: (x: number, y: number) => boolean,
+  halt?: (x: number, y: number) => boolean,
+  standOff?: (x: number, y: number) => boolean,
+) {
   const now = armyNow(army, world, owner, at)
-  const end = game.standingSpot(world.world, dest, blocked) as Point
+  const end = game.standingSpot(world.world, dest, standOff ?? blocked) as Point
   const found = game.findRoute(world.world, now.here, end, blocked) as Point[] | null
   const route = found && halt ? (game.haltBefore(found, halt) as Point[]) : found
   if (!route) return null
@@ -115,8 +126,10 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
     const dest = enemy ? doorOf(enemy.state) ?? target : onPalace ? doorOf(onPalace.state) ?? target : target
     const holdings = kingdoms.map((k) => ({ id: k.id, buildings: k.state?.buildings ?? [] }))
     const blocked = game.buildingBlocker(holdings, army.kingdom_id)
+    // Where it ends up: not in a gateway, even its own.
+    const standOff = game.buildingBlocker(holdings)
     const goal: ArmyRow['goal'] = enemy ? { kind: 'siege', kingdom: enemy.id } : { kind: 'move' }
-    let update = march(world, army, owner, at, dest, goal, blocked)
+    let update = march(world, army, owner, at, dest, goal, blocked, undefined, standOff)
     // A palace behind walls is besieged from outside them: the army marches up to the walls and halts there.
     if (!update && enemy) update = march(world, army, owner, at, dest, goal, game.buildingBlocker(holdings, army.kingdom_id, enemy.id), game.wallsOf(holdings.find((h) => h.id === enemy.id)!))
     if (!update) return 'route'
@@ -126,7 +139,8 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
   if (order.kind === 'home') {
     const door = doorOf(owner)
     if (!door) return 'route'
-    const update = march(world, army, owner, at, door, { kind: 'home' }, game.buildingBlocker(kingdoms.map((k) => ({ id: k.id, buildings: k.state?.buildings ?? [] })), army.kingdom_id))
+    const holdings = kingdoms.map((k) => ({ id: k.id, buildings: k.state?.buildings ?? [] }))
+    const update = march(world, army, owner, at, door, { kind: 'home' }, game.buildingBlocker(holdings, army.kingdom_id), undefined, game.buildingBlocker(holdings))
     if (!update) return 'route'
     await admin.from('armies').update(update).eq('id', army.id)
     return null

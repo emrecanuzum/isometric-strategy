@@ -960,6 +960,11 @@ mertebesindedir.
   hafifçe sallanır. Kapatılınca harita onlarsız yeniden çizilir.
 - Gece yanan pencerelerin çevresinde yumuşak bir **parıltı** vardır (aynı
   ışıklar bulanıklaştırılıp gecenin üstüne eklenir).
+- Ordular binalar, surlar ve yürüyenlerle aynı derinlik sıralamasında
+  çizilir: önlerindeki bina ya da sur onları örter, bir kapının içinden
+  geçerken kemerin altında gizlenirler; uzak yakınlaştırmada da görünürler.
+  Ordular kendi kapılarından geçer ama kapı karesinde durmaz; varış noktası
+  kapıdaysa yanındaki en yakın boş kareye kayar.
 - Ordular 1× ve üstü yakınlaştırmada yürürken adım atar (4 kareli yürüyüş,
   komşu askerler farklı adımda); uzaktayken durağan çizilir.
 - **Ordu sekmesi** sırası: Ordularım (çoğu emir burada verilir), Garnizon,

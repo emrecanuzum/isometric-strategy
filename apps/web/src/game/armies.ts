@@ -183,6 +183,9 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
         const look = squadOf(army.color, 0)
         body.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
         const ring = new Graphics()
+        // Labelled so the layer they share with buildings keeps them at every zoom and sorts them like walkers.
+        body.label = 'army'
+        ring.label = 'army-ring'
         walkers.addChild(ring, body)
         s = { army, body, ring, label: null, cart: null, facing: { x: 1, y: 0 } }
         shown.set(army.id, s)
@@ -190,6 +193,7 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
       s.army = army
       if (army.catapult && !s.cart) {
         s.cart = new PixiSprite(textureOf(CATAPULTS[0]))
+        s.cart.label = 'army'
         s.cart.anchor.set(CATAPULTS[0].anchorX / CATAPULTS[0].width, CATAPULTS[0].anchorY / CATAPULTS[0].height)
         walkers.addChild(s.cart)
       } else if (!army.catapult && s.cart) {
@@ -248,6 +252,10 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
         s.cart.zIndex = at.y
       }
       // Marching feet only when close enough to see them; far out the column stands still.
+      // Shown again each frame: the layer's sorting hides an army while it stands inside a building's footprint (in a
+      // gateway).
+      body.visible = true
+      if (s.cart) s.cart.visible = true
       const look = squadOf(army.color, moving && scale >= 1 ? Math.floor(time / 180) % 4 : 0, army.figures)
       body.texture = textureOf(look)
       body.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
