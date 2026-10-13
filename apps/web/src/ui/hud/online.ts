@@ -16,6 +16,8 @@ export interface KingdomInfo {
   palace: number
   // When its player was last seen (ms; null when unknown).
   seenAt?: number | null
+  // Shielded from sieges until then (taken in one a short while ago).
+  shieldUntil?: number | null
   // Its buildings as seen on the map.
   buildings?: { kind: string; x: number; y: number; size: number; doneAt: number; broken?: boolean }[]
 }

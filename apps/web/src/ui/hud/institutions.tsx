@@ -3,7 +3,7 @@ import {
   RESEARCH_IDS,
   balance,
   battleSpirit,
-  fortuneAt,
+  fortunesAt,
   hospitalHeal,
   levelOf,
   population,
@@ -19,7 +19,7 @@ import {
 } from '@game/shared'
 import type { Building, Kingdom } from '@game/shared'
 import { Icon } from '../icons'
-import { FORTUNE_TEXTS, RESEARCH_NAMES } from '../names'
+import { FORTUNE_TEXTS, RESEARCH_NAMES, SCOPE_NAMES } from '../names'
 import { CostList } from '../panels'
 import { Meter, Section, Stat } from './primitives'
 import type { HudData } from './tabs'
@@ -142,17 +142,22 @@ export function TemplePanel({ data }: { data: HudData }) {
   )
 }
 
-// The fortune of the moment, if any, as a strip on the people's tab.
+// The fortunes of the moment, as strips on the people's tab: whether the whole lobby shares it or it is the kingdom's
+// own.
 export function FortuneNote({ kingdom, now }: { kingdom: Kingdom; now: number }) {
-  const f = fortuneAt(kingdom, now)
-  if (!f) return null
-  const t = FORTUNE_TEXTS[f.kind]
   return (
-    <p className={`fortune-note tone-${t?.tone ?? 'good'}`}>
-      <Icon name={t?.icon ?? 'star'} size={16} />
-      <span>
-        <b>{t?.title}</b> {t?.text} <small>({secs(f.end - now)} kaldı)</small>
-      </span>
-    </p>
+    <>
+      {fortunesAt(kingdom, now).map((f) => {
+        const t = FORTUNE_TEXTS[f.kind]
+        return (
+          <p key={f.scope + f.start} className={`fortune-note tone-${t?.tone ?? 'good'}`}>
+            <Icon name={t?.icon ?? 'star'} size={16} />
+            <span>
+              <small className="scope">{SCOPE_NAMES[f.scope]}</small> <b>{t?.title}</b> {t?.text} <small>({secs(f.end - now)} kaldı)</small>
+            </span>
+          </p>
+        )
+      })}
+    </>
   )
 }

@@ -13,7 +13,7 @@ import {
   isFree,
   buyCost,
   buyError,
-  fortuneAt,
+  fortuneEffects,
   happinessFor,
   isNightAt,
   maxConstructions,
@@ -86,7 +86,7 @@ export function flows(kingdom: Kingdom, now: number, market?: Market | null) {
   const post = kingdom.buildings.find((b) => b.kind === 'tradePost')
   const walledIn = !!post && cutOff(kingdom.buildings, kingdom.site, now).has(post.id)
   const sold = kingdom.trade.good && !walledIn && !kingdom.trade.damaged ? tradeUnits(kingdom) * trips : 0
-  const bonus = 1 + researchEffects(kingdom, now).trade + (fortuneAt(kingdom, now)?.spec.trade ?? 0)
+  const bonus = 1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade
   const tradeGold = kingdom.trade.good ? sold * priceAt(market, kingdom.trade.good, now) * bonus : 0
   const tributesIn = l.tributes.filter((t) => t.gold > 0).reduce((a, t) => a + t.gold, 0)
   const tributesOut = -l.tributes.filter((t) => t.gold < 0).reduce((a, t) => a + t.gold, 0)

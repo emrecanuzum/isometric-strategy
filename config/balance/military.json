@@ -21,7 +21,8 @@
     "breakShare": 0.3
   },
   "siege": {
-    "lootShare": 0.3
+    "lootShare": 0.3,
+    "shieldSeconds": 900
   },
   "morale": {
     "start": 100,

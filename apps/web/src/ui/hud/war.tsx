@@ -27,9 +27,11 @@ export const restOf = (world: World, kingdom: Kingdom, now: number) => (p: Point
 
 const REST_NAMES = { home: 'kendi topraklarında, moral topluyor', inn: 'hanın yanında, hızla moral topluyor', field: 'açık arazide' }
 
-export function armyStatus(army: Army, now: number, rest: ReturnType<typeof restOf>) {
+export function armyStatus(army: Army, now: number, rest: ReturnType<typeof restOf>, shieldOf: (kingdom: number) => number = () => 0) {
   const arrive = Date.parse(army.arrive_at)
   if (army.status === 'battle') return 'Savaşta'
+  // At the gates of a palace still shielded from the last siege: the siege begins when the shield ends.
+  if (army.goal.kind === 'siege' && now >= arrive && shieldOf(army.goal.kingdom) > now) return `Kapıda bekliyor · kuşatmaya ${clock(shieldOf(army.goal.kingdom) - now)}`
   if (now < arrive && army.path.length > 1) {
     const where = army.goal.kind === 'home' ? ('retreat' in army.goal && army.goal.retreat ? 'Geri çekiliyor' : 'Eve dönüyor') : army.goal.kind === 'siege' ? 'Kuşatmaya gidiyor' : 'Yürüyor'
     return `${where} · varış ${clock(arrive - now)}`
@@ -228,7 +230,7 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
         <b>
           {index}. Ordu · {soldiers} savaşçı
         </b>
-        <small>{armyStatus(army, now, rest)}</small>
+        <small>{armyStatus(army, now, rest, (id) => online.kingdoms.find((k) => k.id === id)?.shieldUntil ?? 0)}</small>
         <UnitRow units={army.units ?? { spear: soldiers }} />
         <div className="sign">
           <span>Moral</span>

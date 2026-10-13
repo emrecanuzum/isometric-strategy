@@ -1,4 +1,4 @@
-import { BUILDINGS, RESEARCH, unitSpec } from '@game/shared'
+import { BUILDINGS, RESEARCH, balance, unitSpec } from '@game/shared'
 import type { Kingdom } from '@game/shared'
 import { useRef } from 'react'
 import { Icon } from '../icons'
@@ -46,14 +46,30 @@ function timersOf(kingdom: Kingdom, online: Online | undefined, now: number): Ti
   if ((kingdom.sermonUntil ?? 0) > now - FLASH_MS && kingdom.lastSermonAt) {
     out.push({ key: `s:${kingdom.lastSermonAt}`, icon: 'temple', label: 'Vaaz', start: kingdom.lastSermonAt, end: kingdom.sermonUntil! })
   }
+  if ((kingdom.shieldUntil ?? 0) > now - FLASH_MS) {
+    const span = balance.military.siege.shieldSeconds * 1000
+    out.push({ key: `k:${kingdom.shieldUntil}`, icon: 'shield', label: 'Kuşatma kalkanı', start: kingdom.shieldUntil! - span, end: kingdom.shieldUntil! })
+  }
   if (online) {
     for (const e of online.envoys) {
       if (e.from_id !== online.me || e.status !== 'traveling') continue
       const to = online.kingdoms.find((k) => k.id === e.to_id)?.name ?? 'krallık'
       out.push({ key: `e:${e.id}`, icon: 'scroll', label: `${ENVOY_NAMES[e.kind]} → ${to}`, start: Date.parse(e.sent_at), end: Date.parse(e.arrive_at) })
     }
+    // Envoys riding to the player's armies with orders.
+    const ORDER_NAMES = { move: 'yürü', home: 'eve dön', split: 'bölün', merge: 'birleş' } as const
+    for (const o of online.orders) {
+      if (o.applied_at || !online.armies.some((a) => a.id === o.army_id && a.kingdom_id === online.me)) continue
+      out.push({ key: `o:${o.id}`, icon: 'scroll', label: `Elçi orduya: ${ORDER_NAMES[o.payload.kind] ?? 'emir'}`, start: Date.parse(o.issued_at), end: Date.parse(o.effective_at) })
+    }
     for (const a of online.armies) {
       if (a.kingdom_id !== online.me || a.status !== 'moving') continue
+      // Waiting at the gates of a shielded palace.
+      const shield = a.goal.kind === 'siege' ? (online.kingdoms.find((k) => k.id === (a.goal as { kingdom: number }).kingdom)?.shieldUntil ?? 0) : 0
+      if (shield > now && Date.parse(a.arrive_at) <= now) {
+        out.push({ key: `w:${a.id}:${shield}`, icon: 'crown', label: 'Kuşatma bekliyor', start: shield - balance.military.siege.shieldSeconds * 1000, end: shield })
+        continue
+      }
       out.push({
         key: `a:${a.id}:${a.arrive_at}`,
         icon: 'swords',

@@ -155,66 +155,128 @@
     }
   },
   "events": {
-    "windowSeconds": 900,
-    "chance": 0.6,
-    "minSeconds": 480,
-    "maxSeconds": 840,
-    "kinds": {
-      "drought": {
-        "weight": 3,
-        "output": {
-          "food": -0.3
+    "lobby": {
+      "windowSeconds": 900,
+      "chance": 0.55,
+      "minSeconds": 480,
+      "maxSeconds": 840,
+      "kinds": {
+        "drought": {
+          "weight": 3,
+          "time": "day",
+          "output": {
+            "food": -0.3
+          }
+        },
+        "rain": {
+          "weight": 3,
+          "output": {
+            "food": 0.25
+          }
+        },
+        "coldSnap": {
+          "weight": 3,
+          "time": "night",
+          "sickSpread": 2,
+          "work": -0.1
+        },
+        "storm": {
+          "weight": 2,
+          "output": {
+            "materials": -0.2
+          },
+          "trade": -0.25
+        },
+        "fog": {
+          "weight": 2,
+          "trade": -0.35
+        },
+        "flood": {
+          "weight": 1,
+          "output": {
+            "food": -0.25,
+            "materials": -0.1
+          }
+        },
+        "bountifulSeason": {
+          "weight": 2,
+          "output": {
+            "food": 0.35,
+            "materials": 0.1
+          }
+        },
+        "caravanSeason": {
+          "weight": 2,
+          "trade": 0.3
+        },
+        "comet": {
+          "weight": 1,
+          "happiness": -10
+        },
+        "fullMoon": {
+          "weight": 2,
+          "time": "night",
+          "happiness": 8,
+          "templeHappiness": 4
+        },
+        "epidemic": {
+          "weight": 1,
+          "sicken": 0.1
+        },
+        "goldRush": {
+          "weight": 1,
+          "output": {
+            "arms": 0.3
+          },
+          "gold": 30
         }
-      },
-      "rain": {
-        "weight": 3,
-        "output": {
-          "food": 0.25
+      }
+    },
+    "kingdom": {
+      "windowSeconds": 900,
+      "chance": 0.4,
+      "minSeconds": 480,
+      "maxSeconds": 840,
+      "kinds": {
+        "plague": {
+          "weight": 2,
+          "sicken": 0.15
+        },
+        "festival": {
+          "weight": 2,
+          "happiness": 12
+        },
+        "forestFire": {
+          "weight": 2,
+          "output": {
+            "materials": -0.3
+          }
+        },
+        "oreVein": {
+          "weight": 2,
+          "output": {
+            "arms": 0.4
+          }
+        },
+        "merchants": {
+          "weight": 2,
+          "trade": 0.3
+        },
+        "granaryFire": {
+          "weight": 1,
+          "lose": {
+            "food": 0.1
+          }
+        },
+        "treasure": {
+          "weight": 1,
+          "gold": 60
+        },
+        "pilgrims": {
+          "weight": 2,
+          "happiness": 6,
+          "templeHappiness": 6
         }
-      },
-      "plague": {
-        "weight": 2,
-        "sicken": 0.15
-      },
-      "festival": {
-        "weight": 2,
-        "happiness": 12
-      },
-      "forestFire": {
-        "weight": 2,
-        "output": {
-          "materials": -0.3
-        }
-      },
-      "oreVein": {
-        "weight": 2,
-        "output": {
-          "arms": 0.4
-        }
-      },
-      "merchants": {
-        "weight": 2,
-        "trade": 0.3
-      },
-      "granaryFire": {
-        "weight": 1,
-        "lose": {
-          "food": 0.1
-        }
-      },
-      "treasure": {
-        "weight": 1,
-        "gold": 60
-      },
-      "coldSnap": {
-        "weight": 2,
-        "sickSpread": 2,
-        "work": -0.1
-      },
-      "pilgrims": {
-        "weight": 2,
-        "happiness": 6,
-        "templeHappiness": 6
       }
     }
   }

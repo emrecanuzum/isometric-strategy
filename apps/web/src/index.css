@@ -531,17 +531,27 @@ small {
   z-index: 4;
 }
 
+/* Back to the main menu, beside the settings. */
+.exit {
+  position: fixed;
+  top: var(--gap);
+  right: calc(var(--gap) + var(--icon-chip, 44px + var(--px) * 4) + var(--px) * 4);
+  z-index: 4;
+}
+
 /* The music switch is a one-chip bar of its own, the height of the store bar and in the same frame. */
-.btn.music {
+.btn.music,
+.btn.exit {
   --face: var(--panel);
   --hi: var(--panel-hi);
   --lo: var(--panel-lo);
-  width: calc(44px + var(--px) * 4);
+  width: var(--icon-chip, calc(44px + var(--px) * 4));
   height: calc(44px + var(--px) * 4);
   box-shadow: var(--bevel), var(--outline), 0 calc(var(--px) * 3) 0 0 rgb(0 0 0 / 35%);
 }
 
-.btn.music:hover:not(:disabled) {
+.btn.music:hover:not(:disabled),
+.btn.exit:hover:not(:disabled) {
   --face: var(--panel-2);
 }
 
@@ -776,8 +786,8 @@ small {
   padding: 0 calc(var(--px) * 3);
   background: var(--panel-lo);
   color: var(--muted);
-  font-size: 13px;
-  line-height: 22px;
+  font-size: 14px;
+  line-height: 24px;
 }
 
 .chip.locked {
@@ -1545,6 +1555,7 @@ small {
 
 .sign small {
   color: var(--muted);
+  font-size: 14px;
 }
 
 /* ---- Günlük: dispatches on parchment ---- */
@@ -2278,8 +2289,13 @@ small {
     bottom: calc(var(--gap) + 76px);
   }
 
-  .btn.music {
-    width: calc(40px + var(--px) * 4);
+  .btn.music,
+  .btn.exit {
+    --icon-chip: calc(40px + var(--px) * 4);
+  }
+
+  .btn.exit {
+    right: calc(var(--gap) + var(--icon-chip) + var(--px) * 4);
   }
 
   .sheet {
@@ -2502,7 +2518,7 @@ small {
 }
 
 .battle-view {
-  width: min(560px, calc(100vw - var(--gap) * 2));
+  width: min(640px, calc(100vw - var(--gap) * 2));
 }
 
 .battle-sides {
@@ -2523,6 +2539,17 @@ small {
   color: var(--muted);
 }
 
+/* Numbers in the battle view are read at a glance: nothing smaller than 15px. */
+.battle-view small,
+.battle-view .chip,
+.battle-view .sign small {
+  font-size: 15px;
+}
+
+.battle-view .dice small {
+  line-height: 1.5;
+}
+
 .battle-side .sign {
   grid-template-columns: 6ch auto 1fr;
 }
@@ -2536,8 +2563,9 @@ small {
 .die-face {
   display: inline-grid;
   place-items: center;
-  min-width: 22px;
-  height: 22px;
+  min-width: 30px;
+  height: 30px;
+  font-size: 20px;
   padding: 0 var(--px);
   background: var(--parch-hi);
   color: var(--ink);
@@ -2551,7 +2579,8 @@ small {
   padding: calc(var(--px) * 2) calc(var(--px) * 6);
   overflow: hidden auto;
   background: var(--slot);
-  font-size: 13px;
+  font-size: 15px;
+  line-height: 1.7;
   list-style: none;
   touch-action: pan-y;
 }
@@ -2955,4 +2984,13 @@ kbd {
   color: var(--gold);
   background: var(--panel-2);
   box-shadow: var(--bevel), var(--outline);
+}
+
+/* Whose event it is: the whole lobby's or the kingdom's own. */
+.fortune-note .scope {
+  display: inline-block;
+  padding: 0 calc(var(--px) * 2);
+  background: var(--panel-2);
+  color: var(--gold);
+  font-size: 13px;
 }

@@ -142,6 +142,8 @@ async function moveArmies(lobby: string, world: LobbyWorld, rows: Row[], pacts: 
     for (const l of live) {
       const a = l.army
       if (l.engaged || a.goal.kind !== 'siege' || ms(a.arrive_at) > t) continue
+      // A palace taken a short while ago is shielded: the army waits at its gates until the shield ends.
+      if ((states.get(a.goal.kingdom!)?.shieldUntil ?? 0) > t) continue
       if (game.atWar(pacts, a.kingdom_id, a.goal.kingdom)) await startBattle(lobby, world, rows, states, pacts, live, t, l, null, a.goal.kingdom!)
       else {
         await admin.from('armies').update({ goal: { kind: 'move' }, status: 'idle' }).eq('id', a.id)
@@ -355,7 +357,8 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
       const breakShare = Math.min(1, m.wall.breakShare + catapults * m.catapult.breakPerCatapult)
       let breaking = Math.ceil(k.buildings.filter((b: { kind: string; broken?: boolean }) => b.kind === 'wall' && !b.broken).length * breakShare)
       const buildings = k.buildings.map((b: { kind: string; broken?: boolean }) => (b.kind === 'wall' && !b.broken && breaking-- > 0 ? { ...b, broken: true } : b))
-      return { ...k, stock, buildings, happiness: Math.max(0, (k.happiness ?? 60) + game.balance.society.happiness.looted) }
+      // The shield against the next siege.
+      return { ...k, stock, buildings, happiness: Math.max(0, (k.happiness ?? 60) + game.balance.society.happiness.looted), shieldUntil: at + m.siege.shieldSeconds * 1000 }
     })
     const taker = battle.attackers[0].kingdom
     await mutateKingdom(taker, at, (k) => {

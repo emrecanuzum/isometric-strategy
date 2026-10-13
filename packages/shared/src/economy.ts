@@ -5,8 +5,8 @@ import type { Market } from './market'
 import { happinessStep, happinessTarget, isNightAt, popCapFor, recruitTerms, taxSpec } from './society'
 import { addUnits, countOf, garrisonOf, unitSpec } from './units'
 import { cutOff } from './walls'
-import { fortuneAt, fortuneBegun, hasResearch, hospitalHeal, levelOf, researchEffects, sermonTaxFactor, templeHappiness } from './institutions'
-import type { FortuneKind } from './institutions'
+import { fortuneEffects, fortunesBegun, hasResearch, hospitalHeal, levelOf, researchEffects, sermonTaxFactor, templeHappiness } from './institutions'
+import type { FortuneKind, FortuneScope } from './institutions'
 import type { Unit, Units } from './units'
 import type { TaxLevel } from './society'
 import { TileRule, findPlot, territoryRect, tileRule } from './territory'
@@ -194,6 +194,10 @@ export interface Kingdom {
   lastSermonAt?: number
   // When the player last gave a command or had the game open (an absent ruler's lands give less, see idleFactor).
   lastSeenAt?: number
+  // The lobby's number, which seeds the fortunes the whole lobby shares (set by the server; institutions.ts).
+  lobbyKey?: number
+  // Taken in a siege: no army may lay siege to the palace again until then (CLAUDE.md §8.3).
+  shieldUntil?: number
 }
 
 export type EconomyEvent =
@@ -203,7 +207,7 @@ export type EconomyEvent =
   | { kind: 'trained'; count: number }
   | { kind: 'spy' }
   | { kind: 'researched'; id: string }
-  | { kind: 'fortune'; fortune: FortuneKind; until: number; lost?: Partial<Stock>; gold?: number }
+  | { kind: 'fortune'; fortune: FortuneKind; scope: FortuneScope; until: number; lost?: Partial<Stock>; gold?: number }
 
 const tripMs = () => balance.economy.trade.tripSeconds * 1000
 const productionMs = () => balance.economy.productionSeconds * 1000
@@ -393,7 +397,7 @@ export function workRate(kingdom: Kingdom, at: number) {
   const n = balance.society.night
   const night = isNightAt(at) && !kingdom.nightShift ? n.workRate : 1
   const revolt = (kingdom.revoltUntil ?? 0) > at ? balance.espionage.operations.revolt.workRate : 1
-  const fortune = 1 + (fortuneAt(kingdom, at)?.spec.work ?? 0)
+  const fortune = 1 + fortuneEffects(kingdom, at).work
   return night * (1 - (kingdom.fatigue ?? 0)) * revolt * fortune
 }
 
@@ -445,7 +449,7 @@ export function buildingOutput(kingdom: Kingdom, b: Building, at: number) {
   // The land's yield and the fortunes of the day only touch raw goods; worked goods depend on the hands alone.
   const raw = isGood(product.makes) && !product.uses
   const land = raw ? kingdom.yields[product.makes as Good] : 1
-  const fortune = raw ? 1 + (fortuneAt(kingdom, at)?.spec.output?.[product.makes as Good] ?? 0) : 1
+  const fortune = raw ? Math.max(0, 1 + (fortuneEffects(kingdom, at).output[product.makes as Good] ?? 0)) : 1
   const learnt = 1 + (researchEffects(kingdom, at).output[b.kind] ?? 0)
   return {
     makes: product.makes,
@@ -745,8 +749,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
     if (next === k.nextProductionAt) {
       // A fortune that befell the kingdom since the last round: what it does at once.
       if (k.buildings.some((b) => b.kind === 'palace')) {
-        const begun = fortuneBegun(k, next - productionMs(), next)
-        if (begun) {
+        for (const begun of fortunesBegun(k, next - productionMs(), next)) {
           const lost: Partial<Stock> = {}
           for (const [g, share] of Object.entries(begun.spec.lose ?? {})) {
             lost[g as Good] = Math.floor(k.stock[g as Good] * (share ?? 0))
@@ -754,7 +757,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
           }
           if (begun.spec.gold) k.stock.gold += begun.spec.gold
           if (begun.spec.sicken) k.sickness = Math.min(balance.institutions.sickness.max, (k.sickness ?? 0) + begun.spec.sicken)
-          events.push({ kind: 'fortune', fortune: begun.kind, until: begun.end, ...(Object.keys(lost).length > 0 && { lost }), ...(begun.spec.gold && { gold: begun.spec.gold }) })
+          events.push({ kind: 'fortune', fortune: begun.kind, scope: begun.scope, until: begun.end, ...(Object.keys(lost).length > 0 && { lost }), ...(begun.spec.gold && { gold: begun.spec.gold }) })
         }
       }
       const { delta, weapons } = roundOutcome(k, next)
@@ -789,7 +792,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       const walledIn = !!post && cutOff(k.buildings, k.site, next).has(post.id)
       const damaged = !!k.trade.damaged
       const sold = walledIn || damaged ? 0 : Math.min(tradeUnits(k), Math.floor(k.stock[good]))
-      const fortune = fortuneAt(k, next)?.spec.trade ?? 0
+      const fortune = fortuneEffects(k, next).trade
       const gold = Math.round(sold * priceAt(market, good, next) * (1 + researchEffects(k, next).trade + fortune) * idleFactor(k, next))
       soldTotal[good] = (soldTotal[good] ?? 0) + sold
       k.stock[good] -= sold
@@ -806,7 +809,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
 
 // Where the people's mood is heading at `at`.
 export function happinessFor(k: Kingdom, at: number) {
-  const fortune = fortuneAt(k, at)?.spec
+  const fortune = fortuneEffects(k, at)
   const templeLevel = levelOf(k, 'temple', at)
   return happinessTarget(k.tax, !!k.queen, k.stock.food <= 0, {
     nightShift: k.nightShift,
@@ -816,8 +819,8 @@ export function happinessFor(k: Kingdom, at: number) {
     extra:
       templeHappiness(k, at) +
       (k.sickness ?? 0) * balance.institutions.sickness.happinessPerShare +
-      (fortune?.happiness ?? 0) +
-      (templeLevel > 0 ? (fortune?.templeHappiness ?? 0) : 0),
+      fortune.happiness +
+      (templeLevel > 0 ? fortune.templeHappiness : 0),
   })
 }
 
@@ -827,7 +830,7 @@ export function sicknessStep(k: Kingdom, at: number) {
   const s = balance.institutions.sickness
   const share = k.sickness ?? 0
   const learnt = researchEffects(k, at)
-  const spread = fortuneAt(k, at)?.spec.sickSpread ?? 1
+  const spread = fortuneEffects(k, at).sickSpread
   const falling = (s.perRound + s.spread * share) * (1 - share) * (k.stock.food <= 0 ? s.starvingFactor : 1) * spread * learnt.sickness
   const hospital = k.buildings.find((b) => b.kind === 'hospital')
   const crew = hospital && done(hospital, at) ? (workerSlots(hospital) === 0 ? 1 : staffOf(hospital) / workerSlots(hospital)) * population(k, at).efficiency : 0

@@ -289,7 +289,7 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       refuse('unknown')
   }
   // Any command of a founded kingdom marks its ruler as present.
-  if (next?.state) next = { ...next, state: { ...next.state, lastSeenAt: now } }
+  if (next?.state) next = { ...next, state: { ...next.state, lastSeenAt: now, lobbyKey: game.lobbyKeyOf(lobby) } }
 
   const { data, error } = await admin
     .from('kingdoms')

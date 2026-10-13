@@ -59,7 +59,7 @@ import { Chat } from './ui/Chat'
 import { findPath } from './game/town'
 import type { Errand } from './game/town'
 import { Icon } from './ui/icons'
-import { BUILDING_NAMES, FORTUNE_TEXTS, RESOURCE_NAMES } from './ui/names'
+import { BUILDING_NAMES, FORTUNE_TEXTS, RESOURCE_NAMES, SCOPE_NAMES } from './ui/names'
 import { Dock, Sheet, TopBar, useTabKeys } from './ui/hud/Hud'
 import type { TabId } from './ui/hud/Hud'
 import { useJournal } from './ui/hud/journal'
@@ -139,11 +139,14 @@ function FortuneDialog({ event, now, onClose }: { event: FortuneEvent; now: numb
         <header className="sheet-head">
           <Icon name={f?.icon ?? 'star'} size={32} />
           <div>
-            <small>{tone === 'good' ? 'Hayırlı bir haber' : 'Kötü bir haber'}</small>
+            <small>
+              {tone === 'good' ? 'Hayırlı bir haber' : 'Kötü bir haber'} · {SCOPE_NAMES[event.scope ?? 'kingdom']}
+            </small>
             <h2 id="fortune-title">{f?.title ?? 'Beklenmedik bir olay'}</h2>
           </div>
         </header>
         <p>{f?.text}</p>
+        <p className="hint">{event.scope === 'lobby' ? 'Bu olay lobideki bütün krallıkları etkiliyor.' : 'Bu olay yalnızca senin krallığını etkiliyor.'}</p>
         {extra.length > 0 && <p className={tone === 'good' ? 'up' : 'down'}>{extra.join(' · ')}</p>}
         <p className="hint">Yaklaşık {Math.max(1, Math.round((event.until - now) / 60_000))} dakika sürecek.</p>
         <div className="row spread">
@@ -808,9 +811,9 @@ function App({
   const kingdoms: KingdomInfo[] = useMemo(
     () => [
       ...(kingdom
-        ? [{ id: mine.id, name: kingdom.name ?? 'Krallığın', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings) }]
+        ? [{ id: mine.id, name: kingdom.name ?? 'Krallığın', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null }]
         : []),
-      ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings })),
+      ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings, shieldUntil: r.shield_until })),
     ],
     // Palace levels only change with the buildings.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -922,6 +925,9 @@ function App({
       <div className="top">
         {kingdom && <TopBar kingdom={kingdom} now={now} seasonStart={seasonStart} history={journal.history} onOpen={setPanel} />}
       </div>
+      <button className="btn icon-only exit frame" onClick={onExit} title="Ana menüye dön" aria-label="Ana menüye dön">
+        <Icon name="home" size={16} />
+      </button>
       <button className="btn icon-only music frame" onClick={() => setSettingsOpen(true)} title="Ayarlar" aria-label="Ayarlar">
         <Icon name="gear" size={16} />
       </button>

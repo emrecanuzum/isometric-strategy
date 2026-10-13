@@ -2,7 +2,7 @@ import { gameTime } from '@game/shared'
 import type { EconomyEvent, Good, Kingdom, Resource, Stock } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { IconName } from '../icons'
-import { BUILDING_NAMES, FORTUNE_TEXTS, RESEARCH_NAMES, RESOURCE_NAMES } from '../names'
+import { BUILDING_NAMES, FORTUNE_TEXTS, RESEARCH_NAMES, RESOURCE_NAMES, SCOPE_NAMES } from '../names'
 
 // The envoy's journal: what happened in the kingdom, told as short dispatches. Single events (a building done, the
 // merchant coming back empty) are written at once; everything else is gathered into one report per day.
@@ -100,7 +100,7 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
       j = write(j, seasonStart, at, {
         tone: 'fortune',
         icon: f?.icon ?? 'star',
-        title: f?.title ?? 'Beklenmedik bir olay',
+        title: `${f?.title ?? 'Beklenmedik bir olay'} · ${SCOPE_NAMES[event.scope ?? 'kingdom']}`,
         text: [f?.text, ...extra, `Yaklaşık ${minutes} dk sürecek.`].filter(Boolean).join(' '),
       })
     } else if (event.kind === 'spy') {

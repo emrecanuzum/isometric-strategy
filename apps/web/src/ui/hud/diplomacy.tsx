@@ -297,6 +297,11 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
       </div>
       <Section title="Seninle ilişkisi" icon="banner">
         <RelationBar value={relation} />
+        {(target.shieldUntil ?? 0) > now && (
+          <p className="hint">
+            <Icon name="shield" size={16} /> Yakın zamanda kuşatıldı: sonraki kuşatmaya {Math.ceil(((target.shieldUntil ?? 0) - now) / 60000)} dk var.
+          </p>
+        )}
         {warPact && (
           <div className="sign">
             <span>Savaş puanı</span>

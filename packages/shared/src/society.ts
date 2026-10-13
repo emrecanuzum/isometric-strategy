@@ -18,6 +18,15 @@ export function isNightAt(at: number) {
   return hour >= startHour || hour < endHour
 }
 
+// When the current part of the day (night or day) ends after `at`.
+export function phaseEndsAt(at: number) {
+  const { startHour, endHour } = balance.society.night
+  const hour = gameTime(at, 0).hour
+  let dh = (isNightAt(at) ? endHour : startHour) - hour
+  if (dh <= 0) dh += 24
+  return at + (dh / 24) * balance.time.gameDayMs
+}
+
 // What weighs on the people besides the tax: a night shift, a kidnapped queen, an incited revolt.
 export interface Moods {
   nightShift?: boolean

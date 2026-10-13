@@ -114,10 +114,22 @@ export const RESEARCH_NAMES: Record<string, { name: string; note: string; icon: 
   commerce: { name: 'Ticaret hukuku', note: 'Tüccar %25 daha çok altın getirir', icon: 'trade' },
 }
 
+// Whether a fortune falls on the whole lobby or on the player's kingdom alone.
+export const SCOPE_NAMES = { lobby: 'Lobi geneli', kingdom: 'Krallığına özel' } as const
+
 // Fortunes: random events and what they do (institutions.json events).
 export const FORTUNE_TEXTS: Record<string, { title: string; text: string; tone: 'good' | 'bad'; icon: IconName }> = {
-  drought: { title: 'Kavurucu güneş', text: 'Bugün güneş yakıyor; mahsul ve balık %30 az.', tone: 'bad', icon: 'sun' },
+  drought: { title: 'Kavurucu güneş', text: 'Güneş bütün diyarı yakıyor; mahsul ve balık %30 az.', tone: 'bad', icon: 'sun' },
   rain: { title: 'Bereketli yağmur', text: 'Yağmur toprağı doyurdu; yemek üretimi %25 fazla.', tone: 'good', icon: 'food' },
+  storm: { title: 'Fırtına', text: 'Şiddetli fırtına; yapı malzemesi %20, ticaret geliri %25 az.', tone: 'bad', icon: 'warn' },
+  fog: { title: 'Yoğun sis', text: 'Sis yolları kapladı; tüccarlar yolunu şaşırıyor, ticaret geliri %35 az.', tone: 'bad', icon: 'moon' },
+  flood: { title: 'Sel', text: 'Nehirler taştı; yemek %25, yapı malzemesi %10 az.', tone: 'bad', icon: 'warn' },
+  bountifulSeason: { title: 'Bereket mevsimi', text: 'Toprak cömert; yemek %35, yapı malzemesi %10 fazla.', tone: 'good', icon: 'food' },
+  caravanSeason: { title: 'Kervan mevsimi', text: 'Yollar kervanlarla dolu; ticaret geliri %30 fazla.', tone: 'good', icon: 'trade' },
+  comet: { title: 'Kuyruklu yıldız', text: 'Gökte bir kuyruklu yıldız; halk bunu uğursuzluğa yoruyor (mutluluk −10).', tone: 'bad', icon: 'star' },
+  fullMoon: { title: 'Dolunay şenliği', text: 'Dolunayda halk sokaklarda; mutluluk artıyor (tapınak varsa daha çok).', tone: 'good', icon: 'moon' },
+  epidemic: { title: 'Salgın her yerde', text: 'Bir hastalık bütün diyara yayıldı; halkın bir kısmı hastalandı.', tone: 'bad', icon: 'heal' },
+  goldRush: { title: 'Altına hücum', text: 'Dağlarda altın bulundu; savaş malzemesi %30 fazla, hazineye küçük bir pay.', tone: 'good', icon: 'gold' },
   plague: { title: 'Salgın baş gösterdi', text: 'Halkın bir kısmı hastalandı. Hastane iyileşmeyi hızlandırır.', tone: 'bad', icon: 'heal' },
   festival: { title: 'Halk şenliği', text: 'Meydanda şenlik var; halkın keyfi yerinde.', tone: 'good', icon: 'happy' },
   forestFire: { title: 'Orman yangını', text: 'Ormanlar yanıyor; yapı malzemesi üretimi %30 az.', tone: 'bad', icon: 'warn' },

@@ -475,7 +475,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   üretmez. Her seviye daha çok üretir / daha çok köylü barındırır ve daha
   çok işçi alabilir; her seviyenin **kendi görseli** vardır.
 - **Sayaçlar:** Süren her iş (inşaat ve yükseltme, araştırma, asker
-  eğitimi, vaaz, yoldaki elçi ve ordular) sol altta menünün üstünde kalan
+  eğitimi, vaaz, yoldaki elçi ve ordular, orduya emir götüren elçi,
+  kuşatma kalkanı ve kalkan bekleyen ordu) sol altta menünün üstünde kalan
   süre ve ilerleme çubuğuyla listelenir; biten iş birkaç saniye yeşil yanıp
   söner. Sohbet düğmesinin (açıkken sohbetin) üstünde durur; bir sekme ya
   da bina menüsü açıkken gizlenir.
@@ -871,7 +872,10 @@ mertebesindedir.
   **gözcü kuleleri** (menziline giren düşmana hasar verir, yoldan
   geçenlere de) ve **surlar** (savunmayı güçlendirir, kuşatmada hasar alır,
   yıkılan sur onarılmalıdır) savunur. Kazanan saldıran depolardan yağma
-  alır.
+  alır. Düşen saray **15 dakika kuşatma kalkanı** kazanır: bu sürede kapıya
+  varan ordu savaşmadan bekler, kalkan bitince kuşatma kendiliğinden
+  başlar. Kalan süre Krallıklar sekmesinde, ordu kartında ve sayaçlarda
+  görünür.
 - **Gözcü kuleleri muharebede:** Bir muharebenin yakınındaki (8 karo) kuleler
   sahiplerinin tarafına zar bonusu verir ve her tur birkaç düşman vurur;
   meydan muharebesinde iki taraf için de geçerlidir. Garnizonu boş saray
@@ -919,16 +923,21 @@ krallıkta birer tane olur ve 3 seviyelidir.
 - **Tapınak:** Mutluluk hedefini yükseltir; askerler **iman gücüyle** zara
   bonus ekler (seviyeyle artar). **Vaaz:** altınla, bekleme süresiyle;
   bir süre verginin mutluluğa olumsuz etkisi azalır ("vergiler iyidir").
-- **Günün olayları:** Her krallığın başına ara sıra (15 dakikalık
-  pencerelerde, ~%60 şansla) 8–14 dakika süren bir olay gelir. Olay
-  başlayınca ekranda bir pencere açılır (iyi olaylar yeşil, kötüler kırmızı
-  kenarlı): kavurucu
-  güneş (yemek −%30), bereketli yağmur, salgın (bir anda hastalık), halk
-  şenliği, orman yangını, maden damarı, gezgin tüccarlar, ambar yangını,
-  define, soğuk dalgası, hacılar. Olay krallıktan ve zamandan
-  deterministik hesaplanır (saklanmaz; sunucu ve istemci aynı olayı
-  görür); anlık etkileri (kayıp, define, salgın) başladığı üretim turunda
-  bir kez uygulanır.
+- **Günün olayları:** İki ayrı kanal vardır, her biri 15 dakikalık
+  pencerelerde en fazla bir olay, 8–14 dakika sürer:
+  - **Lobi geneli** (%55): hava ve dünya olayları lobideki herkese aynı
+    anda gelir (lobi tohumundan): kavurucu güneş (yalnız gündüz), yağmur,
+    soğuk dalgası (yalnız gece), fırtına, yoğun sis, sel, bereket mevsimi,
+    kervan mevsimi, kuyruklu yıldız, dolunay şenliği (yalnız gece), salgın,
+    altına hücum.
+  - **Krallığa özel** (%40): salgın, halk şenliği, orman yangını, maden
+    damarı, gezgin tüccarlar, ambar yangını, define, hacılar.
+  Gündüz/gece olayları o vakit başlar ve en geç o vakit bitince biter.
+  Olay başlayınca açılan pencere, günlük ve Halk sekmesindeki şerit olayın
+  **lobi geneli mi krallığa özel mi** olduğunu yazar. Olaylar saklanmaz;
+  zamandan ve tohumdan hesaplanır (lobi tohumu sunucunun krallığa yazdığı
+  `lobbyKey`), anlık etkileri (kayıp, define, salgın) başladığı üretim
+  turunda bir kez uygulanır.
 - **Günlük:** Olaylar ayrı (mor) kâğıtta, elçinin diğer krallıklardan
   getirdiği haberler (savaş, teklif, casus…) ayrı (mühürlü) kâğıtta yazılır.
 
@@ -956,6 +965,8 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   içinden Krallık sekmesindeki "Ana menü" ile dönülür. Lobi silinirse
   içindeki oyuncular kendiliğinden ana menüye döner (yayın + dakikalık
   yoklama).
+- Harita ekranının sağ üstünde, ayarların yanında **ana menüye dön**
+  düğmesi (ev ikonu) vardır.
 - **Ayarlar ve ses:** Harita ekranının köşesindeki dişli **Ayarlar**
   penceresini açar: müzik ve **ses efektleri** ayrı ayrı açılıp kapanır,
   sesleri yüzde olarak ayarlanır (profilde saklanır). Efektler tarayıcıda

@@ -37,6 +37,8 @@ export interface Rival {
   seen_at: number | null
   // Its trade post was wrecked by raiders and not yet repaired.
   trade_damaged?: boolean
+  // Shielded from sieges until then (ms; null when not).
+  shield_until?: number | null
 }
 
 export interface ChatMessage {

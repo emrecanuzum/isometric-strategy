@@ -1,5 +1,6 @@
 import { balance } from './balance'
 import type { Cost, Good, Kingdom } from './economy'
+import { isNightAt, phaseEndsAt } from './society'
 
 // The university, the hospital and the temple, and the fortunes that come and go (CLAUDE.md §9.8). Pure helpers on a
 // kingdom's state; `advance` (economy.ts) applies them every production round.
@@ -96,19 +97,27 @@ export interface FortuneSpec {
   sicken?: number
   lose?: Partial<Record<Good, number>>
   gold?: number
+  // Only by day (scorching sun) or by night (a freezing cold): it begins then and ends with it at the latest.
+  time?: 'day' | 'night'
 }
 
-export const FORTUNES = I.events.kinds as Record<string, FortuneSpec>
-export type FortuneKind = keyof typeof I.events.kinds
+// Two kinds of fortune (CLAUDE.md §9.8): weather and the world's events fall on the whole lobby at once (seeded by
+// the lobby), the rest on one kingdom alone (seeded by the kingdom). Each has its own windows, at most one per window.
+export type FortuneScope = 'lobby' | 'kingdom'
+const TRACKS = I.events as Record<FortuneScope, { windowSeconds: number; chance: number; minSeconds: number; maxSeconds: number; kinds: Record<string, FortuneSpec> }>
+
+export const FORTUNES: Record<string, FortuneSpec> = { ...TRACKS.lobby.kinds, ...TRACKS.kingdom.kinds }
+export type FortuneKind = keyof typeof I.events.lobby.kinds | keyof typeof I.events.kingdom.kinds
 
 export interface Fortune {
   kind: FortuneKind
+  scope: FortuneScope
   start: number
   end: number
   spec: FortuneSpec
 }
 
-const windowMs = () => I.events.windowSeconds * 1000
+type Seeded = Pick<Kingdom, 'site' | 'foundedAt' | 'lobbyKey'>
 
 function hash(...values: number[]) {
   let h = 0x811c9dc5
@@ -118,6 +127,13 @@ function hash(...values: number[]) {
     h ^= h >>> 13
   }
   return h >>> 0
+}
+
+// A number for a lobby's id, the seed of its shared fortunes (set on its kingdoms by the server).
+export function lobbyKeyOf(id: string) {
+  let h = 0x811c9dc5
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193)
+  return (h >>> 0) & 0x7fffffff
 }
 
 function random(seed: number) {
@@ -130,37 +146,65 @@ function random(seed: number) {
   }
 }
 
-// The fortune of window `index` (each window has at most one, wholly inside it). It follows from the kingdom and the
-// window alone, so the server and every screen agree on it and nothing is stored.
-export function fortuneIn(k: Pick<Kingdom, 'site' | 'foundedAt'>, index: number): Fortune | null {
-  const e = I.events
-  const r = random(hash(k.site.x, k.site.y, Math.floor((k.foundedAt ?? 0) / 1000), index))
+const windowMs = (scope: FortuneScope) => TRACKS[scope].windowSeconds * 1000
+
+// The fortune of window `index` on one track, wholly inside the window. It follows from the lobby (or the kingdom) and
+// the window alone, so the server and every screen agree on it and nothing is stored.
+export function fortuneIn(k: Seeded, index: number, scope: FortuneScope = 'kingdom'): Fortune | null {
+  const e = TRACKS[scope]
+  if (scope === 'lobby' && k.lobbyKey === undefined) return null
+  const seed = scope === 'lobby' ? hash(k.lobbyKey!, index, 7) : hash(k.site.x, k.site.y, Math.floor((k.foundedAt ?? 0) / 1000), index)
+  const r = random(seed)
   if (r() >= e.chance) return null
-  const kinds = Object.entries(FORTUNES)
-  let pick = r() * kinds.reduce((s, [, f]) => s + f.weight, 0)
+  const roll = r()
+  const length = (e.minSeconds + r() * (e.maxSeconds - e.minSeconds)) * 1000
+  const start = index * windowMs(scope) + Math.floor(r() * (windowMs(scope) - length))
+  // Nothing befalls a kingdom before it was founded.
+  if (start < (k.foundedAt ?? 0)) return null
+  // Only the kinds that fit the time of day it begins at.
+  const phase = isNightAt(start) ? 'night' : 'day'
+  const kinds = Object.entries(e.kinds).filter(([, f]) => !f.time || f.time === phase)
+  let pick = roll * kinds.reduce((sum, [, f]) => sum + f.weight, 0)
   let kind = kinds[0][0]
   for (const [name, f] of kinds) {
     pick -= f.weight
     kind = name
     if (pick < 0) break
   }
-  const length = (e.minSeconds + r() * (e.maxSeconds - e.minSeconds)) * 1000
-  const start = index * windowMs() + Math.floor(r() * (windowMs() - length))
-  // Nothing befalls a kingdom before it was founded.
-  if (start < (k.foundedAt ?? 0)) return null
-  return { kind: kind as FortuneKind, start, end: start + length, spec: FORTUNES[kind] }
+  const spec = e.kinds[kind]
+  const end = spec.time ? Math.min(start + length, phaseEndsAt(start)) : start + length
+  return { kind: kind as FortuneKind, scope, start, end, spec }
 }
 
-export function fortuneAt(k: Pick<Kingdom, 'site' | 'foundedAt'>, at: number): Fortune | null {
-  const f = fortuneIn(k, Math.floor(at / windowMs()))
-  return f && f.start <= at && at < f.end ? f : null
+const SCOPES: FortuneScope[] = ['lobby', 'kingdom']
+
+// The fortunes under way at `at` (one per track at most).
+export function fortunesAt(k: Seeded, at: number): Fortune[] {
+  return SCOPES.map((scope) => fortuneIn(k, Math.floor(at / windowMs(scope)), scope)).filter((f): f is Fortune => !!f && f.start <= at && at < f.end)
 }
 
-// A fortune that began in (from, to].
-export function fortuneBegun(k: Pick<Kingdom, 'site' | 'foundedAt'>, from: number, to: number): Fortune | null {
-  for (let i = Math.floor(from / windowMs()); i <= Math.floor(to / windowMs()); i++) {
-    const f = fortuneIn(k, i)
-    if (f && f.start > from && f.start <= to) return f
+// What the fortunes under way add up to.
+export function fortuneEffects(k: Seeded, at: number) {
+  const out = { output: {} as Partial<Record<Good, number>>, trade: 0, work: 0, happiness: 0, templeHappiness: 0, sickSpread: 1 }
+  for (const { spec } of fortunesAt(k, at)) {
+    for (const [g, v] of Object.entries(spec.output ?? {})) out.output[g as Good] = (out.output[g as Good] ?? 0) + (v ?? 0)
+    out.trade += spec.trade ?? 0
+    out.work += spec.work ?? 0
+    out.happiness += spec.happiness ?? 0
+    out.templeHappiness += spec.templeHappiness ?? 0
+    out.sickSpread *= spec.sickSpread ?? 1
   }
-  return null
+  return out
+}
+
+// The fortunes that began in (from, to].
+export function fortunesBegun(k: Seeded, from: number, to: number): Fortune[] {
+  const out: Fortune[] = []
+  for (const scope of SCOPES) {
+    for (let i = Math.floor(from / windowMs(scope)); i <= Math.floor(to / windowMs(scope)); i++) {
+      const f = fortuneIn(k, i, scope)
+      if (f && f.start > from && f.start <= to) out.push(f)
+    }
+  }
+  return out
 }
