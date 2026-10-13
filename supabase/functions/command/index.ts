@@ -364,7 +364,13 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       const error = game.operationError(cmd.op, strength, game.advance(me.state, now).kingdom, theirs)
       if (error) refuse(error)
       const spec = game.operationSpec(cmd.op)
-      await mutateKingdom(me.id, now, (k) => ({ ...k, stock: { ...k.stock, gold: k.stock.gold - (spec.cost.gold ?? 0) } }))
+      // Paid, and the pause between operations kept, in the same write as the check (no double spending, no flood).
+      const pause = game.balance.espionage.operations.cooldownSeconds * 1000
+      await mutateKingdom(me.id, now, (k) => {
+        if ((k.lastOperationAt ?? 0) + pause > now) refuse('cooldown')
+        if (k.stock.gold < (spec.cost.gold ?? 0)) refuse('cost')
+        return { ...k, lastOperationAt: now, stock: { ...k.stock, gold: k.stock.gold - (spec.cost.gold ?? 0) } }
+      })
       const success = Math.random() < game.operationChance(cmd.op, strength, counter)
       if (!success) {
         // The spy is taken: the strongest network there loses its spy, and the target learns who sent it.
@@ -405,13 +411,16 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       return { success: true }
     }
     case 'ransom': {
-      // Paying for the queen's return.
-      const state = game.advance(me.state, now).kingdom
-      const holder = state.queenHeldBy
-      if (!holder) refuse('none')
+      // Paying for the queen's return; checked and paid in one write, so two requests cannot both pay.
       const ransom = game.balance.espionage.operations.kidnap.ransom
-      if (state.stock.gold < ransom) refuse('cost')
-      await mutateKingdom(me.id, now, (k) => ({ ...k, queen: true, queenHeldBy: null, stock: { ...k.stock, gold: k.stock.gold - ransom } }))
+      let holder: { id: number; name: string } | null = null
+      await mutateKingdom(me.id, now, (k) => {
+        holder = k.queenHeldBy ?? null
+        if (!holder) refuse('none')
+        if (k.stock.gold < ransom) refuse('cost')
+        return { ...k, queen: true, queenHeldBy: null, stock: { ...k.stock, gold: k.stock.gold - ransom } }
+      })
+      holder = holder!
       await mutateKingdom(holder.id, now, (k) => ({
         ...k,
         stock: { ...k.stock, gold: k.stock.gold + ransom },
@@ -423,10 +432,13 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
     case 'release': {
       // Sending a held queen home freely mends the relation.
       const target = other(cmd.target)
-      const state = game.advance(me.state, now).kingdom
-      if (!(state.hostages ?? []).some((h: { of: number }) => h.of === target.id)) refuse('none')
-      await mutateKingdom(me.id, now, (k) => ({ ...k, hostages: (k.hostages ?? []).filter((h: { of: number }) => h.of !== target.id) }))
-      await mutateKingdom(target.id, now, (k) => ({ ...k, queen: true, queenHeldBy: null }))
+      await mutateKingdom(me.id, now, (k) =>
+        (k.hostages ?? []).some((h: { of: number }) => h.of === target.id)
+          ? { ...k, hostages: (k.hostages ?? []).filter((h: { of: number }) => h.of !== target.id) }
+          : refuse('none'),
+      )
+      // Only the queen this kingdom holds goes home.
+      await mutateKingdom(target.id, now, (k) => (k.queenHeldBy?.id === me.id ? { ...k, queen: true, queenHeldBy: null } : null))
       await changeRelation(lobby, me.id, target.id, game.balance.espionage.operations.kidnap.release, now)
       await notify(lobby, [target.id], 'queen_released', { by: me.name }, now)
       return null
@@ -470,7 +482,15 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         const left = game.subtractUnits(garrison, units)
         return { ...k, units: left, soldiers: game.countOf(left), fielded: (k.fielded ?? 0) + soldiers }
       })
-      await admin.from('armies').insert(army)
+      const { error: armyError } = await admin.from('armies').insert(army)
+      if (armyError) {
+        // The soldiers go back to the garrison rather than vanish.
+        await mutateKingdom(me.id, now, (k) => {
+          const back = game.addUnits(game.garrisonOf(k), units)
+          return { ...k, units: back, soldiers: game.countOf(back), fielded: Math.max(0, (k.fielded ?? 0) - soldiers) }
+        })
+        throw armyError
+      }
       return null
     }
     case 'army': {

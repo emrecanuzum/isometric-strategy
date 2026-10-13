@@ -46,6 +46,7 @@
       "happiness": -30,
       "seconds": 600,
       "workRate": 0.5
-    }
+    },
+    "cooldownSeconds": 30
   }
 }

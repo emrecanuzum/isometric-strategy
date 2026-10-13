@@ -154,6 +154,8 @@ export interface Kingdom {
   queenHeldBy?: { id: number; name: string } | null
   hostages?: { of: number; name: string }[]
   revoltUntil?: number
+  // When this kingdom's spies last tried an operation (they pause between tries).
+  lastOperationAt?: number
   // Spies at home (idle or on counter-espionage) and out on missions; the next one the spy house trains.
   spies?: number
   spiesAway?: number
