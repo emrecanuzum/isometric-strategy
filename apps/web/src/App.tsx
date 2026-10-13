@@ -1,6 +1,7 @@
 import { Feature, Terrain, TileRule, assignStartSite, balance, findPlot, mulberry32, territoryRect } from '@game/shared'
 import type { Plot, Point } from '@game/shared'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type React from 'react'
 import { startMusic } from './audio/music'
 import type { Music } from './audio/music'
 import { Minimap } from './game/Minimap'
@@ -46,11 +47,12 @@ function App() {
   const [view, setView] = useState<WorldView | null>(null)
   const [hover, setHover] = useState<Hover | null>(null)
   const [center, setCenter] = useState<Point | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
     let created: WorldView | undefined
-    createWorld(host.current!, seed, setHover, setCenter).then((v) => {
+    createWorld(host.current!, seed, setHover, setCenter, setLoading).then((v) => {
       if (cancelled) return v.destroy()
       created = v
       setView(v)
@@ -149,6 +151,8 @@ function App() {
           {muted ? '♪ kapalı' : '♪ açık'}
         </button>
       </div>
+      {!view && <PixelSpinner big />}
+      {view && loading && <PixelSpinner />}
       {view && (
         <div className="zoom">
           <button onClick={() => site && view.centerOn(site)} aria-label="Üsse dön" title="Üsse dön">
@@ -164,6 +168,17 @@ function App() {
       )}
       {view && <Minimap world={view.world} center={center} onJump={view.centerOn} />}
     </>
+  )
+}
+
+// Eight square pixels in a ring, lit one after another.
+function PixelSpinner({ big = false }: { big?: boolean }) {
+  return (
+    <div className={big ? 'spinner big' : 'spinner'} role="status" aria-label="Yükleniyor">
+      {Array.from({ length: 8 }, (_, i) => (
+        <i key={i} style={{ '--i': i } as React.CSSProperties} />
+      ))}
+    </div>
   )
 }
 

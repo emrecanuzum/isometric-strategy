@@ -89,6 +89,7 @@ export async function createWorld(
   seed: number,
   onHover: (hover: Hover | null) => void,
   onCamera: (center: Point) => void,
+  onLoading: (loading: boolean) => void,
 ): Promise<WorldView> {
   const app = new Application()
   await app.init({
@@ -160,6 +161,15 @@ export async function createWorld(
     screenToTile({ x: (screen.x - camera.x) / camera.scale.x, y: (screen.y - camera.y) / camera.scale.y })
   const lodFor = (zoom: number) => Math.min(1, zoom)
 
+  // Loading while any visible chunk still lacks a painting at the current detail level.
+  let loading: boolean | null = null
+  function report() {
+    const lod = lodFor(camera.scale.x)
+    let missing = false
+    for (const key of visible) if (chunks.get(key)?.lod !== lod) missing = true
+    if (missing !== loading) onLoading((loading = missing))
+  }
+
   function drop(key: number) {
     const chunk = chunks.get(key)
     if (!chunk) return
@@ -184,6 +194,7 @@ export async function createWorld(
         if (job.lod === lodFor(camera.scale.x) && visible.has(job.key)) show(job, e.data.bitmap)
         else e.data.bitmap.close()
         dispatch()
+        report()
       }
       worker.postMessage({ world } satisfies PaintRequest)
       idle.push(worker)
@@ -256,6 +267,7 @@ export async function createWorld(
       if (!chunk.sprite.visible && textureBytes > TEXTURE_BUDGET_BYTES) drop(key)
     }
     dispatch()
+    report()
     onCamera(middle)
   }
 
