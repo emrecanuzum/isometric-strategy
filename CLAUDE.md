@@ -442,6 +442,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 - **Patikalar:** Her yapının kapısından saraya, yapıların etrafından
   dolaşan toprak patikalar zemine işlenir.
 - **İnşa menüsü (devam):**
+  - **İnşa listesi** saray seviyesine göre 5 sekmedir (1. sv. … 5. sv.): her
+    sekmede o seviyede açılan yapılar ve sınırı artan yapılar yazar; henüz
+    ulaşılmamış seviyeler kilitli görünür.
   - **Sur ve ev** basılı tutup sürükleyerek sıra hâlinde yerleştirilir;
     onay penceresi adedi ve toplam maliyeti gösterir. Sur parçaları inşaat
     sırasına girmez (aynı anda kurulur); evler sıraya girer, yer boşaldıkça
@@ -923,14 +926,18 @@ mertebesindedir.
   eve çekilir ve eve varana kadar yeniden yakalanamaz.
 - Savaştayken elçiler yalnızca barış götürür (ilişki geliştirme, hediye ve
   haraç isteği olmaz).
-- Ordu yolu 4×4 karoluk hücreler üzerinde aranır; her hücrenin geçiş
-  noktası (köprü varsa köprü karosu) seçilir ve iki nokta arasındaki düz
-  yürüyüş suya ya da dağa değmiyorsa bağlanır. Böylece ordular nehirleri
-  yalnızca köprülerden geçer. Binaların (sur, kapı ve tarla dışında)
-  içinden geçmez, etraflarından dolaşır; bir binanın üstüne gönderilen ordu
-  yanındaki boş karoda, bir saraya gönderilen ordu sarayın kapısının
-  (ön köşesi) önünde durur. Yeni çıkarılan ve eve dönen ordular da kapının
-  önündedir.
+- Ordu yolu iki adımda aranır: önce 4×4 karoluk hücreler üzerinde (iki
+  komşu hücre, aralarında yürünebilir bir yol varsa bağlıdır; dar köprüler de
+  bulunur), sonra seçilen hücre koridorunda karo karo; yol, arazinin izin
+  verdiği yerde düzleştirilir. Böylece ordular nehirleri köprülerden ve en
+  kısa yoldan geçer. Binaların (tarla hariç) ve ayakta duran **surların**
+  içinden geçmez; **sur kapısından** yalnızca sahibinin orduları geçer
+  (yıkık sur geçilir). Bir binanın üstüne gönderilen ordu yanındaki boş
+  karoda, bir saraya gönderilen ordu sarayın kapısının (ön köşesi) önünde
+  durur; yeni çıkarılan ve eve dönen ordular da oradadır. Surla çevrili bir
+  sarayı kuşatan ordu surların önünde durur ve kuşatma orada başlar.
+- Ordular 1× ve üstü yakınlaştırmada yürürken adım atar (4 kareli yürüyüş,
+  komşu askerler farklı adımda); uzaktayken durağan çizilir.
 - **Ordu sekmesi** sırası: Ordularım (çoğu emir burada verilir), Garnizon,
   Kışla, Savaşlar. Ordu kartları tam genişlikte, grid düzenindedir: birlik
   türleri tek satırda, moral ve saha bilgisi yan yana, emir düğmeleri üçlü

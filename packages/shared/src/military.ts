@@ -44,17 +44,51 @@ const CELL = 4
 
 type Ground = Pick<World, 'size' | 'terrain' | 'feature'>
 
-// Tiles taken by buildings, which armies walk around (walls, gates and fields excepted: armies cross those).
+// Tiles armies cannot walk over: buildings (fields excepted), standing walls, and the gates of every kingdom but the
+// army's own (`mover`). `breach`: a kingdom whose walls and gates are left open, for an army sent to besiege it to find
+// the way up to them (see wallsOf).
 export type Blocked = (x: number, y: number) => boolean
-export function buildingBlocker(kingdoms: { buildings?: { kind: string; x: number; y: number; size: number }[] }[]): Blocked {
+type Holding = { id?: number; buildings?: { kind: string; x: number; y: number; size: number; broken?: boolean }[] }
+export function buildingBlocker(kingdoms: Holding[], mover?: number, breach?: number): Blocked {
   const taken = new Set<number>()
   for (const k of kingdoms) {
     for (const b of k.buildings ?? []) {
-      if (b.kind === 'wall' || b.kind === 'gate' || b.kind === 'farm') continue
+      if (b.kind === 'farm') continue
+      if ((b.kind === 'wall' || b.kind === 'gate') && k.id !== undefined && k.id === breach) continue
+      if (b.kind === 'wall' && b.broken) continue
+      if (b.kind === 'gate' && k.id !== undefined && k.id === mover) continue
       for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) taken.add(y * 65536 + x)
     }
   }
   return (x, y) => taken.has(y * 65536 + x)
+}
+
+// The standing walls and gates of one kingdom, where a besieging army halts.
+export function wallsOf(kingdom: Holding): Blocked {
+  const taken = new Set<number>()
+  for (const b of kingdom.buildings ?? []) if ((b.kind === 'wall' && !b.broken) || b.kind === 'gate') taken.add(b.y * 65536 + b.x)
+  return (x, y) => taken.has(y * 65536 + x)
+}
+
+// `route` cut short just before it first steps onto a tile where `stop` holds (unchanged if it never does).
+export function haltBefore(route: Point[], stop: Blocked): Point[] {
+  const out = [route[0]]
+  for (let i = 1; i < route.length; i++) {
+    const a = route[i - 1]
+    const b = route[i]
+    const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 4))
+    let last = a
+    for (let k = 1; k <= steps; k++) {
+      const p = { x: a.x + ((b.x - a.x) * k) / steps, y: a.y + ((b.y - a.y) * k) / steps }
+      if (stop(Math.floor(p.x), Math.floor(p.y))) {
+        out.push(last)
+        return out
+      }
+      last = p
+    }
+    out.push(b)
+  }
+  return out
 }
 
 // The nearest tile to `p` an army can stand on (not water, mountain or a building), searching outward a few tiles.
@@ -93,99 +127,117 @@ function clearLine(world: Ground, a: Point, b: Point, blocked?: Blocked) {
   return true
 }
 
-// For each 4×4 cell, the point an army passes through it: a bridge tile when the cell holds one (so narrow bridges are
-// found), else the passable tile nearest its middle; -1 for a cell with no passable tile. Made once per world.
-const waypoints = new WeakMap<object, Int32Array>()
-function waypointsOf(world: Ground) {
-  let found = waypoints.get(world.terrain)
-  if (found) return found
-  const n = world.size / CELL
-  found = new Int32Array(n * n).fill(-1)
-  for (let c = 0; c < n * n; c++) {
-    const x0 = (c % n) * CELL
-    const y0 = Math.floor(c / n) * CELL
-    let best = -1
-    let bestScore = Infinity
-    for (let y = y0; y < y0 + CELL; y++) {
-      for (let x = x0; x < x0 + CELL; x++) {
-        if (!passable(world, x, y)) continue
-        const i = y * world.size + x
-        const score = (world.feature[i] === Feature.Bridge ? -100 : 0) + Math.hypot(x + 0.5 - (x0 + CELL / 2), y + 0.5 - (y0 + CELL / 2))
-        if (score < bestScore) {
-          bestScore = score
-          best = i
+// A binary heap of [priority, value] pairs, smallest first.
+function heapOf() {
+  const heap: [number, number][] = []
+  return {
+    get size() {
+      return heap.length
+    },
+    push(f: number, v: number) {
+      heap.push([f, v])
+      let i = heap.length - 1
+      while (i > 0) {
+        const p = (i - 1) >> 1
+        if (heap[p][0] <= heap[i][0]) break
+        ;[heap[p], heap[i]] = [heap[i], heap[p]]
+        i = p
+      }
+    },
+    pop() {
+      const top = heap[0]
+      const last = heap.pop()!
+      if (heap.length > 0) {
+        heap[0] = last
+        let i = 0
+        for (;;) {
+          const l = i * 2 + 1
+          const r = l + 1
+          let m = i
+          if (l < heap.length && heap[l][0] < heap[m][0]) m = l
+          if (r < heap.length && heap[r][0] < heap[m][0]) m = r
+          if (m === i) break
+          ;[heap[m], heap[i]] = [heap[i], heap[m]]
+          i = m
         }
       }
-    }
-    found[c] = best
+      return top[1]
+    },
   }
-  waypoints.set(world.terrain, found)
-  return found
 }
 
-// A route over land from `from` to `to` (tile points), searched on a grid of 4×4-tile cells; null if none.
+// A route over land from `from` to `to` (tile points); null if none. Searched in two steps so it stays quick on a big
+// map yet exact: first over 4×4-tile cells (two neighbouring cells are joined when a walk between them exists inside
+// them, so a narrow bridge is found), then tile by tile inside the corridor of cells that search chose, and the tile
+// path is pulled straight wherever the ground allows.
 export function findRoute(world: Ground, from: Point, to: Point, blocked?: Blocked): Point[] | null {
-  const n = world.size / CELL
-  const base = waypointsOf(world)
-  // A cell whose waypoint is under a building passes through another tile of it, if it has a free one.
-  const moved = new Map<number, number>()
-  const wayOf = (c: number) => {
-    const w = base[c]
-    if (w < 0 || !blocked || !blocked(w % world.size, Math.floor(w / world.size))) return w
-    if (moved.has(c)) return moved.get(c)!
-    let found = -1
-    const x0 = (c % n) * CELL
-    const y0 = Math.floor(c / n) * CELL
-    for (let y = y0; y < y0 + CELL && found < 0; y++) for (let x = x0; x < x0 + CELL; x++) if (passable(world, x, y) && !blocked(x, y)) { found = y * world.size + x; break }
-    moved.set(c, found)
+  const size = world.size
+  const n = size / CELL
+  const ok = (x: number, y: number) => passable(world, x, y) && !blocked?.(x, y)
+  const fx = Math.floor(from.x)
+  const fy = Math.floor(from.y)
+  const tx = Math.floor(to.x)
+  const ty = Math.floor(to.y)
+  if (!ok(tx, ty)) return null
+  const cellOf = (x: number, y: number) => Math.floor(y / CELL) * n + Math.floor(x / CELL)
+  const start = cellOf(fx, fy)
+  const goal = cellOf(tx, ty)
+
+  // Whether two neighbouring cells are joined: a walk exists from one into the other inside the two of them (the 2×2
+  // block for diagonal neighbours).
+  const joinedMemo = new Map<number, boolean>()
+  const joined = (a: number, b: number) => {
+    const key = a < b ? a * n * n + b : b * n * n + a
+    const known = joinedMemo.get(key)
+    if (known !== undefined) return known
+    const ax = a % n
+    const ay = Math.floor(a / n)
+    const bx = b % n
+    const by = Math.floor(b / n)
+    const x0 = Math.min(ax, bx) * CELL
+    const y0 = Math.min(ay, by) * CELL
+    const w = (Math.abs(ax - bx) + 1) * CELL
+    const h = (Math.abs(ay - by) + 1) * CELL
+    const seen = new Uint8Array(w * h)
+    const queue: number[] = []
+    for (let y = ay * CELL; y < ay * CELL + CELL; y++) {
+      for (let x = ax * CELL; x < ax * CELL + CELL; x++) {
+        if (!ok(x, y)) continue
+        const i = (y - y0) * w + (x - x0)
+        seen[i] = 1
+        queue.push(i)
+      }
+    }
+    let found = false
+    for (let q = 0; q < queue.length && !found; q++) {
+      const i = queue[q]
+      const x = (i % w) + x0
+      const y = Math.floor(i / w) + y0
+      if (cellOf(x, y) === b) found = true
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < x0 || ny < y0 || nx >= x0 + w || ny >= y0 + h) continue
+        const j = (ny - y0) * w + (nx - x0)
+        if (seen[j] || !ok(nx, ny)) continue
+        seen[j] = 1
+        queue.push(j)
+      }
+    }
+    joinedMemo.set(key, found)
     return found
   }
-  const cellOf = (p: Point) => Math.floor(p.y / CELL) * n + Math.floor(p.x / CELL)
-  const open = (c: number) => wayOf(c) >= 0
-  const pointOf = (c: number): Point => ({ x: (wayOf(c) % world.size) + 0.5, y: Math.floor(wayOf(c) / world.size) + 0.5 })
-  // Two cells are joined only when the walk between their waypoints keeps out of the water and off buildings.
-  const joined = (a: number, b: number) => clearLine(world, pointOf(a), pointOf(b), blocked)
-  const start = cellOf(from)
-  const goal = cellOf(to)
+
+  // Step one: over cells.
   const cost = new Float64Array(n * n).fill(Infinity)
   const closed = new Uint8Array(n * n)
   const came = new Int32Array(n * n).fill(-1)
-  const heap: [number, number][] = []
-  const push = (c: number, f: number) => {
-    heap.push([f, c])
-    let i = heap.length - 1
-    while (i > 0) {
-      const p = (i - 1) >> 1
-      if (heap[p][0] <= heap[i][0]) break
-      ;[heap[p], heap[i]] = [heap[i], heap[p]]
-      i = p
-    }
-  }
-  const pop = () => {
-    const top = heap[0]
-    const last = heap.pop()!
-    if (heap.length > 0) {
-      heap[0] = last
-      let i = 0
-      for (;;) {
-        const l = i * 2 + 1
-        const r = l + 1
-        let m = i
-        if (l < heap.length && heap[l][0] < heap[m][0]) m = l
-        if (r < heap.length && heap[r][0] < heap[m][0]) m = r
-        if (m === i) break
-        ;[heap[m], heap[i]] = [heap[i], heap[m]]
-        i = m
-      }
-    }
-    return top[1]
-  }
+  const open = heapOf()
   const h = (c: number) => Math.hypot((c % n) - (goal % n), Math.floor(c / n) - Math.floor(goal / n))
-  if (!open(start) || !open(goal)) return null
   cost[start] = 0
-  push(start, h(start))
-  while (heap.length > 0) {
-    const c = pop()
+  open.push(h(start), start)
+  while (open.size > 0) {
+    const c = open.pop()
     if (closed[c]) continue
     closed[c] = 1
     if (c === goal) break
@@ -198,28 +250,73 @@ export function findRoute(world: Ground, from: Point, to: Point, blocked?: Block
         const ny = cy + dy
         if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue
         const next = ny * n + nx
-        if (closed[next] || !open(next)) continue
-        // No cutting a corner between two closed cells.
-        if (dx && dy && !open(cy * n + nx) && !open(ny * n + cx)) continue
-        if (!joined(c, next)) continue
+        if (closed[next]) continue
         const g = cost[c] + (dx && dy ? Math.SQRT2 : 1)
-        if (g >= cost[next]) continue
+        if (g >= cost[next] || !joined(c, next)) continue
         cost[next] = g
         came[next] = c
-        push(next, g + h(next))
+        open.push(g + h(next), next)
       }
     }
   }
   if (start !== goal && came[goal] === -1) return null
-  const cells: number[] = []
-  for (let c = goal; c !== start && c !== -1; c = came[c]) {
-    // A loop in the trail back would never end.
-    if (cells.length > n * n) return null
-    cells.push(c)
+
+  // The corridor: the cells chosen and those around them.
+  const corridor = new Set<number>()
+  let guard = 0
+  for (let c = goal; ; c = came[c]) {
+    const cx = c % n
+    const cy = Math.floor(c / n)
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (cx + dx >= 0 && cy + dy >= 0 && cx + dx < n && cy + dy < n) corridor.add((cy + dy) * n + cx + dx)
+    }
+    if (c === start || ++guard > n * n) break
   }
-  // From where the army stands, through each cell's waypoint, to where it was sent.
-  const points = [from, pointOf(start), ...cells.reverse().map(pointOf), to]
-  // Waypoints are skipped where the straight walk past them stays on land, so the route bends only where it must.
+
+  // Step two: tile by tile inside the corridor (no cutting a corner past a blocked tile).
+  const inCorridor = (x: number, y: number) => corridor.has(cellOf(x, y))
+  const tileCost = new Map<number, number>()
+  const tileCame = new Map<number, number>()
+  const done = new Set<number>()
+  const tiles = heapOf()
+  const startTile = fy * size + fx
+  const goalTile = ty * size + tx
+  const th = (i: number) => Math.hypot((i % size) - tx, Math.floor(i / size) - ty)
+  tileCost.set(startTile, 0)
+  tiles.push(th(startTile), startTile)
+  while (tiles.size > 0) {
+    const i = tiles.pop()
+    if (done.has(i)) continue
+    done.add(i)
+    if (i === goalTile) break
+    const x = i % size
+    const y = Math.floor(i / size)
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < 0 || ny < 0 || nx >= size || ny >= size || !inCorridor(nx, ny) || !ok(nx, ny)) continue
+        if (dx && dy && (!ok(x + dx, y) || !ok(x, y + dy))) continue
+        const j = ny * size + nx
+        if (done.has(j)) continue
+        const g = tileCost.get(i)! + (dx && dy ? Math.SQRT2 : 1)
+        if (g >= (tileCost.get(j) ?? Infinity)) continue
+        tileCost.set(j, g)
+        tileCame.set(j, i)
+        tiles.push(g + th(j), j)
+      }
+    }
+  }
+  if (startTile !== goalTile && !tileCame.has(goalTile)) return null
+  const path: Point[] = []
+  guard = 0
+  for (let i = goalTile; i !== startTile; i = tileCame.get(i)!) {
+    path.push({ x: (i % size) + 0.5, y: Math.floor(i / size) + 0.5 })
+    if (++guard > size * size) return null
+  }
+  const points = [from, ...path.reverse().slice(0, -1), to]
+  // Pulled straight: a point is kept only where the straight walk past it would leave the ground.
   const route = [points[0]]
   for (let i = 1; i < points.length - 1; i++) {
     if (!clearLine(world, route[route.length - 1], points[i + 1], blocked)) route.push(points[i])

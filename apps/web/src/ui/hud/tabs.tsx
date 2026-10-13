@@ -9,6 +9,7 @@ import {
   capOf,
   storageCap,
   plannedHousing,
+  palaceLevel,
   buildingCount,
   cutOff,
   isFree,
@@ -118,6 +119,16 @@ const BLOCKED: Record<string, string> = {
 export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
   const list = constructing(kingdom, now)
   const slots = maxConstructions(kingdom, now)
+  // Buildings by the palace level that opens them; the tab of the palace's own level first.
+  const level = Math.max(1, palaceLevel(kingdom, now))
+  const tiers = balance.territory.stageParcels.length
+  const [tier, setTier] = useState(Math.min(tiers, level))
+  const shown = BUILDABLE.filter((kind) => (BUILDINGS[kind].requiresPalace ?? 1) === tier)
+  // What a level raises besides: the caps of buildings already open.
+  const raised = BUILDABLE.flatMap((kind) => {
+    const caps = BUILDINGS[kind].maxByPalaceLevel
+    return caps && tier > 1 && caps[tier - 1] > caps[tier - 2] ? [`${BUILDING_NAMES[kind]} ${caps[tier - 2]} → ${caps[tier - 1]}`] : []
+  })
   return (
     <>
       <Section title="İnşaat kuyruğu" icon="time" aside={`${list.length}/${slots} usta`}>
@@ -140,8 +151,19 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
         )}
       </Section>
       <Section title="Yapılar" icon="build">
+        <div className="tier-tabs" role="tablist" aria-label="Saray seviyesi">
+          {Array.from({ length: tiers }, (_, i) => i + 1).map((t) => (
+            <button key={t} className="btn small" role="tab" aria-selected={tier === t} aria-pressed={tier === t} onClick={() => setTier(t)} title={t > level ? `${t}. seviye saray gerekir` : undefined}>
+              {t > level && <Icon name="lock" size={8} />}
+              {t}. sv.
+            </button>
+          ))}
+        </div>
+        {tier > level && <p className="hint">Bu yapılar için sarayı {tier}. seviyeye yükselt.</p>}
+        {raised.length > 0 && <p className="hint">Bu seviyede sınırı artanlar: {raised.join(' · ')}.</p>}
+        {shown.length === 0 && <p className="hint">Bu seviyede açılan yeni yapı yok.</p>}
         <ul className="cards">
-          {BUILDABLE.map((kind) => {
+          {shown.map((kind) => {
             const spec = BUILDINGS[kind]
             const error = buildError(world, kingdom, stage, kind, null, now)
             const effect = spec.produces

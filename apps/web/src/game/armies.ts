@@ -49,9 +49,18 @@ export function squad(color: string | null, frame: number, figures = 3, catapult
   const canvas = new Canvas(54, 42)
   const base = 38
   const ox = 12
-  const soldier = (cx: number, by: number, step: number) => {
-    canvas.set(cx - 1 - step, by, TIMBER[0])
-    canvas.set(cx + 1 + step, by, TIMBER[0])
+  // The march in four frames: a stride one way, feet together (body up a pixel), a stride the other way, together.
+  const STRIDE = [1, 0, -1, 0]
+  const LIFT = [0, 1, 0, 1]
+  const soldier = (cx: number, feet: number, phase: number) => {
+    const step = STRIDE[phase & 3]
+    const by = feet - LIFT[phase & 3]
+    canvas.set(cx - 1 - step, feet, TIMBER[0])
+    canvas.set(cx + 1 + step, feet, TIMBER[0])
+    if (LIFT[phase & 3]) {
+      canvas.set(cx - 1, feet - 1, TIMBER[0])
+      canvas.set(cx + 1, feet - 1, TIMBER[0])
+    }
     for (let y = by - 7; y < by; y++) for (let x = cx - 1; x <= cx + 1; x++) canvas.set(x, y, tunic[x < cx ? 4 : x === cx ? 3 : 2])
     canvas.set(cx, by - 8, SKIN)
     canvas.set(cx - 1, by - 9, HELM[3])
@@ -91,7 +100,6 @@ export function squad(color: string | null, frame: number, figures = 3, catapult
       canvas.set(bx + x, base - 34 + y + wave, y === 0 ? tunic[5] : tunic[y < 3 ? 3 : 2])
     }
   }
-  const step = frame === 0 ? 1 : -1
   // Ranks of three, back to front, each a little lower and to the side on the iso grid.
   const spots: [number, number][] = []
   for (let i = 0; i < figures; i++) {
@@ -100,7 +108,8 @@ export function squad(color: string | null, frame: number, figures = 3, catapult
     spots.push([ox + file * 5 - rank * 4, base - 12 + rank * 4 + file * 2])
   }
   spots.sort((a, b) => a[1] - b[1])
-  spots.forEach(([x, y], i) => soldier(x, y, i % 2 ? step : -step))
+  // Neighbours out of step with each other, so the column ripples as it marches.
+  spots.forEach(([x, y], i) => soldier(x, y, frame + (i % 2) * 2))
   shadow(canvas, ox + 4, base - 6, 6 + Math.ceil(figures / 3) * 3)
   return canvas.sprite(ox + 4, base, 0)
 }
@@ -120,7 +129,7 @@ function swords(): Sprite {
 const squads = new Map<string, Sprite[]>()
 const squadOf = (color: string | null, frame: number, figures = 3, catapult = false) => {
   const key = `${color ?? 'royal'}:${figures}:${catapult}`
-  if (!squads.has(key)) squads.set(key, [squad(color, 0, figures, catapult), squad(color, 1, figures, catapult)])
+  if (!squads.has(key)) squads.set(key, [0, 1, 2, 3].map((f) => squad(color, f, figures, catapult)))
   return squads.get(key)![frame]
 }
 const SWORDS = swords()
@@ -187,7 +196,8 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
       const here = armyAt({ path: army.path, depart_at: new Date(army.departAt).toISOString(), arrive_at: new Date(army.arriveAt).toISOString() }, time)
       const screen = groundToScreen(world, here)
       const moving = !army.battle && time < army.arriveAt && army.path.length > 1
-      const look = squadOf(army.color, moving ? Math.floor(time / 300) % 2 : 0, army.figures, army.catapult)
+      // Marching feet only when close enough to see them; far out the column stands still.
+      const look = squadOf(army.color, moving && scale >= 1 ? Math.floor(time / 180) % 4 : 0, army.figures, army.catapult)
       body.texture = textureOf(look)
       body.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
       body.position.set(screen.x, screen.y)
