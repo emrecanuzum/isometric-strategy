@@ -1,0 +1,98 @@
+{
+  "warrior": {
+    "upkeep": {
+      "gold": 0.15,
+      "food": 0.25
+    }
+  },
+  "maxArmies": 2,
+  "speedTilesPerSecond": 1,
+  "mergeTiles": 5,
+  "contactTiles": 1.5,
+  "allyTiles": 6,
+  "tower": {
+    "range": 6,
+    "secondsPerKill": 20
+  },
+  "wall": {
+    "breakShare": 0.3
+  },
+  "siege": {
+    "lootShare": 0.3
+  },
+  "morale": {
+    "start": 100,
+    "marchPerHour": -30,
+    "idlePerHour": -6,
+    "homePerHour": 120,
+    "innPerHour": 240,
+    "innTiles": 4
+  },
+  "familiarity": {
+    "gainSeconds": 300,
+    "loseTiles": 25,
+    "maxBonus": 1.5
+  },
+  "battle": {
+    "roundSeconds": 45,
+    "maxRounds": 20,
+    "dice": 10,
+    "killRate": 0.008,
+    "moraleHit": 1.6,
+    "towerBonus": 1,
+    "wallsForBonus": 4,
+    "maxWallBonus": 3,
+    "retreatMorale": 0,
+    "maxTowerBonus": 2
+  },
+  "units": {
+    "spear": {
+      "cost": {
+        "gold": 10,
+        "arms": 4
+      },
+      "trainSeconds": 15,
+      "might": 1
+    },
+    "archer": {
+      "cost": {
+        "gold": 12
+      },
+      "weapons": {
+        "bow": 1
+      },
+      "trainSeconds": 18,
+      "might": 1
+    },
+    "cavalry": {
+      "cost": {
+        "gold": 25,
+        "arms": 6,
+        "food": 10
+      },
+      "trainSeconds": 30,
+      "might": 1.6,
+      "barracksLevel": 2
+    },
+    "catapult": {
+      "cost": {
+        "gold": 40,
+        "materials": 30,
+        "arms": 10
+      },
+      "trainSeconds": 45,
+      "might": 0.4,
+      "barracksLevel": 2
+    }
+  },
+  "counters": {
+    "spear": "cavalry",
+    "cavalry": "archer",
+    "archer": "spear"
+  },
+  "counterBonus": 1.5,
+  "catapult": {
+    "wallsPerCatapult": 2,
+    "breakPerCatapult": 0.1
+  }
+}

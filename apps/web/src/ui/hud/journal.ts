@@ -77,6 +77,10 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
           text: `Depoda satacak ${RESOURCE_NAMES[event.good].toLowerCase()} kalmadı. Başka bir mal seç ya da üretimi artır.`,
         })
       } else j = { ...j, tally }
+    } else if (event.kind === 'trained') {
+      j = write(j, seasonStart, at, { tone: 'good', icon: 'people', title: `${event.count} savaşçı eğitimini bitirdi`, text: 'Askerler sarayda garnizonda bekliyor.' })
+    } else if (event.kind === 'spy') {
+      j = write(j, seasonStart, at, { tone: 'info', icon: 'lock', title: 'Casus evi yeni bir casus yetiştirdi' })
     } else {
       const produced = { ...j.tally.produced }
       for (const [r, v] of Object.entries(event.delta)) produced[r as Resource] = (produced[r as Resource] ?? 0) + (v ?? 0)

@@ -1,0 +1,50 @@
+{
+  "envoySeconds": 60,
+  "proposalSeconds": 600,
+  "driftPerHour": 2,
+  "improve": {
+    "cost": {
+      "gold": 50
+    },
+    "gain": 10,
+    "cooldownSeconds": 300
+  },
+  "gift": {
+    "minGold": 10,
+    "relationPerGold": 0.1,
+    "maxGain": 20
+  },
+  "tribute": {
+    "minGold": 1,
+    "maxGold": 20,
+    "accept": -5,
+    "reject": -30,
+    "renege": -45,
+    "release": 5
+  },
+  "alliance": {
+    "minRelation": 50,
+    "break": -40
+  },
+  "war": {
+    "maxRelation": -50,
+    "peaceRelation": -20
+  },
+  "spyCaught": -15,
+  "warScore": {
+    "battle": 10,
+    "perKill": 0.5,
+    "siege": 25,
+    "max": 100
+  },
+  "peace": {
+    "goldPerScore": 20,
+    "tributeMinScore": 40,
+    "enforceScore": 100
+  },
+  "casusBelli": {
+    "seconds": 7200,
+    "maxRelation": -20,
+    "infamy": -10
+  }
+}

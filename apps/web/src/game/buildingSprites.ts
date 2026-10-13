@@ -726,9 +726,123 @@ function peasant(frame: number, tunic: Uint32Array): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
+// The market: an open stall hall under a striped canopy, crates and barrels of goods, and a weighing scale.
+function market(): Sprite {
+  const { canvas, cx, base } = footprint(2, 70)
+  hall(canvas, cx, base - 8, { w: 52, wall: 20, roof: 22, walls: WALL, roofs: ROOF, open: true })
+  barrel(canvas, cx - 30, base - 8)
+  barrel(canvas, cx - 22, base - 4)
+  crate(canvas, cx + 18, base - 8, 9)
+  crate(canvas, cx + 26, base - 12, 8)
+  shadeBlobs(canvas, [{ x: cx + 4, y: base - 4, r: 3.5 }, { x: cx + 9, y: base - 3, r: 3 }], SACK, 3)
+  // A scale on a post by the front corner.
+  const sx = cx - 6
+  const sy = base - 4
+  for (let z = 0; z < 16; z++) canvas.set(sx, sy - z, TIMBER[1])
+  for (let x = -6; x <= 6; x++) canvas.set(sx + x, sy - 16, BRASS[2])
+  for (const side of [-6, 6]) for (let x = -2; x <= 2; x++) canvas.set(sx + side + x, sy - 11, BRASS[x < 0 ? 3 : 1])
+  return canvas.sprite(cx, base, 0)
+}
+
+// The barracks: a long stone hall with a slate roof and a war banner, a palisade yard with straw training dummies and
+// a rack of spears.
+function barracks(level = 1): Sprite {
+  const { canvas, cx, base, h } = footprint(3, 110 + (level - 1) * 10)
+  // Trampled yard.
+  for (let y = base - h * 2; y <= base; y++) {
+    for (let x = cx - (h * 2 - 4); x <= cx + (h * 2 - 4); x++) {
+      const a = (x - cx) / (h * 2 - 6)
+      const b = (y - (base - h)) / (h - 3)
+      if (Math.abs(a) + Math.abs(b) <= 1) canvas.set(x, y, pick(SOIL, 1.5 + hash(x >> 1, y, 83) * 1.2))
+    }
+  }
+  const top = hall(canvas, cx + 18, base - h + 4, { w: 60 + (level - 1) * 6, wall: 30, roof: 30, walls: DARK_STONE, roofs: SLATE, masonry: true, bay: 16, door: true, chimney: 0.6, trim: level > 1 ? BRASS[1] : undefined })
+  banner(canvas, top.x, top.y, 14)
+  // Straw dummies on posts.
+  for (const [dx, dy] of [[-58, -6], [-40, 2], [-22, 8]]) {
+    const x = cx + dx
+    const y = base - h + dy + 10
+    for (let z = 0; z < 14; z++) canvas.set(x, y - z, TIMBER[1])
+    for (let x2 = -4; x2 <= 4; x2++) canvas.set(x + x2, y - 10, TIMBER[2])
+    shadeBlobs(canvas, [{ x, y: y - 14, r: 3.5 }, { x, y: y - 8, r: 3 }], THATCH, 3)
+  }
+  rack(canvas, cx + 28, base - 10)
+  // Palisade along the two front edges.
+  for (const side of [-1, 1]) {
+    for (let t = 6; t < h * 2 - 6; t += 2) {
+      const x = cx + side * t
+      const y = base - 2 - t / 2
+      for (let z = 0; z < 10; z++) canvas.set(x, y - z, z > 7 ? LOGS[3] : LOGS[side < 0 ? 2 : 1])
+    }
+  }
+  return smoky(canvas.sprite(cx, base, 0), [top])
+}
+
+// The spy house: a narrow dark townhouse with shuttered windows, a crow on the roof and a lantern by the door.
+function spyHouse(level = 1): Sprite {
+  const { canvas, cx, base } = footprint(2, 100 + (level - 1) * 12)
+  const shadow = ramp(0x1e1a24, 0x2a2532, 0x37314a, 0x4a4260, 0x5e5478)
+  const top = hall(canvas, cx, base - 6, { w: 40 + (level - 1) * 4, wall: 38 + (level - 1) * 8, roof: 34, walls: shadow, roofs: SLATE, masonry: true, bay: 12, door: true, chimney: 0.5 })
+  // A crow on the ridge.
+  const crow = [
+    [0, 0], [1, 0], [2, 0], [-1, 1], [0, 1], [1, 1], [2, 1], [3, 1], [0, 2], [1, 2], [2, 2], [3, 1], [-2, 0],
+  ]
+  for (const [x, y] of crow) canvas.set(top.x - 4 + x, top.y + 4 + y, rgb(0x16141a))
+  canvas.set(top.x - 6, top.y + 4, BRASS[3])
+  // A lantern by the door.
+  const lx = cx - 30
+  const ly = base - 30
+  for (let z = 0; z < 8; z++) canvas.set(lx, ly - z, TIMBER[0])
+  for (let y = 0; y < 5; y++) for (let x = -2; x <= 2; x++) canvas.set(lx + x, ly + 1 + y, Math.abs(x) === 2 || y === 0 || y === 4 ? TIMBER[0] : EMBER[2])
+  return smoky(canvas.sprite(cx, base, 0), [top])
+}
+
+// The watchtower: a timber tower on a stone footing with a roofed lookout platform and a beacon.
+function watchtower(): Sprite {
+  const { canvas, cx, base } = footprint(1, 120)
+  const top = tower(canvas, cx, base - 6, 9, 70, DARK_STONE, SLATE)
+  // Lookout ledge just under the roof.
+  for (let x = -12; x <= 12; x++) for (let z = 0; z < 3; z++) canvas.set(cx + x, base - 6 - 70 + z, PLANK[x < 0 ? 4 : 2])
+  for (let x = -12; x <= 12; x += 4) for (let z = 3; z < 8; z++) canvas.set(cx + x, base - 6 - 70 - z + 3, TIMBER[1])
+  finial(canvas, top.x, top.y, 4)
+  banner(canvas, top.x, top.y - 4, 8)
+  return canvas.sprite(cx, base, 0)
+}
+
+// A section of wall filling one tile: masonry on the two front faces, a walkway on top and battlements; a broken one
+// is a heap of rubble with a stump of wall.
+function wall(broken = false): Sprite {
+  const { canvas, cx, base, w, h } = footprint(1, 50)
+  const tall = broken ? 8 : 26
+  for (const side of [-1, 1]) {
+    const lit = side < 0
+    for (let t = 0; t <= w; t++) {
+      const x = cx + side * (w - t)
+      const ground = base - h + t / 2
+      const height = broken ? tall + Math.round(hash(t >> 2, side, 41) * 10) : tall
+      for (let z = 0; z <= height; z++) {
+        const course = Math.floor(z / 4)
+        const mortar = z % 4 === 0 || (t + (course & 1) * 3) % 8 === 0
+        canvas.set(x, ground - z, pick(KEEP, (lit ? 3 : 1.3) - (mortar ? 0.8 : 0) + (hash(t >> 2, course, 17 + side) > 0.85 ? 0.6 : 0)))
+      }
+      if (!broken && t % 8 < 4) for (let z = height + 1; z <= height + 5; z++) canvas.set(x, ground - z, pick(KEEP, lit ? 3.4 : 1.8))
+    }
+  }
+  // The walkway on top.
+  for (let y = base - h * 2; y <= base; y++) {
+    for (let x = cx - w; x <= cx + w; x++) {
+      const a = (x - cx) / w
+      const b = (y - (base - h)) / h
+      if (Math.abs(a) + Math.abs(b) <= 1) canvas.set(x, y - tall, broken ? pick(STONE, 1 + hash(x, y, 43) * 3) : pick(KEEP, 2.2 + hash(x >> 1, y, 47) * 0.8))
+    }
+  }
+  if (broken) shadeBlobs(canvas, [{ x: cx - 18, y: base - 6, r: 5 }, { x: cx + 14, y: base - 4, r: 4 }, { x: cx + 2, y: base - 2, r: 3.5 }], STONE, 4)
+  return canvas.sprite(cx, base, 0)
+}
+
 const variants = <T>(count: number, make: (i: number) => T) => Array.from({ length: count }, (_, i) => make(i))
 
-export type StructureLook = BuildingKind | 'scaffold'
+export type StructureLook = BuildingKind | 'scaffold' | 'brokenWall'
 
 // A building as the map draws it; docks carry their jetty (tile rectangle over the water).
 export interface Structure {
@@ -753,6 +867,8 @@ export const LEVEL_SPRITES: Partial<Record<BuildingKind, Sprite[][]>> = {
   lumberCamp: [2, 3].map((level) => [lumberCamp(level)]),
   forge: [2, 3].map((level) => [forge(level)]),
   dock: [2, 3].map((level) => [dock(level)]),
+  barracks: [[barracks(2)]],
+  spyHouse: [2, 3].map((level) => [spyHouse(level)]),
 }
 
 // The palace in each kingdom colour, made when first seen.
@@ -765,7 +881,7 @@ export const palaceIn = (color: string | undefined): Sprite => {
 
 // The variants a building shows at its level.
 export const looksOf = (look: StructureLook, level = 1): Sprite[] =>
-  look !== 'scaffold' && level > 1 ? (LEVEL_SPRITES[look]?.[level - 2] ?? STRUCTURE_SPRITES[look]) : STRUCTURE_SPRITES[look]
+  look !== 'scaffold' && look !== 'brokenWall' && level > 1 ? (LEVEL_SPRITES[look]?.[level - 2] ?? STRUCTURE_SPRITES[look]) : STRUCTURE_SPRITES[look]
 
 export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   palace: [palace()],
@@ -775,6 +891,12 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   forge: [forge()],
   tradePost: [tradePost()],
   dock: [dock()],
+  market: [market()],
+  barracks: [barracks()],
+  spyHouse: [spyHouse()],
+  watchtower: [watchtower()],
+  wall: [wall()],
+  brokenWall: [wall(true)],
   scaffold: [scaffold(1), scaffold(2), scaffold(3)],
 }
 

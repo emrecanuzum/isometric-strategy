@@ -15,8 +15,9 @@
     "db:status": "supabase status",
     "db:push": "supabase db push",
     "fn:bundle": "bun build packages/shared/src/index.ts --format esm --target browser --outfile supabase/functions/_shared/game.js",
-    "fn:deploy": "bun run fn:bundle && supabase functions deploy command --use-api",
-    "lobby:create": "bun scripts/create-lobby.ts"
+    "fn:deploy": "bun run fn:bundle && supabase functions deploy command --use-api && supabase functions deploy tick --use-api",
+    "lobby:create": "bun scripts/create-lobby.ts",
+    "tick:setup": "bun scripts/setup-tick.ts"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.45.0",

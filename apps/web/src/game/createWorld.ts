@@ -15,6 +15,8 @@ import {
 import type { Point, Rect, World } from '@game/shared'
 import { Application, Container, Graphics, ImageSource, Sprite, Text, Texture } from 'pixi.js'
 import { createAmbient } from './ambient'
+import { createArmies } from './armies'
+import type { MapArmy, MapBattle } from './armies'
 import { createCaravans } from './caravans'
 import { CHIMNEYS, structureParts } from './buildingSprites'
 import { lightsOf, outlineOf } from './sprites'
@@ -103,8 +105,8 @@ export interface WorldHandlers {
   onHover(hover: Hover | null): void
   onCamera(center: Point): void
   onLoading(loading: boolean): void
-  // A tap or click that did not drag the map, and the player's building drawn under it, if any.
-  onTap(tile: Point, building?: number): void
+  // A tap or click that did not drag the map, and the player's building or the army drawn under it, if any.
+  onTap(tile: Point, building?: number, army?: number): void
 }
 
 export interface RivalTerritory {
@@ -119,6 +121,8 @@ export interface WorldView {
   setTerritory(rect: Rect | null, plots: Plots, name?: string): void
   // The other kingdoms of the lobby: their borders in their own colour, and their names when zoomed out.
   setRivals(rivals: RivalTerritory[]): void
+  // Every army in the lobby and the battles being fought (see armies.ts).
+  setArmies(armies: MapArmy[], battles: MapBattle[]): void
   // The player's buildings, painted into the ground like the inns.
   setStructures(structures: Structure[], trails: Point[][]): void
   // While set, the pointer shows the footprint of the building being placed, green where it fits.
@@ -219,7 +223,12 @@ export async function createWorld(
   highlight.tint = HIGHLIGHT
   highlight.visible = false
   // The territory lines lie on the ground: buildings and walkers stand over them.
-  camera.addChild(ground, rivalLines, territory, ambient.under, caravans.layer, ambient.sky, cursor, highlight)
+  // Armies stay in sight at every zoom (the caravans' layer hides when zoomed out), their routes on the ground.
+  const armyRoutes = new Graphics()
+  const armyLayer = new Container()
+  armyLayer.sortableChildren = true
+  const armyLabels = new Container()
+  camera.addChild(ground, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, armyLayer, ambient.sky, cursor, highlight)
   app.stage.addChild(camera)
   // Day and night: the whole map is multiplied by the colour of the light at this hour of the game day. Lit windows
   // and the labels sit above it, in a layer that follows the camera, so night never dims them.
@@ -227,7 +236,8 @@ export async function createWorld(
   light.blendMode = 'multiply'
   const glow = new Container()
   const above = new Container()
-  above.addChild(glow, plotLabels.dock, plotLabels.trade, rivalLabels, kingdomLabel, floats)
+  above.addChild(glow, plotLabels.dock, plotLabels.trade, rivalLabels, kingdomLabel, armyLabels, floats)
+  const armies = createArmies(world, armyLayer, armyRoutes, armyLabels)
   app.stage.addChild(light, above)
   for (const inn of world.inns) {
     const lit = lightsOf(innLook(world, inn).sprite)
@@ -260,6 +270,7 @@ export async function createWorld(
       bottom: (app.screen.height - camera.y) / scale,
     }
     ambient.update(seconds, view, scale)
+    armies.update(time, scale)
     for (const text of [...floats.children] as Text[]) {
       const age = (performance.now() - (text as Text & { born: number }).born) / 1000
       if (age > FLOAT_SECONDS) {
@@ -620,7 +631,8 @@ export async function createWorld(
     if (touches.size > 0) return
     if (press && !press.moved && e.type === 'pointerup') {
       const tile = pick({ x: e.global.x, y: e.global.y })
-      if (tile) onTap(tile, pickedBuilding)
+      const army = placement ? undefined : armies.pick({ x: (e.global.x - camera.x) / camera.scale.x, y: (e.global.y - camera.y) / camera.scale.y })
+      if (tile) onTap(tile, army === undefined ? pickedBuilding : undefined, army)
     }
     press = null
   }
@@ -845,6 +857,7 @@ export async function createWorld(
     centerOn,
     setTerritory,
     setRivals,
+    setArmies: (list, fights) => armies.set(list, fights),
     setStructures,
     setPlacement(next) {
       placement = next

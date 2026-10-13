@@ -1,5 +1,11 @@
 import { balance } from './balance'
 import type { Point } from './iso'
+import { priceAt } from './market'
+import type { Market } from './market'
+import { happinessStep, happinessTarget, isNightAt, popCapFor, recruitTerms, taxSpec } from './society'
+import { addUnits, countOf, garrisonOf, unitSpec } from './units'
+import type { Unit, Units } from './units'
+import type { TaxLevel } from './society'
 import { TileRule, findPlot, territoryRect, tileRule } from './territory'
 import type { Rect } from './territory'
 import { Terrain } from './worldgen'
@@ -15,7 +21,7 @@ export type Resource = 'gold' | Good
 export type Stock = Record<Resource, number>
 export type Cost = Partial<Stock>
 
-export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock'] as const
+export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall'] as const
 export type BuildingKind = 'palace' | 'tradePost' | (typeof BUILDABLE)[number]
 
 // Weapons are worked from raw goods in the forge and kept in the armory, apart from the tradeable stores.
@@ -41,6 +47,8 @@ export interface LevelSpec {
 
 export interface BuildingSpec extends LevelSpec {
   size: number
+  // The palace level it waits for (CLAUDE.md §9.7).
+  requiresPalace?: number
   produces?: Good
   // Choices of what to make; the first is the default.
   products?: Record<string, Product>
@@ -86,6 +94,20 @@ export interface Building {
   workers?: number
   // The chosen product (see BuildingSpec.products); the first one when absent.
   product?: string
+  // Walls only: knocked down in a siege, standing again once repaired.
+  broken?: boolean
+}
+
+// Gold that changes hands every production round under an accepted tribute (CLAUDE.md §9.7).
+export interface Tribute {
+  // The other kingdom (its id and name as it was when agreed).
+  other: number
+  name: string
+  gold: number
+  // 'in': the other kingdom pays us; 'out': we pay it.
+  dir: 'in' | 'out'
+  // The pact on the server.
+  pact?: number
 }
 
 export interface Kingdom {
@@ -114,12 +136,37 @@ export interface Kingdom {
   nextProductionAt: number
   // Everything up to here has been settled by `advance`.
   settledAt: number
+  // The people (absent in older saves: normal tax, starting happiness, no queen).
+  tax?: TaxLevel
+  happiness?: number
+  queen?: boolean
+  // Soldiers at the palace (how many, and of which kinds), soldiers out in armies (their rows are on the server), and
+  // batches still training. The pool of people ready to take up arms refills a little every round.
+  soldiers?: number
+  units?: Units
+  fielded?: number
+  training?: { count: number; doneAt: number; unit?: Unit }[]
+  manpower?: number
+  // Working through the night: full output after dark, at the cost of the people's mood and a growing tiredness.
+  nightShift?: boolean
+  fatigue?: number
+  // A queen carried off by another kingdom's spies, the queens this kingdom holds, and a revolt incited until then.
+  queenHeldBy?: { id: number; name: string } | null
+  hostages?: { of: number; name: string }[]
+  revoltUntil?: number
+  // Spies at home (idle or on counter-espionage) and out on missions; the next one the spy house trains.
+  spies?: number
+  spiesAway?: number
+  nextSpyAt?: number
+  tributes?: Tribute[]
 }
 
 export type EconomyEvent =
   | { kind: 'trade'; good: Good; sold: number; gold: number }
   | { kind: 'built'; building: Building }
   | { kind: 'produced'; delta: Partial<Stock>; weapons?: Partial<Armory> }
+  | { kind: 'trained'; count: number }
+  | { kind: 'spy' }
 
 const tripMs = () => balance.economy.trade.tripSeconds * 1000
 const productionMs = () => balance.economy.productionSeconds * 1000
@@ -227,16 +274,73 @@ const done = (b: Building, at: number) => b.doneAt <= at
 
 export const armoryOf = (kingdom: Kingdom): Armory => kingdom.armory ?? { sword: 0, shield: 0, bow: 0 }
 
+// The palace's finished level (0 without a palace); a palace being raised counts at the level below.
+export function palaceLevel(kingdom: Kingdom, at: number) {
+  const palace = kingdom.buildings.find((b) => b.kind === 'palace')
+  if (!palace) return 0
+  return Math.max(1, (palace.level ?? 1) - (palace.doneAt > at ? 1 : 0))
+}
+
+// Everyone in arms or training for it.
+export const soldiersOf = (kingdom: Kingdom) =>
+  (kingdom.soldiers ?? 0) + (kingdom.fielded ?? 0) + (kingdom.training ?? []).reduce((n, t) => n + t.count, 0)
+
+// Homes hold villagers up to the palace's population cap; soldiers come out of that number.
 export function population(kingdom: Kingdom, at: number) {
-  let villagers = 0
+  let housing = 0
   let jobs = 0
   for (const b of kingdom.buildings) {
     if (!done(b, at)) continue
-    villagers += levelSpec(b.kind, b.level).villagers ?? 0
+    housing += levelSpec(b.kind, b.level).villagers ?? 0
     jobs += staffOf(b)
   }
+  const cap = popCapFor(palaceLevel(kingdom, at))
+  const soldiers = soldiersOf(kingdom)
+  const villagers = Math.max(0, Math.min(housing, cap) - soldiers)
   // When more hands are set to work than there are villagers, every building works at a matching fraction.
-  return { villagers, jobs, efficiency: jobs === 0 ? 1 : Math.min(1, villagers / jobs) }
+  return { villagers, housing, cap, soldiers, jobs, efficiency: jobs === 0 ? 1 : Math.min(1, villagers / jobs) }
+}
+
+export const happinessOf = (kingdom: Kingdom) => kingdom.happiness ?? balance.society.happiness.start
+
+// The share of a full day's work the people put in at `at`: a fifth at night unless on a night shift, less when
+// tired from night shifts, half during an incited revolt.
+export function workRate(kingdom: Kingdom, at: number) {
+  const n = balance.society.night
+  const night = isNightAt(at) && !kingdom.nightShift ? n.workRate : 1
+  const revolt = (kingdom.revoltUntil ?? 0) > at ? balance.espionage.operations.revolt.workRate : 1
+  return night * (1 - (kingdom.fatigue ?? 0)) * revolt
+}
+
+// The most people that would take up arms: a share of the population that grows with its happiness.
+export function manpowerCap(kingdom: Kingdom, at: number) {
+  const { villagers, soldiers } = population(kingdom, at)
+  return Math.max(0, Math.floor((villagers + soldiers) * recruitTerms(happinessOf(kingdom)).share) - soldiers)
+}
+
+// How many more villagers would become soldiers of a kind now (the manpower pool, the villagers there are), and what
+// each one asks: mood makes the gold dearer, and some kinds take weapons from the armory.
+export function recruitment(kingdom: Kingdom, at: number, unit: Unit = 'spear') {
+  const { villagers } = population(kingdom, at)
+  const { costMultiplier } = recruitTerms(happinessOf(kingdom))
+  const cap = manpowerCap(kingdom, at)
+  const pool = Math.min(cap, Math.floor(kingdom.manpower ?? cap))
+  const spec = unitSpec(unit)
+  const cost = { ...spec.cost, gold: Math.round((spec.cost.gold ?? 0) * costMultiplier) } as Cost
+  return { willing: Math.max(0, Math.min(villagers, pool)), cap, pool, cost, weapons: spec.weapons ?? {} }
+}
+
+// The gold side of a round apart from the buildings: taxes, soldiers' pay and tributes (for the ledger as well).
+export function ledger(kingdom: Kingdom, at: number) {
+  const { villagers } = population(kingdom, at)
+  const upkeep = balance.military.warrior.upkeep
+  const paid = (kingdom.soldiers ?? 0) + (kingdom.fielded ?? 0)
+  return {
+    tax: villagers * taxSpec(kingdom.tax).goldPerVillager,
+    soldiersGold: paid * upkeep.gold,
+    soldiersFood: paid * upkeep.food,
+    tributes: (kingdom.tributes ?? []).map((t) => ({ ...t, gold: t.dir === 'in' ? t.gold : -t.gold })),
+  }
 }
 
 const isGood = (v: string): v is Good => (GOODS as readonly string[]).includes(v)
@@ -251,7 +355,7 @@ export function buildingOutput(kingdom: Kingdom, b: Building, at: number) {
   const product: Product = choice ? spec.products![choice] : { makes: spec.produces!, rate: 1 }
   // The land's yield only helps raw goods; worked goods depend on the hands alone.
   const land = isGood(product.makes) && !product.uses ? kingdom.yields[product.makes] : 1
-  return { makes: product.makes, units: spec.amount * product.rate * land * crew * population(kingdom, at).efficiency, uses: product.uses }
+  return { makes: product.makes, units: spec.amount * product.rate * land * crew * population(kingdom, at).efficiency * workRate(kingdom, at), uses: product.uses }
 }
 
 // One production round: what it adds to and takes from the stores, and the weapons it works. Worked goods only use
@@ -274,7 +378,9 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
     if (isGood(out.makes)) delta[out.makes] = (delta[out.makes] ?? 0) + units
     else weapons[out.makes] = (weapons[out.makes] ?? 0) + units
   }
-  delta.food = (delta.food ?? 0) - villagers * balance.economy.foodPerVillager
+  const l = ledger(kingdom, at)
+  delta.food = (delta.food ?? 0) - villagers * balance.economy.foodPerVillager - l.soldiersFood
+  delta.gold = (delta.gold ?? 0) + l.tax - l.soldiersGold + l.tributes.reduce((sum, t) => sum + t.gold, 0)
   return { delta, weapons }
 }
 
@@ -298,13 +404,15 @@ const pay = (stock: Stock, cost: Cost = {}): Stock => {
   return next
 }
 
-export type BuildError = 'palace' | 'unique' | 'cost' | 'queue' | 'spot' | 'top' | 'busy'
+export type BuildError = 'palace' | 'unique' | 'cost' | 'queue' | 'spot' | 'top' | 'busy' | 'locked'
 
 export function buildError(world: World, kingdom: Kingdom, stage: number, kind: BuildingKind, spot: Point | null, now: number): BuildError | null {
   const spec = BUILDINGS[kind]
   // One palace, placed first; it stands at once and takes no construction slot.
   if ((kind === 'palace') === hasPalace(kingdom)) return 'palace'
   if (kind === 'dock' && (!kingdom.dockPlot || kingdom.buildings.some((b) => b.kind === 'dock'))) return 'unique'
+  if ((spec.requiresPalace ?? 0) > palaceLevel(kingdom, now)) return 'locked'
+  if ((kind === 'market' || kind === 'barracks' || kind === 'spyHouse') && kingdom.buildings.some((b) => b.kind === kind)) return 'unique'
   if (!affordable(kingdom.stock, spec.cost)) return 'cost'
   if (kind !== 'palace' && constructing(kingdom, now).length >= balance.economy.maxConstructions) return 'queue'
   // The dock goes on its plot, which may lie outside the territory; everything else where the player puts it.
@@ -368,12 +476,34 @@ export function upgradeTrade(kingdom: Kingdom): Kingdom {
 
 // ---- Time ---------------------------------------------------------------------------------------------------------
 
-// Settles everything due by `now`, in the order it happened. Returns the same object when nothing was due.
-export function advance(kingdom: Kingdom, now: number): { kingdom: Kingdom; events: EconomyEvent[] } {
+// The spy house's capacity at its level, 0 without one.
+export function spyCapacity(kingdom: Kingdom, at: number) {
+  const house = kingdom.buildings.find((b) => b.kind === 'spyHouse' && done(b, at))
+  if (!house) return 0
+  const caps = balance.espionage.capacityByLevel
+  return caps[Math.min(caps.length - 1, (house.level ?? 1) - 1)]
+}
+
+// Settles everything due by `now`, in the order it happened. Returns the same object when nothing was due. The
+// merchant sells at the lobby's price (`market`); `sold` says how much went, for the lobby's prices.
+export function advance(kingdom: Kingdom, now: number, market?: Market | null): { kingdom: Kingdom; events: EconomyEvent[]; sold: Partial<Record<Good, number>> } {
   const events: EconomyEvent[] = []
+  const soldTotal: Partial<Record<Good, number>> = {}
   let k = kingdom
   const edit = () =>
-    k === kingdom ? (k = { ...kingdom, stock: { ...kingdom.stock }, armory: { ...armoryOf(kingdom) }, trade: { ...kingdom.trade } }) : k
+    k === kingdom
+      ? (k = { ...kingdom, stock: { ...kingdom.stock }, armory: { ...armoryOf(kingdom) }, trade: { ...kingdom.trade }, training: [...(kingdom.training ?? [])] })
+      : k
+  // Soldiers whose training ended join the garrison.
+  const trained = (kingdom.training ?? []).filter((t) => t.doneAt <= now)
+  if (trained.length > 0) {
+    edit()
+    k.training = k.training!.filter((t) => t.doneAt > now)
+    const count = trained.reduce((n, t) => n + t.count, 0)
+    k.units = trained.reduce((u, t) => addUnits(u, { [t.unit ?? 'spear']: t.count }), garrisonOf(k))
+    k.soldiers = countOf(k.units)
+    events.push({ kind: 'trained', count })
+  }
   // A building counts from the moment it is done, so production rounds after that use it.
   const finishing = kingdom.buildings.filter((b) => b.doneAt > kingdom.settledAt && b.doneAt <= now)
   for (;;) {
@@ -385,12 +515,35 @@ export function advance(kingdom: Kingdom, now: number): { kingdom: Kingdom; even
       const { delta, weapons } = roundOutcome(k, next)
       for (const [r, v] of Object.entries(delta)) k.stock[r as Resource] = Math.max(0, k.stock[r as Resource] + (v ?? 0))
       for (const [w, v] of Object.entries(weapons)) k.armory![w as Weapon] += v ?? 0
+      // The people's mood drifts toward what the taxes, the queen and the granary make of it.
+      const n = balance.society.night
+      k.happiness = happinessStep(
+        happinessOf(k),
+        happinessTarget(k.tax, !!k.queen, k.stock.food <= 0, { nightShift: k.nightShift, queenTaken: !!k.queenHeldBy, revolt: (k.revoltUntil ?? 0) > next }),
+      )
+      // Night shifts tire the people; rest brings them back.
+      k.fatigue =
+        k.nightShift && isNightAt(next)
+          ? Math.min(n.maxFatigue, (k.fatigue ?? 0) + n.fatiguePerNightRound)
+          : Math.max(0, (k.fatigue ?? 0) - n.recoveryPerRound)
+      // The manpower pool refills toward its cap.
+      const cap = manpowerCap(k, next)
+      k.manpower = Math.min(cap, (k.manpower ?? cap) + balance.society.manpower.regenPerRoundPerPalaceLevel * palaceLevel(k, next))
+      // The spy house trains a spy whenever it has room and the gold.
+      const room = spyCapacity(k, next) - (k.spies ?? 0) - (k.spiesAway ?? 0)
+      if (room > 0 && (k.nextSpyAt ?? 0) <= next && affordable(k.stock, balance.espionage.spyCost as Cost)) {
+        k.stock = pay(k.stock, balance.espionage.spyCost as Cost)
+        k.spies = (k.spies ?? 0) + 1
+        k.nextSpyAt = next + balance.espionage.spySeconds * 1000
+        events.push({ kind: 'spy' })
+      }
       k.nextProductionAt += productionMs()
       events.push({ kind: 'produced', delta, weapons })
     } else {
       const good = k.trade.good!
       const sold = Math.min(tradeUnits(k), Math.floor(k.stock[good]))
-      const gold = sold * balance.economy.trade.price[good]
+      const gold = Math.round(sold * priceAt(market, good, next))
+      soldTotal[good] = (soldTotal[good] ?? 0) + sold
       k.stock[good] -= sold
       k.stock.gold += gold
       k.trade.departedAt = next
@@ -400,7 +553,7 @@ export function advance(kingdom: Kingdom, now: number): { kingdom: Kingdom; even
   for (const building of finishing) events.push({ kind: 'built', building })
   if (finishing.length > 0) edit()
   if (k !== kingdom) k.settledAt = now
-  return { kingdom: k, events }
+  return { kingdom: k, events, sold: soldTotal }
 }
 
 const isWater = (world: World, x: number, y: number) =>

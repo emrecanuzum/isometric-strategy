@@ -53,6 +53,11 @@ const MAPS = {
   shield: ['kkkkkkkk', 'kRRyyRRk', 'kRRyyRRk', 'kyyyyyyk', 'kRRyyRRk', '.kRyyRk.', '..kyyk..', '...kk...'],
   bow: ['..bk....', '.b.Sk...', 'b...Sk..', 'b..kkSkk', 'b...Sk..', '.b.Sk...', '..bk....', '........'],
   inn: ['..kkkk..', '.kRRRRk.', 'kRRRRRRk', 'kkkkkkkk', '.klyylk.', '.klyylk.', '.klbblk.', '.kkkkkk.'],
+  swords: ['S......S', 'sS....Ss', '.sS..Ss.', '..sSSs..', '...ss...', '..ySSy..', '.bk..kb.', 'bk....kb'],
+  eye: ['........', '..kkkk..', '.kwwwwk.', 'kwwccwwk', 'kwwckwwk', '.kwwwwk.', '..kkkk..', '........'],
+  horse: ['........', '.....kk.', '....kbbk', 'kkkkbbk.', 'kbbbbbk.', 'kbbbbbk.', '.k.k.k..', '.k.k.k..'],
+  catapult: ['......kk', '.....kbk', '....kbk.', '...kbk..', '..kbk...', 'kkkkkkkk', '.kd..dk.', '.kk..kk.'],
+  dice: ['kkkkkkk.', 'kwwwwwk.', 'kwkwwwk.', 'kwwkwwk.', 'kwwwkwk.', 'kwwwwwk.', 'kkkkkkk.', '........'],
 } as const
 
 export type IconName = keyof typeof MAPS

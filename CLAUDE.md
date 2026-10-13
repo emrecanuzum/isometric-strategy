@@ -211,7 +211,10 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
     kurt sürüsü, tilki ve nadiren ayı; çölde ceylan sürüleri; kar sınırı
     altındaki dağda keçi; göl ve nehirde ördek, gölde kuğu çiftleri;
     bataklıkta balıkçıl ve yaban domuzu. Evlerinin çevresinde dinlenip
-    (otlayıp) yeni bir noktaya yürürler.
+    (otlayıp) yeni bir noktaya yürürler. Kara hayvanları **suyu geçmez**
+    (su kuşları da karayı): durak noktası yuvadan düz bir çizgiyle
+    yürünebilir olmalıdır; iki durak arasındaki yol nehri kesiyorsa hayvan
+    yuvası üzerinden dolaşır.
   - **Kuşlar** haritanın üstünde V düzeninde uçar, yere gölge düşer.
     Hayvanlar ve kuşlar ½× ve üstünde görünür.
   - **Bulutlar:** ¼× ve altında yarı saydam, yavaş sürüklenen iri
@@ -646,6 +649,168 @@ Moral 0–100 arası bir değerdir ve birçok sistemi çarpan olarak etkiler.
 Moral etkiler: vergi verimi, üretim, nüfus artışı, asker savaş gücü,
 isyan riski.
 
+### 9.7 Prototip: krallıklar arası katman (şu an uygulanan)
+
+Değerler `config/balance/society.json`, `market.json`, `diplomacy.json`,
+`espionage.json`, `military.json`; mantık `packages/shared/src/` altında
+(`society.ts`, `market.ts`, `realm.ts`, `diplomacy.ts`, `espionage.ts`,
+`military.ts`, `units.ts`). Sunucuda `supabase/functions/command` (oyuncu
+komutları) ve `supabase/functions/tick` (kendiliğinden olanlar; pg_cron her
+dakika, iş varken) çalışır. Ekonomi gibi süreler prototipte saniye/dakika
+mertebesindedir.
+
+**Saray seviyesi ve nüfus**
+
+- Sarayın her seviyesi bir **nüfus sınırı** verir: 16 / 32 / 48 / 64 / 80
+  (seviye × 16). Köylü + asker bu sınırı aşamaz; evler sınırın üstünde
+  köylü vermez.
+- **2. seviye saray** şunları açar: kışla, casus evi, gözcü kulesi, sur,
+  pazar ve kraliçe.
+
+**Vergi ve mutluluk**
+
+- Vergi oranı: düşük / normal / yüksek / ağır. Her üretim turunda köylü
+  başına altın getirir (oran yükseldikçe daha çok).
+- **Mutluluk** (0–100) her tur bir hedefe doğru yavaşça kayar. Hedef:
+  taban + vergi etkisi (düşük +, ağır −−) + kraliçe + gıda (açlık −).
+- Mutluluk **asker olmaya gönüllü** halkı ve asker maliyetini belirler:
+  mutlu halkın yaklaşık yarısı, mutsuz halkın beşte biri kadarı asker
+  olmaya razıdır; mutsuz halk daha pahalıya asker olur. (Ör. 32 nüfus:
+  mutluyken ~16, mutsuzken ~6–8 gönüllü.)
+- **Kraliçe:** 2. seviye saray ve en az belirli nüfus ister, altınla
+  edinilir; mutluluk hedefini yükseltir. Casuslarca kaçırılabilir (aşağı).
+- **Asker havuzu** (EU4 manpower): asker olmaya razı halkın havuzu her
+  üretim turunda saray seviyesiyle orantılı dolar; tavanı mutlulukla
+  belirlenir (mutlu halkın ~yarısı, mutsuzun ~beşte biri). Eğitim havuzdan
+  düşer.
+
+**Gece ve gece mesaisi**
+
+- Oyun saatinde **gece** (20:30–05:00, haritanın karardığı saatler) halk
+  dinlenir: binalar **%20** hızla üretir.
+- Halk sekmesinden **gece mesaisi** açılabilir: gece de tam çalışılır ama
+  mutluluk hedefi düşer ve her gece turunda **yorgunluk** birikir;
+  yorgunluk gündüz dahil bütün üretimi azaltır (en fazla %60), mesai
+  kapalıyken yavaşça geçer.
+
+**Pazar ve lobi fiyatları**
+
+- Her lobinin **ortak bir fiyat tablosu** vardır. Ticaret noktası mal
+  sattıkça o malın fiyatı lobi genelinde düşer; pazardan alındıkça artar.
+  Fiyatlar zamanla taban değerlerine geri döner.
+- **Pazar** binası (2. seviye saray) altınla hammadde satın almaya yarar;
+  alış fiyatı lobi fiyatının biraz üstündedir.
+
+**İlişkiler ve diplomasi**
+
+- Her krallık çiftinin bir **ilişki** puanı vardır (−100…+100, başta 0);
+  zamanla yavaşça sıfıra döner. İlişkiler, ittifaklar, savaşlar ve
+  haraçlar lobide herkese açıktır.
+- Diplomatik işler **elçi** ile yapılır; elçi karşı sarayda varınca
+  (birkaç dakika) teklif karşı tarafa düşer. Cevapsız teklif süresi
+  dolunca reddedilmiş sayılır.
+  - **İlişki geliştir:** altın karşılığı ilişki artar (bekleme süresiyle).
+  - **Hediye:** altın gönderilir, miktarla orantılı ilişki artar.
+  - **Haraç iste:** Kabul edilirse ilişki −5 düşer ve her üretim turunda
+    haraç ödeyenden isteyene altın akar; iki tarafın gelir/gider
+    tablosunda hangi krallıkla olduğu yazar. **Reddedilirse** ilişki çok
+    düşer. Kabul edip sonra **haracı kesen** daha çok kaybeder. İsteyen
+    haracı kendisi kaldırabilir.
+  - **İttifak teklifi:** en az **+50** ilişki ister. İttifakı bozmak
+    ilişkiyi çok düşürür.
+  - **Savaş ilanı:** ilişki en fazla **−50** olmalı; **savaş gerekçen**
+    (casus belli) varsa **−20** yeter. Gerekçesiz savaş açan, lobideki
+    diğer bütün krallıklarla −10 ilişki kaybeder.
+  - **Savaş gerekçesi** belli bir süre için doğar: casusu yakalanan,
+    haracı reddedilen, haracı kesilen, ittifakı bozulan, kraliçesi
+    kaçırılan ya da sabotaja uğrayıp sabotajcıyı yakalayan taraf, karşı
+    tarafa karşı gerekçe kazanır.
+  - **Savaş puanı** (−100…100, EU4 gibi): iki taraf arasındaki
+    muharebelerden (kazanılan/kaybedilen, öldürülen/kaybedilen asker) ve
+    alınan saraylardan hesaplanır.
+  - **Barış şartları:** beyaz barış, altın iste (her 20 altın 1 puan),
+    haraç iste (en az 40 puan), altın öde. Savaş puanı **100** olan tarafın
+    teklifi varınca kabul edilmiş sayılır (dayatılan barış).
+- Krallıklar sekmesinde müttefikler ayrı listelenir. Bir krallığa
+  tıklayınca (EU4 gibi) ilişkisi, müttefikleri, savaşları, haraçları,
+  diğer krallıklarla ilişkileri ve casusluk ağının izin verdiği ölçüde
+  tahmini hammaddeleri ve ordusu görünür.
+
+**Casusluk**
+
+- **Casus evi** (2. seviye saray) zamanla casus yetiştirir (altınla,
+  seviyeye göre kapasite).
+- Casus panelinden bir casus **bir krallığa ve bir konuya** gönderilir:
+  **Hammadde**, **Ordu** ya da **Diplomasi**; ya da evde **karşı
+  casusluk** için tutulur.
+- Her (hedef, konu) için **ağ gücü** (0–100) casus orada kaldıkça artar;
+  hedefin karşı casusluğu (evdeki casuslar + casus evi seviyesi) artışı
+  yavaşlatır.
+- Rapor tahminidir: ağ gücü arttıkça hata payı küçülür (ör. "120–180
+  yemek"). Diplomasi konusu hedefin yoldaki elçilerini ve casuslarını
+  gösterir.
+- Casusun **yakalanma** anı görev başında hedefin karşı casusluğuna göre
+  belirlenir; yakalanınca casus ölür, hedef kimin gönderdiğini öğrenir,
+  ilişki düşer ve hedef savaş gerekçesi kazanır.
+- Ordu konusundaki ağ %30'u geçince ordunun **birlik türleri** de tahmin
+  edilir.
+- **Operasyonlar** (CK gibi), hedefteki en güçlü ağdan yapılır ve altına
+  mal olur; başarı şansı ağ gücüyle artar, hedefin karşı casusluğuyla
+  düşer. Başarısız operasyon casusu kaybettirir ve kimin yaptığını
+  ortaya çıkarır.
+  - **%50 sabotaj:** depoları yak (yemek ve yapı malzemesinin dörtte
+    biri) ya da süren inşaatları geciktir.
+  - **%70 kraliçeyi kaçır:** kraliçe kaçıranın elinde rehin kalır; kaçırılan
+    krallığın mutluluğu hemen düşer ve rehinlik sürdükçe düşük kalır. Geri
+    almanın yolları: **fidye** ödemek, kaçıranın kendi isteğiyle **serbest
+    bırakması** (+ilişki) ya da kazanılan savaş gerekçesiyle savaş.
+  - **%90 isyan kışkırt:** on dakika üretim yarıya iner ve mutluluk düşer.
+
+**Ordu**
+
+- **Kışla** (2. seviye saray) asker havuzundan, altın ve malzemeyle
+  **birlik** yetiştirir (AoE gibi taş-kağıt-makas):
+  - **Mızrakçı** (savaş malzemesi): süvariyi yener, okçuya yenilir.
+  - **Okçu** (cephanelikten yay): mızrakçıyı yener, süvariye yenilir.
+  - **Süvari** (2. seviye kışla; yemek + savaş malzemesi): okçuyu yener,
+    mızrakçıya yenilir, daha sert vurur.
+  - **Mancınık** (2. seviye kışla): sahada zayıf; kuşatmada her biri birkaç
+    surun savunma bonusunu siler ve kazanılan kuşatmada daha çok sur yıkar.
+  Askerler sarayda garnizon olur ve her tur altın ve yemek tüketir.
+  Birlik karışımları arasındaki üstünlük zara bonus olarak eklenir.
+- Garnizondan istenen birliklerle **ordu** çıkarılır; ordu haritada yürür (konumu yol ve
+  zamanlardan hesaplanır). Hududu dışındaki orduya emirler elçiyle gider
+  (§8.2.1, 30 dk). Bir krallığın sahada **en fazla 2 ordusu** olur: ordu
+  ikiye bölünebilir (her tür orantılı ayrılır); aynı krallığın iki ordusu
+  **5 karo** yakınlıktaysa birleşebilir.
+- Savaştaki iki krallığın orduları karşılaşınca **muharebe** olur
+  (§8.2.2). **Müttefik orduları** muharebe noktasına yakınsa kendi
+  tarafına katılır ve korur. Sonuç tohumla deterministiktir; yenilen
+  ordu kalanlarıyla eve döner.
+- Savaştaki düşman sarayına varan ordu **kuşatma** yapar: garnizon,
+  **gözcü kuleleri** (menziline giren düşmana hasar verir, yoldan
+  geçenlere de) ve **surlar** (savunmayı güçlendirir, kuşatmada hasar alır,
+  yıkılan sur onarılmalıdır) savunur. Kazanan saldıran depolardan yağma
+  alır.
+- **Moral** (0–100, ordu başına): yürürken düşer; durunca kendi
+  topraklarında toparlanır, bir **hanın** yakınında çok daha hızlı
+  toparlanır, açık arazide yavaşça sarkar.
+- **Saha bilgisi** (0–100): ordu bir yerde durdukça artar, kamptan
+  uzaklaştıkça azalır; zara en fazla +1,5 ekler.
+- **Muharebe turları** (EU4 gibi): her tur (45 sn) iki taraf da d10 atar,
+  zara saha bilgisi (kuşatılan saray için kule ve sur bonusu) eklenir;
+  sonuca göre karşı taraf asker ve moral kaybeder. Morali ya da askeri
+  biten taraf yenilir; son turda saldıran çekilir. Savaşlar ~10 tur sürer
+  ve tur tur izlenebilir (zarlar, bonuslar, moral, kayıplar). Yenilen ordu
+  eve çekilir ve eve varana kadar yeniden yakalanamaz.
+- Savaştayken elçiler yalnızca barış götürür (ilişki geliştirme, hediye ve
+  haraç isteği olmaz).
+- Haritada ordular krallığın sancağıyla görünür; oyuncunun yoldaki
+  ordularının rotası kesikli çizgiyle çizilir, muharebeler çapraz kılıçla
+  işaretlenir. Başkasının ordusunun gücü yalnızca casusla tahmin edilir.
+- Muharebe başlayınca ve bitince **elçi** ekranda bir pencereyle haber
+  verir (kim, nerede, sonuç, kayıplar).
+
 ---
 
 ## 10. Puanlama ve Sezon Sonu
@@ -824,7 +989,8 @@ packages/shared/   İstemci ve sunucunun ortak kodu (izometrik matematik,
                    arazi yüksekliği, yürüyüş konumu hesabı, denge
                    yapılandırması erişimi)
 config/balance/    Denge değerleri (JSON) — tek kaynak
-supabase/          config.toml, migrations/, functions/
+supabase/          config.toml, migrations/, functions/ (command: oyuncu
+                   komutları, tick: zamanı gelenler, _shared: ikisinin ortağı)
 ```
 
 ### 16.3 Komutlar (kök dizinden)
@@ -835,7 +1001,8 @@ bun run db:start     Lokal Supabase'i başlat (Docker/OrbStack açık olmalı)
 bun run db:stop      Lokal Supabase'i durdur
 bun run db:reset     Veritabanını migration'lardan yeniden kur
 bun run db:push      Migration'ları bağlı bulut projesine uygula
-bun run fn:deploy    Ortak kodu paketle, `command` fonksiyonunu yükle
+bun run fn:deploy    Ortak kodu paketle, `command` ve `tick` fonksiyonlarını yükle
+bun run tick:setup   pg_cron'u `tick` fonksiyonuna bağla (gizli anahtarı yeniler)
 bun run lobby:create "Ad" [tohum] [--private] [--players n]
                      Bulutta yeni lobi aç
 bun run dev          İstemciyi başlat (http://localhost:5173)

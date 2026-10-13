@@ -32,6 +32,7 @@ const ERRORS: Record<string, string> = {
   full: 'Bu lobi dolu.',
   lobby: 'Bu lobi bulunamadı ya da sezonu bitti.',
   password: 'Şifre yanlış.',
+  tries: 'Çok fazla yanlış şifre denendi; 10 dakika sonra tekrar dene.',
   lobbies: 'Aynı anda en fazla 3 açık lobin olabilir.',
   rejected: 'Lobi bilgileri geçersiz.',
 }

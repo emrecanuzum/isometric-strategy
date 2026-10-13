@@ -2,14 +2,16 @@ import { useEffect, useRef } from 'react'
 import type React from 'react'
 import { Icon } from '../icons'
 import type { IconName } from '../icons'
-import { BuildTab, DiplomacyTab, JournalTab, KingdomTab, PeopleTab, StoreTab, TradeTab } from './tabs'
+import { DiplomacyTab } from './diplomacy'
+import { BuildTab, JournalTab, KingdomTab, PeopleTab, StoreTab, TradeTab } from './tabs'
+import { ArmyTab } from './war'
 import type { HudData } from './tabs'
 
 // The kingdom's interface: stores along the top, a dock of tabs along the bottom and the open tab in a sheet
 // (a drawer on the left on wide screens, a bottom sheet on phones). Tabs are grouped by where they look:
 // the economy, the realm itself, and the world outside.
 
-export type TabId = 'build' | 'store' | 'trade' | 'kingdom' | 'people' | 'diplomacy' | 'journal'
+export type TabId = 'build' | 'store' | 'trade' | 'kingdom' | 'people' | 'army' | 'diplomacy' | 'journal'
 
 interface Tab {
   id: TabId
@@ -26,8 +28,9 @@ export const TABS: Tab[] = [
   { id: 'store', name: 'Depo', icon: 'chest', blurb: 'Hammadde stoku ve akışı', group: 'economy', view: StoreTab },
   { id: 'trade', name: 'Ticaret', icon: 'trade', blurb: 'Tüccar ve ticaret noktası', group: 'economy', view: TradeTab },
   { id: 'kingdom', name: 'Krallık', icon: 'crown', blurb: 'Saray, yapılar, hudut', group: 'realm', view: KingdomTab },
-  { id: 'people', name: 'Halk', icon: 'people', blurb: 'Mutluluk ve iç işler', group: 'realm', view: PeopleTab },
-  { id: 'diplomacy', name: 'Diplomasi', icon: 'banner', blurb: 'Dış ilişkiler ve komşular', group: 'world', view: DiplomacyTab },
+  { id: 'people', name: 'Halk', icon: 'people', blurb: 'Vergi, mutluluk, kraliçe', group: 'realm', view: PeopleTab },
+  { id: 'army', name: 'Ordu', icon: 'swords', blurb: 'Kışla, garnizon, ordular, savaşlar', group: 'world', view: ArmyTab },
+  { id: 'diplomacy', name: 'Diplomasi', icon: 'banner', blurb: 'Krallıklar, ilişkiler, casusluk', group: 'world', view: DiplomacyTab },
   { id: 'journal', name: 'Günlük', icon: 'scroll', blurb: 'Elçinin günlük raporları', group: 'world', view: JournalTab },
 ]
 
@@ -98,13 +101,14 @@ export function Sheet({ tab, data, onClose }: { tab: TabId; data: HudData; onClo
         </button>
       </header>
       <div className="sheet-body" ref={body}>
-        {spec.view(data)}
+        {/* Rendered as a component (keyed by tab) so a tab may keep its own state. */}
+        <spec.view key={tab} {...data} />
       </div>
     </section>
   )
 }
 
-// Number keys 1–7 open the tabs, Escape closes the open one; ignored while typing.
+// Number keys 1–8 open the tabs, Escape closes the open one; ignored while typing.
 export function useTabKeys(onToggle: (tab: TabId) => void, onClose: () => void) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

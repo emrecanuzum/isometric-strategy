@@ -1,4 +1,4 @@
-import type { BuildingKind, Resource, Weapon } from '@game/shared'
+import type { BuildingKind, Resource, Unit, Weapon } from '@game/shared'
 import type { IconName } from './icons'
 
 export const RESOURCE_NAMES: Record<Resource, string> = {
@@ -23,6 +23,11 @@ export const BUILDING_NAMES: Record<BuildingKind, string> = {
   lumberCamp: 'Oduncu kampı',
   forge: 'Silah atölyesi',
   dock: 'İskele',
+  market: 'Pazar',
+  barracks: 'Kışla',
+  spyHouse: 'Casus evi',
+  watchtower: 'Gözcü kulesi',
+  wall: 'Sur',
 }
 
 export const BUILDING_NOTES: Partial<Record<BuildingKind, string>> = {
@@ -31,6 +36,33 @@ export const BUILDING_NOTES: Partial<Record<BuildingKind, string>> = {
   lumberCamp: 'Yapı malzemesi üretir',
   forge: 'Demir döker ya da silah işler',
   dock: 'Balık tutar (yemek), iskele alanına kurulur',
+  market: 'Altınla hammadde satın alınır',
+  barracks: 'Savaşçı yetiştirir',
+  spyHouse: 'Casus yetiştirir',
+  watchtower: 'Yaklaşan düşmana ok atar',
+  wall: 'Kuşatmada savunmayı güçlendirir',
+}
+
+export const UNIT_NAMES: Record<Unit, string> = {
+  spear: 'Mızrakçı',
+  archer: 'Okçu',
+  cavalry: 'Süvari',
+  catapult: 'Mancınık',
+}
+
+export const UNIT_ICONS: Record<Unit, IconName> = {
+  spear: 'arms',
+  archer: 'bow',
+  cavalry: 'horse',
+  catapult: 'catapult',
+}
+
+// What each kind is good for, in a few words.
+export const UNIT_NOTES: Record<Unit, string> = {
+  spear: 'Süvariyi yener, okçuya yenilir',
+  archer: 'Mızrakçıyı yener, süvariye yenilir',
+  cavalry: 'Okçuyu yener, mızrakçıya yenilir; sert vurur',
+  catapult: 'Sahada zayıf; kuşatmada surları etkisiz kılar ve yıkar',
 }
 
 export const WEAPON_NAMES: Record<Weapon, string> = {

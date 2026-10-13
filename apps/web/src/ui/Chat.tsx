@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { KINGDOM_COLORS } from '../game/buildingSprites'
 import type { KingdomColor } from '../game/buildingSprites'
 import type { ChatMessage } from '../net/online'
+import type { KingdomInfo } from './hud/online'
 import { Icon } from './icons'
 
-// The lobby chat: kept for the season, every line under the kingdom's name in its colour. It folds into a button
-// that counts what came in while it was closed.
+// The lobby chat: kept for the season, every line under the kingdom's name in its colour and its player's name. A
+// second tab lists the kingdoms of the lobby and who plays them; picking one opens it in the diplomacy tab. It folds
+// into a button that counts what came in while it was closed.
 
 const swatch = (color: string | null) => KINGDOM_COLORS[color as KingdomColor]?.swatch ?? '#8a7a60'
 const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
@@ -15,14 +17,19 @@ export function Chat({
   mine,
   canPost,
   onSend,
+  kingdoms,
+  onKingdom,
 }: {
   messages: ChatMessage[]
   // The player's kingdom id, to set their own lines apart.
   mine: number | null
   canPost: boolean
   onSend: (body: string) => Promise<void>
+  kingdoms: KingdomInfo[]
+  onKingdom: (id: number) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [tab, setTab] = useState<'chat' | 'kingdoms'>('chat')
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [seen, setSeen] = useState(messages.length ? messages[messages.length - 1].id : 0)
@@ -61,11 +68,33 @@ export function Chat({
   return (
     <section className="chat frame" aria-label="Lobi sohbeti">
       <header>
-        <b>Lobi sohbeti</b>
+        <span className="chat-tabs" role="tablist">
+          <button role="tab" aria-selected={tab === 'chat'} className="btn small" onClick={() => setTab('chat')}>
+            Sohbet
+          </button>
+          <button role="tab" aria-selected={tab === 'kingdoms'} className="btn small" onClick={() => setTab('kingdoms')}>
+            Krallıklar ({kingdoms.length})
+          </button>
+        </span>
         <button className="btn small icon-only" onClick={() => setOpen(false)} aria-label="Sohbeti kapat">
           <Icon name="close" size={16} />
         </button>
       </header>
+      {tab === 'kingdoms' ? (
+        <ol className="chat-kingdoms">
+          {kingdoms.map((k) => (
+            <li key={k.id}>
+              <button className={k.id === mine ? 'own' : undefined} onClick={() => onKingdom(k.id)} disabled={k.id === mine}>
+                <i style={{ background: swatch(k.color) }} />
+                <span>
+                  <b style={{ color: `color-mix(in srgb, ${swatch(k.color)} 45%, #f3e6c8)` }}>{k.name}</b>
+                  <small>{k.id === mine ? 'sen' : (k.username ?? '—')}</small>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      ) : (
       <ol ref={list}>
         {messages.length === 0 && <li className="empty">Henüz kimse yazmadı.</li>}
         {messages.map((m) => (
@@ -73,6 +102,7 @@ export function Chat({
             <i style={{ background: swatch(m.color) }} />
             <span>
               <b style={{ color: `color-mix(in srgb, ${swatch(m.color)} 45%, #f3e6c8)` }}>{m.name}</b>
+              {m.username && <small className="who">{m.username}</small>}
               <small>{timeOf(m.created_at)}</small>
               <br />
               {m.body}
@@ -80,6 +110,7 @@ export function Chat({
           </li>
         ))}
       </ol>
+      )}
       <form onSubmit={submit}>
         <input
           value={draft}

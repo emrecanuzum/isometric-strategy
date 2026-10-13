@@ -417,3 +417,7 @@ enabled = true
 # Commands check the caller's session themselves (publishable keys are not JWTs).
 [functions.command]
 verify_jwt = false
+
+# Called by pg_cron (maybe_tick) with a shared secret, not by players.
+[functions.tick]
+verify_jwt = false

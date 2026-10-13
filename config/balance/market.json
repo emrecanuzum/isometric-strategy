@@ -1,0 +1,8 @@
+{
+  "impactPerUnit": 0.004,
+  "minFactor": 0.3,
+  "maxFactor": 3,
+  "halfLifeSeconds": 1800,
+  "buyMarkup": 1.25,
+  "maxBuy": 100
+}

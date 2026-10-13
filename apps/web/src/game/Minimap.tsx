@@ -36,25 +36,60 @@ function renderBase(world: World) {
   return image
 }
 
+// A kingdom's banner on the map: at its site, in its colour; the player's own is edged in gold.
+export interface MinimapFlag {
+  site: Point
+  color: string
+  own: boolean
+}
+
 interface Props {
   world: World
   center: Point | null
+  flags?: MinimapFlag[]
   onJump: (tile: Point) => void
 }
 
-export function Minimap({ world, center, onJump }: Props) {
+// Banner size in canvas pixels, before the minimap's own turn and squash.
+const POLE = 11
+const CLOTH_W = 7
+const CLOTH_H = 5
+
+// The minimap is turned 45° and squashed to half height on screen (see .minimap); a banner is drawn through the inverse
+// of that, so it stands upright with its pole on the site.
+function drawFlag(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, own: boolean) {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(-Math.PI / 4)
+  ctx.scale(1, 2)
+  const edge = own ? '#f2d16b' : '#120d0b'
+  ctx.fillStyle = edge
+  ctx.fillRect(-1, -POLE - 1, 3, POLE + 1)
+  ctx.fillRect(0, -POLE - 1, CLOTH_W + 2, CLOTH_H + 2)
+  ctx.fillStyle = '#e8d8b0'
+  ctx.fillRect(0, -POLE, 1, POLE)
+  ctx.fillStyle = color
+  ctx.fillRect(1, -POLE, CLOTH_W, CLOTH_H)
+  ctx.restore()
+}
+
+export function Minimap({ world, center, flags = [], onJump }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const base = useMemo(() => renderBase(world), [world])
 
   useEffect(() => {
     const ctx = canvas.current!.getContext('2d')!
     ctx.putImageData(base, 0, 0)
-    if (!center) return
     const scale = SIZE / world.size
-    ctx.strokeStyle = '#fff'
-    ctx.lineWidth = 2
-    ctx.strokeRect(center.x * scale - 6, center.y * scale - 6, 12, 12)
-  }, [base, center, world.size])
+    if (center) {
+      ctx.strokeStyle = '#fff'
+      ctx.lineWidth = 2
+      ctx.strokeRect(center.x * scale - 6, center.y * scale - 6, 12, 12)
+    }
+    // Back to front on screen (the screen's vertical is x + y), the player's own on top.
+    const order = [...flags].sort((a, b) => Number(a.own) - Number(b.own) || a.site.x + a.site.y - (b.site.x + b.site.y))
+    for (const flag of order) drawFlag(ctx, flag.site.x * scale, flag.site.y * scale, flag.color, flag.own)
+  }, [base, center, flags, world.size])
 
   return (
     <div className="minimap">

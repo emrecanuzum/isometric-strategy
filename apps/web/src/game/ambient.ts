@@ -423,11 +423,42 @@ export function createAmbient(world: World, actors: Container): Ambient {
     }
   }
 
-  // Where an animal rests during cycle k: a random spot near home it is allowed on, else home itself.
+  // Whether an animal can walk the straight line between two points: every half tile on ground it is allowed on, so
+  // land animals never wade a river and water birds never cross land.
+  const clear = (a: Animal, from: { x: number; y: number }, to: { x: number; y: number }) => {
+    const steps = Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) * 2)
+    for (let i = 1; i <= steps; i++) {
+      const x = from.x + ((to.x - from.x) * i) / steps
+      const y = from.y + ((to.y - from.y) * i) / steps
+      if (!a.kind.allowed(terrainAt(x, y)) || blocked(Math.floor(x), Math.floor(y))) return false
+    }
+    return true
+  }
+  // Where an animal rests during cycle k: a random spot near home it can walk to straight from home, else home itself.
+  const waypoints = new Map<string, { x: number; y: number }>()
   const waypoint = (a: Animal, k: number) => {
+    const key = `${a.id}:${k}`
+    const known = waypoints.get(key)
+    if (known) return known
+    const home = { x: a.homeX, y: a.homeY }
     const x = a.homeX + (hash(a.id, k * 2, seed + 701) - 0.5) * 2 * a.kind.range
     const y = a.homeY + (hash(a.id, k * 2 + 1, seed + 701) - 0.5) * 2 * a.kind.range
-    return a.kind.allowed(terrainAt(x, y)) && !blocked(Math.floor(x), Math.floor(y)) ? { x, y } : { x: a.homeX, y: a.homeY }
+    const spot = clear(a, home, { x, y }) ? { x, y } : home
+    if (waypoints.size > 20_000) waypoints.clear()
+    waypoints.set(key, spot)
+    return spot
+  }
+  // Two rests on either side of a bend of the river: the walk goes by way of home.
+  const detours = new Map<string, boolean>()
+  const viaHome = (a: Animal, k: number, from: { x: number; y: number }, to: { x: number; y: number }) => {
+    const key = `${a.id}:${k}`
+    let via = detours.get(key)
+    if (via === undefined) {
+      via = !clear(a, from, to)
+      if (detours.size > 20_000) detours.clear()
+      detours.set(key, via)
+    }
+    return via
   }
   let blocked = (_x: number, _y: number) => false
   const lifePool = new Pool(actors)
@@ -444,8 +475,13 @@ export function createAmbient(world: World, actors: Container): Ambient {
         const from = moving ? here : waypoint(a, k - 1)
         const to = moving ? waypoint(a, k + 1) : here
         const s = moving ? (f - (1 - kind.move)) / kind.move : 1
-        const x = from.x + (to.x - from.x) * s
-        const y = from.y + (to.y - from.y) * s
+        let x = from.x + (to.x - from.x) * s
+        let y = from.y + (to.y - from.y) * s
+        if (moving && viaHome(a, k, from, to)) {
+          const leg = s < 0.5 ? { a: from, b: { x: a.homeX, y: a.homeY }, t: s * 2 } : { a: { x: a.homeX, y: a.homeY }, b: to, t: s * 2 - 1 }
+          x = leg.a.x + (leg.b.x - leg.a.x) * leg.t
+          y = leg.a.y + (leg.b.y - leg.a.y) * leg.t
+        }
         const screen = toScreen(x, y, kind.water ? 0 : heightAt(world, x, y))
         if (!inView(view, screen.x, screen.y, 24)) continue
         let frame: number
@@ -594,6 +630,9 @@ export function createAmbient(world: World, actors: Container): Ambient {
     sky,
     setBlocked(next) {
       blocked = next
+      // New buildings change which walks are clear.
+      waypoints.clear()
+      detours.clear()
     },
     setChimneys(points) {
       chimneys = [...innChimneys, ...points.map((c, i) => ({ ...c, phase: hash(i, Math.round(c.x), seed + 953) }))]

@@ -1,4 +1,4 @@
-import type { Building, Kingdom, Point } from '@game/shared'
+import type { Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, Relation, SpyMission, SpyTopic, TaxLevel, Unit, Units } from '@game/shared'
 import { supabase } from '../lib/supabase'
 
 // The lobby as the client sees it: the player's own kingdom in full, the others only as they show on the map, and the
@@ -13,6 +13,7 @@ export interface Lobby {
   season_start: string
   season_end: string
   has_password: boolean
+  market: Market | null
 }
 
 // The player's row: the sites shown before founding, then the economy.
@@ -27,8 +28,10 @@ export interface Rival {
   id: number
   name: string
   color: string
+  username: string | null
   site: Point
-  buildings: Pick<Building, 'id' | 'kind' | 'x' | 'y' | 'size' | 'doneAt' | 'level'>[]
+  buildings: Pick<Building, 'id' | 'kind' | 'x' | 'y' | 'size' | 'doneAt' | 'level' | 'broken'>[]
+  queen: boolean
   version: number
 }
 
@@ -37,6 +40,7 @@ export interface ChatMessage {
   kingdom_id: number
   name: string
   color: string | null
+  username: string | null
   body: string
   created_at: string
 }
@@ -82,7 +86,7 @@ export async function listLobbies(): Promise<LobbyListing[]> {
   return data as LobbyListing[]
 }
 
-const LOBBY_COLUMNS = 'id, name, seed, is_public, max_players, season_start, season_end, has_password'
+const LOBBY_COLUMNS = 'id, name, seed, is_public, max_players, season_start, season_end, has_password, market'
 
 export async function getLobby(id: string): Promise<Lobby | null> {
   const { data } = await supabase.from('lobbies').select(LOBBY_COLUMNS).eq('id', id).maybeSingle()
@@ -103,7 +107,7 @@ export async function loadRivals(lobby: string): Promise<Rival[]> {
 export async function loadChat(lobby: string): Promise<ChatMessage[]> {
   const { data, error } = await supabase
     .from('chat_messages')
-    .select('id, kingdom_id, name, color, body, created_at')
+    .select('id, kingdom_id, name, color, username, body, created_at')
     .eq('lobby_id', lobby)
     .order('id', { ascending: false })
     .limit(CHAT_KEEP)
@@ -127,6 +131,25 @@ export type Command =
   | { type: 'workers'; id: number; workers: number }
   | { type: 'product'; id: number; product: string }
   | { type: 'reset' }
+  | { type: 'tax'; tax: TaxLevel }
+  | { type: 'queen' }
+  | { type: 'train'; count: number; unit: Unit }
+  | { type: 'nightShift'; on: boolean }
+  | { type: 'operation'; target: number; op: Operation }
+  | { type: 'ransom' }
+  | { type: 'release'; target: number }
+  | { type: 'buy'; good: string; units: number }
+  | { type: 'repairWalls' }
+  | { type: 'envoy'; to: number; kind: Envoy['kind']; gold?: number; terms?: PeaceTerms }
+  | { type: 'respond'; envoy: number; accept: boolean }
+  | { type: 'endTribute'; pact: number }
+  | { type: 'breakAlliance'; pact: number }
+  | { type: 'declareWar'; to: number }
+  | { type: 'spy'; target: number; topic: SpyTopic }
+  | { type: 'recall'; mission: number }
+  | { type: 'intel'; target: number }
+  | { type: 'raise'; units: Units }
+  | { type: 'army'; army: number; order: ArmyOrderPayload }
 
 export class CommandError extends Error {}
 
@@ -136,11 +159,17 @@ async function invoke(body: object) {
     const answer = await (error as { context?: Response }).context?.json?.().catch(() => null)
     throw new CommandError(answer?.error ?? 'server')
   }
-  return data as { lobby: string; kingdom: Mine }
+  return data as { lobby: string; kingdom: Mine; result?: unknown }
 }
 
 export async function send(lobby: string, command: Command): Promise<Mine> {
   return (await invoke({ lobby, ...command })).kingdom
+}
+
+// A command with what it answers besides the kingdom (an envoy's answer, a spy report, when an order arrives).
+export async function sendFor<T>(lobby: string, command: Command): Promise<{ kingdom: Mine; result: T }> {
+  const { kingdom, result } = (await invoke({ lobby, ...command })) as { kingdom: Mine; result: T }
+  return { kingdom, result }
 }
 
 // Opens a lobby (the server makes its world) and joins it.
@@ -151,6 +180,9 @@ export async function createLobby(name: string, maxPlayers: number, password: st
 export interface LobbyFeed {
   onKingdom(id: number, version: number): void
   onChat(message: ChatMessage): void
+  // A table of the layer between kingdoms changed (for notices: whose).
+  onChange(table: string, kingdom?: number): void
+  onMarket(market: Market): void
 }
 
 // The lobby's private broadcast topic: only members may join it (see the migrations).
@@ -159,8 +191,100 @@ export function subscribe(lobby: string, feed: LobbyFeed) {
     .channel(`lobby:${lobby}`, { config: { private: true } })
     .on('broadcast', { event: 'kingdom' }, ({ payload }) => feed.onKingdom(payload.id, payload.version))
     .on('broadcast', { event: 'chat' }, ({ payload }) => feed.onChat(payload as ChatMessage))
+    .on('broadcast', { event: 'change' }, ({ payload }) => feed.onChange(payload.table, payload.kingdom))
+    .on('broadcast', { event: 'market' }, ({ payload }) => feed.onMarket(payload.market as Market))
     .subscribe()
   return () => {
     supabase.removeChannel(channel)
   }
+}
+
+// ---- The layer between kingdoms --------------------------------------------------------------------------------
+
+export type ArmyOrderPayload = { kind: 'move'; x: number; y: number } | { kind: 'home' } | { kind: 'split'; soldiers: number } | { kind: 'merge'; with: number }
+
+export interface ArmyOrder {
+  id: number
+  army_id: number
+  issued_at: string
+  effective_at: string
+  payload: ArmyOrderPayload
+  applied_at: string | null
+}
+
+export interface Battle {
+  id: number
+  kind: 'field' | 'siege'
+  x: number
+  y: number
+  started_at: string
+  ends_at: string
+  attackers: Fighter[]
+  defenders: Fighter[]
+  besieged: number | null
+  plan: BattlePlan & { defense?: { towers: number; walls: number } }
+  resolved: boolean
+  report: { winner: 'attackers' | 'defenders'; losses: Record<string, number>; loot?: Record<string, number> } | null
+}
+
+export interface Notice {
+  id: number
+  kingdom_id: number
+  kind: string
+  // deno-style loose payload: each kind has its own fields.
+  payload: Record<string, unknown>
+  show_at: string
+  seen: boolean
+}
+
+export interface Estimate {
+  lo: number
+  hi: number
+}
+
+export interface IntelReport {
+  strength: Record<SpyTopic, number>
+  stores: Record<'gold' | 'food' | 'materials' | 'arms', Estimate | null>
+  army: Record<'garrison' | 'field' | 'might' | 'happiness', Estimate | null> & { units: Record<Unit, Estimate | null> | null }
+  diplomacy?: { envoys: { to: string; kind: string; status: string }[]; spies: { target: string; topic: string }[] | null; spyCount: number }
+}
+
+export async function loadDiplomacy(lobby: string) {
+  const [relations, pacts, envoys, missions, orders, claims] = await Promise.all([
+    supabase.from('relations').select('a, b, value, at, improved_at').eq('lobby_id', lobby),
+    supabase.from('pacts').select('*').eq('lobby_id', lobby).is('ended_at', null),
+    supabase.from('envoys').select('*').eq('lobby_id', lobby).order('id', { ascending: false }).limit(60),
+    supabase.from('spy_missions').select('*').eq('lobby_id', lobby).order('id', { ascending: false }).limit(40),
+    supabase.from('army_orders').select('*').eq('lobby_id', lobby).is('applied_at', null),
+    supabase.from('claims').select('holder_id, target_id, reason, expires_at').eq('lobby_id', lobby).gt('expires_at', new Date().toISOString()),
+  ])
+  return {
+    relations: (relations.data ?? []) as Relation[],
+    pacts: (pacts.data ?? []) as Pact[],
+    envoys: (envoys.data ?? []) as Envoy[],
+    missions: (missions.data ?? []) as SpyMission[],
+    orders: (orders.data ?? []) as ArmyOrder[],
+    claims: (claims.data ?? []) as Claim[],
+  }
+}
+
+export async function loadArmies(lobby: string): Promise<Army[]> {
+  const { data } = await supabase.rpc('lobby_armies', { lobby })
+  return (data ?? []) as Army[]
+}
+
+// Battles under way and the latest ones fought.
+export async function loadBattles(lobby: string): Promise<Battle[]> {
+  const { data } = await supabase.from('battles').select('*').eq('lobby_id', lobby).order('started_at', { ascending: false }).limit(20)
+  return (data ?? []) as Battle[]
+}
+
+export async function loadNotices(lobby: string): Promise<Notice[]> {
+  const { data } = await supabase.from('notices').select('*').eq('lobby_id', lobby).eq('seen', false).order('show_at').limit(30)
+  return (data ?? []) as Notice[]
+}
+
+// Query builders only run when awaited.
+export async function markSeen(ids: number[]) {
+  await supabase.from('notices').update({ seen: true }).in('id', ids)
 }

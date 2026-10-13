@@ -29,14 +29,20 @@ import type React from 'react'
 import { WorldMap } from './game/WorldMap'
 import { ConfirmBuild } from './ui/hud/ConfirmBuild'
 import { Minimap } from './game/Minimap'
+import type { MinimapFlag } from './game/Minimap'
 import type { Structure } from './game/chunkPainter'
 import { createWorld, footprintOrigin } from './game/createWorld'
 import type { Hover, RivalTerritory, WorldView } from './game/createWorld'
 import { KINGDOM_COLORS } from './game/buildingSprites'
 import type { KingdomColor } from './game/buildingSprites'
 import { serverNow } from './net/clock'
-import { CHAT_KEEP, CommandError, loadChat, loadMine, loadRivals, postChat, send, subscribe } from './net/online'
-import type { ChatMessage, Command, Lobby, Mine, Rival } from './net/online'
+import { CHAT_KEEP, CommandError, loadChat, loadMine, loadRivals, markSeen, postChat, send, sendFor, subscribe } from './net/online'
+import type { ChatMessage, Command, IntelReport, Lobby, Mine, Rival } from './net/online'
+import { useLayer } from './net/layer'
+import type { MapArmy } from './game/armies'
+import { EnvoyDialog } from './ui/Envoy'
+import type { KingdomInfo, Online } from './ui/hud/online'
+import { BattleView } from './ui/hud/war'
 import type { Settings } from './net/settings'
 import { Chat } from './ui/Chat'
 import { findPath } from './game/town'
@@ -81,6 +87,22 @@ const REFUSALS: Record<string, string> = {
   color: 'Bu renk başka bir krallığın; başka bir renk seç',
   conflict: 'Krallık başka yerden değişti, yeniden dene',
   server: 'Sunucuya ulaşılamadı',
+  relation: 'İlişkiniz bunun için uygun değil',
+  already: 'Bu zaten var ya da yolda',
+  war: 'Savaştayken olmaz',
+  cooldown: 'Biraz bekle, elçin yeni döndü',
+  spies: 'Evde casusun yok',
+  soldiers: 'Yeterli asker yok',
+  armies: 'Sahada en fazla 2 ordun olabilir',
+  battle: 'Ordu savaşta; emir alamaz',
+  route: 'Oraya yol yok',
+  far: 'Ordular birleşmek için çok uzak',
+  people: 'Yeterli gönüllü ya da nüfus yok',
+  building: 'Bunun için gereken bina yok',
+  have: 'Zaten var',
+  none: 'Yapılacak bir şey yok',
+  target: 'Krallık bulunamadı',
+  founded: 'Önce krallığını kur',
 }
 const refusal = (e: unknown) => {
   const code = e instanceof CommandError ? e.message : 'server'
@@ -102,6 +124,7 @@ const BUILD_ERRORS: Record<BuildError, string> = {
   spot: 'Buraya inşa edilemez',
   top: 'En yüksek seviyede',
   busy: 'Bina şu an inşaatta',
+  locked: 'Önce sarayı 2. seviyeye yükselt',
 }
 
 // Walkers keep to dry land below the mountains.
@@ -157,7 +180,7 @@ function App({
   const [hover, setHover] = useState<Hover | null>(null)
   const [cameraCenter, setCameraCenter] = useState<Point | null>(null)
   const [loading, setLoading] = useState(true)
-  const tapRef = useRef<(tile: Point, building?: number) => void>(() => {})
+  const tapRef = useRef<(tile: Point, building?: number, army?: number) => void>(() => {})
 
   useEffect(() => {
     let cancelled = false
@@ -169,7 +192,7 @@ function App({
         onHover: setHover,
         onCamera: setCameraCenter,
         onLoading: setLoading,
-        onTap: (tile, building) => tapRef.current(tile, building),
+        onTap: (tile, building, army) => tapRef.current(tile, building, army),
       },
       serverNow,
     ).then((v) => {
@@ -189,9 +212,13 @@ function App({
 
   // The server's copy of the player's row, and the kingdom as shown: the server's state settled up to now by the same
   // `advance` the server runs, with the player's commands applied at once while the server confirms them.
+  // The layer between kingdoms (diplomacy, spies, armies, battles, notices, prices).
+  const { layer, refreshAll, onChange: onLayerChange, onMarket, dropNotices } = useLayer(lobby.id, lobby.market)
+  const marketRef = useRef(layer.market)
+  marketRef.current = layer.market
   const [mine, setMine] = useState(initial)
   const mineRef = useRef(mine)
-  const [kingdom, setKingdomState] = useState<Kingdom | null>(() => initial.state && advance(initial.state, serverNow()).kingdom)
+  const [kingdom, setKingdomState] = useState<Kingdom | null>(() => initial.state && advance(initial.state, serverNow(), lobby.market).kingdom)
   const kingdomRef = useRef(kingdom)
   const setKingdom = useCallback((next: Kingdom | null) => {
     kingdomRef.current = next
@@ -207,7 +234,7 @@ function App({
       if (row.version < mineRef.current.version) return
       mineRef.current = row
       setMine(row)
-      setKingdom(row.state && advance(row.state, serverNow()).kingdom)
+      setKingdom(row.state && advance(row.state, serverNow(), marketRef.current).kingdom)
     },
     [setKingdom],
   )
@@ -221,10 +248,25 @@ function App({
       } catch (e) {
         setToast(refusal(e))
         const state = mineRef.current.state
-        setKingdom(state && advance(state, serverNow()).kingdom)
+        setKingdom(state && advance(state, serverNow(), marketRef.current).kingdom)
       }
     },
     [lobby.id, accept, setKingdom],
+  )
+  // Commands that reach other kingdoms: their answer comes back (undefined when refused).
+  const act = useCallback(
+    async <T,>(cmd: Command): Promise<T | undefined> => {
+      try {
+        const { kingdom: row, result } = await sendFor<T>(lobby.id, cmd)
+        accept(row)
+        refreshAll()
+        return (result ?? null) as T
+      } catch (e) {
+        setToast(refusal(e))
+        return undefined
+      }
+    },
+    [lobby.id, accept, refreshAll],
   )
   // Worker sliders send one command when they settle, not one per step.
   const workerTimers = useRef(new Map<number, number>())
@@ -239,6 +281,12 @@ function App({
   // The other kingdoms of the lobby, and the chat; the lobby's broadcast says when either changes.
   const [rivals, setRivals] = useState<Rival[]>([])
   const [chat, setChat] = useState<ChatMessage[]>([])
+  // The kingdom looked at in the diplomacy tab, the army picked, one being sent somewhere, the battle watched, spy reports.
+  const [focus, setFocus] = useState<number | null>(null)
+  const [armyFocus, setArmyFocus] = useState<number | null>(null)
+  const [aiming, setAiming] = useState<number | null>(null)
+  const [watching, setWatching] = useState<number | null>(null)
+  const [intel, setIntel] = useState<Record<number, IntelReport | null | undefined>>({})
   useEffect(() => {
     let live = true
     let rivalTimer = 0
@@ -258,13 +306,17 @@ function App({
       onChat(message) {
         setChat((list) => (list.some((m) => m.id === message.id) ? list : [...list, message].slice(-CHAT_KEEP)))
       },
+      onChange(table, kingdom) {
+        onLayerChange(table, kingdom, mineRef.current.id)
+      },
+      onMarket,
     })
     return () => {
       live = false
       clearTimeout(rivalTimer)
       unsubscribe()
     }
-  }, [lobby.id, accept])
+  }, [lobby.id, accept, onLayerChange, onMarket])
   const sendChat = async (body: string) => {
     try {
       await postChat(lobby.id, mine.id, body)
@@ -324,7 +376,7 @@ function App({
       setNow(time)
       const current = kingdomRef.current
       if (!current) return
-      const { kingdom: next, events } = advance(current, time)
+      const { kingdom: next, events } = advance(current, time, marketRef.current)
       if (next !== current) setKingdom(next)
       recordJournal(events, next, time)
       const palace = next.buildings.find((b) => b.kind === 'palace')
@@ -453,8 +505,30 @@ function App({
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  tapRef.current = (tile, building) => {
+  tapRef.current = (tile, building, army) => {
     const current = kingdomRef.current
+    // Choosing where an army marches.
+    if (aiming !== null) {
+      act({ type: 'army', army: aiming, order: { kind: 'move', x: tile.x, y: tile.y } }).then((r) => {
+        const at = (r as { at?: string } | undefined)?.at
+        if (at && Date.parse(at) > serverNow() + 5000) setToast('Elçi yola çıktı; emir orduya ulaşınca uygulanacak')
+      })
+      setAiming(null)
+      return
+    }
+    if (army !== undefined && !placingKind) {
+      const owner = layer.armies.find((a) => a.id === army)?.kingdom_id
+      if (owner === mine.id) {
+        setArmyFocus(army)
+        setSelected(null)
+        setPanel('army')
+      } else if (owner !== undefined) {
+        setFocus(owner)
+        setSelected(null)
+        setPanel('diplomacy')
+      }
+      return
+    }
     // Without a building in hand, a tap on a building opens its menu; on open ground it closes it.
     if (view && current && !placingKind) {
       setSelected(building ?? null)
@@ -532,6 +606,80 @@ function App({
   }
 
 
+  // ---- The lobby: kingdoms, diplomacy, spies, armies ----
+
+  const loadIntel = useCallback(
+    (target: number) => {
+      act<IntelReport>({ type: 'intel', target }).then((report) => setIntel((all) => ({ ...all, [target]: report ?? null })))
+    },
+    [act],
+  )
+  const palaceOf = (buildings: { kind: string; level?: number; doneAt: number }[]) => {
+    const p = buildings.find((b) => b.kind === 'palace')
+    return p ? Math.max(1, (p.level ?? 1) - (p.doneAt > now ? 1 : 0)) : 0
+  }
+  const kingdoms: KingdomInfo[] = useMemo(
+    () => [
+      ...(kingdom
+        ? [{ id: mine.id, name: kingdom.name ?? 'Krallığın', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings) }]
+        : []),
+      ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings) })),
+    ],
+    // Palace levels only change with the buildings.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [kingdom?.name, kingdom?.color, kingdom?.site, kingdom?.queen, kingdom?.buildings, rivals, mine.id],
+  )
+  const online: Online = {
+    ...layer,
+    lobby,
+    me: mine.id,
+    kingdoms,
+    focus,
+    setFocus,
+    army: armyFocus,
+    setArmy: setArmyFocus,
+    intel,
+    loadIntel,
+    act,
+    target: (army) => {
+      setAiming(army)
+      setPanel(null)
+      setSelected(null)
+    },
+    watch: setWatching,
+  }
+
+  // Armies and battles on the map.
+  useEffect(() => {
+    if (!view) return
+    const colors = new Map(kingdoms.map((k) => [k.id, k.color]))
+    view.setArmies(
+      layer.armies.map((a): MapArmy => ({
+        id: a.id,
+        color: colors.get(a.kingdom_id) ?? null,
+        own: a.kingdom_id === mine.id,
+        soldiers: a.soldiers,
+        path: a.path,
+        departAt: Date.parse(a.depart_at),
+        arriveAt: Date.parse(a.arrive_at),
+        battle: a.status === 'battle',
+        selected: a.id === armyFocus,
+      })),
+      layer.battles
+        .filter((b) => !b.resolved || Date.parse(b.ends_at) > serverNow())
+        .map((b) => ({ id: b.id, at: { x: b.x, y: b.y }, startedAt: Date.parse(b.started_at), endsAt: Date.parse(b.ends_at) })),
+    )
+  }, [view, layer.armies, layer.battles, kingdoms, mine.id, armyFocus])
+
+  // The envoy's dialogs, one at a time, once their moment has come.
+  const notice = layer.notices.find((n) => Date.parse(n.show_at) <= now) ?? null
+  const closeNotice = () => {
+    if (!notice) return
+    markSeen([notice.id])
+    dropNotices([notice.id])
+  }
+  const watchedBattle = layer.battles.find((b) => b.id === watching) ?? null
+
   // What the tabs and building menus read, and the commands they give.
   const hudData: HudData | null =
     view && kingdom
@@ -552,9 +700,20 @@ function App({
           onExit,
           onReset: reset,
           onShow: (tile) => view.centerOn(tile),
+          online,
         }
       : null
   const selectedBuilding = kingdom?.buildings.find((b) => b.id === selected) ?? null
+  // Every kingdom's banner on the minimap.
+  const flags = useMemo(
+    (): MinimapFlag[] => [
+      ...rivals.map((r) => ({ site: r.site, color: hexOf(r.color), own: false })),
+      ...(kingdom ? [{ site: kingdom.site, color: hexOf(kingdom.color), own: true }] : []),
+    ],
+    // The player's site and colour only change at founding.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rivals, kingdom?.site, kingdom?.color],
+  )
 
   return (
     <>
@@ -645,7 +804,7 @@ function App({
           </button>
         </div>
       )}
-      {view && <Minimap world={view.world} center={cameraCenter} onJump={(tile) => (touchOnly ? setFullMap(true) : view.centerOn(tile))} />}
+      {view && <Minimap world={view.world} center={cameraCenter} flags={flags} onJump={(tile) => (touchOnly ? setFullMap(true) : view.centerOn(tile))} />}
       {view && fullMap && (
         <WorldMap
           world={view.world}
@@ -664,7 +823,34 @@ function App({
           onClose={() => setFullMap(false)}
         />
       )}
-      {view && !placingKind && <Chat messages={chat} mine={kingdom ? mine.id : null} canPost={kingdom !== null} onSend={sendChat} />}
+      {view && !placingKind && aiming === null && (
+        <Chat
+          messages={chat}
+          mine={kingdom ? mine.id : null}
+          canPost={kingdom !== null}
+          onSend={sendChat}
+          kingdoms={kingdoms}
+          onKingdom={(id) => {
+            if (id === mine.id) return
+            setFocus(id)
+            setSelected(null)
+            setPanel('diplomacy')
+          }}
+        />
+      )}
+      {aiming !== null && (
+        <div className="placing frame" role="status">
+          <Icon name="swords" size={24} />
+          <span>
+            <b>Ordunun hedefi</b> · {touchOnly ? 'Haritada bir yere dokun' : 'Haritada bir yere tıkla'} (savaştığın bir krallığın hududu kuşatma demektir)
+          </span>
+          <button className="btn small" onClick={() => setAiming(null)}>
+            İptal
+          </button>
+        </div>
+      )}
+      {notice && kingdom && <EnvoyDialog notice={notice} online={online} onClose={closeNotice} />}
+      {watchedBattle && <BattleView battle={watchedBattle} online={online} now={now} onClose={() => setWatching(null)} />}
     </>
   )
 }

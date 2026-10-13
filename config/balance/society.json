@@ -1,0 +1,57 @@
+{
+  "popCapPerPalaceLevel": 16,
+  "unlockPalaceLevel": 2,
+  "tax": {
+    "default": "normal",
+    "levels": {
+      "low": {
+        "goldPerVillager": 0.04,
+        "happiness": 15
+      },
+      "normal": {
+        "goldPerVillager": 0.1,
+        "happiness": 0
+      },
+      "high": {
+        "goldPerVillager": 0.18,
+        "happiness": -20
+      },
+      "heavy": {
+        "goldPerVillager": 0.28,
+        "happiness": -40
+      }
+    }
+  },
+  "happiness": {
+    "start": 60,
+    "base": 60,
+    "queen": 15,
+    "starving": -30,
+    "looted": -20,
+    "approachPerRound": 0.08
+  },
+  "recruits": {
+    "willingShareHappy": 0.5,
+    "willingShareUnhappy": 0.2,
+    "costMultiplierUnhappy": 1.8
+  },
+  "queen": {
+    "minPalaceLevel": 2,
+    "minPopulation": 20,
+    "cost": {
+      "gold": 300
+    }
+  },
+  "night": {
+    "startHour": 20.5,
+    "endHour": 5,
+    "workRate": 0.2,
+    "shiftHappiness": -15,
+    "fatiguePerNightRound": 0.004,
+    "recoveryPerRound": 0.006,
+    "maxFatigue": 0.6
+  },
+  "manpower": {
+    "regenPerRoundPerPalaceLevel": 0.25
+  }
+}
