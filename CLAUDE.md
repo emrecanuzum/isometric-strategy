@@ -1044,6 +1044,13 @@ krallıkta birer tane olur ve 3 seviyelidir.
   isteği, yerine getirilemeyen emirler, ambar boşalıyor uyarıları. Önemli
   kayıtlar diğerlerinden daha uzun saklanır ve kırmızı kenarlıdır. Sekmedeki
   rozet okunmamış önemli kayıt sayısıdır; sekme açılınca sıfırlanır.
+- **Sohbet bildirimleri:** Sohbet kapalıyken gelen yeni mesaj, sayaçların
+  yerinde (sohbet düğmesinin üstünde) birkaç saniye görünen bir önizlemeyle
+  ve kısa bir sesle bildirilir; tıklanınca sohbet açılır. Sohbet başlığındaki
+  zil düğmesi bildirimleri sessize alır (tarayıcıda hatırlanır); sessizdeyken
+  yalnızca oyuncuyu **@etiketleyen** mesajlar bildirilir. Mesaja @ yazınca
+  lobideki oyuncuların adları önerilir; etiketler mesajda vurgulanır. Okunmamış
+  etiket varsa sohbet düğmesindeki rozet sayı yerine "@1" gibi yazar.
 - **Sohbet** penceresi daha uzundur; Krallıklar sekmesinde her satırın
   sonundaki pin kamerayı o krallığa götürür; her oyuncunun
   son görülmesinden çevrimiçi olup olmadığı (yeşil nokta, son 6 dakika) ya

@@ -61,6 +61,7 @@ const MAPS = {
   book: ['........', 'kkkk.kkk', 'kwwlklwk', 'kwwlklwk', 'kwwlklwk', 'kwwlklwk', 'kkkkkkkk', '..kRRk..'],
   heal: ['..kkkk..', '..kRRk..', 'kkkRRkkk', 'kRRRRRRk', 'kRRRRRRk', 'kkkRRkkk', '..kRRk..', '..kkkk..'],
   temple: ['...yy...', '...ky...', '..kssk..', '.kssssk.', 'kkkkkkkk', '.ksksks.', '.ksksks.', 'kkkkkkkk'],
+  bell: ['...yy...', '..yyyy..', '.yyyyyy.', '.yyyyyy.', '.yyyyyy.', 'yyyyyyyy', '...kk...', '........'],
   gear: ['...ww...', '.w.ww.w.', '..wwww..', 'www..www', 'www..www', '..wwww..', '.w.ww.w.', '...ww...'],
   star: ['...yy...', '...yy...', 'yyywwyyy', '.yywwyy.', '..yyyy..', '.yy..yy.', '.y....y.', '........'],
 } as const

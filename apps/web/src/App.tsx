@@ -249,10 +249,13 @@ const doorstep = (b: Building): Point => ({ x: b.x + b.size * 0.7, y: b.y + b.si
 function App({
   lobby,
   initial,
+  username,
   settings,
   onSettings,
   onExit,
 }: {
+  // The player's name, so the chat knows when they are mentioned.
+  username: string
   lobby: Lobby
   initial: Mine
   // The player's settings (music plays from the root, for the menu and the map alike).
@@ -1130,6 +1133,7 @@ function App({
       )}
       {view && !placingKind && aiming === null && (
         <Chat
+          username={username}
           messages={chat}
           mine={kingdom ? mine.id : null}
           canPost={kingdom !== null}

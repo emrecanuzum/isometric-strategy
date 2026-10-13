@@ -6,15 +6,41 @@ import type { KingdomInfo } from './hud/online'
 import type { Score } from '@game/shared'
 import { lastSeen } from './hud/online'
 import { Icon } from './icons'
+import { play } from '../audio/sfx'
 
 // The lobby chat: kept for the season, every line under the kingdom's name in its colour and its player's name. A
 // second tab lists the kingdoms of the lobby and who plays them; picking one opens it in the diplomacy tab. It folds
 // into a button that counts what came in while it was closed.
 
 const swatch = (color: string | null) => KINGDOM_COLORS[color as KingdomColor]?.swatch ?? '#8a7a60'
+
+// Whether a message mentions `name` (@name, any case, as a whole word).
+const mentions = (body: string, name: string) =>
+  !!name && new RegExp(`(^|\\s)@${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[\\s.,!?:;])`, 'i').test(body)
+
+// A message's text with every @mention set apart.
+function Body({ text }: { text: string }) {
+  const parts = text.split(/(@[^\s.,!?:;]+)/g)
+  return (
+    <>
+      {parts.map((part, i) => (part.startsWith('@') ? <b key={i} className="mention">{part}</b> : part))}
+    </>
+  )
+}
+
+// Chat notifications muted in this browser.
+const MUTE_KEY = 'chat-muted'
+const readMuted = () => {
+  try {
+    return localStorage.getItem(MUTE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
 
 export function Chat({
+  username,
   messages,
   mine,
   canPost,
@@ -23,6 +49,8 @@ export function Chat({
   onKingdom,
   onLocate,
 }: {
+  // The player's name: a message with @name in it calls for them.
+  username: string
   messages: ChatMessage[]
   // The player's kingdom id, to set their own lines apart.
   mine: number | null
@@ -40,7 +68,50 @@ export function Chat({
   const [seen, setSeen] = useState(messages.length ? messages[messages.length - 1].id : 0)
   const list = useRef<HTMLOListElement>(null)
   const last = messages.length ? messages[messages.length - 1].id : 0
-  const unread = open ? 0 : messages.filter((m) => m.id > seen && m.kingdom_id !== mine).length
+  const fresh = open ? [] : messages.filter((m) => m.id > seen && m.kingdom_id !== mine)
+  const unread = fresh.length
+  const called = fresh.filter((m) => mentions(m.body, username)).length
+  const [muted, setMuted] = useState(readMuted)
+  const toggleMute = () => {
+    setMuted((on) => {
+      try {
+        localStorage.setItem(MUTE_KEY, on ? '0' : '1')
+      } catch {
+        // Not remembered in private mode.
+      }
+      return !on
+    })
+  }
+  // A new line while the chat is folded away: a preview pops up for a few seconds with a chime (always for a mention,
+  // otherwise unless muted).
+  const [pop, setPop] = useState<ChatMessage | null>(null)
+  const heard = useRef(last)
+  useEffect(() => {
+    if (last <= heard.current) return
+    const newest = messages.filter((m) => m.id > heard.current && m.kingdom_id !== mine)
+    heard.current = last
+    const m = newest[newest.length - 1]
+    if (!m || open) return
+    const called = mentions(m.body, username)
+    if (muted && !called) return
+    play(called ? 'mention' : 'chat')
+    setPop(m)
+  }, [last, messages, mine, open, muted, username])
+  useEffect(() => {
+    if (!pop) return
+    const id = window.setTimeout(() => setPop(null), 6000)
+    return () => clearTimeout(id)
+  }, [pop])
+  // Names to tag: the word being typed after @ is completed from the lobby's players.
+  const typing = /(^|\s)@([^\s@]*)$/.exec(draft)
+  const tags = typing
+    ? kingdoms
+        .filter((k) => k.id !== mine && k.username)
+        .map((k) => k.username!)
+        .filter((n) => n.toLowerCase().startsWith(typing[2].toLowerCase()))
+        .slice(0, 5)
+    : []
+  const tag = (name: string) => setDraft(draft.replace(/@([^\s@]*)$/, `@${name} `))
 
   useEffect(() => {
     if (open) setSeen(last)
@@ -64,10 +135,25 @@ export function Chat({
 
   if (!open) {
     return (
-      <button className="btn chat-toggle" onClick={() => setOpen(true)} title="Lobi sohbeti">
-        <Icon name="scroll" size={16} /> Sohbet
-        {unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
-      </button>
+      <>
+        {pop && (
+          <button className={mentions(pop.body, username) ? 'chat-pop frame called' : 'chat-pop frame'} onClick={() => (setPop(null), setOpen(true))} aria-live="polite">
+            <i style={{ background: swatch(pop.color) }} />
+            <span>
+              <b style={{ color: `color-mix(in srgb, ${swatch(pop.color)} 45%, #f3e6c8)` }}>{pop.name}</b>
+              {pop.username && <small> {pop.username}</small>}
+              <br />
+              <span className="preview">
+                <Body text={pop.body.length > 90 ? `${pop.body.slice(0, 90)}…` : pop.body} />
+              </span>
+            </span>
+          </button>
+        )}
+        <button className="btn chat-toggle" onClick={() => setOpen(true)} title="Lobi sohbeti">
+          <Icon name="scroll" size={16} slash={muted} /> Sohbet
+          {called > 0 ? <span className="badge mention-badge">@{called}</span> : unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
+        </button>
+      </>
     )
   }
   return (
@@ -84,6 +170,15 @@ export function Chat({
             Sıralama
           </button>
         </span>
+        <button
+          className="btn small icon-only"
+          aria-pressed={muted}
+          onClick={toggleMute}
+          aria-label={muted ? 'Sohbet bildirimlerini aç' : 'Sohbet bildirimlerini sessize al'}
+          title={muted ? 'Sessizde: yalnızca seni etiketleyenler bildirilir' : 'Sessize al'}
+        >
+          <Icon name="bell" size={16} slash={muted} />
+        </button>
         <button className="btn small icon-only" onClick={() => setOpen(false)} aria-label="Sohbeti kapat">
           <Icon name="close" size={16} />
         </button>
@@ -121,18 +216,27 @@ export function Chat({
               {m.username && <small className="who">{m.username}</small>}
               <small>{timeOf(m.created_at)}</small>
               <br />
-              {m.body}
+              <Body text={m.body} />
             </span>
           </li>
         ))}
       </ol>
+      )}
+      {tags.length > 0 && (
+        <div className="chat-tags" role="listbox" aria-label="Etiketle">
+          {tags.map((n) => (
+            <button key={n} type="button" className="btn small" onClick={() => tag(n)}>
+              @{n}
+            </button>
+          ))}
+        </div>
       )}
       <form onSubmit={submit}>
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           maxLength={280}
-          placeholder={canPost ? 'Mesaj yaz…' : 'Yazmak için krallığını kur'}
+          placeholder={canPost ? 'Mesaj yaz… (@ ile etiketle)' : 'Yazmak için krallığını kur'}
           disabled={!canPost}
           aria-label="Mesaj"
         />

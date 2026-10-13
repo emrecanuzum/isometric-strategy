@@ -147,6 +147,7 @@ export default function Root() {
         key={phase.lobby.id}
         lobby={phase.lobby}
         initial={phase.mine}
+        username={profile?.username ?? ''}
         settings={settings}
         onSettings={updateSettings}
         onExit={() => {
