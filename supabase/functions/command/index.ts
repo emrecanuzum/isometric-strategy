@@ -161,9 +161,11 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
     case 'build': {
       const k = need()
       if (!PLACEABLE.includes(cmd.kind) || !Number.isFinite(cmd.x) || !Number.isFinite(cmd.y)) refuse('rejected')
-      const error = game.buildError(world, k, stage, cmd.kind, { x: cmd.x | 0, y: cmd.y | 0 }, now)
+      // A gate may be turned by the player; otherwise it follows the wall around it.
+      const turned = cmd.along === 'x' || cmd.along === 'y' ? cmd.along : null
+      const error = game.buildError(world, k, stage, cmd.kind, { x: cmd.x | 0, y: cmd.y | 0 }, now, turned)
       if (error) refuse(error)
-      next = changed(game.build(world, k, stage, cmd.kind, { x: cmd.x | 0, y: cmd.y | 0 }, now))
+      next = changed(game.build(world, k, stage, cmd.kind, { x: cmd.x | 0, y: cmd.y | 0 }, now, turned))
       break
     }
     case 'buildMany': {

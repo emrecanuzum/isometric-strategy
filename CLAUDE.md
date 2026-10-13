@@ -430,8 +430,11 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     sırasına girmez (aynı anda kurulur); evler sıraya girer, yer boşaldıkça
     başlar.
   - **Sur kapısı** üç karodur: ortada kapı, iki yanında daha uzun **kule
-    surları**. Surun yönüne göre döner (kapı yüzü surun içinden geçer) ve
-    var olan sur parçalarının üstüne kurulabilir (onların yerini alır).
+    surları**. Surun yönüne göre kendiliğinden döner (kapı yüzü surun
+    içinden geçer; iki yanında daha çok sur olan yön), **R** tuşu ya da
+    "Döndür" düğmesiyle çevrilebilir; yerleştirirken üç karonun önizlemesi
+    görünür. Var olan sur parçalarının üstüne kurulabilir (onların yerini
+    alır).
   - **Boşluk:** Sur ve kapılar diğer binalarla arasında en az 1 karo boşluk
     bırakır (surlar birbirine bitişik olabilir), böylece uzun sur bir binanın
     avlusunu ya da duvarını ekranda kesmez.
@@ -474,7 +477,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 - **Sayaçlar:** Süren her iş (inşaat ve yükseltme, araştırma, asker
   eğitimi, vaaz, yoldaki elçi ve ordular) sol altta menünün üstünde kalan
   süre ve ilerleme çubuğuyla listelenir; biten iş birkaç saniye yeşil yanıp
-  söner. Bir sekme ya da bina menüsü açıkken gizlenir.
+  söner. Sohbet düğmesinin (açıkken sohbetin) üstünde durur; bir sekme ya
+  da bina menüsü açıkken gizlenir.
+- **Ses efektleri kısadır** (hepsi 1 saniyenin altında).
 - **Bina menüsü:** Haritada bir binanın üstüne gelince bina dış hatla
   vurgulanır ve adı/seviyesi küçük bir etikette görünür; tıklayınca o
   binanın menüsü açılır. Menüde:
@@ -779,7 +784,10 @@ mertebesindedir.
     hedefin ticaret noktası yakınındaki (8 karo) her gözcü kulesi %15
     düşürür (en az %15). Başarıda sattığı maldan 3 seferlik pay alınır ve
     **ticaret noktası harap olur**: sahibi altın + malzemeyle onarana kadar
-    tüccar satış yapamaz. Her durumda saldıran asker kaybeder (başarıda
+    tüccar satış yapamaz. Harap ticaret noktası haritada herkese yanmış
+    görünür (is lekeleri, çatısında tüten bir delik, parçalanmış tente).
+    Sahibi ticaret noktasına tıklayıp ya da Ticaret sekmesinden "Onar" ile
+    onarır. Her durumda saldıran asker kaybeder (başarıda
     %10, başarısızlıkta %40), ilişki −30 düşer ve hedef savaş gerekçesi
     kazanır.
   - **Savaş ilanı:** ilişki en fazla **−50** olmalı; **savaş gerekçen**

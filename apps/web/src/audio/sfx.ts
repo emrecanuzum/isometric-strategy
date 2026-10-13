@@ -49,7 +49,7 @@ function tone(hz: number, at: number, length: number, type: OscillatorType = 'tr
 // A drum hit: filtered noise with a falling thump under it.
 function drum(at: number, gain = 0.8, hz = 90) {
   const c = ctx!
-  const length = 0.35
+  const length = 0.25
   const buffer = c.createBuffer(1, Math.floor(c.sampleRate * length), c.sampleRate)
   const data = buffer.getChannelData(0)
   for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length) ** 4
@@ -62,60 +62,61 @@ function drum(at: number, gain = 0.8, hz = 90) {
   g.gain.value = gain * 0.6
   noise.connect(filter).connect(g).connect(out!)
   noise.start(at)
-  tone(hz, at, 0.3, 'sine', gain, 0.5)
+  tone(hz, at, 0.2, 'sine', gain, 0.5)
 }
 
 const note = (midi: number) => 440 * 2 ** ((midi - 69) / 12)
 
+// Every cue is short (well under a second), so the screen's news never drones on.
 export function play(cue: Cue) {
   if (!enabled || volume <= 0 || !ctx || ctx.state !== 'running') return
   const t = ctx.currentTime + 0.02
   switch (cue) {
     case 'start':
       // Work begins: a saw stroke and two mallet knocks on timber.
-      tone(note(64), t, 0.18, 'sawtooth', 0.05, 1.5)
-      drum(t + 0.2, 0.35, 220)
-      drum(t + 0.36, 0.3, 200)
+      tone(note(64), t, 0.14, 'sawtooth', 0.05, 1.5)
+      drum(t + 0.15, 0.35, 220)
+      drum(t + 0.28, 0.3, 200)
       break
     case 'battle':
-      // War drums and a horn call.
-      for (const [i, d] of [0, 0.22, 0.44, 0.88].entries()) drum(t + d, i === 3 ? 1 : 0.7)
-      tone(note(50), t + 0.5, 0.9, 'sawtooth', 0.12)
-      tone(note(57), t + 0.5, 0.9, 'sawtooth', 0.08)
+      // War drums and a short horn call.
+      for (const d of [0, 0.14, 0.28]) drum(t + d, 0.7)
+      tone(note(50), t + 0.3, 0.35, 'sawtooth', 0.12)
+      tone(note(57), t + 0.3, 0.35, 'sawtooth', 0.08)
       break
     case 'war':
-      // A low horn falling, then a drum.
-      tone(note(45), t, 1.2, 'sawtooth', 0.14, 0.94)
-      tone(note(52), t, 1.2, 'sawtooth', 0.09, 0.94)
-      drum(t + 1.1, 1, 70)
+      // A low horn and a drum.
+      tone(note(45), t, 0.45, 'sawtooth', 0.14, 0.94)
+      tone(note(52), t, 0.45, 'sawtooth', 0.09, 0.94)
+      drum(t + 0.4, 1, 70)
       break
     case 'envoy':
-      // A short trumpet fanfare.
-      ;[67, 72, 76, 79].forEach((m, i) => tone(note(m), t + i * 0.11, i === 3 ? 0.45 : 0.14, 'square', 0.08))
+      // A short trumpet call.
+      ;[67, 72, 76].forEach((m, i) => tone(note(m), t + i * 0.08, i === 2 ? 0.25 : 0.1, 'square', 0.08))
       break
     case 'good':
-      ;[72, 76, 79].forEach((m, i) => tone(note(m), t + i * 0.07, 0.5, 'triangle', 0.25))
+      ;[72, 76, 79].forEach((m, i) => tone(note(m), t + i * 0.05, 0.22, 'triangle', 0.25))
       break
     case 'bad':
       // A low bell.
-      tone(note(45), t, 1.4, 'sine', 0.4)
-      tone(note(57.3), t, 1.0, 'sine', 0.12)
+      tone(note(45), t, 0.6, 'sine', 0.4)
+      tone(note(57.3), t, 0.4, 'sine', 0.12)
       break
     case 'build':
       // Hammer taps.
-      for (const d of [0, 0.15, 0.3]) tone(note(84), t + d, 0.06, 'square', 0.12, 0.6)
+      for (const d of [0, 0.12, 0.24]) tone(note(84), t + d, 0.05, 'square', 0.12, 0.6)
       break
     case 'fortune':
       // A harp running up.
-      ;[62, 66, 69, 74, 78].forEach((m, i) => tone(note(m), t + i * 0.06, 0.6, 'triangle', 0.2))
+      ;[62, 66, 69, 74].forEach((m, i) => tone(note(m), t + i * 0.05, 0.3, 'triangle', 0.2))
       break
     case 'omen':
-      // A harp running down into a minor chord.
-      ;[74, 70, 67, 62, 58].forEach((m, i) => tone(note(m), t + i * 0.08, 0.7, 'triangle', 0.2))
+      // A harp running down.
+      ;[74, 70, 67, 62].forEach((m, i) => tone(note(m), t + i * 0.06, 0.35, 'triangle', 0.2))
       break
     case 'coin':
-      tone(note(88), t, 0.08, 'square', 0.06)
-      tone(note(93), t + 0.06, 0.2, 'square', 0.06)
+      tone(note(88), t, 0.06, 'square', 0.06)
+      tone(note(93), t + 0.05, 0.12, 'square', 0.06)
       break
   }
 }

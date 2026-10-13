@@ -9,6 +9,8 @@ import {
   buildError,
   canPlace,
   fits,
+  gateAlong,
+  gateTiles,
   dockPier,
   findPlot,
   hasPalace,
@@ -28,7 +30,7 @@ import {
   upgradeSpec,
   upgradeTrade,
 } from '@game/shared'
-import type { BuildError, Building, EconomyEvent, BuildingKind, Good, Kingdom, Point, World } from '@game/shared'
+import type { Along, BuildError, Building, EconomyEvent, BuildingKind, Good, Kingdom, Point, World } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { WorldMap } from './game/WorldMap'
@@ -510,7 +512,7 @@ function App({
     if (!view) return
     const time = serverNow()
     const buildings = kingdom?.buildings ?? []
-    const structure = (b: Rival['buildings'][number], color: string | undefined, own: boolean, variant: number): Structure => {
+    const structure = (b: Rival['buildings'][number], color: string | undefined, own: boolean, variant: number, ruined = false): Structure => {
       const done = b.doneAt <= time
       const pier = done && b.kind === 'dock' ? dockPier(view.world, b) : null
       // Only the player's own buildings answer to the pointer.
@@ -524,12 +526,14 @@ function App({
               : 'wall'
           : b.kind === 'gate' && b.along === 'y'
             ? 'gateY'
-            : b.kind
+            : b.kind === 'tradePost' && ruined
+              ? 'tradePostRuined'
+              : b.kind
       return { x: b.x, y: b.y, size: b.size, look, variant, level: b.level ?? 1, ...(own && { id: b.id }), color, ...(pier && { pier }) }
     }
     const structures: Structure[] = [
-      ...buildings.map((b) => structure(b, kingdom?.color, true, b.id)),
-      ...rivals.flatMap((r) => r.buildings.map((b) => structure(b, r.color, false, r.id * 1000 + b.id))),
+      ...buildings.map((b) => structure(b, kingdom?.color, true, b.id, !!kingdom?.trade.damaged)),
+      ...rivals.flatMap((r) => r.buildings.map((b) => structure(b, r.color, false, r.id * 1000 + b.id, !!r.trade_damaged))),
     ]
     // Footpaths worn from every building's door to the palace gate, around the buildings in between.
     const palace = buildings.find((b) => b.kind === 'palace')
@@ -593,6 +597,8 @@ function App({
     document.documentElement.dataset.sheet = panel || selected !== null ? 'open' : 'closed'
   }, [panel, selected])
   const [placing, setPlacing] = useState<BuildingKind | null>(null)
+  // A gate turned with R (null: it follows the wall around it).
+  const [turned, setTurned] = useState<Along | null>(null)
   // A new kingdom first places its palace, wherever the player likes inside the territory.
   const needsPalace = kingdom !== null && !hasPalace(kingdom)
   const placingKind: BuildingKind | null = needsPalace ? 'palace' : placing
@@ -615,16 +621,19 @@ function App({
     const size = BUILDINGS[placingKind].size
     view.setPlacement({
       size,
-      valid: (origin) => fits(view.world, kingdom, stage, placingKind, origin),
+      valid: (origin) => fits(view.world, kingdom, stage, placingKind, origin, turned),
+      // A gate shows its two towers beside it.
+      ...(placingKind === 'gate' && { extra: (origin: Point) => gateTiles(origin, gateAlong(kingdom, origin, turned)).filter((t) => t.x !== origin.x || t.y !== origin.y) }),
       pinned: preview ?? undefined,
       stroke: stroking,
       pinnedMany: previewMany ?? undefined,
     })
-  }, [view, placingKind, kingdom, stage, preview, previewMany, stroking])
+  }, [view, placingKind, kingdom, stage, preview, previewMany, stroking, turned])
 
   // The whole-world map, opened from the minimap on phones.
   const [fullMap, setFullMap] = useState(false)
   const cancelPlacing = () => {
+    setTurned(null)
     setPlacing(null)
     setPreview(null)
     setPreviewMany(null)
@@ -634,6 +643,23 @@ function App({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+  // R turns a gate a quarter round from the way it faces under the pointer (or at the picked spot).
+  const turnGate = () => {
+    const current = kingdomRef.current
+    const at = preview ?? hover?.tile
+    if (!current || !at) return setTurned((t) => (t === 'y' ? 'x' : 'y'))
+    setTurned(gateAlong(current, at, turned) === 'x' ? 'y' : 'x')
+  }
+  const turnRef = useRef(turnGate)
+  turnRef.current = turnGate
+  useEffect(() => {
+    if (placingKind !== 'gate') return
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key === 'r' || e.key === 'R') && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) turnRef.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [placingKind])
 
   tapRef.current = (tile, building, army) => {
     const current = kingdomRef.current
@@ -668,7 +694,7 @@ function App({
     if (!view || !placingKind || !current) return
     // A picked spot waits for confirmation (see ConfirmBuild); picking again moves it.
     const origin = footprintOrigin(tile, BUILDINGS[placingKind].size)
-    const error = buildError(view.world, current, stage, placingKind, origin, serverNow())
+    const error = buildError(view.world, current, stage, placingKind, origin, serverNow(), turned)
     if (error) {
       setToast(BUILD_ERRORS[error])
       setPreview(null)
@@ -680,14 +706,15 @@ function App({
     const current = kingdomRef.current
     if (!view || !placingKind || !current || !preview) return
     const time = serverNow()
-    const error = buildError(view.world, current, stage, placingKind, preview, time)
+    const error = buildError(view.world, current, stage, placingKind, preview, time, turned)
     if (error) {
       setToast(BUILD_ERRORS[error])
       setPreview(null)
       return
     }
     play('start')
-    command({ type: 'build', kind: placingKind, ...preview }, build(view.world, current, stage, placingKind, preview, time))
+    const along = placingKind === 'gate' ? gateAlong(current, preview, turned) : undefined
+    command({ type: 'build', kind: placingKind, ...preview, ...(along && { along }) }, build(view.world, current, stage, placingKind, preview, time, along))
     cancelPlacing()
   }
 
@@ -967,10 +994,17 @@ function App({
             <b>{needsPalace ? 'Sarayını yerleştir' : BUILDING_NAMES[placingKind]}</b> ·{' '}
             {stroking
               ? 'Basılı tutup sürükleyerek sıra hâlinde yerleştir'
+              : placingKind === 'gate'
+                ? 'Kapı iki kulesiyle 3 karo kaplar; surun üstüne de kurulur.'
               : touchOnly
                 ? 'Hudut içinde bir yere dokun'
                 : 'Hudut içinde yeşil bir yere tıkla'}
           </span>
+          {placingKind === 'gate' && (
+            <button className="btn small" onClick={turnGate} title="Kapıyı döndür (R)">
+              <kbd>R</kbd> Döndür
+            </button>
+          )}
           {!needsPalace && (
             <button className="btn small" onClick={cancelPlacing}>
               İptal

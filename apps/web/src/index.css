@@ -334,7 +334,7 @@ small {
   gap: calc(var(--px) * 4);
   width: 240px;
   padding: calc(var(--px) * 5);
-  font-size: 14px;
+  font-size: 16px;
   pointer-events: none;
 }
 
@@ -374,7 +374,7 @@ small {
 
 .pop-head b {
   flex: 1;
-  font-size: 16px;
+  font-size: 18px;
 }
 
 .pop-head strong {
@@ -391,7 +391,7 @@ small {
   gap: calc(var(--px) * 2) calc(var(--px) * 4);
   padding: calc(var(--px) * 3);
   background: var(--slot);
-  font-size: 12px;
+  font-size: 14px;
   color: var(--muted);
 }
 
@@ -413,7 +413,7 @@ small {
 
 .flowbars small {
   text-align: right;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .pop-lines {
@@ -423,7 +423,7 @@ small {
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .pop-lines li {
@@ -439,7 +439,7 @@ small {
 }
 
 .pop-foot {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--muted);
 }
 
@@ -481,7 +481,7 @@ small {
   display: flex;
   justify-content: space-between;
   margin-top: calc(var(--px) * -2);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -493,12 +493,12 @@ small {
 
 .res-value b {
   min-width: 3ch;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
 }
 
 .res-value small {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--muted);
 }
 
@@ -649,7 +649,7 @@ small {
   padding: 0 calc(var(--px) * 2);
   background: #b0302a;
   color: #fff3e8;
-  font-size: 11px;
+  font-size: 13px;
   font-style: normal;
   line-height: 16px;
   text-align: center;
@@ -1032,7 +1032,7 @@ small {
 }
 
 .store-flow .stat > span {
-  font-size: 12px;
+  font-size: 13px;
 }
 
 /* ---- Krallık adı ---- */
@@ -1172,7 +1172,7 @@ small {
 }
 
 .stages-track small {
-  font-size: 12px;
+  font-size: 13px;
 }
 
 /* ---- İnşaat onayı ---- */
@@ -1346,7 +1346,7 @@ small {
 
 .armory small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 /* ---- Bina menüsü ---- */
@@ -1435,7 +1435,7 @@ small {
 
 .map-tip em {
   font-style: normal;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--gold);
 }
 
@@ -1501,7 +1501,7 @@ small {
 
 .good small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 /* ---- Krallık ---- */
@@ -1608,7 +1608,7 @@ small {
 
 .letter small {
   color: #6b5034;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 /* ---- Main menu (before the map) ---- */
@@ -1933,7 +1933,7 @@ small {
 .chat li small {
   margin-left: calc(var(--px) * 3);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .chat li.own > span {
@@ -2259,7 +2259,7 @@ small {
     height: calc(var(--dock-h) - var(--px) * 4);
     background: var(--panel-2);
     box-shadow: var(--bevel), var(--outline);
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .tab.gap {
@@ -2783,7 +2783,7 @@ small {
 }
 
 .site-card small {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.3;
   color: #6b5034;
 }
@@ -2842,7 +2842,7 @@ small {
 }
 
 .price-row .price small {
-  font-size: 11px;
+  font-size: 13px;
   opacity: 0.8;
 }
 
@@ -2882,7 +2882,8 @@ small {
 .timers {
   position: fixed;
   left: var(--gap);
-  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10);
+  /* Above the chat button, or above the chat itself while it is open. */
+  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10 + 44px + var(--px) * 6);
   z-index: 4;
   display: grid;
   gap: calc(var(--px) * 2);
@@ -2939,4 +2940,19 @@ small {
     animation: none;
     background: rgb(79 140 64 / 60%);
   }
+}
+
+body:has(section.chat) .timers {
+  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10 + min(340px, 45vh) + var(--px) * 6);
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 calc(var(--px) * 2);
+  font: inherit;
+  text-align: center;
+  color: var(--gold);
+  background: var(--panel-2);
+  box-shadow: var(--bevel), var(--outline);
 }

@@ -104,6 +104,8 @@ export interface Placement {
   stroke?: boolean
   // A row already drawn and awaiting confirmation.
   pinnedMany?: Point[]
+  // Single tiles that come with the footprint at `origin` (a gate's towers), drawn with it.
+  extra?(origin: Point): Point[]
 }
 
 export interface WorldHandlers {
@@ -583,10 +585,12 @@ export async function createWorld(
       const p = placement
       const ghost = (origin: Point) => {
         const color = p.valid(origin) ? GHOST_OK : GHOST_BAD
-        cursor
-          .poly(square(origin.x, origin.y, p.size))
-          .fill({ color, alpha: 0.3 })
-          .stroke({ width: 2 / camera.scale.x, color, alpha: 0.95 })
+        for (const t of [origin, ...(p.extra?.(origin) ?? [])]) {
+          cursor
+            .poly(square(t.x, t.y, t === origin ? p.size : 1))
+            .fill({ color, alpha: 0.3 })
+            .stroke({ width: 2 / camera.scale.x, color, alpha: 0.95 })
+        }
       }
       const row = stroke?.spots ?? p.pinnedMany
       if (row) row.forEach(ghost)

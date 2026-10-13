@@ -110,7 +110,7 @@ export interface Building {
   // Walls only: a tower beside a gate (taller).
   tower?: boolean
   // Gates only: the direction of the wall it stands in.
-  along?: 'x' | 'y'
+  along?: Along
   // Built free as the kingdom's first of its kind (its building cost is not refunded on demolition).
   free?: boolean
 }
@@ -279,29 +279,33 @@ export function canPlace(world: World, kingdom: Pick<Kingdom, 'site' | 'building
 
 // A gate is three tiles in a row: the gate itself between two wall towers. It runs along the wall it is set into
 // (the walls beside the chosen tile), and may be built over standing wall, which it replaces.
-export function gateAlong(kingdom: Pick<Kingdom, 'buildings'>, spot: Point): 'x' | 'y' {
-  const wallAt = (x: number, y: number) => kingdom.buildings.some((b) => b.kind === 'wall' && b.x === x && b.y === y)
-  if (wallAt(spot.x - 1, spot.y) || wallAt(spot.x + 1, spot.y)) return 'x'
-  if (wallAt(spot.x, spot.y - 1) || wallAt(spot.x, spot.y + 1)) return 'y'
-  return 'x'
+export type Along = 'x' | 'y'
+
+// The way a gate at `spot` runs: as the player turned it, else along the wall around it (the side with more wall
+// within two tiles), else along x.
+export function gateAlong(kingdom: Pick<Kingdom, 'buildings'>, spot: Point, turned?: Along | null): Along {
+  if (turned === 'x' || turned === 'y') return turned
+  const wallAt = (x: number, y: number) => kingdom.buildings.some((b) => (b.kind === 'wall' || b.kind === 'gate') && b.x === x && b.y === y)
+  const count = (dx: number, dy: number) => [1, 2, -1, -2].filter((d) => wallAt(spot.x + dx * d, spot.y + dy * d)).length
+  return count(0, 1) > count(1, 0) ? 'y' : 'x'
 }
 
-export const gateTiles = (spot: Point, along: 'x' | 'y'): Point[] =>
+export const gateTiles = (spot: Point, along: Along): Point[] =>
   along === 'x'
     ? [{ x: spot.x - 1, y: spot.y }, spot, { x: spot.x + 1, y: spot.y }]
     : [{ x: spot.x, y: spot.y - 1 }, spot, { x: spot.x, y: spot.y + 1 }]
 
 const onTiles = (b: Building, tiles: Point[]) => b.size === 1 && tiles.some((t) => t.x === b.x && t.y === b.y)
 
-export function canPlaceGate(world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'>, stage: number, spot: Point) {
-  const tiles = gateTiles(spot, gateAlong(kingdom, spot))
+export function canPlaceGate(world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'>, stage: number, spot: Point, turned?: Along | null) {
+  const tiles = gateTiles(spot, gateAlong(kingdom, spot, turned))
   const rest = { ...kingdom, buildings: kingdom.buildings.filter((b) => !(b.kind === 'wall' && onTiles(b, tiles))) }
   return tiles.every((t) => canPlace(world, rest, stage, { ...t, size: 1 }, 0, 'wall'))
 }
 
 // Whether a building of `kind` fits at `spot` (gates by their three tiles).
-export const fits = (world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'>, stage: number, kind: BuildingKind, spot: Point) =>
-  kind === 'gate' ? canPlaceGate(world, kingdom, stage, spot) : canPlace(world, kingdom, stage, { ...spot, size: BUILDINGS[kind].size }, 0, kind)
+export const fits = (world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'>, stage: number, kind: BuildingKind, spot: Point, turned?: Along | null) =>
+  kind === 'gate' ? canPlaceGate(world, kingdom, stage, spot, turned) : canPlace(world, kingdom, stage, { ...spot, size: BUILDINGS[kind].size }, 0, kind)
 
 // ---- Founding -----------------------------------------------------------------------------------------------------
 
@@ -553,7 +557,7 @@ export function buildLimit(kingdom: Kingdom, kind: BuildingKind, at: number) {
 }
 export const buildingCount = (kingdom: Kingdom, kind: BuildingKind) => kingdom.buildings.filter((b) => b.kind === kind).length
 
-export function buildError(world: World, kingdom: Kingdom, stage: number, kind: BuildingKind, spot: Point | null, now: number): BuildError | null {
+export function buildError(world: World, kingdom: Kingdom, stage: number, kind: BuildingKind, spot: Point | null, now: number, turned?: Along | null): BuildError | null {
   const spec = BUILDINGS[kind]
   // One palace, placed first; it stands at once and takes no construction slot.
   if ((kind === 'palace') === hasPalace(kingdom)) return 'palace'
@@ -564,19 +568,19 @@ export function buildError(world: World, kingdom: Kingdom, stage: number, kind: 
   if (!affordable(kingdom.stock, buildCost(kingdom, kind))) return 'cost'
   if (kind !== 'palace' && !spec.outsideQueue && queued(kingdom, now).length >= maxConstructions(kingdom, now)) return 'queue'
   // The dock goes on its plot, which may lie outside the territory; everything else where the player puts it.
-  if (spot && kind !== 'dock' && !fits(world, kingdom, stage, kind, spot)) return 'spot'
+  if (spot && kind !== 'dock' && !fits(world, kingdom, stage, kind, spot, turned)) return 'spot'
   return null
 }
 
-export function build(world: World, kingdom: Kingdom, stage: number, kind: BuildingKind, spot: Point, now: number): Kingdom {
-  if (buildError(world, kingdom, stage, kind, spot, now)) return kingdom
+export function build(world: World, kingdom: Kingdom, stage: number, kind: BuildingKind, spot: Point, now: number, turned?: Along | null): Kingdom {
+  if (buildError(world, kingdom, stage, kind, spot, now, turned)) return kingdom
   const spec = BUILDINGS[kind]
   if (kind === 'dock') spot = kingdom.dockPlot!
   const free = isFree(kingdom, kind)
   const doneAt = now + (spec.buildSeconds ?? 0) * 1000
   if (kind === 'gate') {
     // The gate and its two towers, in place of any wall on those tiles.
-    const along = gateAlong(kingdom, spot)
+    const along = gateAlong(kingdom, spot, turned)
     const tiles = gateTiles(spot, along)
     const kept = kingdom.buildings.filter((b) => !(b.kind === 'wall' && onTiles(b, tiles)))
     const id = kingdom.nextId
@@ -727,7 +731,10 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
     k.soldiers = countOf(k.units)
     events.push({ kind: 'trained', count })
   }
-  for (const r of kingdom.researches ?? []) if (r.doneAt > kingdom.settledAt && r.doneAt <= now) events.push({ kind: 'researched', id: r.id })
+  // Research that ended since the last settling (told once: settling moves settledAt past it).
+  const learnt = (kingdom.researches ?? []).filter((r) => r.doneAt > kingdom.settledAt && r.doneAt <= now)
+  for (const r of learnt) events.push({ kind: 'researched', id: r.id })
+  if (learnt.length > 0) edit()
   // A building counts from the moment it is done, so production rounds after that use it.
   const finishing = kingdom.buildings.filter((b) => b.doneAt > kingdom.settledAt && b.doneAt <= now)
   for (;;) {

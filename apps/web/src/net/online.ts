@@ -35,6 +35,8 @@ export interface Rival {
   version: number
   // When its player was last seen (ms).
   seen_at: number | null
+  // Its trade post was wrecked by raiders and not yet repaired.
+  trade_damaged?: boolean
 }
 
 export interface ChatMessage {
@@ -127,7 +129,7 @@ export type Command =
   | { type: 'join'; password?: string }
   | { type: 'roll' }
   | { type: 'found'; site: number; name: string; color: string }
-  | { type: 'build'; kind: string; x: number; y: number }
+  | { type: 'build'; kind: string; x: number; y: number; along?: 'x' | 'y' }
   | { type: 'buildMany'; kind: string; spots: Point[] }
   | { type: 'demolish'; id: number }
   | { type: 'disband'; units: Units }

@@ -491,11 +491,16 @@ function crate(canvas: Canvas, x: number, base: number, size: number) {
 
 // The trade house: a timber hall with a striped awning over a stall full of goods, barrels and crates out front,
 // a gilded sign and a pennant on the roof.
-function tradePost(): Sprite {
+const CHAR = ramp(0x120c0a, 0x1e1410, 0x2c1e16, 0x3a2a1e)
+
+// `ruined`: wrecked by raiders (until repaired): scorched walls, a hole burnt in the roof with smoke rising from it,
+// the awning in tatters, the goods gone and the crates broken.
+function tradePost(ruined = false): Sprite {
   const { canvas, cx, base } = footprint(2, 90)
   const hb = base - 14
   const hw = 44
-  const top = hall(canvas, cx, hb, { w: hw, wall: 26, roof: 26, walls: WALL, roofs: ROOF, bay: 13, door: true, chimney: 0.42 })
+  const top = hall(canvas, cx, hb, { w: hw, wall: 26, roof: 26, walls: WALL, roofs: ROOF, bay: 13, door: true, chimney: ruined ? undefined : 0.42 })
+  if (ruined) return ruins(canvas, cx, base, hb, hw, top)
   banner(canvas, top.x, top.y, 10)
   // Awning along the left wall, sloping out and down, with a scalloped edge.
   const awning = { from: 6, to: hw - 4, z: 20, out: 13 }
@@ -532,6 +537,45 @@ function tradePost(): Sprite {
   for (let y = 0; y < 8; y++) for (let x = 0; x < 9; x++) canvas.set(px + 1 + x, py - 22 + y, y === 0 || y === 7 || x === 0 || x === 8 ? TIMBER[0] : PLANK[3])
   for (let y = -2; y <= 2; y++) for (let x = -2; x <= 2; x++) if (x * x + y * y <= 5) canvas.set(px + 5 + x, py - 18 + y, x + y < 0 ? BRASS[3] : BRASS[2])
   return smoky(canvas.sprite(cx, base, 0), [top])
+}
+
+function ruins(canvas: Canvas, cx: number, base: number, hb: number, hw: number, top: { x: number; y: number }): Sprite {
+  // Soot over the walls and roof: dithered patches on what is already drawn, thickest at their middle.
+  for (const [bx, by, r] of [[cx - 24, hb - 18, 12], [cx + 20, hb - 22, 11], [cx - 6, hb - 40, 13], [cx + 6, hb - 6, 9]]) {
+    for (let y = by - r; y <= by + r; y++) {
+      for (let x = bx - r; x <= bx + r; x++) {
+        const d = Math.hypot(x - bx, (y - by) * 1.4) / r
+        if (d > 1 || canvas.get(x, y) >>> 24 === 0) continue
+        if (hash(x, y, 97) > 0.25 + d * 0.65) canvas.set(x, y, CHAR[(x + y) & 1 ? 2 : 3])
+      }
+    }
+  }
+  // A hole burnt through the roof, glowing at its edge.
+  const hx = top.x + 6
+  const hy = top.y + 18
+  for (let y = -6; y <= 6; y++) {
+    for (let x = -9; x <= 9; x++) {
+      const d = (x * x) / 81 + (y * y) / 36
+      if (d <= 1) canvas.set(hx + x, hy + y, d > 0.7 ? EMBER[hash(x, y, 91) > 0.5 ? 1 : 0] : CHAR[0])
+    }
+  }
+  // Charred rafters across the hole.
+  for (let x = -8; x <= 8; x++) canvas.set(hx + x, hy - 1 + Math.round(x * 0.4), TIMBER[0])
+  // Tatters of the awning hanging from the left wall.
+  for (let t = 8; t <= hw - 6; t += 7) {
+    const wx = cx - (hw - t)
+    const wy = hb - hw / 2 + t / 2 - 20
+    for (let d = 0; d < 4 + (t % 3) * 3; d++) canvas.set(wx - 1, wy + d, d % 2 ? STRIPE[0] : STRIPE[1])
+  }
+  // Broken crates and planks strewn by the front corner.
+  for (const [dx, dy, len] of [[10, -6, 10], [18, -10, 8], [-6, -4, 9], [24, -14, 7]]) {
+    for (let i = 0; i < len; i++) canvas.set(cx + dx + i, base + dy + Math.round(i * 0.4), PLANK[i % 3 === 0 ? 0 : 2])
+  }
+  // Embers among the rubble.
+  for (let i = 0; i < 6; i++) canvas.set(cx - 10 + i * 6, base - 6 - (i % 2) * 3, EMBER[2])
+  const sprite = canvas.sprite(cx, base, 0)
+  // Smoke rises from the hole.
+  return smoky(sprite, [{ x: hx, y: hy - 2, chimney: true }])
 }
 
 // A fishing shed on the shore: timber walls, a thatched roof, a rack of drying fish and a coil of net.
@@ -942,7 +986,7 @@ function wall(broken = false, door: -1 | 0 | 1 = 0, towerWall = false): Sprite {
 
 const variants = <T>(count: number, make: (i: number) => T) => Array.from({ length: count }, (_, i) => make(i))
 
-export type StructureLook = BuildingKind | 'scaffold' | 'brokenWall' | 'gateY' | 'towerWall'
+export type StructureLook = BuildingKind | 'scaffold' | 'brokenWall' | 'gateY' | 'towerWall' | 'tradePostRuined'
 
 // A building as the map draws it; docks carry their jetty (tile rectangle over the water).
 export interface Structure {
@@ -984,7 +1028,7 @@ export const palaceIn = (color: string | undefined): Sprite => {
 
 // The variants a building shows at its level.
 export const looksOf = (look: StructureLook, level = 1): Sprite[] =>
-  look !== 'scaffold' && look !== 'brokenWall' && look !== 'gateY' && look !== 'towerWall' && level > 1 ? (LEVEL_SPRITES[look]?.[level - 2] ?? STRUCTURE_SPRITES[look]) : STRUCTURE_SPRITES[look]
+  look !== 'scaffold' && look !== 'brokenWall' && look !== 'gateY' && look !== 'towerWall' && look !== 'tradePostRuined' && level > 1 ? (LEVEL_SPRITES[look]?.[level - 2] ?? STRUCTURE_SPRITES[look]) : STRUCTURE_SPRITES[look]
 
 export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   palace: [palace()],
@@ -993,6 +1037,7 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   lumberCamp: [lumberCamp()],
   forge: [forge()],
   tradePost: [tradePost()],
+  tradePostRuined: [tradePost(true)],
   dock: [dock()],
   market: [market()],
   barracks: [barracks()],
