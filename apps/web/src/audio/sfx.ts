@@ -1,7 +1,7 @@
 // Sound effects, synthesised in the browser like the music: short cues for what the envoy brings and what happens in
 // the kingdom. One shared audio context, made on the first user gesture (browsers allow audio only after one).
 
-export type Cue = 'start' | 'battle' | 'war' | 'envoy' | 'good' | 'bad' | 'build' | 'fortune' | 'omen' | 'coin'
+export type Cue = 'click' | 'enter' | 'leave' | 'start' | 'battle' | 'war' | 'envoy' | 'good' | 'bad' | 'build' | 'fortune' | 'omen' | 'coin'
 
 const LEVEL = 0.35
 
@@ -72,6 +72,18 @@ export function play(cue: Cue) {
   if (!enabled || volume <= 0 || !ctx || ctx.state !== 'running') return
   const t = ctx.currentTime + 0.02
   switch (cue) {
+    case 'click':
+      // A soft wooden tick.
+      tone(note(79), t, 0.04, 'triangle', 0.12, 0.7)
+      break
+    case 'enter':
+      // Into a lobby: a horn call rising.
+      ;[62, 67, 71, 74].forEach((m, i) => tone(note(m), t + i * 0.09, i === 3 ? 0.35 : 0.12, 'square', 0.07))
+      break
+    case 'leave':
+      // Back to the menu: the same call falling.
+      ;[74, 71, 67, 62].forEach((m, i) => tone(note(m), t + i * 0.08, i === 3 ? 0.3 : 0.1, 'triangle', 0.18))
+      break
     case 'start':
       // Work begins: a saw stroke and two mallet knocks on timber.
       tone(note(64), t, 0.14, 'sawtooth', 0.05, 1.5)

@@ -3351,3 +3351,16 @@ kbd {
   font-size: 12px;
   line-height: 1.4;
 }
+
+/* The dot sits on the line of its text, to its left. */
+.chat-kingdoms .presence {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+}
+
+.chat-kingdoms .presence::before {
+  flex: none;
+  margin-right: 0;
+}

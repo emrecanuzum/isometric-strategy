@@ -4,6 +4,7 @@ import { supabase } from './lib/supabase'
 import { keepClockSynced, syncClock } from './net/clock'
 import { CommandError, createLobby, currentUser, getLobby, loadMine, send, signOut } from './net/online'
 import type { Lobby, LobbyListing, Mine } from './net/online'
+import { play as sound } from './audio/sfx'
 import { loadProfile, useMusic, useSettings } from './net/settings'
 import type { Profile } from './net/settings'
 import { Icon } from './ui/icons'
@@ -54,9 +55,20 @@ export default function Root() {
   const [tab, setTab] = useState<Tab>('lobbies')
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  useMusic(settings)
+  // Softer in the menus than on the map.
+  useMusic(settings, phase.kind === 'game' ? 1 : 0.45)
+  // Every button answers with a soft tick (except those that make a sound of their own).
+  useEffect(() => {
+    const tick = (e: MouseEvent) => {
+      const button = (e.target as Element | null)?.closest?.('button')
+      if (button && !button.disabled && !button.hasAttribute('data-silent')) sound('click')
+    }
+    document.addEventListener('click', tick, true)
+    return () => document.removeEventListener('click', tick, true)
+  }, [])
 
   const play = useCallback((lobby: Lobby, mine: Mine) => {
+    sound('enter')
     setLobbyParam(lobby.id)
     setPhase({ kind: 'game', lobby, mine })
   }, [])
@@ -138,6 +150,7 @@ export default function Root() {
         settings={settings}
         onSettings={updateSettings}
         onExit={() => {
+          sound('leave')
           setLobbyParam(null)
           setTab('lobbies')
           setPhase({ kind: 'home' })

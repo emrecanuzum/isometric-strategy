@@ -45,14 +45,17 @@ export async function saveSettings(settings: Settings) {
 
 // The tavern music, for the menu and the map alike. Browsers only allow audio after a user gesture; on touch screens
 // that is the finger lifting (touchend/click), not pointerdown, so every kind is tried until the audio is running.
-export function useMusic(settings: Settings) {
+// `quiet`: a share of the volume while away from the map (the main menu plays it softer).
+export function useMusic(settings: Settings, quiet = 1) {
   const music = useRef<Music | null>(null)
   const current = useRef(settings)
   current.current = settings
+  const quietRef = useRef(quiet)
+  quietRef.current = quiet
   useEffect(() => {
     const events = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'] as const
     const unlock = () => {
-      music.current ??= startMusic(!current.current.music, current.current.musicVolume / 100)
+      music.current ??= startMusic(!current.current.music, (current.current.musicVolume / 100) * quietRef.current)
       const sfx = unlockSfx()
       if (music.current.unlock() && sfx) for (const type of events) window.removeEventListener(type, unlock)
     }
@@ -65,8 +68,8 @@ export function useMusic(settings: Settings) {
   }, [])
   useEffect(() => {
     music.current?.setMuted(!settings.music)
-    music.current?.setVolume(settings.musicVolume / 100)
-  }, [settings.music, settings.musicVolume])
+    music.current?.setVolume((settings.musicVolume / 100) * quiet)
+  }, [settings.music, settings.musicVolume, quiet])
   useEffect(() => setSfx(settings.sfx, settings.sfxVolume / 100), [settings.sfx, settings.sfxVolume])
 }
 

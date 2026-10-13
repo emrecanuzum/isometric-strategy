@@ -167,7 +167,7 @@ function Ranking({ kingdoms, mine, onKingdom }: { kingdoms: KingdomInfo[]; mine:
               <b style={{ color: `color-mix(in srgb, ${swatch(k.color)} 45%, #f3e6c8)` }}>{k.name}</b>
               <small>
                 {k.score
-                  ? PARTS.filter((p) => k.score![p.key] > 0)
+                  ? PARTS.filter((p) => (k.score![p.key] ?? 0) > 0)
                       .map((p) => `${p.name} ${k.score![p.key].toLocaleString('tr-TR')}`)
                       .join(' · ')
                   : 'henüz puanlanmadı'}
@@ -179,7 +179,7 @@ function Ranking({ kingdoms, mine, onKingdom }: { kingdoms: KingdomInfo[]; mine:
       ))}
       <li className="ranking-note">
         Puan: hazine (altın ve depo), gelişim (saray ve bina seviyeleri), nüfus, ordu, zafer (kazanılan muharebe ve kuşatmalar, kraliçe, rehineler) ve
-        bilgi (araştırmalar).
+        bilgi (araştırmalar). Başkalarının yalnızca gelişim ve zafer puanı ile yuvarlanmış toplamı görünür; hazinesi ve ordusu casuslarla öğrenilir.
       </li>
     </ol>
   )

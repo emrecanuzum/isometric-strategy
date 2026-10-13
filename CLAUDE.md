@@ -507,6 +507,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   söner. Sohbet düğmesinin (açıkken sohbetin) üstünde durur; bir sekme ya
   da bina menüsü açıkken gizlenir.
 - **Ses efektleri kısadır** (hepsi 1 saniyenin altında).
+- Ana menüde müzik daha kısık çalar (haritadaki sesin yaklaşık %45'i).
+  Her düğme hafif bir tık sesiyle cevap verir; lobiye girerken yükselen,
+  ana menüye dönerken alçalan kısa bir boru sesi çalar.
 - **Bina menüsü:** Haritada bir binanın üstüne gelince bina dış hatla
   vurgulanır ve adı/seviyesi küçük bir etikette görünür; tıklayınca o
   binanın menüsü açılır. Menüde:
@@ -1028,7 +1031,10 @@ krallıkta birer tane olur ve 3 seviyelidir.
   kraliçe 40, rehine × 60.
 - **Bilgi:** öğrenilen araştırma × kademe × 50.
 Puanı sunucu, krallığı her yazışında hesaplar ve satırına yazar; böylece
-herkes aynı tabloyu görür ama kimsenin deposu görünmez. Sohbetteki
+herkes aynı tabloyu görür. Başkalarının yalnızca zaten görünen kalemleri
+(gelişim, zafer) ve 50'ye yuvarlanmış toplamı gönderilir; hazine, nüfus,
+ordu ve bilgi kalemleri kişinin kendisine özeldir (depo ve asker sayısı
+yalnızca casuslarla tahmin edilir). Sohbetteki
 **Sıralama** sekmesi krallıkları puana göre dizer ve dökümünü gösterir.
 
 Sezon sonunda sıralama birden fazla kategoride yapılır:
