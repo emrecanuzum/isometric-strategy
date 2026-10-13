@@ -1133,6 +1133,7 @@ function App({
       )}
       {view && !placingKind && aiming === null && (
         <Chat
+          storeKey={`chat-seen:${lobby.id}`}
           username={username}
           messages={chat}
           mine={kingdom ? mine.id : null}

@@ -3509,3 +3509,29 @@ kbd {
   gap: calc(var(--px) * 2);
   padding: calc(var(--px) * 2) calc(var(--px) * 3) 0;
 }
+
+/* Spy topics on a kingdom's page: what is already there, and a button to send (another) spy. */
+.spy-topics {
+  display: grid;
+  gap: calc(var(--px) * 2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.spy-topics li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 2) calc(var(--px) * 3);
+  background: var(--panel-lo);
+}
+
+.spy-topics li > span {
+  display: grid;
+}
+
+.spy-topics small {
+  color: var(--muted);
+}

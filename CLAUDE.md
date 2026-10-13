@@ -863,7 +863,8 @@ mertebesindedir.
 
 - **Casus evi** (2. seviye saray) zamanla casus yetiştirir (altınla,
   seviyeye göre kapasite).
-- Casus panelinden bir casus **bir krallığa ve bir konuya** gönderilir:
+- Casus panelinden bir casus **bir krallığa ve bir konuya** gönderilir (bir
+  krallığın her konusunda en fazla bir casus):
   **Hammadde**, **Ordu** ya da **Diplomasi**; ya da evde **karşı
   casusluk** için tutulur.
 - Her (hedef, konu) için **ağ gücü** (0–100) casus orada kaldıkça artar;
@@ -1050,7 +1051,9 @@ krallıkta birer tane olur ve 3 seviyelidir.
   zil düğmesi bildirimleri sessize alır (tarayıcıda hatırlanır); sessizdeyken
   yalnızca oyuncuyu **@etiketleyen** mesajlar bildirilir. Mesaja @ yazınca
   lobideki oyuncuların adları önerilir; etiketler mesajda vurgulanır. Okunmamış
-  etiket varsa sohbet düğmesindeki rozet sayı yerine "@1" gibi yazar.
+  etiket varsa sohbet düğmesindeki rozet sayı yerine "@1" gibi yazar. Okunan
+  son mesaj tarayıcıda lobi başına hatırlanır; sayfa yenilenince eski
+  mesajlar yeniden bildirilmez.
 - **Sohbet** penceresi daha uzundur; Krallıklar sekmesinde her satırın
   sonundaki pin kamerayı o krallığa götürür; her oyuncunun
   son görülmesinden çevrimiçi olup olmadığı (yeşil nokta, son 6 dakika) ya

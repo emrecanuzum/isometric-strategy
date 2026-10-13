@@ -560,6 +560,15 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
     case 'spy': {
       const target = other(cmd.target)
       if (!game.SPY_TOPICS.includes(cmd.topic)) refuse('rejected')
+      // One spy per kingdom and topic.
+      const { count: working } = await admin
+        .from('spy_missions')
+        .select('id', { count: 'exact', head: true })
+        .eq('owner_id', me.id)
+        .eq('target_id', target.id)
+        .eq('topic', cmd.topic)
+        .is('ended_at', null)
+      if (working) refuse('already')
       const counter = await counterAgainst(lobby, me.id, target.id, game.advance(target.state, now).kingdom, now)
       const caught = game.catchTime(crypto.getRandomValues(new Uint32Array(1))[0], counter, now)
       await mutateKingdom(me.id, now, (k) =>

@@ -39,7 +39,25 @@ const readMuted = () => {
 }
 const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
 
+// The newest message read, kept per lobby in this browser so a reload does not bring old messages back as new.
+const readSeen = (key: string) => {
+  try {
+    const v = localStorage.getItem(key)
+    return v === null ? null : Number(v)
+  } catch {
+    return null
+  }
+}
+const writeSeen = (key: string, id: number) => {
+  try {
+    localStorage.setItem(key, String(id))
+  } catch {
+    // Not remembered in private mode.
+  }
+}
+
 export function Chat({
+  storeKey,
   username,
   messages,
   mine,
@@ -49,6 +67,8 @@ export function Chat({
   onKingdom,
   onLocate,
 }: {
+  // Where this lobby's read marker is kept.
+  storeKey: string
   // The player's name: a message with @name in it calls for them.
   username: string
   messages: ChatMessage[]
@@ -65,10 +85,17 @@ export function Chat({
   const [tab, setTab] = useState<'chat' | 'kingdoms' | 'ranking'>('chat')
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
-  const [seen, setSeen] = useState(messages.length ? messages[messages.length - 1].id : 0)
+  // The newest message read: as remembered, or (the first time in this lobby) everything already there.
+  const [seen, setSeen] = useState<number | null>(() => readSeen(storeKey))
   const list = useRef<HTMLOListElement>(null)
   const last = messages.length ? messages[messages.length - 1].id : 0
-  const fresh = open ? [] : messages.filter((m) => m.id > seen && m.kingdom_id !== mine)
+  useEffect(() => {
+    if (seen === null && messages.length > 0) setSeen(last)
+  }, [seen, messages.length, last])
+  useEffect(() => {
+    if (seen !== null) writeSeen(storeKey, seen)
+  }, [seen, storeKey])
+  const fresh = open || seen === null ? [] : messages.filter((m) => m.id > seen && m.kingdom_id !== mine)
   const unread = fresh.length
   const called = fresh.filter((m) => mentions(m.body, username)).length
   const [muted, setMuted] = useState(readMuted)
@@ -85,10 +112,16 @@ export function Chat({
   // A new line while the chat is folded away: a preview pops up for a few seconds with a chime (always for a mention,
   // otherwise unless muted).
   const [pop, setPop] = useState<ChatMessage | null>(null)
-  const heard = useRef(last)
+  // Messages loaded with the page are history, not news: only those that arrive afterwards pop up.
+  const heard = useRef<number | null>(null)
   useEffect(() => {
-    if (last <= heard.current) return
-    const newest = messages.filter((m) => m.id > heard.current && m.kingdom_id !== mine)
+    if (heard.current === null) {
+      if (messages.length > 0) heard.current = last
+      return
+    }
+    const since = heard.current
+    if (last <= since) return
+    const newest = messages.filter((m) => m.id > since && m.kingdom_id !== mine)
     heard.current = last
     const m = newest[newest.length - 1]
     if (!m || open) return
@@ -114,7 +147,7 @@ export function Chat({
   const tag = (name: string) => setDraft(draft.replace(/@([^\s@]*)$/, `@${name} `))
 
   useEffect(() => {
-    if (open) setSeen(last)
+    if (open && last) setSeen(last)
   }, [open, last])
   useEffect(() => {
     if (open && list.current) list.current.scrollTop = list.current.scrollHeight

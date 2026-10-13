@@ -549,13 +549,28 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
             </button>
           </>
         )}
-        <div className="actions">
-          {(Object.keys(TOPIC_NAMES) as SpyTopic[]).map((t) => (
-            <button key={t} className="btn small" disabled={spiesHome < 1} onClick={() => online.act({ type: 'spy', target: target.id, topic: t })}>
-              <Icon name="eye" size={16} /> {TOPIC_NAMES[t]} için casus gönder
-            </button>
-          ))}
-        </div>
+        <ul className="spy-topics">
+          {(Object.keys(TOPIC_NAMES) as SpyTopic[]).map((t) => {
+            // The player's spy already at work on this topic (one per kingdom and topic).
+            const there = online.missions.filter((m) => m.owner_id === me && m.target_id === target.id && m.topic === t && !m.ended_at).length
+            return (
+              <li key={t}>
+                <span>
+                  <b>{TOPIC_NAMES[t]}</b>
+                  <small>{there > 0 ? `ağ %${intel ? Math.round(intel.strength[t] ?? 0) : '?'}` : 'casusun yok'}</small>
+                </span>
+                {there > 0 ? (
+                  <span className="chip up">Casusun orada</span>
+                ) : (
+                  <button className="btn small" disabled={spiesHome < 1} onClick={() => online.act({ type: 'spy', target: target.id, topic: t })}>
+                    <Icon name="eye" size={16} /> Casus gönder
+                  </button>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+        <p className="hint">Bir krallığın her konusuna bir casus gönderilebilir.</p>
         {spiesHome < 1 && <p className="hint">Evde casusun yok. Casus evi zamanla casus yetiştirir.</p>}
       </Section>
       <Section title="Casus operasyonları" icon="eye" aside={intel ? `en güçlü ağın %${Math.round(best)}` : 'önce raporu getir'}>
