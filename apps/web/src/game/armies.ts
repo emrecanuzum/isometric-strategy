@@ -5,6 +5,7 @@ import { KINGDOM_COLORS } from './buildingSprites'
 import type { KingdomColor } from './buildingSprites'
 import { Canvas, STONE, TIMBER, ramp, rgb, shadow } from './sprites'
 import type { Sprite } from './sprites'
+import { dashes } from './dashes'
 import { textureOf } from './textures'
 
 // Armies on the map (CLAUDE.md §9.7): a squad of spearmen under the kingdom's banner, walking along the route the
@@ -150,24 +151,7 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
   }
 
   function dashed(points: Point[], scale: number) {
-    const dash = DASH / scale
-    const gap = GAP / scale
-    let along = 0
-    for (let i = 1; i < points.length; i++) {
-      const a = points[i - 1]
-      const b = points[i]
-      const length = Math.hypot(b.x - a.x, b.y - a.y)
-      for (let t = 0; t < length; ) {
-        const phase = along % (dash + gap)
-        const step = Math.min(length - t, phase < dash ? dash - phase : dash + gap - phase)
-        if (phase < dash) {
-          routes.moveTo(a.x + ((b.x - a.x) * t) / length, a.y + ((b.y - a.y) * t) / length)
-          routes.lineTo(a.x + ((b.x - a.x) * (t + step)) / length, a.y + ((b.y - a.y) * (t + step)) / length)
-        }
-        t += step
-        along += step
-      }
-    }
+    dashes(points, DASH / scale, GAP / scale, false, (x0, y0, x1, y1) => routes.moveTo(x0, y0).lineTo(x1, y1))
   }
 
   function update(time: number, scale: number) {

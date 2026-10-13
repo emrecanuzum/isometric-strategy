@@ -16,6 +16,7 @@ import type { Point, Rect, World } from '@game/shared'
 import { Application, Container, Graphics, ImageSource, Sprite, Text, Texture } from 'pixi.js'
 import { createAmbient } from './ambient'
 import { createArmies } from './armies'
+import { dashes } from './dashes'
 import type { MapArmy, MapBattle } from './armies'
 import { createCaravans } from './caravans'
 import { CHIMNEYS, structureParts } from './buildingSprites'
@@ -450,27 +451,11 @@ export async function createWorld(
     drape([{ x, y }, { x: x + size, y }, { x: x + size, y: y + size }, { x, y: y + size }])
 
   // A dashed border: whole dashes along the draped outline, a fixed length on screen.
+  // A closed dashed border along flat [x, y, x, y, …] points, a fixed dash length on screen.
   function dashed(g: Graphics, border: number[]) {
-    const dash = DASH / camera.scale.x
-    const gap = GAP / camera.scale.x
-    let along = 0
-    for (let i = 0; i < border.length; i += 2) {
-      const ax = border[i]
-      const ay = border[i + 1]
-      const bx = border[(i + 2) % border.length]
-      const by = border[(i + 3) % border.length]
-      const length = Math.hypot(bx - ax, by - ay)
-      for (let t = 0; t < length; ) {
-        const phase = along % (dash + gap)
-        const step = Math.min(length - t, phase < dash ? dash - phase : dash + gap - phase)
-        if (phase < dash) {
-          g.moveTo(ax + ((bx - ax) * t) / length, ay + ((by - ay) * t) / length)
-          g.lineTo(ax + ((bx - ax) * (t + step)) / length, ay + ((by - ay) * (t + step)) / length)
-        }
-        t += step
-        along += step
-      }
-    }
+    const points = []
+    for (let k = 0; k < border.length; k += 2) points.push({ x: border[k], y: border[k + 1] })
+    dashes(points, DASH / camera.scale.x, GAP / camera.scale.x, true, (x0, y0, x1, y1) => g.moveTo(x0, y0).lineTo(x1, y1))
   }
 
   // Overlay lines keep their screen thickness at every zoom level, so they are redrawn when it changes.
