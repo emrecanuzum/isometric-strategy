@@ -24,6 +24,9 @@ export interface Army {
   morale: number
   familiarity: number
   camp: Point
+  // How many figures to draw (3–9, growing with its soldiers) and whether it drags catapults; seen by everyone.
+  figures?: number
+  catapults?: boolean
 }
 
 // Walkers keep to dry land below the mountains; bridges cross the water.
@@ -37,15 +40,57 @@ const passable = (world: Pick<World, 'size' | 'terrain' | 'feature'>, x: number,
 
 const CELL = 4
 
-// A route over land from `from` to `to` (tile points), searched on a grid of 4×4-tile cells; null if none.
-export function findRoute(world: Pick<World, 'size' | 'terrain' | 'feature'>, from: Point, to: Point): Point[] | null {
-  const n = world.size / CELL
-  const cellOf = (p: Point) => Math.floor(p.y / CELL) * n + Math.floor(p.x / CELL)
-  const open = (c: number) => {
-    const x = (c % n) * CELL + CELL / 2
-    const y = Math.floor(c / n) * CELL + CELL / 2
-    return passable(world, Math.floor(x), Math.floor(y))
+type Ground = Pick<World, 'size' | 'terrain' | 'feature'>
+
+// Whether a straight walk from `a` to `b` stays on passable ground (sampled every quarter tile).
+function clearLine(world: Ground, a: Point, b: Point) {
+  const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 4))
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps
+    if (!passable(world, Math.floor(a.x + (b.x - a.x) * t), Math.floor(a.y + (b.y - a.y) * t))) return false
   }
+  return true
+}
+
+// For each 4×4 cell, the point an army passes through it: a bridge tile when the cell holds one (so narrow bridges are
+// found), else the passable tile nearest its middle; -1 for a cell with no passable tile. Made once per world.
+const waypoints = new WeakMap<object, Int32Array>()
+function waypointsOf(world: Ground) {
+  let found = waypoints.get(world.terrain)
+  if (found) return found
+  const n = world.size / CELL
+  found = new Int32Array(n * n).fill(-1)
+  for (let c = 0; c < n * n; c++) {
+    const x0 = (c % n) * CELL
+    const y0 = Math.floor(c / n) * CELL
+    let best = -1
+    let bestScore = Infinity
+    for (let y = y0; y < y0 + CELL; y++) {
+      for (let x = x0; x < x0 + CELL; x++) {
+        if (!passable(world, x, y)) continue
+        const i = y * world.size + x
+        const score = (world.feature[i] === Feature.Bridge ? -100 : 0) + Math.hypot(x + 0.5 - (x0 + CELL / 2), y + 0.5 - (y0 + CELL / 2))
+        if (score < bestScore) {
+          bestScore = score
+          best = i
+        }
+      }
+    }
+    found[c] = best
+  }
+  waypoints.set(world.terrain, found)
+  return found
+}
+
+// A route over land from `from` to `to` (tile points), searched on a grid of 4×4-tile cells; null if none.
+export function findRoute(world: Ground, from: Point, to: Point): Point[] | null {
+  const n = world.size / CELL
+  const ways = waypointsOf(world)
+  const cellOf = (p: Point) => Math.floor(p.y / CELL) * n + Math.floor(p.x / CELL)
+  const open = (c: number) => ways[c] >= 0
+  const pointOf = (c: number): Point => ({ x: (ways[c] % world.size) + 0.5, y: Math.floor(ways[c] / world.size) + 0.5 })
+  // Two cells are joined only when the walk between their waypoints keeps out of the water.
+  const joined = (a: number, b: number) => clearLine(world, pointOf(a), pointOf(b))
   const start = cellOf(from)
   const goal = cellOf(to)
   const cost = new Float64Array(n * n).fill(Infinity)
@@ -82,6 +127,7 @@ export function findRoute(world: Pick<World, 'size' | 'terrain' | 'feature'>, fr
     return top[1]
   }
   const h = (c: number) => Math.hypot((c % n) - (goal % n), Math.floor(c / n) - Math.floor(goal / n))
+  if (!open(start) || !open(goal)) return null
   cost[start] = 0
   push(start, h(start))
   while (heap.length > 0) {
@@ -98,9 +144,10 @@ export function findRoute(world: Pick<World, 'size' | 'terrain' | 'feature'>, fr
         const ny = cy + dy
         if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue
         const next = ny * n + nx
-        if (closed[next] || (next !== goal && !open(next))) continue
+        if (closed[next] || !open(next)) continue
         // No cutting a corner between two closed cells.
         if (dx && dy && !open(cy * n + nx) && !open(ny * n + cx)) continue
+        if (!joined(c, next)) continue
         const g = cost[c] + (dx && dy ? Math.SQRT2 : 1)
         if (g >= cost[next]) continue
         cost[next] = g
@@ -116,14 +163,12 @@ export function findRoute(world: Pick<World, 'size' | 'terrain' | 'feature'>, fr
     if (cells.length > n * n) return null
     cells.push(c)
   }
-  const points = cells.reverse().map((c) => ({ x: (c % n) * CELL + CELL / 2, y: Math.floor(c / n) * CELL + CELL / 2 }))
-  // Straight runs of cells become one segment.
-  const route = [from]
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = route[route.length - 1]
-    const b = points[i]
-    const c = points[i + 1]
-    if (Math.sign(b.x - a.x) !== Math.sign(c.x - b.x) || Math.sign(b.y - a.y) !== Math.sign(c.y - b.y)) route.push(b)
+  // From where the army stands, through each cell's waypoint, to where it was sent.
+  const points = [from, pointOf(start), ...cells.reverse().map(pointOf), to]
+  // Waypoints are skipped where the straight walk past them stays on land, so the route bends only where it must.
+  const route = [points[0]]
+  for (let i = 1; i < points.length - 1; i++) {
+    if (!clearLine(world, route[route.length - 1], points[i + 1])) route.push(points[i])
   }
   route.push(to)
   return route

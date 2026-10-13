@@ -854,6 +854,9 @@ function App({
         arriveAt: Date.parse(a.arrive_at),
         battle: a.status === 'battle',
         selected: a.id === armyFocus,
+        // Own armies by their exact size; others by what everyone can see of them.
+        figures: a.soldiers !== null ? Math.min(9, 3 + Math.floor(a.soldiers / 10)) : (a.figures ?? 3),
+        catapult: a.units ? (a.units.catapult ?? 0) > 0 : !!a.catapults,
       })),
       layer.battles
         .filter((b) => !b.resolved || Date.parse(b.ends_at) > serverNow())

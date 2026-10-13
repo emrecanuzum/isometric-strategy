@@ -894,7 +894,14 @@ mertebesindedir.
   eve çekilir ve eve varana kadar yeniden yakalanamaz.
 - Savaştayken elçiler yalnızca barış götürür (ilişki geliştirme, hediye ve
   haraç isteği olmaz).
-- Haritada ordular krallığın sancağıyla görünür; oyuncunun yoldaki
+- Ordu yolu 4×4 karoluk hücreler üzerinde aranır; her hücrenin geçiş
+  noktası (köprü varsa köprü karosu) seçilir ve iki nokta arasındaki düz
+  yürüyüş suya ya da dağa değmiyorsa bağlanır. Böylece ordular nehirleri
+  yalnızca köprülerden geçer.
+- Haritada ordular krallığın sancağıyla görünür; görünen asker sayısı
+  ordunun büyüklüğüyle artar (3–9 figür, her 10 askerde bir) ve mancınığı
+  olan ordunun arkasında bir mancınık yürür. Rakipler yalnızca bu kaba
+  büyüklüğü görür, kesin sayıyı casuslar söyler; oyuncunun yoldaki
   ordularının rotası kesikli çizgiyle çizilir, muharebeler çapraz kılıçla
   işaretlenir. Başkasının ordusunun gücü yalnızca casusla tahmin edilir.
 - Muharebe başlayınca ve bitince **elçi** ekranda bir pencereyle haber

@@ -23,6 +23,9 @@ export interface MapArmy {
   arriveAt: number
   battle: boolean
   selected: boolean
+  // Figures drawn (3–9, by its size) and whether a catapult rolls behind it.
+  figures: number
+  catapult: boolean
 }
 
 export interface MapBattle {
@@ -39,11 +42,13 @@ const GAP = 7
 
 const roofsOf = (color: string | null) => (KINGDOM_COLORS[color as KingdomColor] ?? KINGDOM_COLORS.royal).roofs
 
-// Three spearmen in tunics of the kingdom's colour behind a banner; two frames of the march.
-function squad(color: string | null, frame: number): Sprite {
+// Spearmen in tunics of the kingdom's colour behind a banner, more of them for a bigger army (in ranks of three), and
+// a catapult on wheels at the back when the army has one; two frames of the march.
+export function squad(color: string | null, frame: number, figures = 3, catapult = false): Sprite {
   const tunic = roofsOf(color)
-  const canvas = new Canvas(30, 34)
-  const base = 31
+  const canvas = new Canvas(54, 42)
+  const base = 38
+  const ox = 12
   const soldier = (cx: number, by: number, step: number) => {
     canvas.set(cx - 1 - step, by, TIMBER[0])
     canvas.set(cx + 1 + step, by, TIMBER[0])
@@ -61,21 +66,43 @@ function squad(color: string | null, frame: number): Sprite {
     canvas.set(cx - 2, by - 4, tunic[1])
     canvas.set(cx - 3, by - 5, HELM[2])
   }
+  if (catapult) {
+    // A throwing arm on an A-frame over a wheeled bed, behind the ranks.
+    const cx = ox + 30
+    const cy = base - 10
+    for (let x = -7; x <= 7; x++) for (let z = 0; z < 3; z++) canvas.set(cx + x, cy - z + Math.round(x * 0.3), TIMBER[z === 2 ? 2 : 1])
+    for (const wx of [-5, 5]) for (let a = 0; a < 12; a++) canvas.set(cx + wx + Math.round(Math.cos(a / 2) * 2), cy + 1 + Math.round(Math.sin(a / 2) * 2), TIMBER[0])
+    for (let z = 0; z < 8; z++) {
+      canvas.set(cx - 3 + Math.round(z * 0.3), cy - 3 - z, TIMBER[2])
+      canvas.set(cx + 3 - Math.round(z * 0.3), cy - 3 - z, TIMBER[1])
+    }
+    for (let i = 0; i < 13; i++) canvas.set(cx - 6 + i, cy - 13 + Math.round(i * 0.55), TIMBER[i < 3 ? 0 : 2])
+    canvas.set(cx - 6, cy - 14, STONE[3])
+    canvas.set(cx - 7, cy - 14, STONE[2])
+    shadow(canvas, cx, cy + 2, 8)
+  }
   // The banner stands behind the rear soldier.
-  for (let y = base - 30; y < base - 6; y++) canvas.set(18, y, TIMBER[1])
+  const bx = ox + 4
+  for (let y = base - 34; y < base - 10; y++) canvas.set(bx, y, TIMBER[1])
   for (let y = 0; y < 7; y++) {
     for (let x = 1; x <= 9; x++) {
       const wave = Math.round(Math.sin(x * 0.7 + frame * 1.5) * 0.8)
       if (x > 7 && (y === 0 || y === 6)) continue
-      canvas.set(18 + x, base - 30 + y + wave, y === 0 ? tunic[5] : tunic[y < 3 ? 3 : 2])
+      canvas.set(bx + x, base - 34 + y + wave, y === 0 ? tunic[5] : tunic[y < 3 ? 3 : 2])
     }
   }
   const step = frame === 0 ? 1 : -1
-  soldier(14, base - 6, -step)
-  soldier(9, base - 2, step)
-  soldier(19, base, step)
-  shadow(canvas, 14, base, 9)
-  return canvas.sprite(14, base, 0)
+  // Ranks of three, back to front, each a little lower and to the side on the iso grid.
+  const spots: [number, number][] = []
+  for (let i = 0; i < figures; i++) {
+    const rank = Math.floor(i / 3)
+    const file = i % 3
+    spots.push([ox + file * 5 - rank * 4, base - 12 + rank * 4 + file * 2])
+  }
+  spots.sort((a, b) => a[1] - b[1])
+  spots.forEach(([x, y], i) => soldier(x, y, i % 2 ? step : -step))
+  shadow(canvas, ox + 4, base - 6, 6 + Math.ceil(figures / 3) * 3)
+  return canvas.sprite(ox + 4, base, 0)
 }
 
 // Two crossed swords over a puff of dust.
@@ -91,9 +118,9 @@ function swords(): Sprite {
 }
 
 const squads = new Map<string, Sprite[]>()
-const squadOf = (color: string | null, frame: number) => {
-  const key = color ?? 'royal'
-  if (!squads.has(key)) squads.set(key, [squad(color, 0), squad(color, 1)])
+const squadOf = (color: string | null, frame: number, figures = 3, catapult = false) => {
+  const key = `${color ?? 'royal'}:${figures}:${catapult}`
+  if (!squads.has(key)) squads.set(key, [squad(color, 0, figures, catapult), squad(color, 1, figures, catapult)])
   return squads.get(key)![frame]
 }
 const SWORDS = swords()
@@ -160,7 +187,9 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
       const here = armyAt({ path: army.path, depart_at: new Date(army.departAt).toISOString(), arrive_at: new Date(army.arriveAt).toISOString() }, time)
       const screen = groundToScreen(world, here)
       const moving = !army.battle && time < army.arriveAt && army.path.length > 1
-      body.texture = textureOf(squadOf(army.color, moving ? Math.floor(time / 300) % 2 : 0))
+      const look = squadOf(army.color, moving ? Math.floor(time / 300) % 2 : 0, army.figures, army.catapult)
+      body.texture = textureOf(look)
+      body.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
       body.position.set(screen.x, screen.y)
       // Larger than life when zoomed out, so an army never shrinks out of sight.
       body.scale.set(Math.max(1, 0.6 / scale))
@@ -171,7 +200,7 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
         ring.zIndex = screen.y - 1
       }
       if (label) {
-        label.position.set(screen.x, screen.y - 36 * Math.max(1, 0.6 / scale))
+        label.position.set(screen.x, screen.y - 44 * Math.max(1, 0.6 / scale))
         label.scale.set(1 / scale)
       }
       // The road still ahead of the player's own armies.
