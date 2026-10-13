@@ -3364,3 +3364,73 @@ kbd {
   flex: none;
   margin-right: 0;
 }
+
+/* Quick targets for an army being sent somewhere, down the right side. */
+.war-targets {
+  position: fixed;
+  right: var(--gap);
+  top: calc(var(--gap) + 120px);
+  z-index: 6;
+  display: grid;
+  gap: calc(var(--px) * 3);
+  width: min(260px, calc(100vw - var(--gap) * 2));
+  max-height: calc(100vh - 420px);
+  overflow: hidden auto;
+  padding: calc(var(--px) * 4);
+}
+
+.war-targets header {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  color: var(--gold);
+  font-size: 14px;
+}
+
+.war-targets .btn {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.war-target {
+  display: grid;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 3);
+  background: var(--panel-lo);
+}
+
+.war-target > b {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+}
+
+.war-target > b i {
+  width: calc(var(--px) * 5);
+  height: calc(var(--px) * 5);
+  box-shadow: var(--outline);
+}
+
+.war-target > b .btn.icon-only {
+  width: 32px;
+  min-height: 32px;
+  margin-left: auto;
+}
+
+@media (max-width: 560px) {
+  .war-targets {
+    top: auto;
+    bottom: calc(var(--gap) + var(--dock-h) + 70px);
+    max-height: 40vh;
+  }
+}
+
+/* The little moving picture of a battle, at pixel scale across the view. */
+.battle-scene {
+  display: block;
+  width: calc(100% - var(--px) * 12);
+  margin: 0 calc(var(--px) * 6);
+  aspect-ratio: 160 / 52;
+  image-rendering: pixelated;
+  box-shadow: var(--outline);
+}

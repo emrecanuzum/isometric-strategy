@@ -7,6 +7,7 @@ import {
   balance,
   build,
   buildError,
+  armyAt,
   canPlace,
   fits,
   scoreOf,
@@ -51,7 +52,8 @@ import { useLayer } from './net/layer'
 import type { MapArmy } from './game/armies'
 import { play } from './audio/sfx'
 import type { Cue } from './audio/sfx'
-import { SoundSettings } from './ui/home/SettingsPanel'
+import { DetailSettings, SoundSettings } from './ui/home/SettingsPanel'
+import { WarTargets } from './ui/hud/WarTargets'
 import { EnvoyDialog, describe as describeNotice } from './ui/Envoy'
 import type { KingdomInfo, Online } from './ui/hud/online'
 import { BattleView } from './ui/hud/war'
@@ -300,6 +302,8 @@ function App({
   }, [seed])
 
   const muted = !settings.music
+  // Detail animations follow the setting.
+  useEffect(() => view?.setDetail(settings.detail), [view, settings.detail])
   // The sound settings, opened from the corner button or the kingdom tab.
   const [settingsOpen, setSettingsOpen] = useState(false)
 
@@ -394,6 +398,7 @@ function App({
   const [focus, setFocus] = useState<number | null>(null)
   const [armyFocus, setArmyFocus] = useState<number | null>(null)
   const [aiming, setAiming] = useState<number | null>(null)
+  const [following, setFollowing] = useState<number | null>(null)
   const [watching, setWatching] = useState<number | null>(null)
   const [intel, setIntel] = useState<Record<number, IntelReport | null | undefined>>({})
   useEffect(() => {
@@ -687,15 +692,20 @@ function App({
     return () => window.removeEventListener('keydown', onKey)
   }, [placingKind])
 
+  // Sends the aimed army toward a tile (an enemy's lands mean a siege) and leaves aiming.
+  const sendArmy = (army: number, tile: Point) => {
+    act({ type: 'army', army, order: { kind: 'move', x: Math.floor(tile.x), y: Math.floor(tile.y) } }).then((r) => {
+      const at = (r as { at?: string } | undefined)?.at
+      if (at && Date.parse(at) > serverNow() + 5000) setToast('Elçi yola çıktı; emir orduya ulaşınca uygulanacak')
+    })
+    setAiming(null)
+  }
+
   tapRef.current = (tile, building, army) => {
     const current = kingdomRef.current
     // Choosing where an army marches.
     if (aiming !== null) {
-      act({ type: 'army', army: aiming, order: { kind: 'move', x: tile.x, y: tile.y } }).then((r) => {
-        const at = (r as { at?: string } | undefined)?.at
-        if (at && Date.parse(at) > serverNow() + 5000) setToast('Elçi yola çıktı; emir orduya ulaşınca uygulanacak')
-      })
-      setAiming(null)
+      sendArmy(aiming, tile)
       return
     }
     if (army !== undefined && !placingKind) {
@@ -860,7 +870,27 @@ function App({
       setSelected(null)
     },
     watch: setWatching,
+    following,
+    follow: setFollowing,
   }
+
+  // The camera locked onto an army: it glides along with it until let go, dragged away, or the army is gone.
+  const armiesRef = useRef(layer.armies)
+  armiesRef.current = layer.armies
+  useEffect(() => {
+    if (!view || following === null) return
+    view.follow(
+      () => {
+        const army = armiesRef.current.find((a) => a.id === following)
+        return army ? armyAt(army, serverNow()) : null
+      },
+      () => setFollowing(null),
+    )
+    return () => view.follow(null)
+  }, [view, following])
+  useEffect(() => {
+    if (following !== null && !layer.armies.some((a) => a.id === following)) setFollowing(null)
+  }, [following, layer.armies])
 
   // Armies and battles on the map.
   useEffect(() => {
@@ -878,7 +908,7 @@ function App({
         battle: a.status === 'battle',
         selected: a.id === armyFocus,
         // Own armies by their exact size; others by what everyone can see of them.
-        figures: a.soldiers !== null ? Math.min(9, 3 + Math.floor(a.soldiers / 10)) : (a.figures ?? 3),
+        figures: a.soldiers !== null ? Math.min(12, Math.max(2, Math.ceil(a.soldiers / 3))) : (a.figures ?? 3),
         catapult: a.units ? (a.units.catapult ?? 0) > 0 : !!a.catapults,
       })),
       layer.battles
@@ -965,7 +995,7 @@ function App({
               <Icon name="gear" size={32} />
               <div>
                 <h2 id="settings-title">Ayarlar</h2>
-                <small>Ses ve müzik</small>
+                <small>Ses, müzik ve görüntü</small>
               </div>
               <button className="btn icon-only" onClick={() => setSettingsOpen(false)} aria-label="Kapat">
                 <Icon name="close" size={16} />
@@ -973,6 +1003,7 @@ function App({
             </header>
             <div className="form">
               <SoundSettings settings={settings} onChange={onSettings} />
+              <DetailSettings settings={settings} onChange={onSettings} />
             </div>
           </section>
         </div>
@@ -1112,6 +1143,17 @@ function App({
           }}
         />
       )}
+      {following !== null && aiming === null && !placingKind && (
+        <div className="placing frame" role="status">
+          <Icon name="eye" size={24} />
+          <span>
+            <b>Ordu takip ediliyor</b> · haritayı sürüklersen takip biter
+          </span>
+          <button className="btn small" onClick={() => setFollowing(null)}>
+            Bırak
+          </button>
+        </div>
+      )}
       {aiming !== null && (
         <div className="placing frame" role="status">
           <Icon name="swords" size={24} />
@@ -1122,6 +1164,19 @@ function App({
             İptal
           </button>
         </div>
+      )}
+      {aiming !== null && (
+        <WarTargets
+          online={online}
+          rivals={rivals}
+          now={now}
+          onSend={(tile) => sendArmy(aiming, tile)}
+          onHome={() => {
+            act({ type: 'army', army: aiming, order: { kind: 'home' } })
+            setAiming(null)
+          }}
+          onShow={(tile) => view?.centerOn(tile)}
+        />
       )}
       {notice && kingdom && <EnvoyDialog notice={notice} online={online} onClose={closeNotice} />}
       {!notice && kingdom && fortunes[0] && <FortuneDialog event={fortunes[0]} now={now} onClose={() => setFortunes((list) => list.slice(1))} />}

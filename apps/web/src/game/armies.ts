@@ -44,11 +44,11 @@ const roofsOf = (color: string | null) => (KINGDOM_COLORS[color as KingdomColor]
 
 // Spearmen in tunics of the kingdom's colour behind a banner, more of them for a bigger army (in ranks of three), and
 // a catapult on wheels at the back when the army has one; two frames of the march.
-export function squad(color: string | null, frame: number, figures = 3, catapult = false): Sprite {
+export function squad(color: string | null, frame: number, figures = 3): Sprite {
   const tunic = roofsOf(color)
-  const canvas = new Canvas(54, 42)
-  const base = 38
-  const ox = 12
+  const canvas = new Canvas(46, 50)
+  const base = 46
+  const ox = 18
   // The march in four frames: a stride one way, feet together (body up a pixel), a stride the other way, together.
   const STRIDE = [1, 0, -1, 0]
   const LIFT = [0, 1, 0, 1]
@@ -75,29 +75,14 @@ export function squad(color: string | null, frame: number, figures = 3, catapult
     canvas.set(cx - 2, by - 4, tunic[1])
     canvas.set(cx - 3, by - 5, HELM[2])
   }
-  if (catapult) {
-    // A throwing arm on an A-frame over a wheeled bed, behind the ranks.
-    const cx = ox + 30
-    const cy = base - 10
-    for (let x = -7; x <= 7; x++) for (let z = 0; z < 3; z++) canvas.set(cx + x, cy - z + Math.round(x * 0.3), TIMBER[z === 2 ? 2 : 1])
-    for (const wx of [-5, 5]) for (let a = 0; a < 12; a++) canvas.set(cx + wx + Math.round(Math.cos(a / 2) * 2), cy + 1 + Math.round(Math.sin(a / 2) * 2), TIMBER[0])
-    for (let z = 0; z < 8; z++) {
-      canvas.set(cx - 3 + Math.round(z * 0.3), cy - 3 - z, TIMBER[2])
-      canvas.set(cx + 3 - Math.round(z * 0.3), cy - 3 - z, TIMBER[1])
-    }
-    for (let i = 0; i < 13; i++) canvas.set(cx - 6 + i, cy - 13 + Math.round(i * 0.55), TIMBER[i < 3 ? 0 : 2])
-    canvas.set(cx - 6, cy - 14, STONE[3])
-    canvas.set(cx - 7, cy - 14, STONE[2])
-    shadow(canvas, cx, cy + 2, 8)
-  }
   // The banner stands behind the rear soldier.
   const bx = ox + 4
-  for (let y = base - 34; y < base - 10; y++) canvas.set(bx, y, TIMBER[1])
+  for (let y = base - 42; y < base - 18; y++) canvas.set(bx, y, TIMBER[1])
   for (let y = 0; y < 7; y++) {
     for (let x = 1; x <= 9; x++) {
       const wave = Math.round(Math.sin(x * 0.7 + frame * 1.5) * 0.8)
       if (x > 7 && (y === 0 || y === 6)) continue
-      canvas.set(bx + x, base - 34 + y + wave, y === 0 ? tunic[5] : tunic[y < 3 ? 3 : 2])
+      canvas.set(bx + x, base - 42 + y + wave, y === 0 ? tunic[5] : tunic[y < 3 ? 3 : 2])
     }
   }
   // Ranks of three, back to front, each a little lower and to the side on the iso grid.
@@ -105,13 +90,44 @@ export function squad(color: string | null, frame: number, figures = 3, catapult
   for (let i = 0; i < figures; i++) {
     const rank = Math.floor(i / 3)
     const file = i % 3
-    spots.push([ox + file * 5 - rank * 4, base - 12 + rank * 4 + file * 2])
+    spots.push([ox + file * 5 - rank * 4, base - 16 + rank * 4 + file * 2])
   }
   spots.sort((a, b) => a[1] - b[1])
   // Neighbours out of step with each other, so the column ripples as it marches.
   spots.forEach(([x, y], i) => soldier(x, y, frame + (i % 2) * 2))
-  shadow(canvas, ox + 4, base - 6, 6 + Math.ceil(figures / 3) * 3)
-  return canvas.sprite(ox + 4, base, 0)
+  shadow(canvas, ox + 2, base - 8, 6 + Math.ceil(figures / 3) * 3)
+  return canvas.sprite(ox + 4, base - 6, 0)
+}
+
+// A catapult on its wheeled bed, facing right (mirrored to face left): the throwing arm leans back over the bed and the
+// wheels turn through four frames as it rolls.
+export function catapultLook(frame: number): Sprite {
+  const canvas = new Canvas(30, 26)
+  const cx = 15
+  const cy = 20
+  // The bed, sloping with the ground's grain toward the front.
+  for (let x = -9; x <= 9; x++) for (let z = 0; z < 3; z++) canvas.set(cx + x, cy - z + Math.round(x * 0.25), TIMBER[z === 2 ? 2 : 1])
+  // The A-frame and the arm, its cup with a stone at the back.
+  for (let z = 0; z < 9; z++) {
+    canvas.set(cx - 1 + Math.round(z * 0.25), cy - 3 - z, TIMBER[2])
+    canvas.set(cx + 3 - Math.round(z * 0.25), cy - 3 - z, TIMBER[1])
+  }
+  for (let i = 0; i < 15; i++) canvas.set(cx - 8 + i, cy - 15 + Math.round(i * 0.6), TIMBER[i < 3 ? 0 : 2])
+  canvas.set(cx - 8, cy - 16, STONE[3])
+  canvas.set(cx - 9, cy - 16, STONE[2])
+  canvas.set(cx - 8, cy - 17, STONE[4])
+  // Wheels: a rim and two spokes turned a quarter more each frame.
+  for (const wx of [-6, 6]) {
+    const wy = cy + 1 + Math.round(wx * 0.25)
+    for (let a = 0; a < 16; a++) canvas.set(cx + wx + Math.round(Math.cos((a / 16) * Math.PI * 2) * 3), wy + Math.round(Math.sin((a / 16) * Math.PI * 2) * 3), TIMBER[0])
+    const turn = (frame / 4) * (Math.PI / 2)
+    for (let r = -2; r <= 2; r++) {
+      canvas.set(cx + wx + Math.round(Math.cos(turn) * r), wy + Math.round(Math.sin(turn) * r), TIMBER[2])
+      canvas.set(cx + wx + Math.round(Math.cos(turn + Math.PI / 2) * r), wy + Math.round(Math.sin(turn + Math.PI / 2) * r), TIMBER[2])
+    }
+  }
+  shadow(canvas, cx, cy + 3, 10)
+  return canvas.sprite(cx, cy + 3, 0)
 }
 
 // Two crossed swords over a puff of dust.
@@ -127,11 +143,12 @@ function swords(): Sprite {
 }
 
 const squads = new Map<string, Sprite[]>()
-const squadOf = (color: string | null, frame: number, figures = 3, catapult = false) => {
-  const key = `${color ?? 'royal'}:${figures}:${catapult}`
-  if (!squads.has(key)) squads.set(key, [0, 1, 2, 3].map((f) => squad(color, f, figures, catapult)))
+const squadOf = (color: string | null, frame: number, figures = 3) => {
+  const key = `${color ?? 'royal'}:${figures}`
+  if (!squads.has(key)) squads.set(key, [0, 1, 2, 3].map((f) => squad(color, f, figures)))
   return squads.get(key)![frame]
 }
+const CATAPULTS = [0, 1, 2, 3].map(catapultLook)
 const SWORDS = swords()
 
 interface Shown {
@@ -139,6 +156,9 @@ interface Shown {
   body: PixiSprite
   ring: Graphics
   label: Text | null
+  // The catapult rolling behind, and the way the army last faced (tile space).
+  cart: PixiSprite | null
+  facing: Point
 }
 
 export function createArmies(world: World, walkers: Container, routes: Graphics, labels: Container) {
@@ -152,6 +172,7 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
       s.body.destroy()
       s.ring.destroy()
       s.label?.destroy()
+      s.cart?.destroy()
       shown.delete(id)
     }
     for (const army of armies) {
@@ -162,10 +183,18 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
         body.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
         const ring = new Graphics()
         walkers.addChild(ring, body)
-        s = { army, body, ring, label: null }
+        s = { army, body, ring, label: null, cart: null, facing: { x: 1, y: 0 } }
         shown.set(army.id, s)
       }
       s.army = army
+      if (army.catapult && !s.cart) {
+        s.cart = new PixiSprite(textureOf(CATAPULTS[0]))
+        s.cart.anchor.set(CATAPULTS[0].anchorX / CATAPULTS[0].width, CATAPULTS[0].anchorY / CATAPULTS[0].height)
+        walkers.addChild(s.cart)
+      } else if (!army.catapult && s.cart) {
+        s.cart.destroy()
+        s.cart = null
+      }
       if (army.soldiers !== null && !s.label) {
         s.label = new Text({
           text: '',
@@ -192,12 +221,33 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
 
   function update(time: number, scale: number) {
     routes.clear()
-    for (const { army, body, ring, label } of shown.values()) {
-      const here = armyAt({ path: army.path, depart_at: new Date(army.departAt).toISOString(), arrive_at: new Date(army.arriveAt).toISOString() }, time)
+    for (const s of shown.values()) {
+      const { army, body, ring, label } = s
+      const route = { path: army.path, depart_at: new Date(army.departAt).toISOString(), arrive_at: new Date(army.arriveAt).toISOString() }
+      const here = armyAt(route, time)
       const screen = groundToScreen(world, here)
       const moving = !army.battle && time < army.arriveAt && army.path.length > 1
+      // Which way it is heading: from a moment ago to now (kept when it stops).
+      if (moving) {
+        const before = armyAt(route, time - 600)
+        const dx = here.x - before.x
+        const dy = here.y - before.y
+        const d = Math.hypot(dx, dy)
+        if (d > 1e-3) s.facing = { x: dx / d, y: dy / d }
+      }
+      if (s.cart) {
+        // A tile and a half behind the column, facing the way it goes, wheels turning while it rolls (when close).
+        const behind = { x: here.x - s.facing.x * 1.5, y: here.y - s.facing.y * 1.5 }
+        const at = groundToScreen(world, behind)
+        const frame = moving && scale >= 1 ? Math.floor(time / 120) % 4 : 0
+        s.cart.texture = textureOf(CATAPULTS[frame])
+        s.cart.position.set(at.x, at.y)
+        const size = Math.max(1, 0.6 / scale)
+        s.cart.scale.set(s.facing.x - s.facing.y < 0 ? -size : size, size)
+        s.cart.zIndex = at.y
+      }
       // Marching feet only when close enough to see them; far out the column stands still.
-      const look = squadOf(army.color, moving && scale >= 1 ? Math.floor(time / 180) % 4 : 0, army.figures, army.catapult)
+      const look = squadOf(army.color, moving && scale >= 1 ? Math.floor(time / 180) % 4 : 0, army.figures)
       body.texture = textureOf(look)
       body.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
       body.position.set(screen.x, screen.y)

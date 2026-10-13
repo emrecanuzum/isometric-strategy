@@ -1,6 +1,11 @@
+import { BattleScene } from './BattleScene'
+import { startBattleMusic } from '../../audio/sfx'
+import { duckMusic } from '../../net/settings'
 import { UNITS, armoryOf, armyAt, balance, countOf, familiarityAt, familiarityBonus, garrisonOf, moraleAt, nearInn, recruitment, territoryRect, territoryStage, trainError, unitSpec } from '@game/shared'
 import type { Army, Kingdom, Point, Unit, Units, World } from '@game/shared'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { KINGDOM_COLORS } from '../../game/buildingSprites'
+import type { KingdomColor } from '../../game/buildingSprites'
 import type { Battle } from '../../net/online'
 import { Icon } from '../icons'
 import { RESOURCE_NAMES, UNIT_ICONS, UNIT_NAMES, UNIT_NOTES, WEAPON_NAMES } from '../names'
@@ -266,6 +271,17 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
           <button className="btn small" disabled={busy} onClick={() => online.target(army.id)}>
             Hareket
           </button>
+          <button
+            className="btn small"
+            aria-pressed={online.following === army.id}
+            onClick={() => {
+              online.setArmy(army.id)
+              online.follow(online.following === army.id ? null : army.id)
+            }}
+            title="Kamera orduyu takip etsin (haritayı sürükleyince bırakır)"
+          >
+            <Icon name="eye" size={16} /> {online.following === army.id ? 'Takibi bırak' : 'Takip et'}
+          </button>
           <button className="btn small" disabled={busy} onClick={() => online.act({ type: 'army', army: army.id, order: { kind: 'home' } })}>
             <Icon name="home" size={16} /> Eve dön
           </button>
@@ -356,6 +372,23 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
   const d = side('defenders')
   const defense = battle.plan.defense
   const winner = battle.plan.winner === 'attackers' ? a : d
+  const sceneSide = (s: typeof a) => ({
+    soldiers: s.now.soldiers,
+    start: s.start.soldiers,
+    color: KINGDOM_COLORS[s.colors[0] as KingdomColor]?.swatch ?? '#a8a4ac',
+    archers: (s.units.archer ?? 0) > 0,
+    catapults: (s.units.catapult ?? 0) > 0,
+  })
+  // A tense march under the battle while it is fought (the tavern tune steps aside).
+  useEffect(() => {
+    if (over) return
+    duckMusic(true)
+    const stop = startBattleMusic()
+    return () => {
+      stop()
+      duckMusic(false)
+    }
+  }, [over])
   return (
     <div className="modal" role="dialog" aria-labelledby="battle-title" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <section className="dialog frame battle-view">
@@ -371,6 +404,14 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
             <Icon name="close" size={16} />
           </button>
         </header>
+        <BattleScene
+          attackers={sceneSide(a)}
+          defenders={sceneSide(d)}
+          siege={battle.kind === 'siege'}
+          round={shown}
+          over={over}
+          winner={battle.plan.winner}
+        />
         <div className="battle-sides">
           {[
             { title: 'Saldıranlar', s: a, roll: last?.attackers },

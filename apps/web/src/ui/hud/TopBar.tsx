@@ -1,4 +1,4 @@
-import { BUILDINGS, balance, buildingOutput, gameTime, population, storageCap, tradeUnits } from '@game/shared'
+import { BUILDINGS, balance, buildingOutput, gameTime, goldCap, population, storageCap, tradeUnits } from '@game/shared'
 import type { BuildingKind, Kingdom, Resource, Stock } from '@game/shared'
 import type React from 'react'
 import { PHASE_NAMES, dayPhase, isNight } from '../../game/daylight'
@@ -97,9 +97,9 @@ function ResourceCard({ resource: r, kingdom, now, history }: { resource: Resour
       <header className="pop-head">
         <Icon name={RESOURCE_ICONS[r]} size={24} />
         <b>{RESOURCE_NAMES[r]}</b>
-        <strong className={r !== 'gold' && kingdom.stock[r] >= storageCap(kingdom, now) ? 'down' : undefined}>
+        <strong className={kingdom.stock[r] >= (r === 'gold' ? goldCap(kingdom, now) : storageCap(kingdom, now)) ? 'down' : undefined}>
           {fmt(kingdom.stock[r])}
-          {r !== 'gold' && <small> / {fmt(storageCap(kingdom, now))}</small>}
+          <small> / {fmt(r === 'gold' ? goldCap(kingdom, now) : storageCap(kingdom, now))}</small>
         </strong>
       </header>
       <div className="flowbars" aria-label="Tur başına gelen ve giden">

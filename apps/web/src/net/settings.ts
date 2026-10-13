@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { startMusic } from '../audio/music'
-import { setSfx, unlockSfx } from '../audio/sfx'
+import { setBattleMusicLevel, setSfx, unlockSfx } from '../audio/sfx'
 import type { Music } from '../audio/music'
 import { supabase } from '../lib/supabase'
 
@@ -13,9 +13,11 @@ export interface Settings {
   // Sound effects (the envoy's news, battles, the day's events), and how loud, 0..100.
   sfx: boolean
   sfxVolume: number
+  // Small motions on the map, such as trees swaying close up; off for slower machines or a calmer screen.
+  detail: boolean
 }
 
-export const DEFAULT_SETTINGS: Settings = { music: true, musicVolume: 70, sfx: true, sfxVolume: 70 }
+export const DEFAULT_SETTINGS: Settings = { music: true, musicVolume: 70, sfx: true, sfxVolume: 70, detail: true }
 
 export interface Profile {
   username: string
@@ -45,8 +47,23 @@ export async function saveSettings(settings: Settings) {
 
 // The tavern music, for the menu and the map alike. Browsers only allow audio after a user gesture; on touch screens
 // that is the finger lifting (touchend/click), not pointerdown, so every kind is tried until the audio is running.
+// The tavern tune steps aside (fades low) while something else plays, such as the battle music.
+let duck = 1
+const duckers = new Set<(d: number) => void>()
+export function duckMusic(on: boolean) {
+  duck = on ? 0.08 : 1
+  for (const listen of duckers) listen(duck)
+}
+
 // `quiet`: a share of the volume while away from the map (the main menu plays it softer).
 export function useMusic(settings: Settings, quiet = 1) {
+  const [ducked, setDucked] = useState(duck)
+  useEffect(() => {
+    duckers.add(setDucked)
+    return () => {
+      duckers.delete(setDucked)
+    }
+  }, [])
   const music = useRef<Music | null>(null)
   const current = useRef(settings)
   current.current = settings
@@ -68,8 +85,9 @@ export function useMusic(settings: Settings, quiet = 1) {
   }, [])
   useEffect(() => {
     music.current?.setMuted(!settings.music)
-    music.current?.setVolume((settings.musicVolume / 100) * quiet)
-  }, [settings.music, settings.musicVolume, quiet])
+    music.current?.setVolume((settings.musicVolume / 100) * quiet * ducked)
+    setBattleMusicLevel(settings.music, settings.musicVolume / 100)
+  }, [settings.music, settings.musicVolume, quiet, ducked])
   useEffect(() => setSfx(settings.sfx, settings.sfxVolume / 100), [settings.sfx, settings.sfxVolume])
 }
 

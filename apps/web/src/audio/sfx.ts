@@ -132,3 +132,77 @@ export function play(cue: Cue) {
       break
   }
 }
+
+// ---- Battle music --------------------------------------------------------------------------------------------------
+
+// Played while a battle is watched: war drums under a low ostinato in D minor and a horn now and then, all on the
+// music's volume (not the effects'). Returns a function that fades it out.
+let musicOn = true
+let musicLevel = 0.7
+export function setBattleMusicLevel(on: boolean, level: number) {
+  musicOn = on
+  musicLevel = Math.min(1, Math.max(0, level))
+}
+
+export function startBattleMusic(): () => void {
+  if (!ctx || !musicOn || musicLevel <= 0) return () => {}
+  const c = ctx
+  const bus = c.createGain()
+  bus.gain.setValueAtTime(0.0001, c.currentTime)
+  bus.gain.exponentialRampToValueAtTime(0.5 * musicLevel + 0.0001, c.currentTime + 1.5)
+  bus.connect(c.destination)
+  const beat = 0.42
+  const BASS = [38, 38, 41, 38, 36, 36, 33, 36]
+  let step = 0
+  let next = c.currentTime + 0.1
+  const voice = (hz: number, at: number, length: number, type: OscillatorType, gain: number) => {
+    const osc = c.createOscillator()
+    const g = c.createGain()
+    osc.type = type
+    osc.frequency.setValueAtTime(hz, at)
+    g.gain.setValueAtTime(0.0001, at)
+    g.gain.exponentialRampToValueAtTime(gain, at + 0.02)
+    g.gain.exponentialRampToValueAtTime(0.0001, at + length)
+    osc.connect(g).connect(bus)
+    osc.start(at)
+    osc.stop(at + length + 0.05)
+  }
+  const thump = (at: number, gain: number, hz: number) => {
+    const osc = c.createOscillator()
+    const g = c.createGain()
+    osc.frequency.setValueAtTime(hz, at)
+    osc.frequency.exponentialRampToValueAtTime(hz * 0.45, at + 0.25)
+    g.gain.setValueAtTime(gain, at)
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.3)
+    osc.connect(g).connect(bus)
+    osc.start(at)
+    osc.stop(at + 0.35)
+  }
+  const timer = window.setInterval(() => {
+    // Keep half a second scheduled ahead.
+    while (next < c.currentTime + 0.5) {
+      const bar = step % 16
+      // Drums: a heavy beat on one and three, a run of light hits at the end of the bar.
+      if (bar % 4 === 0) thump(next, 0.9, 80)
+      if (bar === 6 || bar === 14) thump(next, 0.5, 120)
+      if (bar >= 12 && bar % 1 === 0) thump(next, 0.25, 180)
+      // A low, restless bass on every beat.
+      voice(note(BASS[Math.floor(step / 2) % BASS.length]), next, beat * 0.9, 'sawtooth', 0.06)
+      // A horn call every other bar.
+      if (step % 32 === 0) {
+        voice(note(62), next, beat * 2, 'sawtooth', 0.05)
+        voice(note(65), next + beat * 2, beat * 2, 'sawtooth', 0.05)
+      }
+      next += beat / 2
+      step++
+    }
+  }, 120)
+  return () => {
+    clearInterval(timer)
+    const t = c.currentTime
+    bus.gain.cancelScheduledValues(t)
+    bus.gain.setValueAtTime(Math.max(0.0001, bus.gain.value), t)
+    bus.gain.exponentialRampToValueAtTime(0.0001, t + 1)
+    window.setTimeout(() => bus.disconnect(), 1200)
+  }
+}

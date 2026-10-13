@@ -105,7 +105,7 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
       j = write(j, seasonStart, at, { tone: 'good', icon: 'people', title: `${event.count} savaşçı eğitimini bitirdi`, text: 'Askerler sarayda garnizonda bekliyor.' })
     } else if (event.kind === 'wasted') {
       const wasted = { ...(j.tally.wasted ?? {}) }
-      for (const [g, v] of Object.entries(event.lost)) wasted[g as Good] = (wasted[g as Good] ?? 0) + (v ?? 0)
+      for (const [g, v] of Object.entries(event.lost)) wasted[g as Resource] = (wasted[g as Resource] ?? 0) + (v ?? 0)
       j = { ...j, tally: { ...j.tally, wasted } }
     } else if (event.kind === 'researched') {
       const r = RESEARCH_NAMES[event.id]
@@ -168,7 +168,7 @@ function closeDay(j: Journal, kingdom: Kingdom, at: number, seasonStart: number)
       tone: 'bad',
       icon: 'chest',
       title: 'Ambar dolu',
-      text: `Depoya sığmayan ${wasted.map(([g, v]) => `${fmt(v ?? 0)} ${RESOURCE_NAMES[g as Good].toLowerCase()}`).join(', ')} boşa gitti. Ambar kur ya da yükselt, fazlasını sat.`,
+      text: `Depoya sığmayan ${wasted.map(([g, v]) => `${fmt(v ?? 0)} ${RESOURCE_NAMES[g as Resource].toLowerCase()}`).join(', ')} boşa gitti. Ambar ya da hazine kur, yükselt; fazlasını sat ya da harca.`,
     })
   }
   return { ...j, day: j.day + 1, tally: { rounds: 0, produced: {}, tradeGold: 0, trips: 0, emptyTrip: false } }

@@ -1,17 +1,18 @@
 import type { Point, World } from '@game/shared'
 import { paintChunk, preparePaint, setStructures } from './chunkPainter'
-import type { PaintContext, Structure } from './chunkPainter'
+import type { LiftedTree, PaintContext, Structure } from './chunkPainter'
 
 // Chunks are painted off the main thread, so panning and zooming never wait for them.
 
 export type PaintRequest =
   | { world: World }
   | { structures: Structure[]; trails: Point[][] }
-  | { id: number; cx: number; cy: number; lod: number }
+  | { id: number; cx: number; cy: number; lod: number; lift?: boolean }
 
 export interface PaintResult {
   id: number
   bitmap: ImageBitmap
+  trees?: LiftedTree[]
 }
 
 let context: PaintContext | undefined
@@ -25,9 +26,9 @@ self.onmessage = async (e: MessageEvent<PaintRequest>) => {
     setStructures(context!, e.data.structures, e.data.trails)
     return
   }
-  const { id, cx, cy, lod } = e.data
-  const image = paintChunk(context!, cx, cy, lod)
+  const { id, cx, cy, lod, lift } = e.data
+  const image = paintChunk(context!, cx, cy, lod, lift)
   const bitmap = await createImageBitmap(new ImageData(image.data, image.width, image.height))
-  const result: PaintResult = { id, bitmap }
+  const result: PaintResult = { id, bitmap, ...(image.trees && { trees: image.trees }) }
   postMessage(result, { transfer: [bitmap] })
 }

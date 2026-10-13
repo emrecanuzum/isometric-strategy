@@ -525,6 +525,43 @@
           "storage": 1400
         }
       ]
+    },
+    "treasury": {
+      "size": 2,
+      "requiresPalace": 4,
+      "maxByPalaceLevel": [
+        1,
+        1,
+        1,
+        1,
+        2
+      ],
+      "cost": {
+        "gold": 1500,
+        "materials": 800
+      },
+      "buildSeconds": 120,
+      "gold": 4000,
+      "levels": [
+        {
+          "cost": {
+            "gold": 3000,
+            "materials": 1400,
+            "arms": 200
+          },
+          "buildSeconds": 180,
+          "gold": 8000
+        },
+        {
+          "cost": {
+            "gold": 5000,
+            "materials": 2200,
+            "arms": 400
+          },
+          "buildSeconds": 240,
+          "gold": 14000
+        }
+      ]
     }
   },
   "maxBatch": 64,
@@ -547,6 +584,13 @@
       1900,
       2600
     ],
-    "note": "per good (food, materials, arms); gold is not capped"
+    "note": "per good (food, materials, arms) and, separately, gold",
+    "goldByPalaceLevel": [
+      1000,
+      2000,
+      3500,
+      5500,
+      7000
+    ]
   }
 }

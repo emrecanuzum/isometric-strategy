@@ -963,6 +963,29 @@ function warehouse(level = 1): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
+// The treasury: a squat stone strong-house with a gilded roof edge, a brass-bound door between two guards' lanterns,
+// and chests of coin by the front corner; a gilded dome rises on it at the higher levels.
+function treasury(level = 1): Sprite {
+  const { canvas, cx, base, h } = footprint(2, 100 + (level - 1) * 14)
+  yard(canvas, cx, base, h, KEEP, 71)
+  const top = hall(canvas, cx, base - 6, { w: 42, wall: 30 + (level - 1) * 4, roof: 18, walls: DARK_STONE, roofs: SLATE, masonry: true, bay: 0, door: true, trim: BRASS[2] })
+  if (level > 1) {
+    // A small gilded dome over the roof.
+    for (let y = 0; y <= 8 + level * 2; y++) {
+      const half = Math.round(Math.sqrt(Math.max(0, 1 - (y / (8 + level * 2)) ** 2)) * (6 + level))
+      for (let x = -half; x <= half; x++) canvas.set(top.x + x, top.y + 4 - y, BRASS[x < 0 ? 3 : x < half / 2 ? 2 : 1])
+    }
+    finial(canvas, top.x, top.y - 6 - level * 2, 4)
+  }
+  // Brass studs on the door (left wall).
+  for (let i = 0; i < 4; i++) canvas.set(cx - 14 + i * 2, base - 18 + i, BRASS[3])
+  // Coin chests and a heap of gold.
+  crate(canvas, cx + 14, base - 6, 8)
+  crate(canvas, cx + 22, base - 10, 7)
+  shadeBlobs(canvas, [{ x: cx + 4, y: base - 4, r: 3.5 }, { x: cx + 8, y: base - 3, r: 3 }], BRASS, 3)
+  return canvas.sprite(cx, base, 0)
+}
+
 // A section of wall filling one tile: masonry on the two front faces, a walkway on top and battlements; a broken one
 // is a heap of rubble with a stump of wall.
 // `door`: a gate, with an arched wooden door through both front faces under a banner.
@@ -1038,6 +1061,7 @@ export const LEVEL_SPRITES: Partial<Record<BuildingKind, Sprite[][]>> = {
   hospital: [2, 3].map((level) => [hospital(level)]),
   temple: [2, 3].map((level) => [temple(level)]),
   warehouse: [2, 3].map((level) => [warehouse(level)]),
+  treasury: [2, 3].map((level) => [treasury(level)]),
 }
 
 // The palace in each kingdom colour, made when first seen.
@@ -1073,6 +1097,7 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   hospital: [hospital()],
   temple: [temple()],
   warehouse: [warehouse()],
+  treasury: [treasury()],
   brokenWall: [wall(true)],
   scaffold: [scaffold(1), scaffold(2), scaffold(3)],
 }

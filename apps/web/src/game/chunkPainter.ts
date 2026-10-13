@@ -17,6 +17,16 @@ export interface ChunkImage {
   width: number
   height: number
   data: Uint8ClampedArray<ArrayBuffer>
+  // Trees left out of the painting to be drawn (and sway) as sprites of their own: which list and which sprite of it,
+  // and where they stand (tile coordinates).
+  trees?: LiftedTree[]
+}
+
+export interface LiftedTree {
+  set: 'pine' | 'leaf'
+  index: number
+  tx: number
+  ty: number
 }
 
 export interface PaintContext {
@@ -319,7 +329,8 @@ interface Placed {
 // Paints one chunk at `k` texture pixels per screen pixel. Each ground point is colored from the continuous
 // elevation and moisture fields and drawn lifted by its height, back to front, so nearer ground covers
 // farther ground. Sprites are then composited against the depth of the ground they stand behind.
-export function paintChunk(context: PaintContext, cx: number, cy: number, k: number): ChunkImage {
+// `lift`: leave the trees out and hand back where they stand instead (see ChunkImage.trees).
+export function paintChunk(context: PaintContext, cx: number, cy: number, k: number, lift = false): ChunkImage {
   const { world, lit, patch, road, bridges, structures, occupied, trail } = context
   const { size, seed, elevation, moisture, height, levels } = world
   const S = balance.map.chunkSize
@@ -560,6 +571,7 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
     return false
   }
   const choose = <T>(list: T[], r: number) => list[Math.floor(r * list.length)]
+  const lifted: LiftedTree[] = []
   const xEnd = Math.min(size, x0 + S + SPRITE_MARGIN)
   const yEnd = Math.min(size, y0 + S + SPRITE_MARGIN)
   for (let y = Math.max(0, y0 - SPRITE_MARGIN); y < yEnd; y++) {
@@ -579,7 +591,15 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       const woods = smoothstep(levels.forest - 0.05, levels.forest + 0.03, moisture[i] + edge)
       const tree = (n: number) => {
         const conifer = hash(x, y, seed + 45 + n) < upland * 1.3 - 0.25
-        place(choose(conifer ? SPRITES.pine : SPRITES.leaf, hash(x, y, seed + 47 + n)), ...spot(n), own)
+        const list = conifer ? SPRITES.pine : SPRITES.leaf
+        const index = Math.floor(hash(x, y, seed + 47 + n) * list.length)
+        const [tx, ty] = spot(n)
+        if (lift) {
+          // Each tree once, by the chunk it stands in.
+          if (own) lifted.push({ set: conifer ? 'pine' : 'leaf', index, tx, ty })
+          return
+        }
+        place(list[index], tx, ty, own)
       }
       // Bare rock, wherever the painted ground shows it, carries rock formations and no trees.
       const climb = (elevation[i] - levels.mountain) / (levels.snow - levels.mountain)
@@ -700,7 +720,7 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       }
     }
   }
-  return { width, height: canvasHeight, data }
+  return { width, height: canvasHeight, data, ...(lift && { trees: lifted }) }
 }
 
 // Draws a bridge as small 3D parts sampled finely enough to cover every pixel. Each sample carries the ground row

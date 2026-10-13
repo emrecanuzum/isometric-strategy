@@ -8,6 +8,7 @@ import {
   balance,
   capOf,
   storageCap,
+  goldCap,
   plannedHousing,
   palaceLevel,
   buildingCount,
@@ -231,9 +232,13 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
   const trips = balance.economy.productionSeconds / balance.economy.trade.tripSeconds
   const tradeGold = kingdom.trade.good ? tradeUnits(kingdom) * trips * priceAt(online?.market, kingdom.trade.good, now) : 0
   const cap = storageCap(kingdom, now)
+  const room = (r: Resource) => (r === 'gold' ? goldCap(kingdom, now) : cap)
   return (
     <>
-      <p className="hint">Her mal için depo yeri: {fmt(cap)} (saray seviyesi ve ambarlarla artar; altın sınırsız).</p>
+      <p className="hint">
+        Her mal için depo yeri {fmt(cap)} (saray seviyesi ve ambarlarla artar); hazinede {fmt(goldCap(kingdom, now))} altın yeri var (saray seviyesi ve
+        hazine binasıyla artar). Sığmayan boşa gider.
+      </p>
       <Section title="Gelir ve gider" icon="gold" aside="altın / tur">
         <Stat label="Vergi" value={signed(l.tax)} tone="up" />
         {tradeGold > 0 && <Stat label="Ticaret" value={signed(tradeGold)} tone="up" />}
@@ -269,15 +274,18 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
                 <b>{RESOURCE_NAMES[r]}</b>
                 {r !== 'gold' && <small>Arazi çarpanı {times(kingdom.yields[r as Good])}</small>}
               </span>
-              <strong className={r !== 'gold' && stock >= cap ? 'down' : undefined}>
+              <strong className={stock >= room(r) ? 'down' : undefined}>
                 {fmt(stock)}
-                {r !== 'gold' && <small> / {fmt(cap)}</small>}
+                <small> / {fmt(room(r))}</small>
               </strong>
             </header>
-            {r !== 'gold' && <Meter value={stock / cap} tone={stock >= cap ? 'down' : stock >= cap * 0.85 ? 'gold' : 'up'} label={`${RESOURCE_NAMES[r]} deposu`} segments={20} />}
-            {r !== 'gold' && stock >= cap && (
+            <Meter value={stock / room(r)} tone={stock >= room(r) ? 'down' : stock >= room(r) * 0.85 ? 'gold' : 'up'} label={`${RESOURCE_NAMES[r]} deposu`} segments={20} />
+            {stock >= room(r) && (
               <p className="alert">
-                <Icon name="warn" size={16} /> Depo dolu: üretilen fazlası boşa gidiyor. Ambar kur ya da yükselt, fazlasını sat.
+                <Icon name="warn" size={16} />{' '}
+                {r === 'gold'
+                  ? 'Hazine dolu: gelen altın boşa gidiyor. Harca, hazine binası kur (4. seviye saray) ya da yükselt.'
+                  : 'Depo dolu: üretilen fazlası boşa gidiyor. Ambar kur ya da yükselt, fazlasını sat.'}
               </p>
             )}
             <div className="store-flow">

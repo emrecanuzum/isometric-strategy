@@ -412,9 +412,13 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   malzemesi) depoda tutulabilecek miktar saray seviyesiyle artar (400 /
   800 / 1300 / 1900 / 2600) ve her **Ambar** ekler (seviye 1/2/3: +400 /
   +800 / +1400; saray seviyesine göre 1–3 ambar). Sığmayan üretim boşa
-  gider; günlük raporunda "Ambar dolu" yazar. Altın sınırsızdır. Depo
-  doluluğu Depo sekmesinde ve üst çubuğun kartlarında "stok / sınır"
-  olarak görünür.
+  gider; günlük raporunda "Ambar dolu" yazar.
+- **Hazine sınırı:** Altının da sınırı vardır: saray seviyesiyle 1000 /
+  2000 / 3500 / 5500 / 7000, ve 4. seviye sarayda açılan **Hazine** binası
+  ekler (seviye 1/2/3: +4000 / +8000 / +14000; 4. seviyede bir, 5.de iki
+  hazine). Sığmayan altın boşa gider. Depo
+  ve hazine doluluğu Depo sekmesinde ve üst çubuğun kartlarında
+  "stok / sınır" olarak görünür.
 - **Kuruluş:** Hazır şehir düzeni yoktur. Krallık kurulunca oyuncu önce
   **Sarayını** hudut içinde istediği yere yerleştirir (ücretsiz, anında);
   ev, tarla vb. her şeyi de kendisi yerleştirir. Ticaret arsasına
@@ -612,6 +616,13 @@ fiyatı düşer, çok alınanın artar; zamanla dengeye döner.
   emrini uygulamaya devam eder. Böylece ordu sistemi tam gerçek zamanlı
   değildir: her ordunun en az 30 dakikalık geleceği önceden bellidir.
 - Kendi yerleşiminde/garnizonunda bekleyen orduya emir anında verilir.
+- **Takip et:** Ordu kartındaki düğme kamerayı orduya kilitler; kamera
+  orduyla birlikte kayar. Düğmeye yeniden basınca, alttaki şeritteki
+  "Bırak" ile ya da harita sürüklenince takip biter.
+- **Hızlı hedefler:** Ordu "Hareket" ile gönderilirken sağda, savaşta
+  olunan krallıkların listesi açılır: sarayını kuşat (kalkan süresiyle),
+  ticaret noktasına git, ordularından birine saldır; ayrıca eve dön ve
+  haritada göster. Haritaya tıklamak da hâlâ geçerlidir.
 - **İletişim penceresi:** Elçi orduya ulaşıp emri verdikten sonra
   **30 saniye** komutanın yanında kalır; bu sürede verilen yeni emirler
   elçi beklemeden hemen uygulanır (`time.json` → `contactSeconds`). Kalan
@@ -939,6 +950,11 @@ mertebesindedir.
   karoda, bir saraya gönderilen ordu sarayın kapısının (ön köşesi) önünde
   durur; yeni çıkarılan ve eve dönen ordular da oradadır. Surla çevrili bir
   sarayı kuşatan ordu surların önünde durur ve kuşatma orada başlar.
+- **Detay animasyonları** (Ayarlar → Görüntü, varsayılan açık): 1× ve üstü
+  yakınlaştırmada ağaçlar zemine işlenmek yerine ayrı çizilir ve rüzgârda
+  hafifçe sallanır. Kapatılınca harita onlarsız yeniden çizilir.
+- Gece yanan pencerelerin çevresinde yumuşak bir **parıltı** vardır (aynı
+  ışıklar bulanıklaştırılıp gecenin üstüne eklenir).
 - Ordular 1× ve üstü yakınlaştırmada yürürken adım atar (4 kareli yürüyüş,
   komşu askerler farklı adımda); uzaktayken durağan çizilir.
 - **Ordu sekmesi** sırası: Ordularım (çoğu emir burada verilir), Garnizon,
@@ -946,13 +962,21 @@ mertebesindedir.
   türleri tek satırda, moral ve saha bilgisi yan yana, emir düğmeleri üçlü
   sütunlarda.
 - Haritada ordular krallığın sancağıyla görünür; görünen asker sayısı
-  ordunun büyüklüğüyle artar (3–9 figür, her 10 askerde bir) ve mancınığı
-  olan ordunun arkasında bir mancınık yürür. Rakipler yalnızca bu kaba
+  ordunun büyüklüğüyle artar (yaklaşık her 3 askere bir figür, 2–12) ve
+  mancınığı olan ordunun **arkasından** ayrı bir mancınık gelir: ordunun
+  gittiği yöne bakar, yuvarlanırken (yakınlaştırınca) tekerlekleri döner. Rakipler yalnızca bu kaba
   büyüklüğü görür, kesin sayıyı casuslar söyler; oyuncunun yoldaki
   ordularının rotası kesikli çizgiyle çizilir, muharebeler çapraz kılıçla
   işaretlenir. Başkasının ordusunun gücü yalnızca casusla tahmin edilir.
 - Muharebe başlayınca ve bitince **elçi** ekranda bir pencereyle haber
   verir (kim, nerede, sonuç, kayıplar).
+- **Savaş izleme:** Savaş penceresinin üstünde küçük bir canlandırma
+  oynar: iki taraf kendi renklerinde, askerleri kadar figürle ortada
+  çarpışır; kuşatmada savunanların tarafında sur ve kapı, okçu varsa ok
+  yağmuru, mancınık varsa sura uçan taşlar görünür; her turun kayıpları
+  yere düşer, savaş bitince kazananlar mızraklarını kaldırır, yenilenler
+  geri çekilir. Savaş sürerken gerilimli bir savaş müziği (davul, bas,
+  boru) çalar ve meyhane müziği kısılır; ses müzik ayarına bağlıdır.
 
 ### 9.8 Prototip: kurumlar ve günün olayları (şu an uygulanan)
 

@@ -1,4 +1,4 @@
-import { BUILDINGS, buildingOutput, cutOff, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
+import { BUILDINGS, buildingOutput, cutOff, goldCap, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
 import type { Building, BuildingKind, Good, Product, Resource } from '@game/shared'
 import { useState } from 'react'
 import { looksOf } from '../../game/buildingSprites'
@@ -112,6 +112,16 @@ function Output({ building: b, data }: { building: Building; data: HudData }) {
     )
   }
   if (b.kind === 'university' || b.kind === 'hospital' || b.kind === 'temple') return <b>{BUILDING_NOTES[b.kind]}</b>
+  if (spec.gold) {
+    return (
+      <>
+        <b className="output">
+          <Icon name="gold" size={24} /> +{spec.gold} altın yeri
+        </b>
+        <small className="hint">Hazinede toplam {goldCap(kingdom, now)} altın tutulabilir.</small>
+      </>
+    )
+  }
   if (spec.storage) {
     return (
       <>
@@ -219,6 +229,7 @@ function Levels({ building: b, data, onUpgrade }: { building: Building; data: Hu
         next.workers !== now.workers && `İşçi ${now.workers} → ${next.workers}`,
         next.villagers !== now.villagers && `Köylü ${now.villagers} → ${next.villagers}`,
         next.storage !== now.storage && `Depo yeri ${now.storage} → ${next.storage}`,
+        next.gold !== now.gold && `Altın yeri ${now.gold} → ${next.gold}`,
       ].filter(Boolean)
     : []
   return (

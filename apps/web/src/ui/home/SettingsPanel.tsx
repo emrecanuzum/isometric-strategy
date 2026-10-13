@@ -18,6 +18,8 @@ export function SettingsPanel({
     <div className="home-body form">
       <h3>Ses</h3>
       <SoundSettings settings={settings} onChange={onChange} />
+      <h3>Görüntü</h3>
+      <DetailSettings settings={settings} onChange={onChange} />
       <h3>Hesap</h3>
       <dl className="account">
         <dt>Kullanıcı adı</dt>
@@ -65,5 +67,17 @@ export function SoundSettings({ settings, onChange }: { settings: Settings; onCh
         </div>
       ))}
     </>
+  )
+}
+
+// Small motions on the map (swaying trees); turning them off repaints the map without them.
+export function DetailSettings({ settings, onChange }: { settings: Settings; onChange: (change: Partial<Settings>) => void }) {
+  return (
+    <div className="row spread">
+      <span>Detay animasyonları (sallanan ağaçlar)</span>
+      <button className="btn small" aria-pressed={settings.detail} onClick={() => onChange({ detail: !settings.detail })}>
+        {settings.detail ? 'Açık' : 'Kapalı'}
+      </button>
+    </div>
   )
 }

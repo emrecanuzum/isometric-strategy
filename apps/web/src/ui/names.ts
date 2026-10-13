@@ -33,6 +33,7 @@ export const BUILDING_NAMES: Record<BuildingKind, string> = {
   hospital: 'Hastane',
   temple: 'Tapınak',
   warehouse: 'Ambar',
+  treasury: 'Hazine',
 }
 
 export const BUILDING_NOTES: Partial<Record<BuildingKind, string>> = {
@@ -51,6 +52,7 @@ export const BUILDING_NOTES: Partial<Record<BuildingKind, string>> = {
   hospital: 'Hasta köylüleri iyileştirir',
   temple: 'Mutluluk, askerlere iman; vergi vaazı',
   warehouse: 'Depolara yer açar (yemek, malzeme, savaş malzemesi)',
+  treasury: 'Hazineye altın yeri açar',
 }
 
 export const UNIT_NAMES: Record<Unit, string> = {

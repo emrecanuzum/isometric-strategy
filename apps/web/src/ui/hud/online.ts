@@ -51,6 +51,9 @@ export interface Online extends Layer {
   target(army: number): void
   // Opens the battle view.
   watch(battle: number): void
+  // The army the camera is locked onto, if any.
+  following: number | null
+  follow(army: number | null): void
 }
 
 export const kingdomName = (online: Online, id: number) => online.kingdoms.find((k) => k.id === id)?.name ?? '?'

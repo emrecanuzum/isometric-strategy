@@ -14,19 +14,19 @@ import {
   tileRule,
 } from '@game/shared'
 import type { Point, Rect, World } from '@game/shared'
-import { Application, Container, Graphics, ImageSource, Sprite, Text, Texture } from 'pixi.js'
+import { Application, BlurFilter, Container, Graphics, ImageSource, Sprite, Text, Texture } from 'pixi.js'
 import { createAmbient } from './ambient'
 import { createArmies } from './armies'
 import { dashes } from './dashes'
 import type { MapArmy, MapBattle } from './armies'
 import { createCaravans } from './caravans'
 import { CHIMNEYS, structureParts } from './buildingSprites'
-import { lightsOf, outlineOf } from './sprites'
+import { SPRITES, lightsOf, outlineOf } from './sprites'
 import { daylight, nightness } from './daylight'
 import { innLook } from './innSprites'
 import type { Sprite as Sprite_ } from './sprites'
 import { CHUNK_PAD } from './chunkPainter'
-import type { Structure } from './chunkPainter'
+import type { LiftedTree, Structure } from './chunkPainter'
 import type { PaintRequest, PaintResult } from './paintWorker'
 import { freeTexture, textureOf } from './textures'
 import { createTown } from './town'
@@ -128,6 +128,11 @@ export interface RivalTerritory {
 export interface WorldView {
   world: World
   centerOn(tile: Point): void
+  // Detail animations (swaying trees close up) on or off; the chunks on screen are painted again.
+  setDetail(on: boolean): void
+  // Keeps the camera on whatever `target` says each frame (an army on the march), until null is given or the map is
+  // dragged; `onStop` hears when a drag ended it.
+  follow(target: (() => Point | null) | null, onStop?: () => void): void
   setTerritory(rect: Rect | null, plots: Plots, name?: string): void
   // The other kingdoms of the lobby: their borders in their own colour, and their names when zoomed out.
   setRivals(rivals: RivalTerritory[]): void
@@ -153,11 +158,14 @@ interface Chunk {
   lod: number
   bytes: number
   version: number
+  // Its trees as sprites of their own (painted with detail animations on, close up), which sway in the wind.
+  trees: Sprite[]
 }
 
 interface Job {
   key: number
   lod: number
+  lift: boolean
   // Structures version the worker painted with.
   version: number
 }
@@ -238,32 +246,77 @@ export async function createWorld(
   const armyLayer = new Container()
   armyLayer.sortableChildren = true
   const armyLabels = new Container()
-  camera.addChild(ground, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, armyLayer, ambient.sky, cursor, highlight)
+  // Trees lifted out of the ground painting to sway, above the ground and below everything that stands on it.
+  const treeLayer = new Container()
+  treeLayer.sortableChildren = true
+  camera.addChild(ground, treeLayer, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, armyLayer, ambient.sky, cursor, highlight)
   app.stage.addChild(camera)
   // Day and night: the whole map is multiplied by the colour of the light at this hour of the game day. Lit windows
   // and the labels sit above it, in a layer that follows the camera, so night never dims them.
   const light = new Graphics()
   light.blendMode = 'multiply'
   const glow = new Container()
+  // A soft halo under the lit windows: the same lights again, blurred and added onto the night.
+  const halo = new Container()
+  halo.filters = [new BlurFilter({ strength: 5, quality: 3 })]
+  halo.blendMode = 'add'
+  // Each light goes into both layers: crisp in `glow`, blurred in `halo`.
+  const addLight = (texture: Texture, anchorX: number, anchorY: number, x: number, y: number) => {
+    const crisp = new Sprite(texture)
+    crisp.anchor.set(anchorX, anchorY)
+    crisp.position.set(x, y)
+    glow.addChild(crisp)
+    const soft = new Sprite(texture)
+    soft.anchor.set(anchorX, anchorY)
+    soft.position.set(x, y)
+    halo.addChild(soft)
+    return [crisp, soft]
+  }
   const above = new Container()
-  above.addChild(glow, plotLabels.dock, plotLabels.trade, rivalLabels, kingdomLabel, armyLabels, floats)
+  above.addChild(halo, glow, plotLabels.dock, plotLabels.trade, rivalLabels, kingdomLabel, armyLabels, floats)
   const armies = createArmies(world, armyLayer, armyRoutes, armyLabels)
   app.stage.addChild(light, above)
   for (const inn of world.inns) {
     const lit = lightsOf(innLook(world, inn).sprite)
     if (!lit) continue
-    const sprite = new Sprite(textureOf(lit))
-    sprite.anchor.set(lit.anchorX / lit.width, lit.anchorY / lit.height)
-    sprite.position.set((inn.x - inn.y) * (TILE_WIDTH / 2), (inn.x + inn.y + 4) * (TILE_HEIGHT / 2) - heightAt(world, inn.x + 1, inn.y + 1))
-    glow.addChild(sprite)
+    addLight(textureOf(lit), lit.anchorX / lit.width, lit.anchorY / lit.height, (inn.x - inn.y) * (TILE_WIDTH / 2), (inn.x + inn.y + 4) * (TILE_HEIGHT / 2) - heightAt(world, inn.x + 1, inn.y + 1))
   }
   let lightColor = -1
+  // Trees sway in the wind close up: each leans a little to and fro about its foot, out of step with its neighbours.
+  let detail = true
+  app.ticker.add(() => {
+    if (!detail || camera.scale.x < 1) return
+    const t = performance.now() / 1000
+    for (const chunk of chunks.values()) {
+      if (!chunk.sprite.visible) continue
+      for (const tree of chunk.trees) tree.skew.x = Math.sin(t * 1.4 + tree.x * 0.031 + tree.y * 0.047) * 0.045
+    }
+  })
+  // The camera following something (see follow): it glides onto the target each frame.
+  let followTarget: (() => Point | null) | null = null
+  let followStop: (() => void) | null = null
+  app.ticker.add(() => {
+    if (!followTarget) return
+    const p = followTarget()
+    if (!p) return
+    const s = groundToScreen(world, p)
+    const tx = app.screen.width / 2 - s.x * camera.scale.x
+    const ty = app.screen.height / 2 - s.y * camera.scale.y
+    const nx = Math.round(camera.x + (tx - camera.x) * 0.2)
+    const ny = Math.round(camera.y + (ty - camera.y) * 0.2)
+    if (nx === camera.x && ny === camera.y) return
+    camera.x = nx
+    camera.y = ny
+    refresh()
+  })
   app.ticker.add(() => {
     above.position.copyFrom(camera.position)
     above.scale.copyFrom(camera.scale)
     const hour = gameTime(clock(), 0).hour
     glow.alpha = nightness(hour)
     glow.visible = glow.alpha > 0.02
+    halo.alpha = glow.alpha * 0.85
+    halo.visible = glow.visible
     const color = daylight(hour)
     if (color === lightColor && light.width === app.screen.width && light.height === app.screen.height) return
     lightColor = color
@@ -332,6 +385,7 @@ export async function createWorld(
     if (!chunk) return
     textureBytes -= chunk.bytes
     chunk.sprite.destroy({ texture: true, textureSource: true })
+    for (const tree of chunk.trees) tree.destroy()
     chunk.bitmap.close()
     chunks.delete(key)
   }
@@ -352,7 +406,7 @@ export async function createWorld(
         jobs.delete(e.data.id)
         idle.push(worker)
         const stale = job.version < (staleSince.get(job.key) ?? 0)
-        if (job.lod === lodFor(camera.scale.x) && visible.has(job.key) && !stale) show(job, e.data.bitmap)
+        if (job.lod === lodFor(camera.scale.x) && visible.has(job.key) && !stale) show(job, e.data.bitmap, e.data.trees)
         else e.data.bitmap.close()
         // Painted before a building changed: paint it again.
         if (stale && visible.has(job.key)) wanted.unshift(job.key)
@@ -376,13 +430,14 @@ export async function createWorld(
       const key = wanted.shift()!
       if (busy.has(key)) continue
       const id = nextJob++
-      jobs.set(id, { key, lod, version })
-      const request: PaintRequest = { id, cx: key % chunkCount, cy: Math.floor(key / chunkCount), lod }
+      const lift = detail && lod >= 1
+      jobs.set(id, { key, lod, version, lift })
+      const request: PaintRequest = { id, cx: key % chunkCount, cy: Math.floor(key / chunkCount), lod, lift }
       idle.pop()!.postMessage(request)
     }
   }
 
-  function show({ key, lod, version }: Job, bitmap: ImageBitmap) {
+  function show({ key, lod, version }: Job, bitmap: ImageBitmap, lifted?: LiftedTree[]) {
     const cx = key % chunkCount
     const cy = Math.floor(key / chunkCount)
     drop(key)
@@ -395,7 +450,17 @@ export async function createWorld(
     ground.addChild(sprite)
     const bytes = bitmap.width * bitmap.height * 4
     textureBytes += bytes
-    chunks.set(key, { sprite, bitmap, lod, bytes, version })
+    const trees = (lifted ?? []).map((t) => {
+      const look = SPRITES[t.set][t.index]
+      const tree = new Sprite(textureOf(look))
+      tree.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
+      const at = groundToScreen(world, { x: t.tx, y: t.ty })
+      tree.position.set(at.x, at.y)
+      tree.zIndex = at.y
+      treeLayer.addChild(tree)
+      return tree
+    })
+    chunks.set(key, { sprite, bitmap, lod, bytes, version, trees })
   }
 
   // The middle of the screen stays over the map (a little way into the mountains that ring it, no further), so the
@@ -454,6 +519,7 @@ export async function createWorld(
       .sort((a, b) => distance(a) - distance(b))
     for (const [key, chunk] of chunks) {
       chunk.sprite.visible = visible.has(key)
+      for (const tree of chunk.trees) tree.visible = chunk.sprite.visible
       if (!chunk.sprite.visible && textureBytes > TEXTURE_BUDGET_BYTES) drop(key)
     }
     dispatch()
@@ -709,7 +775,15 @@ export async function createWorld(
     if (press && touches.size === 1) {
       const dx = e.global.x - press.start.x
       const dy = e.global.y - press.start.y
-      if (!press.moved && Math.hypot(dx, dy) > TAP_SLOP) press.moved = true
+      if (!press.moved && Math.hypot(dx, dy) > TAP_SLOP) {
+        press.moved = true
+        // Dragging the map lets go of whatever the camera was following.
+        if (followTarget) {
+          followTarget = null
+          followStop?.()
+          followStop = null
+        }
+      }
       if (press.moved) {
         camera.x = Math.round(press.camera.x + dx)
         camera.y = Math.round(press.camera.y + dy)
@@ -834,11 +908,7 @@ export async function createWorld(
           masked.push(shown)
         }
       }
-      const w = new Sprite(textureOf(shown))
-      w.anchor.set(shown.anchorX / shown.width, shown.anchorY / shown.height)
-      w.position.set(sx, sy)
-      glow.addChild(w)
-      windows.push(w)
+      windows.push(...addLight(textureOf(shown), shown.anchorX / shown.width, shown.anchorY / shown.height, sx, sy))
     }
     ambient.setChimneys(chimneys)
   }
@@ -961,6 +1031,18 @@ export async function createWorld(
   return {
     world,
     centerOn,
+    setDetail(on) {
+      if (on === detail) return
+      detail = on
+      // Paint the chunks again, with or without their trees lifted out.
+      version++
+      for (const key of chunks.keys()) staleSince.set(key, version)
+      refresh()
+    },
+    follow(target, onStop) {
+      followTarget = target
+      followStop = target ? (onStop ?? null) : null
+    },
     setTerritory,
     setRivals,
     setArmies: (list, fights) => armies.set(list, fights),
