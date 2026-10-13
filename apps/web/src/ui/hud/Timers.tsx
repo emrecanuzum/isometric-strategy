@@ -62,6 +62,12 @@ function timersOf(kingdom: Kingdom, online: Online | undefined, now: number): Ti
       if (o.applied_at || !online.armies.some((a) => a.id === o.army_id && a.kingdom_id === online.me)) continue
       out.push({ key: `o:${o.id}`, icon: 'scroll', label: `Elçi orduya: ${ORDER_NAMES[o.payload.kind] ?? 'emir'}`, start: Date.parse(o.issued_at), end: Date.parse(o.effective_at) })
     }
+    // The window in which a commander hears new orders at once.
+    for (const a of online.armies) {
+      if (a.kingdom_id !== online.me || !a.contact_until || Date.parse(a.contact_until) <= now) continue
+      const end = Date.parse(a.contact_until)
+      out.push({ key: `c:${a.id}:${end}`, icon: 'scroll', label: 'Komutanla iletişim', start: end - balance.time.contactSeconds * 1000, end })
+    }
     for (const a of online.armies) {
       if (a.kingdom_id !== online.me || a.status !== 'moving') continue
       // Waiting at the gates of a shielded palace.

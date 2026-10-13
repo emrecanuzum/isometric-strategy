@@ -89,6 +89,8 @@ export async function tick(lobby: string, simAt: number, now: number) {
     const at = ms(order.effective_at)
     const why = army ? await applyOrder(world, army as ArmyRow, order.payload as Order, rows, pacts, at) : 'army'
     await admin.from('army_orders').update({ applied_at: iso(now) }).eq('id', order.id)
+    // The envoy stays with the commander for a while: further orders reach the army at once.
+    if (army && !why) await admin.from('armies').update({ contact_until: iso(Math.max(at, now) + game.balance.time.contactSeconds * 1000) }).eq('id', army.id)
     if (why) await notify(lobby, [order.kingdom_id], 'order_failed', { order: order.payload, why }, at)
   }
 

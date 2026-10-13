@@ -8,7 +8,7 @@
   "maxArmies": 2,
   "speedTilesPerSecond": 1,
   "mergeTiles": 5,
-  "contactTiles": 1.5,
+  "contactTiles": 5,
   "allyTiles": 6,
   "tower": {
     "range": 6,

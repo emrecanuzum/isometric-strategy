@@ -27,6 +27,8 @@ export interface Army {
   // How many figures to draw (3–9, growing with its soldiers) and whether it drags catapults; seen by everyone.
   figures?: number
   catapults?: boolean
+  // The player's own armies: orders reach it at once until then (an envoy has just reached it).
+  contact_until?: string | null
 }
 
 // Walkers keep to dry land below the mountains; bridges cross the water.

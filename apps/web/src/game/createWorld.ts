@@ -28,7 +28,7 @@ import type { Sprite as Sprite_ } from './sprites'
 import { CHUNK_PAD } from './chunkPainter'
 import type { Structure } from './chunkPainter'
 import type { PaintRequest, PaintResult } from './paintWorker'
-import { textureOf } from './textures'
+import { freeTexture, textureOf } from './textures'
 import { createTown } from './town'
 import type { Errand, MerchantTrip } from './town'
 import type { FederatedPointerEvent } from 'pixi.js'
@@ -756,8 +756,13 @@ export async function createWorld(
     // Ground height under the building's middle.
     lift: number
     sprite: Sprite
+    // Its pixels, and the order it is drawn in (later ones cover earlier ones).
+    look: Sprite_
+    depth: number
   }
   let occluders: Occluder[] = []
+  // Window lights cut to what the buildings in front leave visible, made anew with the buildings.
+  let masked: Sprite_[] = []
   const solid = new Set<number>()
   // Lit windows of the player's buildings, in the glow layer.
   let windows: Sprite[] = []
@@ -765,6 +770,10 @@ export async function createWorld(
     for (const o of occluders) o.sprite.destroy()
     for (const w of windows) w.destroy()
     windows = []
+    for (const m of masked) freeTexture(m)
+    masked = []
+    const lights: { lit: Sprite_; sx: number; sy: number; depth: number }[] = []
+    let order = 0
     solid.clear()
     const chimneys: { x: number; y: number; depth: number }[] = []
     occluders = structures.flatMap((s) => {
@@ -787,18 +796,50 @@ export async function createWorld(
         sprite.zIndex = ground
         caravans.layer.addChild(sprite)
         if (part === main) for (const c of CHIMNEYS.get(look) ?? []) chimneys.push({ x: sx + c.x, y: sy + c.y, depth: ground + 1 })
+        const depth = ground * 4096 + order++
         const lit = part === main ? lightsOf(look) : null
-        if (lit) {
-          const w = new Sprite(textureOf(lit))
-          w.anchor.set(lit.anchorX / lit.width, lit.anchorY / lit.height)
-          w.position.set(sx, sy)
-          glow.addChild(w)
-          windows.push(w)
-        }
+        if (lit) lights.push({ lit, sx, sy, depth })
         const left = sx - look.anchorX
-        return { x: s.x, y: s.y, size: s.size, sx, sy: ground, left, right: left + look.width, top: sy - look.anchorY, lift: main.z, sprite }
+        return { x: s.x, y: s.y, size: s.size, sx, sy: ground, left, right: left + look.width, top: sy - look.anchorY, lift: main.z, sprite, look, depth }
       })
     })
+    // Lit windows shine in the glow layer above everything, so the buildings in front of a house would not hide them:
+    // each one is cut down to the pixels no building drawn after it covers.
+    for (const { lit, sx, sy, depth } of lights) {
+      const left = sx - lit.anchorX
+      const top = sy - lit.anchorY
+      const front = occluders.filter((o) => o.depth > depth && o.left < left + lit.width && o.right > left && o.top < top + lit.height && o.top + o.look.height > top)
+      let shown = lit
+      if (front.length > 0) {
+        const pixels = lit.pixels.slice()
+        let cut = false
+        for (let y = 0; y < lit.height; y++) {
+          for (let x = 0; x < lit.width; x++) {
+            const i = y * lit.width + x
+            if (pixels[i] >>> 24 === 0) continue
+            for (const o of front) {
+              const ox = left + x - o.left
+              const oy = top + y - o.top
+              if (ox < 0 || oy < 0 || ox >= o.look.width || oy >= o.look.height) continue
+              if (o.look.pixels[oy * o.look.width + ox] >>> 24 !== 0) {
+                pixels[i] = 0
+                cut = true
+                break
+              }
+            }
+          }
+        }
+        if (cut) {
+          shown = { ...lit, pixels }
+          masked.push(shown)
+        }
+      }
+      const w = new Sprite(textureOf(shown))
+      w.anchor.set(shown.anchorX / shown.width, shown.anchorY / shown.height)
+      w.position.set(sx, sy)
+      glow.addChild(w)
+      windows.push(w)
+    }
     ambient.setChimneys(chimneys)
   }
   function sortWalkers() {

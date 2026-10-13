@@ -249,6 +249,11 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
             <Meter value={familiarity / 100} tone="water" label="Saha bilgisi" segments={10} />
           </div>
         </div>
+        {army.contact_until && Date.parse(army.contact_until) > now && (
+          <small className="order-note up">
+            <Icon name="scroll" size={16} /> Komutanla iletişim açık: {clock(Date.parse(army.contact_until) - now)} boyunca emirler hemen uygulanır
+          </small>
+        )}
         {pending.map((o) => (
           <small key={o.id} className="order-note">
             <Icon name="scroll" size={16} /> Elçi yolda: emir {clock(Date.parse(o.effective_at) - now)} sonra ulaşacak

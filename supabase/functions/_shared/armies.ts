@@ -10,6 +10,8 @@ export interface ArmyRow {
   id: number
   lobby_id: string
   kingdom_id: number
+  // Until then the commander is in touch: new orders take effect at once (an envoy has just reached it).
+  contact_until?: string | null
   soldiers: number
   // Of which kinds (see units.ts).
   units: Record<string, number>

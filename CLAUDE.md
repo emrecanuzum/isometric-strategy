@@ -595,6 +595,10 @@ fiyatı düşer, çok alınanın artar; zamanla dengeye döner.
   emrini uygulamaya devam eder. Böylece ordu sistemi tam gerçek zamanlı
   değildir: her ordunun en az 30 dakikalık geleceği önceden bellidir.
 - Kendi yerleşiminde/garnizonunda bekleyen orduya emir anında verilir.
+- **İletişim penceresi:** Elçi orduya ulaşıp emri verdikten sonra
+  **30 saniye** komutanın yanında kalır; bu sürede verilen yeni emirler
+  elçi beklemeden hemen uygulanır (`time.json` → `contactSeconds`). Kalan
+  süre ordu kartında ve sayaçlarda görünür.
 - Sunucuda ordu konumu saklanmaz; rota `path`, `depart_at`, `arrive_at`
   olarak tutulur, konum bu değerlerden hesaplanır. Oyuncu oyunu kapatsa da
   ordusu yoluna devam eder; **diğer oyuncular onu aynı formülle yolda ve
@@ -606,8 +610,9 @@ fiyatı düşer, çok alınanın artar; zamanla dengeye döner.
 
 ### 8.2.2 Meydan muharebesi (yolda karşılaşma)
 
-- Savaş halindeki iki krallığın orduları yolda **aynı karoda/yakınında aynı
-  anda** bulunursa meydan muharebesi olur.
+- Savaş halindeki iki krallığın orduları birbirine **5 karo** (çember
+  yarıçapı) kadar yaklaşınca meydan muharebesi olur (`military.json` →
+  `contactTiles`).
 - Emirler gecikmeli olduğu için rotalar önceden bellidir: karşılaşma, bir
   emir yürürlüğe girdiğinde rotaların zaman-mekân kesişimi hesaplanarak
   **zamanlanmış olay** olarak kaydedilir; sürekli konum taraması yapılmaz.

@@ -618,9 +618,11 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         (order?.kind === 'split' && Number.isInteger(order.soldiers)) ||
         (order?.kind === 'merge' && isId(order.with))
       if (!valid) refuse('rejected')
-      // Inside its own lands the army hears the order at once; elsewhere the envoy has to ride to it (§8.2.1).
+      // Inside its own lands the army hears the order at once, and so it does while an envoy that has just reached it
+      // is still at its side; elsewhere the envoy has to ride to it (§8.2.1).
       const { here } = armyNow(army!, world, me.state, now)
-      if (inTerritory(me.state, here, now)) {
+      const inTouch = !!army!.contact_until && ms(army!.contact_until) > now
+      if (inTerritory(me.state, here, now) || inTouch) {
         const why = await applyOrder(world, army!, order, rows, pacts, now)
         if (why) refuse(why)
         return { at: iso(now) }

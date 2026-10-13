@@ -17,3 +17,11 @@ export function textureOf(sprite: Sprite): Texture {
   return texture
 }
 
+
+// Drops the texture of a sprite made for one moment (a masked copy), so it does not linger in the cache.
+export function freeTexture(sprite: Sprite) {
+  const texture = cache.get(sprite)
+  if (!texture) return
+  cache.delete(sprite)
+  texture.destroy(true)
+}

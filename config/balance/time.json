@@ -2,5 +2,6 @@
   "gameDayMs": 3600000,
   "seasonGameDays": 336,
   "messengerDelayGameDays": 0.008333,
-  "monthGameDays": 30
+  "monthGameDays": 30,
+  "contactSeconds": 30
 }
