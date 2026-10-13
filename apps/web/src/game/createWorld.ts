@@ -11,11 +11,12 @@ import {
   tileRule,
 } from '@game/shared'
 import type { Point, Rect, World } from '@game/shared'
-import { Application, Container, Graphics, ImageSource, Sprite, Texture } from 'pixi.js'
+import { Application, Container, Graphics, ImageSource, Sprite, Text, Texture } from 'pixi.js'
 import { createAmbient } from './ambient'
 import { createCaravans } from './caravans'
 import { CHUNK_PAD } from './chunkPainter'
 import type { PaintRequest, PaintResult } from './paintWorker'
+import type { FederatedPointerEvent } from 'pixi.js'
 
 // Flat colors for the minimap; the main view is painted by chunkPainter.
 export const TERRAIN_COLORS: Record<number, number> = {
@@ -43,6 +44,10 @@ const ZOOMS = [0.125, 0.25, 0.5, 1, 2, 3]
 const DEFAULT_ZOOM_INDEX = 3
 const WHEEL_STEP = 50
 const WHEEL_COOLDOWN_MS = 220
+// A pinch steps one zoom level each time the finger spread changes by this ratio.
+const PINCH_STEP = 1.35
+// A press that moves less than this many screen pixels is a tap, not a drag.
+const TAP_SLOP = 10
 const TEXTURE_BUDGET_BYTES = 320 * 1024 * 1024
 const MAX_WORKERS = 4
 // Caravans are too small to make out below this zoom.
@@ -64,6 +69,8 @@ export interface WorldView {
   world: World
   centerOn(tile: Point): void
   setTerritory(rect: Rect | null, plots: Plots): void
+  /** Steps the zoom in (+1) or out (-1) around the middle of the screen. */
+  zoomBy(step: number): void
   destroy(): void
 }
 
@@ -108,7 +115,22 @@ export async function createWorld(
   const cursor = new Graphics()
   const caravans = createCaravans(world)
   const ambient = createAmbient(world, caravans.layer)
-  camera.addChild(ground, ambient.under, caravans.layer, ambient.sky, territory, cursor)
+  // Plot names float above their outlines at a fixed screen size.
+  const label = (text: string, color: number) =>
+    new Text({
+      text,
+      resolution: window.devicePixelRatio * 2,
+      anchor: { x: 0.5, y: 1 },
+      style: {
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: 12,
+        fontWeight: '600',
+        fill: color,
+        stroke: { color: 0x10141a, width: 3, join: 'round' },
+      },
+    })
+  const plotLabels = { dock: label('İskele alanı', DOCK_PLOT), trade: label('Ticaret alanı', TRADE_PLOT) }
+  camera.addChild(ground, ambient.under, caravans.layer, ambient.sky, territory, cursor, plotLabels.dock, plotLabels.trade)
   app.stage.addChild(camera)
   app.ticker.add(() => {
     const scale = camera.scale.x
@@ -267,6 +289,7 @@ export async function createWorld(
   function setTerritory(rect: Rect | null, plots: Plots) {
     claimed = [rect, plots]
     territory.clear()
+    for (const text of Object.values(plotLabels)) text.visible = false
     if (!rect) return
     const thick = 3 / camera.scale.x
     const outline = (r: Rect) => square(r.x, r.y, r.size)
@@ -282,29 +305,40 @@ export async function createWorld(
     }
     territory.stroke({ width: 1 / camera.scale.x, color: 0xffffff, alpha: 0.1 })
     territory.poly(outline(rect)).stroke({ width: thick, color: TERRITORY, alpha: 0.9 })
-    for (const [plot, color] of [[plots.dock, DOCK_PLOT], [plots.trade, TRADE_PLOT]] as const) {
-      if (plot) territory.poly(outline(plot)).fill({ color, alpha: 0.45 }).stroke({ width: thick, color })
+    for (const [key, color] of [['dock', DOCK_PLOT], ['trade', TRADE_PLOT]] as const) {
+      const plot = plots[key]
+      if (!plot) continue
+      const points = outline(plot)
+      territory.poly(points).fill({ color, alpha: 0.45 }).stroke({ width: thick, color })
+      // Above the outline's top corner.
+      let top = 1
+      for (let i = 3; i < points.length; i += 2) if (points[i] < points[top]) top = i
+      const text = plotLabels[key]
+      text.position.set(points[top - 1], points[top] - 4 / camera.scale.y)
+      text.scale.set(1 / camera.scale.x)
+      text.visible = true
     }
   }
 
-  let drag: Point | null = null
-  app.stage.eventMode = 'static'
-  app.stage.hitArea = app.screen
-  app.stage.on('pointerdown', (e) => {
-    drag = { x: e.global.x - camera.x, y: e.global.y - camera.y }
-  })
-  app.stage.on('pointerup', () => (drag = null))
-  app.stage.on('pointerupoutside', () => (drag = null))
-  app.stage.on('pointermove', (e) => {
-    if (drag) {
-      camera.x = Math.round(e.global.x - drag.x)
-      camera.y = Math.round(e.global.y - drag.y)
-      refresh()
-    }
-    // The pointer picks the ground it is drawn over, which on a slope is not the flat tile under it.
+  // Steps to a zoom level, keeping the ground under the given screen point fixed.
+  const zoomTo = (index: number, at: Point) => {
+    index = Math.min(ZOOMS.length - 1, Math.max(0, index))
+    if (index === zoomIndex) return
+    const factor = ZOOMS[index] / camera.scale.x
+    zoomIndex = index
+    camera.x = Math.round(at.x - (at.x - camera.x) * factor)
+    camera.y = Math.round(at.y - (at.y - camera.y) * factor)
+    camera.scale.set(ZOOMS[index])
+    cursor.clear()
+    setTerritory(...claimed)
+    refresh()
+  }
+
+  // The pointer picks the ground it is drawn over, which on a slope is not the flat tile under it.
+  const pick = (at: Point) => {
     const ground = screenToGround(world, {
-      x: (e.global.x - camera.x) / camera.scale.x,
-      y: (e.global.y - camera.y) / camera.scale.y,
+      x: (at.x - camera.x) / camera.scale.x,
+      y: (at.y - camera.y) / camera.scale.y,
     })
     const tile = { x: Math.floor(ground.x), y: Math.floor(ground.y) }
     const inside = tile.x >= 0 && tile.y >= 0 && tile.x < world.size && tile.y < world.size
@@ -317,6 +351,62 @@ export async function createWorld(
       .stroke({ width: 2 / camera.scale.x, color: HOVER, alpha: 0.9 })
     const i = tile.y * world.size + tile.x
     onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y) })
+  }
+
+  // One finger (or the mouse) drags, two fingers pinch to zoom. A press that barely moves is a tap:
+  // on touch screens only a tap picks a tile, so panning the map never changes the selection.
+  const touches = new Map<number, Point>()
+  let pinch: number | null = null
+  const spread = () => {
+    const [a, b] = [...touches.values()]
+    return { distance: Math.hypot(a.x - b.x, a.y - b.y), middle: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }
+  }
+
+  let press: { start: Point; camera: Point; moved: boolean } | null = null
+  app.stage.eventMode = 'static'
+  app.stage.hitArea = app.screen
+  app.stage.on('pointerdown', (e) => {
+    touches.set(e.pointerId, { x: e.global.x, y: e.global.y })
+    if (touches.size === 2) {
+      // A pinch is never a tap, even after one finger lifts.
+      if (press) press.moved = true
+      pinch = spread().distance
+      return
+    }
+    press = { start: { x: e.global.x, y: e.global.y }, camera: { x: camera.x, y: camera.y }, moved: false }
+  })
+  const release = (e: FederatedPointerEvent) => {
+    touches.delete(e.pointerId)
+    if (touches.size < 2) pinch = null
+    if (touches.size > 0) return
+    if (press && !press.moved && e.type === 'pointerup') pick({ x: e.global.x, y: e.global.y })
+    press = null
+  }
+  app.stage.on('pointerup', release)
+  app.stage.on('pointerupoutside', release)
+  app.stage.on('pointercancel', release)
+  app.stage.on('pointermove', (e) => {
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.global.x, y: e.global.y })
+    if (pinch !== null && touches.size === 2) {
+      const { distance, middle } = spread()
+      if (distance / pinch >= PINCH_STEP || pinch / distance >= PINCH_STEP) {
+        zoomTo(zoomIndex + (distance > pinch ? 1 : -1), middle)
+        pinch = distance
+      }
+      return
+    }
+    if (press && touches.size === 1) {
+      const dx = e.global.x - press.start.x
+      const dy = e.global.y - press.start.y
+      if (!press.moved && Math.hypot(dx, dy) > TAP_SLOP) press.moved = true
+      if (press.moved) {
+        camera.x = Math.round(press.camera.x + dx)
+        camera.y = Math.round(press.camera.y + dy)
+        refresh()
+      }
+    }
+    // The mouse highlights whatever it is over; a finger has no hover.
+    if (e.pointerType === 'mouse') pick({ x: e.global.x, y: e.global.y })
   })
 
   let wheel = 0
@@ -326,20 +416,11 @@ export async function createWorld(
     if (performance.now() - lastStep < WHEEL_COOLDOWN_MS) return
     wheel += e.deltaY
     if (Math.abs(wheel) < WHEEL_STEP) return
-    const index = Math.min(ZOOMS.length - 1, Math.max(0, zoomIndex + (wheel < 0 ? 1 : -1)))
+    const step = wheel < 0 ? 1 : -1
     wheel = 0
     lastStep = performance.now()
-    if (index === zoomIndex) return
     const rect = app.canvas.getBoundingClientRect()
-    const pointer = { x: e.clientX - rect.left, y: e.clientY - rect.top }
-    const factor = ZOOMS[index] / camera.scale.x
-    zoomIndex = index
-    camera.x = Math.round(pointer.x - (pointer.x - camera.x) * factor)
-    camera.y = Math.round(pointer.y - (pointer.y - camera.y) * factor)
-    camera.scale.set(ZOOMS[index])
-    cursor.clear()
-    setTerritory(...claimed)
-    refresh()
+    zoomTo(zoomIndex + step, { x: e.clientX - rect.left, y: e.clientY - rect.top })
   }
   app.canvas.addEventListener('wheel', onWheel, { passive: false })
   app.renderer.on('resize', refresh)
@@ -350,6 +431,7 @@ export async function createWorld(
     world,
     centerOn,
     setTerritory,
+    zoomBy: (step) => zoomTo(zoomIndex + step, { x: app.screen.width / 2, y: app.screen.height / 2 }),
     destroy() {
       app.canvas.removeEventListener('wheel', onWheel)
       for (const worker of workers) worker.terminate()

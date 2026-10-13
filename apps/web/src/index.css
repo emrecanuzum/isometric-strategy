@@ -9,6 +9,11 @@ body,
   font-family: system-ui, sans-serif;
 }
 
+canvas {
+  /* Touch gestures drive the camera, not page scroll or browser zoom. */
+  touch-action: none;
+}
+
 .hud {
   position: fixed;
   top: 12px;
@@ -45,7 +50,17 @@ body,
   gap: 6px;
 }
 
-.stages button {
+.zoom {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stages button,
+.zoom button {
   padding: 6px 10px;
   background: rgb(16 20 26 / 80%);
   color: inherit;
@@ -59,4 +74,45 @@ body,
 .stages button.active {
   border-color: #f2d16b;
   color: #f2d16b;
+}
+
+@media (max-width: 640px) {
+  .stages {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    flex-wrap: wrap;
+  }
+
+  .hud {
+    top: 50px;
+    left: 8px;
+    right: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .zoom {
+    left: 8px;
+    bottom: 8px;
+  }
+
+  .minimap {
+    /* Offsets account for the rotated box overflowing its 128px layout box. */
+    right: 34px;
+    bottom: -11px;
+  }
+
+  .minimap canvas {
+    width: 128px;
+    height: 128px;
+  }
+}
+
+.zoom button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
 }

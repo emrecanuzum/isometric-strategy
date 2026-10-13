@@ -1,6 +1,8 @@
 import { Feature, Terrain, TileRule, assignStartSite, balance, findPlot, mulberry32, territoryRect } from '@game/shared'
 import type { Plot, Point } from '@game/shared'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { startMusic } from './audio/music'
+import type { Music } from './audio/music'
 import { Minimap } from './game/Minimap'
 import { createWorld } from './game/createWorld'
 import type { Hover, WorldView } from './game/createWorld'
@@ -28,6 +30,15 @@ const RULE_NAMES: Record<number, string> = {
   [TileRule.TradePostOnly]: 'yalnızca ticaret noktası',
 }
 
+const MUTED_KEY = 'music-muted'
+const readMuted = () => {
+  try {
+    return localStorage.getItem(MUTED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 const seed = Number(new URLSearchParams(location.search).get('seed') ?? 1337)
 
 function App() {
@@ -50,6 +61,33 @@ function App() {
       setView(null)
     }
   }, [])
+
+  // Browsers only allow audio after a user gesture, so the music starts on the first touch or key.
+  const music = useRef<Music | null>(null)
+  const [muted, setMuted] = useState(readMuted)
+  const mutedRef = useRef(muted)
+  useEffect(() => {
+    const start = () => {
+      if (!music.current) music.current = startMusic(mutedRef.current)
+    }
+    window.addEventListener('pointerdown', start, { once: true })
+    window.addEventListener('keydown', start, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', start)
+      window.removeEventListener('keydown', start)
+      music.current?.destroy()
+      music.current = null
+    }
+  }, [])
+  useEffect(() => {
+    mutedRef.current = muted
+    music.current?.setMuted(muted)
+    try {
+      localStorage.setItem(MUTED_KEY, muted ? '1' : '0')
+    } catch {
+      // Storage may be unavailable (private mode); the setting just is not remembered.
+    }
+  }, [muted])
 
   const [stage, setStage] = useState(0)
   const [roll, setRoll] = useState(0)
@@ -106,7 +144,20 @@ function App() {
             {parcels}×{parcels}
           </button>
         ))}
+        <button onClick={() => setMuted((m) => !m)} title={muted ? 'Müziği aç' : 'Müziği kapat'}>
+          {muted ? '♪ kapalı' : '♪ açık'}
+        </button>
       </div>
+      {view && (
+        <div className="zoom">
+          <button onClick={() => view.zoomBy(1)} aria-label="Yakınlaştır">
+            +
+          </button>
+          <button onClick={() => view.zoomBy(-1)} aria-label="Uzaklaştır">
+            −
+          </button>
+        </div>
+      )}
       {view && <Minimap world={view.world} center={center} onJump={view.centerOn} />}
     </>
   )

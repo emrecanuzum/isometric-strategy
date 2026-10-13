@@ -63,7 +63,8 @@ export function Minimap({ world, center, onJump }: Props) {
         width={SIZE}
         height={SIZE}
         onClick={(e) => {
-          const scale = world.size / SIZE
+          // The canvas is drawn smaller than SIZE on narrow screens.
+          const scale = world.size / e.currentTarget.clientWidth
           onJump({
             x: Math.floor(e.nativeEvent.offsetX * scale),
             y: Math.floor(e.nativeEvent.offsetY * scale),
