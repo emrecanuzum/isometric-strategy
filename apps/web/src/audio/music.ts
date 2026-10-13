@@ -46,11 +46,16 @@ function impulse(ctx: AudioContext, seconds: number) {
 }
 
 export interface Music {
+  /** Resumes playback; must be called from a user gesture. Returns whether audio is running. */
+  unlock(): boolean
   setMuted(muted: boolean): void
   destroy(): void
 }
 
 export function startMusic(muted: boolean): Music {
+  // iOS 17+: play through the ringer/silent switch like a media player instead of being muted by it.
+  const session = (navigator as { audioSession?: { type: string } }).audioSession
+  if (session) session.type = 'playback'
   const ctx = new AudioContext()
   const master = ctx.createGain()
   master.gain.value = 0
@@ -217,12 +222,25 @@ export function startMusic(muted: boolean): Music {
   tick()
 
   // Hidden tabs stay silent.
-  const onVisibility = () => (document.hidden ? ctx.suspend() : ctx.resume())
+  const onVisibility = () => void (document.hidden ? ctx.suspend() : ctx.resume())
   document.addEventListener('visibilitychange', onVisibility)
 
   if (!muted) fadeTo(VOLUME, FADE_IN_S)
 
+  let unlocked = false
   return {
+    unlock() {
+      if (!unlocked) {
+        // Older iOS only starts audio once something is played inside the gesture itself.
+        const silent = ctx.createBufferSource()
+        silent.buffer = ctx.createBuffer(1, 1, ctx.sampleRate)
+        silent.connect(ctx.destination)
+        silent.start()
+        unlocked = true
+      }
+      if (ctx.state !== 'running') void ctx.resume()
+      return ctx.state === 'running'
+    },
     setMuted(value) {
       fadeTo(value ? 0 : VOLUME, value ? 0.4 : 1.5)
     },

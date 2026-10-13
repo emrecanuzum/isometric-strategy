@@ -44,8 +44,6 @@ const ZOOMS = [0.125, 0.25, 0.5, 1, 2, 3]
 const DEFAULT_ZOOM_INDEX = 3
 const WHEEL_STEP = 50
 const WHEEL_COOLDOWN_MS = 220
-// A pinch steps one zoom level each time the finger spread changes by this ratio.
-const PINCH_STEP = 1.35
 // A press that moves less than this many screen pixels is a tap, not a drag.
 const TAP_SLOP = 10
 const TEXTURE_BUDGET_BYTES = 320 * 1024 * 1024
@@ -353,31 +351,25 @@ export async function createWorld(
     onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y) })
   }
 
-  // One finger (or the mouse) drags, two fingers pinch to zoom. A press that barely moves is a tap:
-  // on touch screens only a tap picks a tile, so panning the map never changes the selection.
+  // One finger (or the mouse) drags; zoom is on the buttons and the wheel only, so extra fingers are
+  // ignored. A press that barely moves is a tap: on touch screens only a tap picks a tile, so panning
+  // the map never changes the selection.
   const touches = new Map<number, Point>()
-  let pinch: number | null = null
-  const spread = () => {
-    const [a, b] = [...touches.values()]
-    return { distance: Math.hypot(a.x - b.x, a.y - b.y), middle: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }
-  }
 
   let press: { start: Point; camera: Point; moved: boolean } | null = null
   app.stage.eventMode = 'static'
   app.stage.hitArea = app.screen
   app.stage.on('pointerdown', (e) => {
     touches.set(e.pointerId, { x: e.global.x, y: e.global.y })
-    if (touches.size === 2) {
-      // A pinch is never a tap, even after one finger lifts.
+    if (touches.size > 1) {
+      // A multi-finger touch is never a tap, even after the other fingers lift.
       if (press) press.moved = true
-      pinch = spread().distance
       return
     }
     press = { start: { x: e.global.x, y: e.global.y }, camera: { x: camera.x, y: camera.y }, moved: false }
   })
   const release = (e: FederatedPointerEvent) => {
     touches.delete(e.pointerId)
-    if (touches.size < 2) pinch = null
     if (touches.size > 0) return
     if (press && !press.moved && e.type === 'pointerup') pick({ x: e.global.x, y: e.global.y })
     press = null
@@ -387,14 +379,6 @@ export async function createWorld(
   app.stage.on('pointercancel', release)
   app.stage.on('pointermove', (e) => {
     if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.global.x, y: e.global.y })
-    if (pinch !== null && touches.size === 2) {
-      const { distance, middle } = spread()
-      if (distance / pinch >= PINCH_STEP || pinch / distance >= PINCH_STEP) {
-        zoomTo(zoomIndex + (distance > pinch ? 1 : -1), middle)
-        pinch = distance
-      }
-      return
-    }
     if (press && touches.size === 1) {
       const dx = e.global.x - press.start.x
       const dy = e.global.y - press.start.y

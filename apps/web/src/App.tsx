@@ -62,19 +62,20 @@ function App() {
     }
   }, [])
 
-  // Browsers only allow audio after a user gesture, so the music starts on the first touch or key.
+  // Browsers only allow audio after a user gesture. On touch screens that is the finger lifting
+  // (touchend/click), not pointerdown, so every kind is tried until the audio is running.
   const music = useRef<Music | null>(null)
   const [muted, setMuted] = useState(readMuted)
   const mutedRef = useRef(muted)
   useEffect(() => {
-    const start = () => {
-      if (!music.current) music.current = startMusic(mutedRef.current)
+    const events = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'] as const
+    const unlock = () => {
+      music.current ??= startMusic(mutedRef.current)
+      if (music.current.unlock()) for (const type of events) window.removeEventListener(type, unlock)
     }
-    window.addEventListener('pointerdown', start, { once: true })
-    window.addEventListener('keydown', start, { once: true })
+    for (const type of events) window.addEventListener(type, unlock)
     return () => {
-      window.removeEventListener('pointerdown', start)
-      window.removeEventListener('keydown', start)
+      for (const type of events) window.removeEventListener(type, unlock)
       music.current?.destroy()
       music.current = null
     }
@@ -150,6 +151,9 @@ function App() {
       </div>
       {view && (
         <div className="zoom">
+          <button onClick={() => site && view.centerOn(site)} aria-label="Üsse dön" title="Üsse dön">
+            ⌂
+          </button>
           <button onClick={() => view.zoomBy(1)} aria-label="Yakınlaştır">
             +
           </button>
