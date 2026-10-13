@@ -531,11 +531,11 @@ small {
   z-index: 4;
 }
 
-/* Back to the main menu, beside the settings. */
+/* Back to the main menu, under the settings. */
 .exit {
   position: fixed;
-  top: var(--gap);
-  right: calc(var(--gap) + var(--icon-chip, 44px + var(--px) * 4) + var(--px) * 4);
+  top: calc(var(--gap) + 44px + var(--px) * 4 + var(--px) * 4);
+  right: var(--gap);
   z-index: 4;
 }
 
@@ -1903,8 +1903,8 @@ small {
 .chat {
   display: flex;
   flex-direction: column;
-  width: min(340px, calc(100vw - var(--gap) * 2));
-  height: min(340px, 45vh);
+  width: min(380px, calc(100vw - var(--gap) * 2));
+  height: min(460px, 58vh);
   box-sizing: border-box;
 }
 
@@ -2294,9 +2294,6 @@ small {
     --icon-chip: calc(40px + var(--px) * 4);
   }
 
-  .btn.exit {
-    right: calc(var(--gap) + var(--icon-chip) + var(--px) * 4);
-  }
 
   .sheet {
     left: 0;
@@ -2972,7 +2969,7 @@ small {
 }
 
 body:has(section.chat) .timers {
-  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10 + min(340px, 45vh) + var(--px) * 6);
+  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10 + min(460px, 58vh) + var(--px) * 6);
 }
 
 kbd {
@@ -3017,4 +3014,138 @@ kbd {
 
 .letter.important {
   box-shadow: inset calc(var(--px) * 3) 0 0 0 #b0302a, var(--bevel), var(--outline);
+}
+
+/* Until the ground around the kingdom is painted: a dim veil over the map with a spinner. */
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: calc(var(--px) * 8);
+  background:
+    repeating-linear-gradient(45deg, rgb(255 255 255 / 2%) 0 8px, transparent 8px 16px),
+    rgb(14 10 8 / 92%);
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.loading-screen .spinner.big {
+  position: relative;
+  left: auto;
+  top: auto;
+  transform: none;
+}
+
+.loading-screen p {
+  margin: calc(var(--px) * 24) 0 0;
+}
+
+/* Whether a kingdom's player is about, from when they were last seen. */
+.chat-kingdoms .presence {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.chat-kingdoms .presence::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: calc(var(--px) * 2);
+  background: #5a5450;
+  box-shadow: var(--outline);
+}
+
+.chat-kingdoms .presence.on {
+  color: var(--up);
+}
+
+.chat-kingdoms .presence.on::before {
+  background: #6fcf5a;
+}
+
+/* Army cards: everything on a grid, using the full width. */
+.armies {
+  display: grid;
+  gap: calc(var(--px) * 4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.army-card {
+  padding: calc(var(--px) * 4);
+}
+
+.army-body {
+  display: grid;
+  gap: calc(var(--px) * 4);
+}
+
+.army-head {
+  display: grid;
+  gap: var(--px);
+}
+
+.army-card .unit-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: calc(var(--px) * 2);
+}
+
+.army-card .unit-row .chip {
+  justify-content: center;
+  flex-direction: row;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 1) calc(var(--px) * 2);
+}
+
+.army-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--px) * 4);
+}
+
+.army-stats > div {
+  display: grid;
+  gap: calc(var(--px) * 2);
+}
+
+.army-stats span {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--px) * 2);
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.army-stats b {
+  color: var(--text, #f3e6c8);
+}
+
+.army-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(var(--px) * 2);
+}
+
+.army-actions .btn {
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.army-stats .meter {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.army-stats .meter i {
+  flex: 1;
 }

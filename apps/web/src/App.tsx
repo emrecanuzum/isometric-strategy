@@ -266,6 +266,9 @@ function App({
   const [hover, setHover] = useState<Hover | null>(null)
   const [cameraCenter, setCameraCenter] = useState<Point | null>(null)
   const [loading, setLoading] = useState(true)
+  // The first view is held back until the ground around the kingdom (or the sites to choose from) is painted: the
+  // camera has moved there and no chunk on screen is missing for a moment.
+  const [ready, setReady] = useState(false)
   const tapRef = useRef<(tile: Point, building?: number, army?: number) => void>(() => {})
   const strokeRef = useRef<(spots: Point[]) => void>(() => {})
 
@@ -463,6 +466,13 @@ function App({
     // Only when the site itself changes, not on every kingdom update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, site?.x, site?.y])
+  // Ready once the camera is on the site and nothing on screen has been missing for a short while (a chunk still to
+  // paint turns `loading` back on and starts the wait over).
+  useEffect(() => {
+    if (ready || !view || !site || loading) return
+    const id = window.setTimeout(() => setReady(true), 500)
+    return () => clearTimeout(id)
+  }, [ready, view, site, loading])
   useEffect(() => {
     // After founding, the dock plot stays marked until a dock stands on it.
     const dockPlot = kingdom ? (kingdom.buildings.some((b) => b.kind === 'dock') ? null : kingdom.dockPlot) : plots?.dock?.plot
@@ -476,7 +486,7 @@ function App({
   // The envoy's journal of what happened, kept in this browser per lobby.
   // The day's events waiting to be shown in their window, oldest first.
   const [fortunes, setFortunes] = useState<FortuneEvent[]>([])
-  const { journal, record: recordJournal, markRead, reset: resetJournal, notice: noteJournal } = useJournal(`journal-v2:${lobby.id}`, seasonStart)
+  const { journal, record: recordJournal, markRead, reset: resetJournal, notice: noteJournal, markImportantRead } = useJournal(`journal-v2:${lobby.id}`, seasonStart)
 
   // The clock: settle whatever came due and show it on the map.
   const [now, setNow] = useState(serverNow)
@@ -919,6 +929,7 @@ function App({
           onExit,
           onReset: reset,
           onShow: (tile) => view.centerOn(tile),
+          onImportantRead: markImportantRead,
           online,
         }
       : null
@@ -1045,12 +1056,17 @@ function App({
           <Icon name="warn" size={16} /> {toast}
         </div>
       )}
-      {!view && <PixelSpinner big />}
-      {view && loading && <PixelSpinner />}
+      {!ready && (
+        <div className="loading-screen" role="status" aria-label="Harita yükleniyor">
+          <PixelSpinner big />
+          <p>Diyar yükleniyor…</p>
+        </div>
+      )}
+      {ready && view && loading && <PixelSpinner />}
       {view && (
         <div className="zoom">
           <button className="btn icon-only" onClick={() => site && view.centerOn(site)} aria-label="Üsse dön" title="Üsse dön">
-            <Icon name="home" size={16} />
+            <Icon name="pin" size={16} />
           </button>
           <button className="btn icon-only" onClick={() => view.zoomBy(1)} aria-label="Yakınlaştır" title="Yakınlaştır">
             <Icon name="plus" size={16} />

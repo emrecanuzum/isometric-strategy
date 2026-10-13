@@ -525,8 +525,8 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
 
   for (const bridge of bridges) paintBridge(world, bridge, out, depth, x0, y0, k)
 
+  // Trees, rocks, inns and buildings are drawn at every zoom, down to the farthest.
   const data = new Uint8ClampedArray(out.buffer)
-  if (k < 0.25) return { width, height: canvasHeight, data }
 
   // Sprites: gathered from this chunk and a margin around it, so shapes crossing a chunk border match up.
   const placed: Placed[] = []

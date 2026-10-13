@@ -332,7 +332,7 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
         const owner = states.get(f.kingdom)
         const door = owner && doorOf(owner)
         const still = { ...army, soldiers, units, morale, status: 'idle' as const, path: [here], depart_at: iso(at), arrive_at: iso(at) }
-        const retreat = owner && door ? march(world, still, owner, at, door, { kind: 'home', retreat: true }) : null
+        const retreat = owner && door ? march(world, still, owner, at, door, { kind: 'home', retreat: true }, game.buildingBlocker([...states.values()])) : null
         // With no way home it stays where it is, still out of the fight until it is given a new order.
         const fallback = { ...standing(here, at, morale, familiarity), goal: { kind: 'home', retreat: true } }
         await admin.from('armies').update({ ...(retreat ?? fallback), soldiers, units, morale }).eq('id', army.id)

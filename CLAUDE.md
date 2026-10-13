@@ -115,7 +115,9 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   sürüyormuş hissi verir. Ana nehir ve dereler halkadan **boğazlar** açarak
   çıkar. Hanlar ve başlangıç yerleri halkanın içinde kalır.
 - **Chunk tabanlı çizim:** istemci yalnızca ekrana giren chunk'ları çizer ve
-  önbelleğe alır.
+  önbelleğe alır. Oyuna girerken harita, kamera krallığa (ya da seçilecek
+  yerlere) gidip ekrandaki bütün chunk'lar çizilene kadar yarı saydam bir
+  yükleme perdesinin arkasında bekler.
 - Dünya, lobi tohumundan (seed) **deterministik** üretilir
   (`packages/shared/src/worldgen.ts`); üretim oranları
   `config/balance/world.json` içindedir.
@@ -147,7 +149,11 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   rampası vardır; tonlar arası geçiş **dither** ile yapılır, yumuşak
   gradyan/bulanıklık kullanılmaz.
 - **Yakınlaştırma kademelidir** (⅛×, ¼×, ½×, 1×, 2×, 3×); dokular en yakın
-  komşu ile ölçeklenir, pikseller bozulmaz.
+  komşu ile ölçeklenir, pikseller bozulmaz. Ağaçlar, kayalar, hanlar ve binalar en uzak
+  kademede de çizilir (yürüyenler, kervanlar ve hayvanlar ½× altında
+  gizlenir). Kamera haritanın dışına çıkamaz: ekranın ortası haritanın
+  kenarından en fazla 24 karo içeride, kenardaki dağ halkasının üstünde
+  kalır.
 - Harita **karo karo görünmez.** Zemin, sürekli yükseklik/nem alanlarından
   piksel düzeyinde boyanır; arazi sınırları kıvrımlıdır.
 - **Biyom geçişleri** (kaya, bataklık, çöl, orman, çayır, kumsal arasında)
@@ -903,7 +909,15 @@ mertebesindedir.
 - Ordu yolu 4×4 karoluk hücreler üzerinde aranır; her hücrenin geçiş
   noktası (köprü varsa köprü karosu) seçilir ve iki nokta arasındaki düz
   yürüyüş suya ya da dağa değmiyorsa bağlanır. Böylece ordular nehirleri
-  yalnızca köprülerden geçer.
+  yalnızca köprülerden geçer. Binaların (sur, kapı ve tarla dışında)
+  içinden geçmez, etraflarından dolaşır; bir binanın üstüne gönderilen ordu
+  yanındaki boş karoda, bir saraya gönderilen ordu sarayın kapısının
+  (ön köşesi) önünde durur. Yeni çıkarılan ve eve dönen ordular da kapının
+  önündedir.
+- **Ordu sekmesi** sırası: Ordularım (çoğu emir burada verilir), Garnizon,
+  Kışla, Savaşlar. Ordu kartları tam genişlikte, grid düzenindedir: birlik
+  türleri tek satırda, moral ve saha bilgisi yan yana, emir düğmeleri üçlü
+  sütunlarda.
 - Haritada ordular krallığın sancağıyla görünür; görünen asker sayısı
   ordunun büyüklüğüyle artar (3–9 figür, her 10 askerde bir) ve mancınığı
   olan ordunun arkasında bir mancınık yürür. Rakipler yalnızca bu kaba
@@ -956,7 +970,11 @@ krallıkta birer tane olur ve 3 seviyelidir.
   ilanı, dayatılan barış, hakaret, sabotaj ve kaçırma, yakalanan casuslar,
   kule kayıpları, asker kaybedilen muharebeler, reddedilen teklifler, haraç
   isteği, yerine getirilemeyen emirler, ambar boşalıyor uyarıları. Önemli
-  kayıtlar diğerlerinden daha uzun saklanır ve kırmızı kenarlıdır.
+  kayıtlar diğerlerinden daha uzun saklanır ve kırmızı kenarlıdır. Sekmedeki
+  rozet okunmamış önemli kayıt sayısıdır; sekme açılınca sıfırlanır.
+- **Sohbet** penceresi daha uzundur; Krallıklar sekmesinde her oyuncunun
+  son görülmesinden çevrimiçi olup olmadığı (yeşil nokta, son 6 dakika) ya
+  da ne zaman görüldüğü yazar.
 - **Günlük:** Olaylar ayrı (mor) kâğıtta, elçinin diğer krallıklardan
   getirdiği haberler (savaş, teklif, casus…) ayrı (mühürlü) kâğıtta yazılır.
 
@@ -984,8 +1002,9 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   içinden Krallık sekmesindeki "Ana menü" ile dönülür. Lobi silinirse
   içindeki oyuncular kendiliğinden ana menüye döner (yayın + dakikalık
   yoklama).
-- Harita ekranının sağ üstünde, ayarların yanında **ana menüye dön**
-  düğmesi (ev ikonu) vardır.
+- Harita ekranının sağ üstünde, ayarların altında **ana menüye dön**
+  düğmesi (ev ikonu) vardır. Yakınlaştırma düğmelerinin üstündeki **üsse
+  dön** düğmesi (konum pini) kamerayı krallığa götürür.
 - **Ayarlar ve ses:** Harita ekranının köşesindeki dişli **Ayarlar**
   penceresini açar: müzik ve **ses efektleri** ayrı ayrı açılıp kapanır,
   sesleri yüzde olarak ayarlanır (profilde saklanır). Efektler tarayıcıda

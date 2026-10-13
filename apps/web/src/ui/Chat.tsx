@@ -3,6 +3,7 @@ import { KINGDOM_COLORS } from '../game/buildingSprites'
 import type { KingdomColor } from '../game/buildingSprites'
 import type { ChatMessage } from '../net/online'
 import type { KingdomInfo } from './hud/online'
+import { lastSeen } from './hud/online'
 import { Icon } from './icons'
 
 // The lobby chat: kept for the season, every line under the kingdom's name in its colour and its player's name. A
@@ -90,6 +91,9 @@ export function Chat({
                   <b style={{ color: `color-mix(in srgb, ${swatch(k.color)} 45%, #f3e6c8)` }}>{k.name}</b>
                   <small>{k.id === mine ? 'sen' : (k.username ?? '—')}</small>
                 </span>
+                {k.id !== mine && (
+                  <span className={lastSeen(k.seenAt, Date.now()) === 'çevrimiçi' ? 'presence on' : 'presence'}>{lastSeen(k.seenAt, Date.now())}</span>
+                )}
               </button>
             </li>
           ))}

@@ -45,7 +45,11 @@ export interface Journal {
   history: Stock[]
   // The envoy's notices already written down.
   notices?: number[]
+  // The newest important entry the player has looked at under "Önemli" (entries after it count as unread there).
+  importantSeen?: number
 }
+
+export const unreadImportant = (j: Journal) => j.entries.filter((e) => isImportant(e) && e.id > (j.importantSeen ?? 0)).length
 
 const fresh = (): Journal => ({
   day: 1,
@@ -189,6 +193,10 @@ export function useJournal(key: string, seasonStart: number) {
         if (ref.current.unread > 0) update((j) => ({ ...j, unread: 0 }))
       },
       reset: () => update(() => fresh()),
+      markImportantRead: () => {
+        const newest = ref.current.entries.find(isImportant)?.id ?? 0
+        if (newest > (ref.current.importantSeen ?? 0)) update((j) => ({ ...j, importantSeen: newest }))
+      },
       // News the envoy brought (from the lobby's notices), each written once.
       notice: (id: number, at: number, entry: Omit<Entry, 'id' | 'at' | 'day' | 'tone'>) => {
         if (ref.current.notices?.includes(id)) return

@@ -34,7 +34,8 @@ export type Order =
 // Where a kingdom's soldiers gather: just outside the palace's front corner.
 export function doorOf(state: Kingdom): Point | null {
   const palace = state?.buildings?.find((b: { kind: string }) => b.kind === 'palace')
-  return palace ? { x: palace.x + palace.size / 2, y: palace.y + palace.size + 1 } : null
+  // Just out in front of the palace gate (its front corner), clear of the walls.
+  return palace ? { x: palace.x + palace.size + 0.8, y: palace.y + palace.size + 0.8 } : null
 }
 
 const inside = (rect: { x: number; y: number; size: number }, p: Point) => p.x >= rect.x && p.y >= rect.y && p.x < rect.x + rect.size && p.y < rect.y + rect.size
@@ -68,9 +69,11 @@ export const standing = (p: Point, at: number, morale: number, familiarity: numb
 })
 
 // Sets the army off from where it is at `at` to `dest`.
-export function march(world: LobbyWorld, army: ArmyRow, owner: Kingdom, at: number, dest: Point, goal: ArmyRow['goal']) {
+// Armies walk around buildings (`blocked`, from every kingdom of the lobby) and stop beside one rather than on it.
+export function march(world: LobbyWorld, army: ArmyRow, owner: Kingdom, at: number, dest: Point, goal: ArmyRow['goal'], blocked?: (x: number, y: number) => boolean) {
   const now = armyNow(army, world, owner, at)
-  const route = game.findRoute(world.world, now.here, dest) as Point[] | null
+  const end = game.standingSpot(world.world, dest, blocked) as Point
+  const route = game.findRoute(world.world, now.here, end, blocked) as Point[] | null
   if (!route) return null
   return {
     path: route,
@@ -103,8 +106,11 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
     const enemy = kingdoms.find(
       (k) => k.id !== army.kingdom_id && k.state && inTerritory(k.state, target, at) && game.atWar(pacts, army.kingdom_id, k.id),
     )
-    const dest = enemy ? doorOf(enemy.state) ?? target : target
-    const update = march(world, army, owner, at, dest, enemy ? { kind: 'siege', kingdom: enemy.id } : { kind: 'move' })
+    // Sent onto a palace (its own, or one not at war), the army stands at its gate.
+    const onPalace = kingdoms.find((k) => k.state?.buildings?.some((b: { kind: string; x: number; y: number; size: number }) => b.kind === 'palace' && inside(b, target)))
+    const dest = enemy ? doorOf(enemy.state) ?? target : onPalace ? doorOf(onPalace.state) ?? target : target
+    const blocked = game.buildingBlocker(kingdoms.map((k) => k.state ?? {}))
+    const update = march(world, army, owner, at, dest, enemy ? { kind: 'siege', kingdom: enemy.id } : { kind: 'move' }, blocked)
     if (!update) return 'route'
     await admin.from('armies').update(update).eq('id', army.id)
     return null
@@ -112,7 +118,7 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
   if (order.kind === 'home') {
     const door = doorOf(owner)
     if (!door) return 'route'
-    const update = march(world, army, owner, at, door, { kind: 'home' })
+    const update = march(world, army, owner, at, door, { kind: 'home' }, game.buildingBlocker(kingdoms.map((k) => k.state ?? {})))
     if (!update) return 'route'
     await admin.from('armies').update(update).eq('id', army.id)
     return null

@@ -9,6 +9,7 @@ import {
   groundToScreen,
   heightAt,
   screenToGround,
+  tileToScreen,
   screenToTile,
   tileRule,
 } from '@game/shared'
@@ -290,8 +291,12 @@ export async function createWorld(
       text.alpha = Math.min(1, (FLOAT_SECONDS - age) * 2)
       text.y = (text as Text & { startY: number }).startY - (age * 28) / scale
     }
-    caravans.layer.visible = scale >= CARAVAN_MIN_ZOOM
-    if (!caravans.layer.visible) return
+    // Zoomed far out, walkers, caravans and animals are left out but the buildings (which share their layer, to hide
+    // whoever walks behind them) stay; zoomed back in, each walker's own update shows it again.
+    if (scale < CARAVAN_MIN_ZOOM) {
+      for (const child of caravans.layer.children) child.visible = child.label === 'occluder'
+      return
+    }
     const margin = 40
     const padded = {
       left: view.left - margin,
@@ -393,7 +398,28 @@ export async function createWorld(
     chunks.set(key, { sprite, bitmap, lod, bytes, version })
   }
 
+  // The middle of the screen stays over the map (a little way into the mountains that ring it, no further), so the
+  // camera cannot wander off into the dark.
+  const EDGE_TILES = 24
+  function keepInside() {
+    const { width, height } = app.screen
+    const wx = (width / 2 - camera.x) / camera.scale.x
+    const wy = (height / 2 - camera.y) / camera.scale.y
+    // The ground point under the middle of the screen, on flat ground.
+    const a = wx / (TILE_WIDTH / 2)
+    const b = wy / (TILE_HEIGHT / 2)
+    const tx = (a + b) / 2
+    const ty = (b - a) / 2
+    const cx = Math.min(world.size - EDGE_TILES, Math.max(EDGE_TILES, tx))
+    const cy = Math.min(world.size - EDGE_TILES, Math.max(EDGE_TILES, ty))
+    if (cx === tx && cy === ty) return
+    const s = tileToScreen({ x: cx, y: cy })
+    camera.x = Math.round(width / 2 - s.x * camera.scale.x)
+    camera.y = Math.round(height / 2 - s.y * camera.scale.y)
+  }
+
   function refresh() {
+    keepInside()
     const { width, height } = app.screen
     // Raised ground from below the screen's bottom edge can reach into view.
     const reach = height + CHUNK_PAD * camera.scale.y

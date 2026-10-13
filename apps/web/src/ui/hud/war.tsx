@@ -48,16 +48,17 @@ export function ArmyTab(data: HudData) {
   const mine = online.armies.filter((a) => a.kingdom_id === online.me).sort((a, b) => a.id - b.id)
   return (
     <>
-      <Training data={data} has={!!barracks} />
-      <Garrison data={data} armies={mine.length} />
+      {/* The armies first: most orders are given here. */}
       <Section title="Ordularım" icon="swords" aside={`${mine.length} / ${balance.military.maxArmies}`}>
         {mine.length === 0 && <p className="hint">Sahada ordun yok. Garnizondan bir ordu çıkar.</p>}
-        <ul className="places armies">
+        <ul className="armies">
           {mine.map((army, i) => (
             <ArmyCard key={army.id} index={i + 1} army={army} others={mine.filter((a) => a.id !== army.id)} data={data} rest={rest} />
           ))}
         </ul>
       </Section>
+      <Garrison data={data} armies={mine.length} />
+      <Training data={data} has={!!barracks} />
       <Battles online={online} now={now} />
     </>
   )
@@ -227,27 +228,33 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
   return (
     <li className={selected ? 'army-card selected' : 'army-card'}>
       <div className="army-body">
-        <b>
-          {index}. Ordu · {soldiers} savaşçı
-        </b>
-        <small>{armyStatus(army, now, rest, (id) => online.kingdoms.find((k) => k.id === id)?.shieldUntil ?? 0)}</small>
-        <UnitRow units={army.units ?? { spear: soldiers }} />
-        <div className="sign">
-          <span>Moral</span>
-          <Meter value={morale / 100} tone={morale >= 60 ? 'up' : morale >= 30 ? 'gold' : 'down'} label="Moral" segments={10} />
-          <small>%{Math.round(morale)}</small>
+        <div className="army-head">
+          <b>
+            {index}. Ordu · {soldiers} savaşçı
+          </b>
+          <small>{armyStatus(army, now, rest, (id) => online.kingdoms.find((k) => k.id === id)?.shieldUntil ?? 0)}</small>
         </div>
-        <div className="sign">
-          <span>Saha bilgisi</span>
-          <Meter value={familiarity / 100} tone="water" label="Saha bilgisi" segments={10} />
-          <small>+{familiarityBonus(familiarity).toFixed(1).replace('.', ',')} zar</small>
+        <UnitRow units={army.units ?? { spear: soldiers }} />
+        <div className="army-stats">
+          <div>
+            <span>
+              Moral <b>%{Math.round(morale)}</b>
+            </span>
+            <Meter value={morale / 100} tone={morale >= 60 ? 'up' : morale >= 30 ? 'gold' : 'down'} label="Moral" segments={10} />
+          </div>
+          <div>
+            <span>
+              Saha bilgisi <b>+{familiarityBonus(familiarity).toFixed(1).replace('.', ',')} zar</b>
+            </span>
+            <Meter value={familiarity / 100} tone="water" label="Saha bilgisi" segments={10} />
+          </div>
         </div>
         {pending.map((o) => (
           <small key={o.id} className="order-note">
             <Icon name="scroll" size={16} /> Elçi yolda: emir {clock(Date.parse(o.effective_at) - now)} sonra ulaşacak
           </small>
         ))}
-        <div className="row">
+        <div className="army-actions">
           <button className="btn small" onClick={() => (online.setArmy(army.id), onShow(here))}>
             <Icon name="pin" size={16} /> Göster
           </button>

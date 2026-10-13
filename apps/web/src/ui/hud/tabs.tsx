@@ -36,14 +36,14 @@ import {
   upgradeSpec,
 } from '@game/shared'
 import type { BuildingKind, Good, Kingdom, Market, Plot, Point, Resource, TaxLevel, World } from '@game/shared'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { STRUCTURE_SPRITES, palaceIn } from '../../game/buildingSprites'
 import { Icon } from '../icons'
 import { BUILDING_NAMES, BUILDING_NOTES, RESOURCE_ICONS, RESOURCE_NAMES, WEAPON_ICONS, WEAPON_NAMES } from '../names'
 import { CostList, GoodChoice, Missing } from '../panels'
 import type { Journal } from './journal'
 import type { Online } from './online'
-import { REPORT_ROUNDS, isImportant } from './journal'
+import { REPORT_ROUNDS, isImportant, unreadImportant } from './journal'
 import { FortuneNote, Sickness } from './institutions'
 import { History, Meter, Placeholder, Section, SpriteView, Stat, fmt, signed, times } from './primitives'
 
@@ -69,6 +69,8 @@ export interface HudData {
   // Back to the main menu.
   onExit(): void
   onShow(tile: Point): void
+  // The journal's important entries were looked at.
+  onImportantRead?(): void
   // The lobby: other kingdoms, diplomacy, spies, armies (absent before the lobby has loaded).
   online?: Online
 }
@@ -695,10 +697,15 @@ const ago = (ms: number) => {
   return s < 60 ? `${s} sn önce` : s < 3600 ? `${Math.floor(s / 60)} dk önce` : `${Math.floor(s / 3600)} sa önce`
 }
 
-export function JournalTab({ journal, now }: HudData) {
+export function JournalTab({ journal, now, onImportantRead }: HudData) {
   // Everything, or only the bad news that touched the kingdom.
   const [only, setOnly] = useState(false)
   const important = journal.entries.filter(isImportant)
+  const unread = unreadImportant(journal)
+  // Looking at the important entries reads them, new ones too while the tab stays open.
+  useEffect(() => {
+    if (only && unread > 0) onImportantRead?.()
+  }, [only, unread, onImportantRead])
   const shown = only ? important : journal.entries
   const days = new Map<number, typeof journal.entries>()
   for (const e of shown) days.set(e.day, [...(days.get(e.day) ?? []), e])
@@ -709,7 +716,7 @@ export function JournalTab({ journal, now }: HudData) {
           <Icon name="scroll" size={16} /> Tümü
         </button>
         <button className="btn small" role="tab" aria-selected={only} aria-pressed={only} onClick={() => setOnly(true)}>
-          <Icon name="warn" size={16} /> Önemli {important.length > 0 && <span className="count">{important.length}</span>}
+          <Icon name="warn" size={16} /> Önemli {unread > 0 && <span className="count">{unread}</span>}
         </button>
       </div>
       {shown.length === 0 ? (

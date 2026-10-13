@@ -42,12 +42,51 @@ const CELL = 4
 
 type Ground = Pick<World, 'size' | 'terrain' | 'feature'>
 
+// Tiles taken by buildings, which armies walk around (walls, gates and fields excepted: armies cross those).
+export type Blocked = (x: number, y: number) => boolean
+export function buildingBlocker(kingdoms: { buildings?: { kind: string; x: number; y: number; size: number }[] }[]): Blocked {
+  const taken = new Set<number>()
+  for (const k of kingdoms) {
+    for (const b of k.buildings ?? []) {
+      if (b.kind === 'wall' || b.kind === 'gate' || b.kind === 'farm') continue
+      for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) taken.add(y * 65536 + x)
+    }
+  }
+  return (x, y) => taken.has(y * 65536 + x)
+}
+
+// The nearest tile to `p` an army can stand on (not water, mountain or a building), searching outward a few tiles.
+export function standingSpot(world: Ground, p: Point, blocked?: Blocked): Point {
+  const ok = (x: number, y: number) => passable(world, x, y) && !blocked?.(x, y)
+  const px = Math.floor(p.x)
+  const py = Math.floor(p.y)
+  if (ok(px, py)) return p
+  for (let r = 1; r <= 8; r++) {
+    let best: Point | null = null
+    let bestD = Infinity
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || !ok(px + dx, py + dy)) continue
+        const d = Math.hypot(dx, dy)
+        if (d < bestD) {
+          bestD = d
+          best = { x: px + dx + 0.5, y: py + dy + 0.5 }
+        }
+      }
+    }
+    if (best) return best
+  }
+  return p
+}
+
 // Whether a straight walk from `a` to `b` stays on passable ground (sampled every quarter tile).
-function clearLine(world: Ground, a: Point, b: Point) {
+function clearLine(world: Ground, a: Point, b: Point, blocked?: Blocked) {
   const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 4))
   for (let i = 0; i <= steps; i++) {
     const t = i / steps
-    if (!passable(world, Math.floor(a.x + (b.x - a.x) * t), Math.floor(a.y + (b.y - a.y) * t))) return false
+    const x = Math.floor(a.x + (b.x - a.x) * t)
+    const y = Math.floor(a.y + (b.y - a.y) * t)
+    if (!passable(world, x, y) || blocked?.(x, y)) return false
   }
   return true
 }
@@ -83,14 +122,27 @@ function waypointsOf(world: Ground) {
 }
 
 // A route over land from `from` to `to` (tile points), searched on a grid of 4×4-tile cells; null if none.
-export function findRoute(world: Ground, from: Point, to: Point): Point[] | null {
+export function findRoute(world: Ground, from: Point, to: Point, blocked?: Blocked): Point[] | null {
   const n = world.size / CELL
-  const ways = waypointsOf(world)
+  const base = waypointsOf(world)
+  // A cell whose waypoint is under a building passes through another tile of it, if it has a free one.
+  const moved = new Map<number, number>()
+  const wayOf = (c: number) => {
+    const w = base[c]
+    if (w < 0 || !blocked || !blocked(w % world.size, Math.floor(w / world.size))) return w
+    if (moved.has(c)) return moved.get(c)!
+    let found = -1
+    const x0 = (c % n) * CELL
+    const y0 = Math.floor(c / n) * CELL
+    for (let y = y0; y < y0 + CELL && found < 0; y++) for (let x = x0; x < x0 + CELL; x++) if (passable(world, x, y) && !blocked(x, y)) { found = y * world.size + x; break }
+    moved.set(c, found)
+    return found
+  }
   const cellOf = (p: Point) => Math.floor(p.y / CELL) * n + Math.floor(p.x / CELL)
-  const open = (c: number) => ways[c] >= 0
-  const pointOf = (c: number): Point => ({ x: (ways[c] % world.size) + 0.5, y: Math.floor(ways[c] / world.size) + 0.5 })
-  // Two cells are joined only when the walk between their waypoints keeps out of the water.
-  const joined = (a: number, b: number) => clearLine(world, pointOf(a), pointOf(b))
+  const open = (c: number) => wayOf(c) >= 0
+  const pointOf = (c: number): Point => ({ x: (wayOf(c) % world.size) + 0.5, y: Math.floor(wayOf(c) / world.size) + 0.5 })
+  // Two cells are joined only when the walk between their waypoints keeps out of the water and off buildings.
+  const joined = (a: number, b: number) => clearLine(world, pointOf(a), pointOf(b), blocked)
   const start = cellOf(from)
   const goal = cellOf(to)
   const cost = new Float64Array(n * n).fill(Infinity)
@@ -168,7 +220,7 @@ export function findRoute(world: Ground, from: Point, to: Point): Point[] | null
   // Waypoints are skipped where the straight walk past them stays on land, so the route bends only where it must.
   const route = [points[0]]
   for (let i = 1; i < points.length - 1; i++) {
-    if (!clearLine(world, route[route.length - 1], points[i + 1])) route.push(points[i])
+    if (!clearLine(world, route[route.length - 1], points[i + 1], blocked)) route.push(points[i])
   }
   route.push(to)
   return route
