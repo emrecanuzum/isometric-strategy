@@ -24,7 +24,7 @@ export type Resource = 'gold' | Good
 export type Stock = Record<Resource, number>
 export type Cost = Partial<Stock>
 
-export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple', 'warehouse', 'treasury'] as const
+export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple', 'warehouse', 'treasury', 'fisherHut'] as const
 export type BuildingKind = 'palace' | 'tradePost' | (typeof BUILDABLE)[number]
 
 // Weapons are worked from raw goods in the forge and kept in the armory, apart from the tradeable stores.
@@ -61,6 +61,10 @@ export interface BuildingSpec extends LevelSpec {
   outsideQueue?: boolean
   // Only one may stand.
   unique?: boolean
+  // Goes on a shore tile (beside the water), where nothing else but a dock may stand.
+  shoreOnly?: boolean
+  // Gold it brings in every round on its own (the fisher's finds in the river).
+  goldPerRound?: number
   // How many may stand at each palace level (houses), so growing the town means raising them too.
   maxByPalaceLevel?: number[]
   produces?: Good
@@ -203,9 +207,18 @@ export interface Kingdom {
   shieldUntil?: number
   // An enemy army camped at the border frightens the people until then (CLAUDE.md §9.7).
   fearUntil?: number
+  // The mysterious fisher's last cast and what the fishing brought (newest first; kept by the server).
+  lastFishAt?: number
+  fisherLog?: FisherEntry[]
   // Battles and sieges won (kept by the server, for the lobby's ranking).
   record?: { battlesWon?: number; siegesWon?: number }
 }
+
+// What a cast brought: a bag of goods, a bottle with word of another kingdom, or nothing.
+export type FisherEntry =
+  | { at: number; kind: 'bag'; goods: Partial<Stock> }
+  | { at: number; kind: 'bottle'; about: string; color: string | null; metric: 'gold' | 'food' | 'materials' | 'arms' | 'soldiers'; atLeast: number }
+  | { at: number; kind: 'miss' }
 
 export type EconomyEvent =
   | { kind: 'trade'; good: Good; sold: number; gold: number; walledIn?: boolean; damaged?: boolean }
@@ -282,7 +295,8 @@ export function canPlace(world: World, kingdom: Pick<Kingdom, 'site' | 'building
   const t = territoryRect(kingdom.site, stage)
   if (spot.x < t.x || spot.y < t.y || spot.x + spot.size > t.x + t.size || spot.y + spot.size > t.y + t.size) return false
   for (let y = spot.y; y < spot.y + spot.size; y++) {
-    for (let x = spot.x; x < spot.x + spot.size; x++) if (tileRule(world, x, y) !== TileRule.Free) return false
+    // Shore buildings stand on shore tiles, everything else on free land.
+    for (let x = spot.x; x < spot.x + spot.size; x++) if (tileRule(world, x, y) !== (kind && BUILDINGS[kind].shoreOnly ? TileRule.DockOnly : TileRule.Free)) return false
   }
   return !kingdom.buildings.some((b) => overlaps(b, spot, kind && wallish(kind) !== wallish(b.kind) ? Math.max(1, gap) : gap))
 }
@@ -505,6 +519,11 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
   }
   const l = ledger(kingdom, at)
   delta.food = (delta.food ?? 0) - villagers * balance.economy.foodPerVillager - l.soldiersFood
+  // Gold some buildings bring in on their own (the fisher's river finds).
+  for (const b of kingdom.buildings) {
+    const per = BUILDINGS[b.kind].goldPerRound
+    if (per && done(b, at) && !cutOff(kingdom.buildings, kingdom.site, at).has(b.id)) delta.gold = (delta.gold ?? 0) + per * idleFactor(kingdom, at)
+  }
   delta.gold = (delta.gold ?? 0) + l.tax - l.soldiersGold + l.tributes.reduce((sum, t) => sum + t.gold, 0)
   return { delta, weapons }
 }

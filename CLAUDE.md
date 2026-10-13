@@ -412,7 +412,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   malzemesi) depoda tutulabilecek miktar saray seviyesiyle artar (400 /
   800 / 1300 / 1900 / 2600) ve her **Ambar** ekler (seviye 1/2/3: +400 /
   +800 / +1400; saray seviyesine göre 1–3 ambar). Sığmayan üretim boşa
-  gider; günlük raporunda "Ambar dolu" yazar.
+  gider; günlükte bir kez "Ambar dolu" yazar (depo yer açılana kadar
+  tekrarlanmaz, yeniden dolarsa yine yazar).
 - **Hazine sınırı:** Altının da sınırı vardır: saray seviyesiyle 1000 /
   2000 / 3500 / 5500 / 7000, ve 4. seviye sarayda açılan **Hazine** binası
   ekler (seviye 1/2/3: +4000 / +8000 / +14000; 4. seviyede bir, 5.de iki
@@ -443,6 +444,20 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   en açık suya bakan kenarından nehre/göle doğru uzanır.
 - **Eğim:** Yokuşa kurulan yapı, en yüksek köşesi hizasında düz bir taş
   kaide üzerinde durur (tarlada toprak set); kaide aşağıdaki zemine iner.
+- **Esrarengiz balıkçı kulübesi** (3. seviye saray, bir tane, yalnızca
+  hudut içindeki bir **kıyı** karesine kurulur): kendi başına çok az yemek
+  ve nehre atılmış altınlardan çok az (tur başına 0,4) getirir. Tıklanınca
+  "Oltayı at" ile bir mini oyun açılır: dikey suda düzensiz kaçan bir balık;
+  basılı tutunca yükselen, bırakınca düşen yeşil alanı balığın üstünde tutmak
+  gerekir; balık alandayken çubuk dolar, dışındayken boşalır; 25 saniyede
+  dolarsa balık tutulur. Tutunca ya bir **kese** (iki ya da üç maldan
+  25–70'er birim, bazen altın) ya da bir **şişe** çıkar: şişede başka bir
+  krallık hakkında yavan bir not vardır ("… krallığının 1000'den fazla
+  altını var gibi görünüyor"; gerçeğin yaklaşık %70'inin yuvarlanmış hâli).
+  Sonuçlar kulübenin **balıkçı günlüğüne** yazılır. Olta 150 saniyede bir
+  atılabilir; bekleme süresini ve ödülü sunucu belirler (oyunun kendisi
+  oyuncunun ekranında oynanır). Değerler `economy.json` → `fishing`,
+  mantık `packages/shared/src/fishing.ts`.
 - **Patikalar:** Her yapının kapısından saraya, yapıların etrafından
   dolaşan toprak patikalar zemine işlenir.
 - **İnşa menüsü (devam):**

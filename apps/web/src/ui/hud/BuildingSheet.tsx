@@ -6,6 +6,7 @@ import { Icon } from '../icons'
 import type { IconName } from '../icons'
 import { BUILDING_NAMES, BUILDING_NOTES, PRODUCT_NAMES, RESEARCH_NAMES, RESOURCE_ICONS, RESOURCE_NAMES, WEAPON_ICONS, WEAPON_NAMES } from '../names'
 import { CostList, Missing } from '../panels'
+import { FisherPanel } from './Fishing'
 import { HospitalPanel, TemplePanel, UniversityPanel } from './institutions'
 import { Meter, Section, SpriteView } from './primitives'
 import { KingdomTab, TradeTab } from './tabs'
@@ -81,6 +82,7 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
             {!building && b.kind === 'university' && <UniversityPanel data={data} />}
             {!building && b.kind === 'hospital' && <HospitalPanel building={b} data={data} />}
             {!building && b.kind === 'temple' && <TemplePanel data={data} />}
+            {!building && b.kind === 'fisherHut' && <FisherPanel data={data} />}
             {BUILDINGS[b.kind].products && <Products building={b} data={data} onProduct={commands.onProduct} />}
             {workerSlots(b) > 0 && <Workers building={b} data={data} onWorkers={commands.onWorkers} />}
             {top > 1 && <Levels building={b} data={data} onUpgrade={commands.onUpgrade} />}

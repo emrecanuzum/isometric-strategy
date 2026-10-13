@@ -986,6 +986,30 @@ function treasury(level = 1): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
+// The mysterious fisher's hut: a crooked shack on stilts with a mossy thatch, a net drying on poles, and an odd
+// violet lantern burning by the door.
+const MOSS = ramp(0x2a3a1c, 0x3a4e24, 0x51662e, 0x6a7e3a, 0x86984a, 0xa4b060)
+const ARCANE = ramp(0x3a1a5a, 0x6a2aa0, 0x9a4ae0, 0xd090ff)
+function fisherHut(): Sprite {
+  const { canvas, cx, base } = footprint(1, 60)
+  // Stilts.
+  for (const dx of [-14, -4, 6, 14]) for (let z = 0; z < 8; z++) canvas.set(cx + dx, base - 4 - z + Math.round(Math.abs(dx) * 0.1), TIMBER[0])
+  const top = hall(canvas, cx, base - 10, { w: 20, wall: 14, roof: 16, walls: LOGS, roofs: MOSS, bay: 0, door: true })
+  // A crooked chimney-pole with a lantern of violet light.
+  const lx = cx - 22
+  const ly = base - 20
+  for (let z = 0; z < 16; z++) canvas.set(lx + (z > 10 ? 1 : 0), ly - z, TIMBER[1])
+  for (let y = 0; y < 5; y++) for (let x = -2; x <= 2; x++) canvas.set(lx + x + 1, ly - 15 + y, Math.abs(x) === 2 || y === 0 ? TIMBER[0] : ARCANE[y < 2 ? 3 : 2])
+  // A net drying between two poles on the right.
+  for (const px of [12, 24]) for (let z = 0; z < 14; z++) canvas.set(cx + px, base - 6 - z, TIMBER[1])
+  for (let y = 0; y < 9; y++) for (let x = 13; x < 24; x++) if ((x + y) % 3 === 0 || (x - y) % 3 === 0) canvas.set(cx + x, base - 18 + y + Math.round(Math.sin(x * 0.6)), STONE[3])
+  // A fish hanging under the eaves.
+  canvas.set(top.x + 6, top.y + 14, BLADE[2])
+  canvas.set(top.x + 6, top.y + 15, BLADE[1])
+  canvas.set(top.x + 7, top.y + 15, BLADE[2])
+  return canvas.sprite(cx, base, 0)
+}
+
 // A section of wall filling one tile: masonry on the two front faces, a walkway on top and battlements; a broken one
 // is a heap of rubble with a stump of wall.
 // `door`: a gate, with an arched wooden door through both front faces under a banner.
@@ -1098,6 +1122,7 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   temple: [temple()],
   warehouse: [warehouse()],
   treasury: [treasury()],
+  fisherHut: [fisherHut()],
   brokenWall: [wall(true)],
   scaffold: [scaffold(1), scaffold(2), scaffold(3)],
 }

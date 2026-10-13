@@ -3535,3 +3535,73 @@ kbd {
 .spy-topics small {
   color: var(--muted);
 }
+
+/* The fisher's hut: the casting game and the fisher's log. */
+.fishing-game {
+  display: grid;
+  justify-items: center;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 4) 0;
+  touch-action: none;
+  user-select: none;
+  cursor: pointer;
+}
+
+.fishing-game canvas {
+  width: 144px;
+  height: 440px;
+  max-height: 55vh;
+  image-rendering: pixelated;
+  box-shadow: var(--outline);
+}
+
+.fishing-result {
+  display: grid;
+  justify-items: center;
+  gap: calc(var(--px) * 5);
+  padding: calc(var(--px) * 6) 0;
+  text-align: center;
+}
+
+.fisher-log {
+  display: grid;
+  gap: calc(var(--px) * 2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fisher-log li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 3);
+  background: var(--parch);
+  color: var(--parch-ink);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.fisher-log li.bottle {
+  background: #d9d4ea;
+}
+
+.fisher-log li.miss {
+  opacity: 0.6;
+}
+
+.fisher-log li > i {
+  width: calc(var(--px) * 5);
+  height: calc(var(--px) * 5);
+  margin-top: calc(var(--px) * 1);
+  box-shadow: var(--outline);
+}
+
+.fisher-log li:not(.bottle) > span {
+  grid-column: 1 / 3;
+}
+
+.fisher-log small {
+  color: #6b5034;
+}

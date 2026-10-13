@@ -47,6 +47,8 @@ export interface Journal {
   notices?: number[]
   // The newest important entry the player has looked at under "Önemli" (entries after it count as unread there).
   importantSeen?: number
+  // The stores that have been overflowing since it was last reported: told once, again only after they have had room.
+  overflowing?: string[]
 }
 
 export const unreadImportant = (j: Journal) => j.entries.filter((e) => isImportant(e) && e.id > (j.importantSeen ?? 0)).length
@@ -163,12 +165,16 @@ function closeDay(j: Journal, kingdom: Kingdom, at: number, seasonStart: number)
   }
   // Full stores: what was lost this day.
   const wasted = Object.entries(j.tally.wasted ?? {}).filter(([, v]) => (v ?? 0) >= 1)
-  if (wasted.length > 0) {
+  // Only stores that were not already overflowing are news; a store that had room all day is forgotten.
+  const already = new Set(j.overflowing ?? [])
+  const news = wasted.filter(([g]) => !already.has(g))
+  j = { ...j, overflowing: wasted.map(([g]) => g) }
+  if (news.length > 0) {
     j = write(j, seasonStart, at, {
       tone: 'bad',
       icon: 'chest',
       title: 'Ambar dolu',
-      text: `Depoya sığmayan ${wasted.map(([g, v]) => `${fmt(v ?? 0)} ${RESOURCE_NAMES[g as Resource].toLowerCase()}`).join(', ')} boşa gitti. Ambar ya da hazine kur, yükselt; fazlasını sat ya da harca.`,
+      text: `Depoya sığmayan ${news.map(([g, v]) => `${fmt(v ?? 0)} ${RESOURCE_NAMES[g as Resource].toLowerCase()}`).join(', ')} boşa gitti. Ambar ya da hazine kur, yükselt; fazlasını sat ya da harca.`,
     })
   }
   return { ...j, day: j.day + 1, tally: { rounds: 0, produced: {}, tradeGold: 0, trips: 0, emptyTrip: false } }
@@ -179,7 +185,13 @@ export function useJournal(key: string, seasonStart: number) {
   const [journal, setJournal] = useState<Journal>(() => {
     try {
       const raw = localStorage.getItem(key)
-      if (raw) return { ...fresh(), ...(JSON.parse(raw) as Journal) }
+      if (raw) {
+        const saved = { ...fresh(), ...(JSON.parse(raw) as Journal) }
+        // Journals written before full stores were told only once: keep the newest of those reports.
+        let kept = false
+        const entries = saved.entries.filter((e) => e.title !== 'Ambar dolu' || (!kept && (kept = true)))
+        return { ...saved, entries }
+      }
     } catch {
       // Unreadable or unavailable storage: start a new journal.
     }

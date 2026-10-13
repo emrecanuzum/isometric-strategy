@@ -560,29 +560,54 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
     case 'spy': {
       const target = other(cmd.target)
       if (!game.SPY_TOPICS.includes(cmd.topic)) refuse('rejected')
-      // One spy per kingdom and topic.
-      const { count: working } = await admin
-        .from('spy_missions')
-        .select('id', { count: 'exact', head: true })
-        .eq('owner_id', me.id)
-        .eq('target_id', target.id)
-        .eq('topic', cmd.topic)
-        .is('ended_at', null)
-      if (working) refuse('already')
       const counter = await counterAgainst(lobby, me.id, target.id, game.advance(target.state, now).kingdom, now)
       const caught = game.catchTime(crypto.getRandomValues(new Uint32Array(1))[0], counter, now)
-      await mutateKingdom(me.id, now, (k) =>
-        (k.spies ?? 0) >= 1 ? { ...k, spies: (k.spies ?? 0) - 1, spiesAway: (k.spiesAway ?? 0) + 1 } : refuse('spies'),
-      )
-      await admin.from('spy_missions').insert({
-        lobby_id: lobby,
-        owner_id: me.id,
-        target_id: target.id,
-        topic: cmd.topic,
-        started_at: iso(now),
-        caught_at: caught === null ? null : iso(caught),
-      })
+      // One spy per kingdom and topic, held by a unique index: the mission is written first, so of two requests at
+      // once only one gets through, and only then is a spy taken from home (given back if there is none).
+      const { data: mission, error } = await admin
+        .from('spy_missions')
+        .insert({
+          lobby_id: lobby,
+          owner_id: me.id,
+          target_id: target.id,
+          topic: cmd.topic,
+          started_at: iso(now),
+          caught_at: caught === null ? null : iso(caught),
+        })
+        .select('id')
+        .single()
+      if (error?.code === '23505') refuse('already')
+      if (error || !mission) throw error ?? new Error('spy mission')
+      try {
+        await mutateKingdom(me.id, now, (k) =>
+          (k.spies ?? 0) >= 1 ? { ...k, spies: (k.spies ?? 0) - 1, spiesAway: (k.spiesAway ?? 0) + 1 } : refuse('spies'),
+        )
+      } catch (e) {
+        await admin.from('spy_missions').delete().eq('id', mission.id)
+        throw e
+      }
       return null
+    }
+    case 'fish': {
+      // A cast at the fisher's hut. The little game is played on the player's screen; the server holds the pause
+      // between casts and draws what a catch brings up (a bag of goods, or word of another kingdom in a bottle).
+      const settled = game.advance(me.state, now).kingdom
+      const why = game.fishError(settled, now)
+      if (why) refuse(why)
+      const rivals = rows
+        .filter((r) => r.id !== me.id && r.state)
+        .map((r) => ({ name: r.name ?? '?', color: r.color, kingdom: game.advance(r.state, now).kingdom }))
+      const bytes = crypto.getRandomValues(new Uint32Array(32))
+      let i = 0
+      const random = () => bytes[i++ % bytes.length] / 4294967296
+      const entry = cmd.caught === true ? game.castReward(random, rivals, now) : { at: now, kind: 'miss' }
+      await mutateKingdom(me.id, now, (k) => {
+        if (game.castReadyAt(k) > now) refuse('busy')
+        const stock = { ...k.stock }
+        if (entry.kind === 'bag') for (const [r, v] of Object.entries(entry.goods as Record<string, number>)) stock[r] += v
+        return { ...k, stock, lastFishAt: now, fisherLog: game.logCast(k, entry) }
+      })
+      return entry
     }
     case 'recall': {
       const { data: mission } = await admin.from('spy_missions').select('*').eq('id', cmd.mission).maybeSingle()

@@ -1,0 +1,54 @@
+import { balance } from './balance'
+import { GOODS, soldiersOf } from './economy'
+import type { FisherEntry, Kingdom, Stock } from './economy'
+
+// The mysterious fisher's hut (CLAUDE.md §6.4): besides a little food and the gold it finds in the river, a cast of
+// the line (a hard little game on the player's screen) may bring up a bag of goods or a bottle holding word of
+// another kingdom: vaguer than a spy's report, "it seems to have more than 1500 gold". The server draws the catch.
+
+const F = balance.economy.fishing
+
+export type FishError = 'building' | 'busy'
+
+export const castReadyAt = (k: Kingdom) => (k.lastFishAt ?? -Infinity) + F.cooldownSeconds * 1000
+
+export function fishError(k: Kingdom, at: number): FishError | null {
+  if (!k.buildings.some((b) => b.kind === 'fisherHut' && b.doneAt <= at)) return 'building'
+  if (castReadyAt(k) > at) return 'busy'
+  return null
+}
+
+// A round number not above `v`: 1, 1.5, 2, 2.5, … times a power of ten.
+function roundDown(v: number) {
+  if (v < 10) return Math.max(0, Math.floor(v))
+  const mag = 10 ** Math.floor(Math.log10(v))
+  const step = mag / 2
+  return Math.floor(v / step) * step
+}
+
+export interface Rival {
+  name: string
+  color: string | null
+  kingdom: Kingdom
+}
+
+// What a successful cast brings up (`random` gives numbers in [0, 1)).
+export function castReward(random: () => number, rivals: Rival[], at: number): FisherEntry {
+  if (rivals.length === 0 || random() < F.bagChance) {
+    const goods: Partial<Stock> = {}
+    // Two of the goods, sometimes some gold.
+    const picks = [...GOODS].sort(() => random() - 0.5).slice(0, 2)
+    for (const g of picks) goods[g] = Math.round(F.bag.min + random() * (F.bag.max - F.bag.min))
+    if (random() < F.bag.goldChance) goods.gold = Math.round(F.bag.min + random() * (F.bag.max - F.bag.min))
+    return { at, kind: 'bag', goods }
+  }
+  const rival = rivals[Math.floor(random() * rivals.length)]
+  const metrics = ['gold', 'food', 'materials', 'arms', 'soldiers'] as const
+  const metric = metrics[Math.floor(random() * metrics.length)]
+  const value = metric === 'soldiers' ? soldiersOf(rival.kingdom) : rival.kingdom.stock[metric]
+  // Somewhat under the truth, rounded: "more than …".
+  return { at, kind: 'bottle', about: rival.name, color: rival.color, metric, atLeast: roundDown(value * F.bottleShare) }
+}
+
+// The fisher's log with a new entry on top.
+export const logCast = (k: Kingdom, entry: FisherEntry) => [entry, ...(k.fisherLog ?? [])].slice(0, F.logSize)

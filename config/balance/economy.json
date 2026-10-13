@@ -562,6 +562,21 @@
           "gold": 14000
         }
       ]
+    },
+    "fisherHut": {
+      "size": 1,
+      "requiresPalace": 3,
+      "unique": true,
+      "shoreOnly": true,
+      "cost": {
+        "gold": 400,
+        "materials": 200
+      },
+      "buildSeconds": 40,
+      "workers": 1,
+      "produces": "food",
+      "amount": 1,
+      "goldPerRound": 0.4
     }
   },
   "maxBatch": 64,
@@ -592,5 +607,16 @@
       5500,
       7000
     ]
+  },
+  "fishing": {
+    "cooldownSeconds": 150,
+    "bagChance": 0.6,
+    "bag": {
+      "min": 25,
+      "max": 70,
+      "goldChance": 0.35
+    },
+    "logSize": 20,
+    "bottleShare": 0.7
   }
 }
