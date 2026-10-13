@@ -1,5 +1,8 @@
 import { Feature, MAX_HEIGHT, TILE_HEIGHT, TILE_WIDTH, Terrain, balance, hash, heightAt, valueNoise } from '@game/shared'
 import type { Point, World } from '@game/shared'
+import { structureParts } from './buildingSprites'
+import type { Structure } from './buildingSprites'
+import { innLook } from './innSprites'
 import { BAYER, SPRITES, ramp } from './sprites'
 import type { Sprite } from './sprites'
 
@@ -25,6 +28,46 @@ export interface PaintContext {
   // Per tile: distance to the nearest trade route center line, in tiles.
   road: Float32Array
   bridges: Bridge[]
+  // The player's buildings, and per tile whether one stands on or right next to it (no trees or rocks grow there, so
+  // none covers a wall).
+  structures: Structure[]
+  occupied: Uint8Array
+  // Per tile: distance to the nearest footpath between the player's buildings, in tiles.
+  trail: Float32Array
+}
+
+export type { Structure }
+
+// Footpaths are this many tiles wide either side of their center line.
+const TRAIL_HALF = 0.2
+const TRAIL_REACH = 2
+
+export function setStructures(context: PaintContext, structures: Structure[], trails: Point[][]) {
+  const { size } = context.world
+  context.structures = structures
+  context.occupied = new Uint8Array(size * size)
+  for (const s of structures) {
+    for (let y = Math.max(0, s.y - 1); y < Math.min(size, s.y + s.size + 1); y++) {
+      for (let x = Math.max(0, s.x - 1); x < Math.min(size, s.x + s.size + 1); x++) context.occupied[y * size + x] = 1
+    }
+  }
+  context.trail = new Float32Array(size * size).fill(TRAIL_REACH + 1)
+  for (const line of trails) {
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1]
+      const b = line[i]
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const lengthSq = dx * dx + dy * dy || 1
+      for (let y = Math.max(0, Math.floor(Math.min(a.y, b.y)) - TRAIL_REACH); y <= Math.min(size - 1, Math.floor(Math.max(a.y, b.y)) + TRAIL_REACH); y++) {
+        for (let x = Math.max(0, Math.floor(Math.min(a.x, b.x)) - TRAIL_REACH); x <= Math.min(size - 1, Math.floor(Math.max(a.x, b.x)) + TRAIL_REACH); x++) {
+          const t = Math.min(1, Math.max(0, ((x + 0.5 - a.x) * dx + (y + 0.5 - a.y) * dy) / lengthSq))
+          const d = Math.hypot(x + 0.5 - a.x - dx * t, y + 0.5 - a.y - dy * t)
+          if (d < context.trail[y * size + x]) context.trail[y * size + x] = d
+        }
+      }
+    }
+  }
 }
 
 // A straight wooden bridge carrying a route over water, from bank point `a` to bank point `b`.
@@ -39,6 +82,8 @@ export interface Bridge {
   // Ground height at each end, where the deck meets the bank.
   ha: number
   hb: number
+  // A humped stone arch bridge (off the trade routes) instead of a flat wooden one.
+  stone?: boolean
 }
 
 const GRASS = ramp(0x16382c, 0x1c4433, 0x24523a, 0x2f663d, 0x3d7c40, 0x4f9142, 0x66a546, 0x80b74e, 0x9cc85a, 0xb9d86e)
@@ -52,10 +97,14 @@ const POOL = ramp(0x22343f, 0x2a4450, 0x35565c)
 const BEACH = ramp(0xc7a970, 0xdcc388, 0xecd9a2, 0xf6e8bd)
 const ROAD = ramp(0x5e4630, 0x7c5f3f, 0x9b7c52, 0xb89866, 0xcdb07e)
 const WOOD = ramp(0x3a2619, 0x5a3d28, 0x7a5535, 0x9c7245, 0xb98d58)
+const MASONRY = ramp(0x3b3542, 0x575060, 0x766d78, 0x958b8c, 0xb3a89f, 0xcfc4b4)
 const EARTH = ramp(0x2a1f1c, 0x3d2c24, 0x54392b)
 const FLOWERS = [ramp(0xf6f3e4), ramp(0xf2cf4a), ramp(0xe2798f), ramp(0xb48be0)]
 
 const ROAD_HALF = 0.62
+// Footpaths off the ends of stone bridges: length in tiles, and how much narrower than a road they start.
+const PATH_LENGTH = 3.2
+const PATH_NARROW = 0.3
 // Bridge shape: deck lift above the banks (pixels), half width (tiles), deck thickness and railing height (pixels),
 // length of the ramp onto each bank and the spacing of the piers (tiles).
 const BRIDGE_LIFT = 12
@@ -64,6 +113,13 @@ const DECK_THICK = 3
 const RAIL_HEIGHT = 7
 const BRIDGE_RAMP = 1.2
 const PIER_SPACING = 1.5
+// Stone bridges: hump height (pixels), half width (tiles), parapet height (pixels), abutment length on each bank and
+// the span of one arch (tiles).
+const STONE_LIFT = 14
+const STONE_HALF = 0.5
+const PARAPET = 4
+const ABUTMENT = 0.9
+const ARCH_SPAN = 2.2
 const NO_GROUND = -32768
 // Light climbs this many pixels per tile diagonal; shadows are searched this many diagonals toward the light.
 const SHADOW_RISE = 30
@@ -120,8 +176,30 @@ export function preparePaint(world: World): PaintContext {
       }
     }
   }
+  for (const { a, b } of world.crossings) {
+    const ha = heightAt(world, a.x, a.y)
+    const hb = heightAt(world, b.x, b.y)
+    bridges.push({ from: 0, to: 0, ax: a.x, ay: a.y, bx: b.x, by: b.y, ha, hb, stone: true })
+    // A short footpath leads off each end, narrower than a trade route and fading out at its tip.
+    const length = Math.hypot(b.x - a.x, b.y - a.y) || 1
+    for (const [end, sx, sy] of [[a, (a.x - b.x) / length, (a.y - b.y) / length], [b, (b.x - a.x) / length, (b.y - a.y) / length]] as const) {
+      for (let y = Math.floor(end.y - PATH_LENGTH - 1); y <= end.y + PATH_LENGTH + 1; y++) {
+        for (let x = Math.floor(end.x - PATH_LENGTH - 1); x <= end.x + PATH_LENGTH + 1; x++) {
+          if (x < 0 || y < 0 || x >= size || y >= size) continue
+          // Bends a little, so the path does not run dead straight off the bridge.
+          const along = (x + 0.5 - end.x) * sx + (y + 0.5 - end.y) * sy
+          if (along < -0.5 || along > PATH_LENGTH) continue
+          const t = Math.max(0, along) / PATH_LENGTH
+          const bend = Math.sin(t * Math.PI) * 0.35 * (hash(Math.floor(end.x), Math.floor(end.y), world.seed + 77) - 0.5) * 2
+          const across = Math.abs((x + 0.5 - end.x) * -sy + (y + 0.5 - end.y) * sx - bend)
+          const d = across + PATH_NARROW + t ** 4 * ROAD_HALF
+          if (d < road[y * size + x]) road[y * size + x] = d
+        }
+      }
+    }
+  }
   for (let i = 0; i < road.length; i++) if (road[i] === Infinity) road[i] = reach + 1
-  return { world, lit, patch, road, bridges }
+  return { world, lit, patch, road, bridges, structures: [], occupied: new Uint8Array(size * size), trail: new Float32Array(size * size).fill(TRAIL_REACH + 1) }
 }
 
 // How a biome border looks around a point: finely dithered, in blotches and islands, or in frayed fibres. The
@@ -195,8 +273,10 @@ export function resampleRoute(line: Point[]): Point[] {
 // Height of a bridge's deck `t` of the way from its first end to its second.
 export function deckHeight(bridge: Bridge, t: number) {
   const length = Math.hypot(bridge.bx - bridge.ax, bridge.by - bridge.ay)
+  const level = bridge.ha + (bridge.hb - bridge.ha) * t
+  if (bridge.stone) return level + STONE_LIFT * Math.sin(Math.PI * t) ** 0.6
   const rise = smoothstep(0, 1, Math.min(t * length, (1 - t) * length) / BRIDGE_RAMP)
-  return bridge.ha + (bridge.hb - bridge.ha) * t + BRIDGE_LIFT * rise
+  return level + BRIDGE_LIFT * rise
 }
 
 // Each stretch of a resampled route over water becomes a straight bridge reaching a little onto both banks.
@@ -240,7 +320,7 @@ interface Placed {
 // elevation and moisture fields and drawn lifted by its height, back to front, so nearer ground covers
 // farther ground. Sprites are then composited against the depth of the ground they stand behind.
 export function paintChunk(context: PaintContext, cx: number, cy: number, k: number): ChunkImage {
-  const { world, lit, patch, road, bridges } = context
+  const { world, lit, patch, road, bridges, structures, occupied, trail } = context
   const { size, seed, elevation, moisture, height, levels } = world
   const S = balance.map.chunkSize
   const chunkCount = size / S
@@ -291,6 +371,7 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       const h = height[i00] * w00 + height[i00 + 1] * w01 + height[i10] * w10 + height[i10 + 1] * w11
       const e = elevation[i00] * w00 + elevation[i00 + 1] * w01 + elevation[i10] * w10 + elevation[i10 + 1] * w11
       const way = road[i00] * w00 + road[i00 + 1] * w01 + road[i10] * w10 + road[i10 + 1] * w11
+      const foot = trail[i00] * w00 + trail[i00 + 1] * w01 + trail[i10] * w10 + trail[i10 + 1] * w11
       const depthBelow = levels.lake - e
 
       const y = row + pad - Math.round(h * k)
@@ -329,6 +410,11 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
         tone = way > ROAD_HALF - 0.13 ? 0.6 : 2.6 + broad * 1.5 + (speck > 0.9 ? 1 : speck < 0.12 ? -1 : 0)
         tone += light * 6
         spread = 0.3
+      } else if (foot < TRAIL_HALF + dither * 0.12 + mid * 0.06) {
+        // Footpaths worn between the player's buildings: bare earth, its edge broken up by grass.
+        colors = ROAD
+        tone = (foot > TRAIL_HALF - 0.1 ? 1 : 2) + broad * 1.2 + (speck > 0.88 ? 1 : speck < 0.1 ? -1 : 0) + light * 6
+        spread = 0.35
       } else {
         const land = -depthBelow
         const m = moisture[i00] * w00 + moisture[i00 + 1] * w01 + moisture[i10] * w10 + moisture[i10 + 1] * w11
@@ -352,7 +438,10 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
         const marsh = smoothstep(levels.swamp - 0.03, levels.swamp, m) * lowland
         const parched = 1 - smoothstep(levels.desert - 0.03, levels.desert + 0.03, m)
         const wooded = smoothstep(levels.forest - 0.045, levels.forest + 0.03, m + wobble + fray * 0.01)
-        const shore = 0.0045 + mid * 0.002 + patch * 0.003 * blotch + dither * 0.0006
+        // The beach widens and narrows along a shore, and some stretches have none: grass runs to the water.
+        const sandy = smoothstep(0.3, 0.75, valueNoise(rx * 0.045, ry * 0.045, seed + 23))
+        const beach = 0.0008 + sandy * sandy * 0.011
+        const shore = beach + (mid * 0.002 + patch * 0.003 * blotch) * (0.25 + sandy) + dither * 0.0006
         // Tufts and stones of one ground left on the other near their border.
         const tuft = (weight: number) => weight - pick < 0.12 && clump < 0.32
         const speckOf = (weight: number) => weight > 0.35 && clump > 1 - (weight - 0.35) * 0.12
@@ -370,7 +459,7 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
           }
         } else if (land < shore) {
           colors = BEACH
-          tone = 1 + (land / 0.0045) * 2 + grain * 0.6
+          tone = 1 + (land / beach) * 2 + grain * 0.6
           // Grass creeps onto the upper beach.
           if (land > shore * 0.65 && clump < 0.22 && dryW < 0.5) {
             colors = GRASS
@@ -457,8 +546,19 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
     [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => {
       const nx = Math.min(size - 1, Math.max(0, x + dx))
       const ny = Math.min(size - 1, Math.max(0, y + dy))
-      return world.feature[ny * size + nx] === Feature.None
-    })
+      return world.feature[ny * size + nx] === Feature.None && !occupied[ny * size + nx]
+    }) && !walkedBehind(x, y)
+  // Trees and rocks are painted into the ground, below the walkers, so none may stand where it would have to cover
+  // someone walking a road or footpath just behind it (up to two tiles back toward the top of the screen).
+  const walkedBehind = (x: number, y: number) => {
+    for (let dy = 0; dy <= 2; dy++) {
+      for (let dx = 0; dx <= 2; dx++) {
+        const i = Math.max(0, y - dy) * size + Math.max(0, x - dx)
+        if (road[i] < ROAD_HALF + 0.4 || trail[i] < TRAIL_HALF + 0.6) return true
+      }
+    }
+    return false
+  }
   const choose = <T>(list: T[], r: number) => list[Math.floor(r * list.length)]
   const xEnd = Math.min(size, x0 + S + SPRITE_MARGIN)
   const yEnd = Math.min(size, y0 + S + SPRITE_MARGIN)
@@ -526,20 +626,26 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       }
     }
   }
-  for (const p of world.inns) {
-    if (p.x < x0 - SPRITE_MARGIN || p.y < y0 - SPRITE_MARGIN || p.x >= xEnd || p.y >= yEnd) continue
-    const own = p.x >= x0 && p.y >= y0 && p.x < x0 + S && p.y < y0 + S
-    // Stands on the footprint's front corner, at the height of its center.
-    const u = p.x + 2 - x0
-    const v = p.y + 2 - y0
+  const buildings = [
+    ...world.inns.map((p) => ({ fx: p.x + 2, fy: p.y + 2, z: heightAt(world, p.x + 1, p.y + 1), sprite: innLook(world, p).sprite })),
+    ...structures.flatMap((s) => structureParts(world, s)),
+  ]
+  for (const p of buildings) {
+    // Tall buildings reach into chunks well behind them, so they are culled by their screen box (below).
+    // A building belongs to the chunk holding its front tile.
+    const tx = Math.ceil(p.fx) - 1
+    const ty = Math.ceil(p.fy) - 1
+    const own = tx >= x0 && ty >= y0 && tx < x0 + S && ty < y0 + S
+    // Stands on the footprint's front corner, at the height given for it.
+    const u = p.fx - x0
+    const v = p.fy - y0
     const row = Math.round((u + v) * (TILE_HEIGHT / 2) * k)
-    placed.push({
-      sprite: SPRITES.inn,
-      x: Math.round(((u - v) * (TILE_WIDTH / 2) + W / 2) * k),
-      y: row + pad - Math.round(heightAt(world, p.x + 1, p.y + 1) * k),
-      row,
-      own,
-    })
+    const x = Math.round(((u - v) * (TILE_WIDTH / 2) + W / 2) * k)
+    const y = row + pad - Math.round(p.z * k)
+    const left = x - p.sprite.anchorX * k
+    const top = y - p.sprite.anchorY * k
+    if (left > width || left + p.sprite.width * k < 0 || top > canvasHeight || top + p.sprite.height * k < 0) continue
+    placed.push({ sprite: p.sprite, x, y, row, own })
   }
   placed.sort((p, q) => p.row - q.row || p.x - q.x)
 
@@ -666,6 +772,98 @@ function paintBridge(
         }
       }
     }
+  }
+
+  if (bridge.stone) {
+    paintStoneBridge()
+    return
+  }
+
+  // A humped bridge of dressed stone: side walls pierced by round arches that spring from the water, a paved deck
+  // and a low parapet on both sides.
+  function paintStoneBridge() {
+    const t0 = Math.min(0.45, ABUTMENT / length)
+    const t1 = 1 - t0
+    const arches = Math.max(1, Math.round((length - ABUTMENT * 2) / ARCH_SPAN))
+    const pier = 0.13
+    // Height of the arch opening at `t`; 0 on the piers and abutments.
+    const opening = (t: number) => {
+      if (t <= t0 || t >= t1) return 0
+      const u = ((t - t0) / (t1 - t0)) * arches
+      const f = u - Math.floor(u)
+      if (f < pier || f > 1 - pier) return 0
+      const v = ((f - pier) / (1 - pier * 2)) * 2 - 1
+      const crown = deckAt(t0 + ((Math.floor(u) + 0.5) / arches) * (t1 - t0)) - DECK_THICK - 3
+      return Math.max(0, crown) * Math.sqrt(1 - v * v)
+    }
+    const groundAt = (wx: number, wy: number) => Math.max(0, heightAt(world, wx, wy))
+    // Dressed blocks in staggered courses; the joints are darker.
+    const block = (t: number, z: number) => {
+      const course = Math.floor(z / 3)
+      const joint = z - course * 3 < 0.6 || (t * length * 3 + (course & 1) * 0.5) % 1 < 0.1
+      return joint ? -1.1 : (hash(Math.floor(t * length * 3 + (course & 1) * 0.5), course, seed + id) - 0.5) * 0.9
+    }
+    // Pier feet stand in a ring of foam.
+    for (let j = 0; j <= arches; j++) {
+      const t = t0 + (j / arches) * (t1 - t0)
+      const [px, py] = at(t, 0)
+      if (sample(world, world.elevation, px, py) >= world.levels.lake) continue
+      for (let s = -STONE_HALF - 0.14; s <= STONE_HALF + 0.14; s += ds) {
+        for (const side of [-1, 1]) {
+          const [wx, wy] = at(t + (side * (pier + 0.05) * (t1 - t0)) / arches, s)
+          plot(wx, wy, 0, FOAM, 0)
+        }
+      }
+    }
+    // The near wall faces the viewer and is drawn last.
+    const sides = nx + ny > 0 ? [-1, 1] : [1, -1]
+    const wall = (side: number) => {
+      const light = facing(side * nx, side * ny) * 1.4
+      for (let t = 0; t <= 1; t += dt) {
+        const [wx, wy] = at(t, side * STONE_HALF)
+        const deck = deckAt(t)
+        const arch = opening(t)
+        for (let z = groundAt(wx, wy); z <= deck + PARAPET; z += dz) {
+          if (z < arch) continue
+          let tone = 2.6 + light + block(t, z)
+          // The arch ring and the coping on the parapet are picked out lighter.
+          if (arch > 0 && z < arch + 1.5) tone = 3.6 + light
+          if (z > deck + PARAPET - 1.2) tone = 4.2 + light * 0.5
+          plot(wx, wy, z, MASONRY, tone)
+        }
+      }
+      // The parapet's inner face and its top.
+      for (let t = 0; t <= 1; t += dt) {
+        const [wx, wy] = at(t, side * (STONE_HALF - 0.12))
+        const deck = deckAt(t)
+        for (let z = deck; z <= deck + PARAPET; z += dz) plot(wx, wy, z, MASONRY, 2.2 - light * 0.5)
+        for (let s = STONE_HALF - 0.12; s <= STONE_HALF; s += ds) {
+          const [tx, ty] = at(t, side * s)
+          plot(tx, ty, deck + PARAPET, MASONRY, 4.6)
+        }
+      }
+    }
+    // The arch vaults, seen through the openings.
+    for (let t = t0; t <= t1; t += dt) {
+      const arch = opening(t)
+      if (arch <= 0) continue
+      for (let s = -STONE_HALF; s <= STONE_HALF; s += ds) {
+        const [wx, wy] = at(t, s)
+        plot(wx, wy, arch, MASONRY, 0.6)
+      }
+    }
+    wall(sides[0])
+    for (let t = 0; t <= 1; t += dt) {
+      const deck = deckAt(t)
+      const cobble = Math.floor(t * length * 4)
+      for (let s = -STONE_HALF; s <= STONE_HALF; s += ds) {
+        const [wx, wy] = at(t, s)
+        const seam = (t * length * 4) % 1 < 0.12 || (s * 4 + 8 + (cobble & 1) * 0.5) % 1 < 0.12
+        const grain = hash(cobble, Math.floor(s * 4 + 8 + (cobble & 1) * 0.5), seed + id) - 0.5
+        plot(wx, wy, deck, MASONRY, seam ? 2.4 : 3.4 + grain * 1.2)
+      }
+    }
+    wall(sides[1])
   }
 
   // Piers: pairs of legs standing in the water, tied together by a beam under the deck.

@@ -29,7 +29,14 @@
   "riverElevationCost": 6,
   "innCount": 28,
   "innMinSpacing": 115,
-  "innEdgeMargin": 40,
+  "innEdgeMargin": 96,
   "roadExtraLinks": 2,
-  "routeJitter": 1.5
+  "routeJitter": 1.5,
+  "borderTiles": 72,
+  "borderJitter": 0.45,
+  "borderPeak": 1.6,
+  "stoneBridgeGap": [45, 120],
+  "stoneBridgeMaxSpan": 9,
+  "stoneBridgeMaxRise": 30,
+  "stoneBridgeClearance": 20
 }

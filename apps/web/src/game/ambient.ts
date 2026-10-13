@@ -3,6 +3,7 @@ import type { World } from '@game/shared'
 import { Container, Sprite as PixiSprite } from 'pixi.js'
 import type { Texture } from 'pixi.js'
 import { ROUTE_STEP, resampleRoute } from './chunkPainter'
+import { SMOKE_PUFFS, innLook } from './innSprites'
 import { SPRITES, cloudShapes } from './sprites'
 import type { Sprite } from './sprites'
 import { textureOf } from './textures'
@@ -30,12 +31,19 @@ const FLOW_SPEED = [0.8, 1.3]
 const FLOW_ALPHA = 0.6
 
 // Birds fly in loose V formations at this height above the ground (pixels), in tiles per second.
-const FLOCKS = 160
+const FLOCKS = 280
 const BIRD_ALTITUDE = 150
 const BIRD_SPEED = [2.2, 3.6]
 
-// Clouds: drawn magnified by CLOUD_SCALE, drifting in pixels per second; opacity at the farthest zoom.
-const CLOUDS = 90
+// Chimney smoke: puffs per chimney, seconds each one lives, how high it rises and how far the wind carries it.
+const SMOKE_PUFFS_PER_CHIMNEY = 8
+const SMOKE_LIFE = 7
+const SMOKE_RISE = 54
+const SMOKE_DRIFT = 22
+
+// Clouds: drawn magnified by CLOUD_SCALE (varied per cloud by CLOUD_SIZE), drifting in pixels per second; opacity
+// at the farthest zoom.
+const CLOUDS = 220
 // How common each cloud type is (cumulus, stratus, cirrus, scattered) and how opaque it looks.
 const CLOUD_TYPES = [
   { weight: 0.35, alpha: 1 },
@@ -43,9 +51,10 @@ const CLOUD_TYPES = [
   { weight: 0.25, alpha: 0.6 },
   { weight: 0.2, alpha: 0.9 },
 ]
-const CLOUD_SCALE = 8
+const CLOUD_SCALE = 13
+const CLOUD_SIZE = [0.7, 1.5]
 const CLOUD_DRIFT = [18, 36]
-const CLOUD_ALPHA = 0.38
+const CLOUD_ALPHA = 0.45
 
 interface Kind {
   frames: Sprite[][]
@@ -95,6 +104,69 @@ const KINDS: Record<string, Kind> = {
     strides: 0,
     water: true,
     allowed: (t) => t === Terrain.Lake || t === Terrain.River,
+  },
+  wolf: {
+    frames: [SPRITES.wolf],
+    period: 9,
+    move: 0.4,
+    range: 7,
+    strides: 5,
+    water: false,
+    allowed: (t) => t === Terrain.Forest || t === Terrain.Grass,
+  },
+  fox: {
+    frames: [SPRITES.fox],
+    period: 7,
+    move: 0.35,
+    range: 4,
+    strides: 7,
+    water: false,
+    allowed: (t) => t === Terrain.Grass || t === Terrain.Forest,
+  },
+  boar: {
+    frames: [SPRITES.boar],
+    period: 10,
+    move: 0.25,
+    range: 3,
+    strides: 6,
+    water: false,
+    allowed: (t) => t === Terrain.Forest || t === Terrain.Swamp,
+  },
+  bear: {
+    frames: [SPRITES.bear],
+    period: 16,
+    move: 0.3,
+    range: 4,
+    strides: 3,
+    water: false,
+    allowed: (t) => t === Terrain.Forest || t === Terrain.Mountain,
+  },
+  horse: {
+    frames: SPRITES.horse,
+    period: 13,
+    move: 0.3,
+    range: 6,
+    strides: 3,
+    water: false,
+    allowed: (t) => t === Terrain.Grass,
+  },
+  gazelle: {
+    frames: [SPRITES.gazelle],
+    period: 9,
+    move: 0.3,
+    range: 5,
+    strides: 5,
+    water: false,
+    allowed: (t) => t === Terrain.Desert || t === Terrain.Grass,
+  },
+  swan: {
+    frames: [SPRITES.swan],
+    period: 12,
+    move: 0.5,
+    range: 3,
+    strides: 0,
+    water: true,
+    allowed: (t) => t === Terrain.Lake,
   },
   heron: {
     frames: [SPRITES.heron],
@@ -169,6 +241,10 @@ export interface Ambient {
   // Birds and clouds, above everything on the ground.
   sky: Container
   update(seconds: number, view: View, zoom: number): void
+  // Ground animals keep off tiles where this holds (the player's buildings).
+  setBlocked(blocked: (x: number, y: number) => boolean): void
+  // Chimney tops of the player's buildings (screen points, and the depth to sort the smoke at).
+  setChimneys(points: { x: number; y: number; depth: number }[]): void
 }
 
 export function createAmbient(world: World, actors: Container): Ambient {
@@ -284,7 +360,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
 
   // --- Animals ---
   const animals = bucket<Animal>()
-  const step = 6
+  const step = 5
   let nextId = 0
   const spawn = (kind: Kind, x: number, y: number, count: number, variant: number) => {
     for (let m = 0; m < count; m++) {
@@ -313,20 +389,36 @@ export function createAmbient(world: World, actors: Container): Ambient {
       const terrain = terrainAt(x, y)
       const r = roll(2)
       const herd = 2 + Math.floor(roll(3) * 3)
-      const nearForest = [[3, 0], [-3, 0], [0, 3], [0, -3], [2, 2], [-2, -2]].some(
-        ([dx, dy]) => terrainAt(x + dx, y + dy) === Terrain.Forest,
-      )
+      const near = (match: number) =>
+        [[3, 0], [-3, 0], [0, 3], [0, -3], [2, 2], [-2, -2]].some(([dx, dy]) => terrainAt(x + dx, y + dy) === match)
+      const nearForest = near(Terrain.Forest)
+      const pack = 3 + Math.floor(roll(7) * 3)
+      // A grazer herd sometimes has a second look in it (a stag, a grey horse).
+      const lead = roll(4) < 0.5 ? 1 : 0
       if (terrain === Terrain.Grass) {
-        if (nearForest && r < 0.12) spawn(KINDS.deer, x, y, herd, roll(4) < 0.5 ? 1 : 0)
-        else if (r < 0.035) spawn(KINDS.hare, x, y, 1 + Math.floor(roll(5) * 2), 0)
+        if (nearForest && r < 0.12) spawn(KINDS.deer, x, y, herd, lead)
+        else if (!nearForest && r < 0.16) spawn(KINDS.horse, x, y, pack, lead)
+        else if (r < 0.22) spawn(KINDS.hare, x, y, 1 + Math.floor(roll(5) * 2), 0)
+        else if (r < 0.245) spawn(KINDS.fox, x, y, 1, 0)
+      } else if (terrain === Terrain.Forest) {
+        if (r < 0.05) spawn(KINDS.deer, x, y, herd, lead)
+        else if (r < 0.09) spawn(KINDS.boar, x, y, herd, 0)
+        else if (r < 0.105) spawn(KINDS.wolf, x, y, pack, 0)
+        else if (r < 0.125) spawn(KINDS.fox, x, y, 1, 0)
+        else if (r < 0.135 && near(Terrain.Mountain)) spawn(KINDS.bear, x, y, 1, 0)
+        else if (r < 0.138) spawn(KINDS.bear, x, y, 1, 0)
+      } else if (terrain === Terrain.Desert) {
+        if (r < 0.06) spawn(KINDS.gazelle, x, y, pack, 0)
       } else if (terrain === Terrain.Mountain) {
-        if (r < 0.05 && heightAt(world, x, y) < balance.world.snowHeight * 0.8) spawn(KINDS.goat, x, y, herd, 0)
+        if (r < 0.07 && heightAt(world, x, y) < balance.world.snowHeight * 0.8) spawn(KINDS.goat, x, y, herd, 0)
       } else if (terrain === Terrain.Lake) {
-        if (r < 0.15) spawn(KINDS.duck, x, y, herd, 0)
+        if (r < 0.2) spawn(KINDS.duck, x, y, herd, 0)
+        else if (r < 0.26) spawn(KINDS.swan, x, y, 2, 0)
       } else if (terrain === Terrain.River) {
-        if (r < 0.06) spawn(KINDS.duck, x, y, 2, 0)
+        if (r < 0.12) spawn(KINDS.duck, x, y, 2 + Math.floor(roll(6) * 2), 0)
       } else if (terrain === Terrain.Swamp) {
-        if (r < 0.08) spawn(KINDS.heron, x, y, 1 + Math.floor(roll(6) * 2), 0)
+        if (r < 0.12) spawn(KINDS.heron, x, y, 1 + Math.floor(roll(6) * 2), 0)
+        else if (r < 0.16) spawn(KINDS.boar, x, y, herd, 0)
       }
     }
   }
@@ -335,8 +427,9 @@ export function createAmbient(world: World, actors: Container): Ambient {
   const waypoint = (a: Animal, k: number) => {
     const x = a.homeX + (hash(a.id, k * 2, seed + 701) - 0.5) * 2 * a.kind.range
     const y = a.homeY + (hash(a.id, k * 2 + 1, seed + 701) - 0.5) * 2 * a.kind.range
-    return a.kind.allowed(terrainAt(x, y)) ? { x, y } : { x: a.homeX, y: a.homeY }
+    return a.kind.allowed(terrainAt(x, y)) && !blocked(Math.floor(x), Math.floor(y)) ? { x, y } : { x: a.homeX, y: a.homeY }
   }
+  let blocked = (_x: number, _y: number) => false
   const lifePool = new Pool(actors)
 
   function updateLife(seconds: number, view: View) {
@@ -367,6 +460,36 @@ export function createAmbient(world: World, actors: Container): Ambient {
       }
     }
     lifePool.finish()
+  }
+
+  // --- Chimney smoke ---
+  // Puffs rise from every inn chimney, swell, drift downwind and fade. They sort with the walkers just in front of
+  // the inn, so caravans passing in front cover them.
+  const innChimneys = world.inns.flatMap((p, n) => {
+    const sx = (p.x - p.y) * (TILE_WIDTH / 2)
+    const sy = (p.x + p.y + 4) * (TILE_HEIGHT / 2) - heightAt(world, p.x + 1, p.y + 1)
+    return innLook(world, p).smoke.map((c, m) => ({ x: sx + c.x, y: sy + c.y, depth: sy + 1, phase: hash(n, m, seed + 951) }))
+  })
+  // The player's buildings add theirs (see setChimneys).
+  let chimneys = innChimneys
+  const puffTextures = SMOKE_PUFFS.map(textureOf)
+  const smokePool = new Pool(actors)
+
+  function updateSmoke(seconds: number, view: View) {
+    for (const c of chimneys) {
+      if (!inView(view, c.x, c.y, SMOKE_RISE + 16)) continue
+      for (let i = 0; i < SMOKE_PUFFS_PER_CHIMNEY; i++) {
+        const p = (seconds / SMOKE_LIFE + i / SMOKE_PUFFS_PER_CHIMNEY + c.phase) % 1
+        const sway = Math.sin(seconds * 0.8 + i * 1.7 + c.phase * 9) * 2 * p
+        const size = Math.min(puffTextures.length - 1, Math.floor(p * puffTextures.length * 1.1))
+        const sprite = smokePool.take(puffTextures[size])
+        sprite.anchor.set(0.5, 0.5)
+        sprite.position.set(Math.round(c.x + p * p * SMOKE_DRIFT + sway), Math.round(c.y - p * SMOKE_RISE))
+        sprite.alpha = 0.7 * Math.min(1, p * 10) * (1 - p) ** 1.3
+        sprite.zIndex = c.depth
+      }
+    }
+    smokePool.finish()
   }
 
   // --- Birds ---
@@ -430,6 +553,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
       drift: CLOUD_DRIFT[0] + roll(2) * (CLOUD_DRIFT[1] - CLOUD_DRIFT[0]),
       sprite: shapes[Math.floor(roll(3) * shapes.length)],
       alpha: CLOUD_TYPES[type].alpha,
+      scale: CLOUD_SCALE * (CLOUD_SIZE[0] + roll(5) * (CLOUD_SIZE[1] - CLOUD_SIZE[0])),
     }
   })
   const shadowLayer = new Container()
@@ -442,7 +566,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
     for (const cloud of clouds) {
       const sx = span.left + ((((cloud.x + seconds * cloud.drift) % span.width) + span.width) % span.width)
       const sy = cloud.y
-      const reach = cloud.sprite.width * CLOUD_SCALE
+      const reach = cloud.sprite.width * cloud.scale
       if (!inView(view, sx, sy, reach)) continue
       // Only over the map: the center must fall on a tile.
       const tx = (sy / (TILE_HEIGHT / 2) + sx / (TILE_WIDTH / 2)) / 2
@@ -451,13 +575,13 @@ export function createAmbient(world: World, actors: Container): Ambient {
       const texture = textureOf(cloud.sprite)
       const shadow = cloudShadows.take(texture)
       anchored(shadow, cloud.sprite)
-      shadow.scale.set(CLOUD_SCALE)
+      shadow.scale.set(cloud.scale)
       shadow.tint = 0x000000
       shadow.alpha = alpha * cloud.alpha * 0.22
-      shadow.position.set(Math.round(sx + 700), Math.round(sy + 900))
+      shadow.position.set(Math.round(sx + cloud.scale * 85), Math.round(sy + cloud.scale * 110))
       const sprite = cloudPool.take(texture)
       anchored(sprite, cloud.sprite)
-      sprite.scale.set(CLOUD_SCALE)
+      sprite.scale.set(cloud.scale)
       sprite.alpha = alpha * cloud.alpha
       sprite.position.set(Math.round(sx), Math.round(sy))
     }
@@ -468,14 +592,22 @@ export function createAmbient(world: World, actors: Container): Ambient {
   return {
     under,
     sky,
+    setBlocked(next) {
+      blocked = next
+    },
+    setChimneys(points) {
+      chimneys = [...innChimneys, ...points.map((c, i) => ({ ...c, phase: hash(i, Math.round(c.x), seed + 953) }))]
+    },
     update(seconds, view, zoom) {
       if (zoom >= FLOW_MIN_ZOOM) updateFlow(seconds, view)
       else flowPool.finish()
       if (zoom >= LIFE_MIN_ZOOM) {
         updateLife(seconds, view)
         updateBirds(seconds, view)
+        updateSmoke(seconds, view)
       } else {
         lifePool.finish()
+        smokePool.finish()
         birdPool.finish()
         birdShadows.finish()
       }

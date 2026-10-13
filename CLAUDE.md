@@ -40,6 +40,15 @@ diğer krallıklarla diplomasi, entrika veya savaş.
   bağımsız olarak gerçek zamanlı ilerler.
 - Ayrıca **ay** kavramı kullanılabilir (ör. 30 oyun günü ≈ 30 saat) — büyük
   olaylar, rapor özetleri ve bazı kontrat süreleri için.
+- **Saat ve gece-gündüz:** Oyun saati duvar saatinden hesaplanır (gerçek
+  saatin başı = gece yarısı, her gerçek dakika = 24 oyun dakikası), yani
+  herkes aynı anda aynı saati görür. Arayüzde saat, gün (sezon başından),
+  ay ve sezon ilerlemesi gösterilir. Harita saate göre renklenir: şafak,
+  gündüz, gün batımı ve gece (loş mavi, harita okunur kalır). Akşamdan itibaren binaların
+  ve hanların pencereleri (atölyede ocak ateşi) yanar; krallık adı ve
+  harita yazıları geceden etkilenmez. Lobilerin
+  sezon başlangıcı gelene kadar günler krallığın kuruluşundan sayılır
+  (`packages/shared/src/clock.ts`).
 
 **Tasarım ilkesi:** Oyuncu günde birkaç kez kısa oturumlarla girip anlamlı
 kararlar verebilmeli; sürekli başında durmak zorunlu olmamalı. Kritik süreler
@@ -52,16 +61,21 @@ kararlar verebilmeli; sürekli başında durmak zorunlu olmamalı. Kritik sürel
 
 ### 3.1 Lobi türleri
 
-- **Halka açık lobiler:** Herkes listeden görüp katılabilir. Kapasite dolunca
-  kapanır veya sıra (waitlist) oluşur.
-- **Özel (arkadaş) lobileri:** Kurucu oluşturur, davet kodu/link ile katılım.
-  Kurucu belirli ayarları (bkz. 3.3) seçebilir.
+- Her oyuncu ana menüden **lobi açabilir** (ad, büyüklük **9 ya da 18 krallık**,
+  isteğe bağlı **şifre**). Lobinin haritası yeni bir tohumdan sunucuda
+  üretilir. Bir oyuncunun aynı anda en fazla **3 açık lobisi** olabilir.
+- Açık lobilerin tümü listede görünür (dolu/şifreli olduğu, kurucusu,
+  krallık sayısı ve sezon bitişiyle). **Şifreli** lobiye yalnızca şifreyi
+  bilen katılır; şifre sunucuda yalnızca hash olarak tutulur.
+- Kapasite dolunca lobi yeni oyuncu almaz. (İleride: sıra, davet linki.)
 
 ### 3.2 Lobi yaşam döngüsü
 
 1. **Oluşturma** — harita üretilir (seed), oyuncu slotları açılır.
 2. **Katılım** — oyuncuya başlangıç bölgesi **rastgele atanır**; yerini
-   kendisi seçemez.
+   kendisi seçemez. Ancak **3 yer hakkı** vardır: atanan yerin biyom
+   çarpanlarını görür, beğenmezse yeni bir yer keşfettirir; gördüğü (en çok
+   3) yerden birinde krallığını kurar (bkz. §6.4).
 3. **Aktif sezon** — 2 hafta (336 oyun günü).
 4. **Sezon sonu** — skor tablosu, ödüller/başarımlar kaydedilir.
 5. **Wipe** — dünya sıfırlanır; özel lobide aynı grup yeni sezona devam eder.
@@ -96,6 +110,10 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
 
 - Şimdiki boyut: **1024×1024 karo** (32×32 chunk, chunk = 32×32 karo).
   Değerler `config/balance/map.json` içindedir.
+- Haritanın kenarları ve köşeleri **yüksek, karlı dağ halkasıyla** çevrilidir
+  (iç sınırı kıvrımlı, ~70 karo); dünya kenarda bitmiyor, dağların ardında
+  sürüyormuş hissi verir. Ana nehir ve dereler halkadan **boğazlar** açarak
+  çıkar. Hanlar ve başlangıç yerleri halkanın içinde kalır.
 - **Chunk tabanlı çizim:** istemci yalnızca ekrana giren chunk'ları çizer ve
   önbelleğe alır.
 - Dünya, lobi tohumundan (seed) **deterministik** üretilir
@@ -164,6 +182,18 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   **ayak çiftleri** (dibinde köpük halkası). Güverte kıyılardan rampayla
   yükselir; parçalar piksel bazında derinlik testiyle çizilir, öndeki kıyı
   köprünün ucunu örter.
+- **Taş köprüler:** Yol geçmeyen nehir kesimlerine de rastgele aralıklarla
+  (tohumdan, `World.crossings`) kemerli **taş köprü** kurulur; iki yaka
+  yürüyerek birbirine bağlanır. Kambur güverte, iki yanda korkuluk duvarı,
+  sudan yükselen yuvarlak kemerler ve ayak diplerinde köpük. Ticaret
+  köprülerine ve harita kenarındaki boğazlara yakın kurulmaz; aralık ve
+  sınırlar `config/balance/world.json` içindedir.
+- **Hanlar** bulundukları araziye göre farklı tiptedir
+  (`apps/web/src/game/innSprites.ts`): çölde düz damlı, kubbeli kerpiç
+  **kervansaray**; dağ yakınında arduvaz damlı **taş han**; ormanda saman
+  damlı (bazen yosunlu) **kütük han**; diğer yerlerde kiremit ya da arduvaz
+  damlı **yarı ahşap (bağdadi)** han. Bacalarından **duman** tüter (½× ve
+  üstü; yükselir, büyür, rüzgârla sürüklenip söner).
 - **Kervanlar:** Ticaret yollarında hanlar arasında sürekli gidip gelen
   deve kervanları dolaşır (önde tüccar, 2–4 yüklü deve, bazen mızraklı
   muhafız). Şimdilik yalnızca görseldir; konumları saatten hesaplanır,
@@ -176,15 +206,20 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
     yönünde süzülüp belirip sönen kısa parıltılar. Öndeki yüksek arazinin
     ya da köprünün arkasında kalanlar çizilmez.
   - **Hayvanlar** bölgeye göre yaşar: orman kenarındaki çayırda geyik
-    sürüleri (birinde boynuzlu erkek), çayırda tavşan, kar sınırı altındaki
-    dağda keçi, göl ve nehirde ördek, bataklıkta balıkçıl. Evlerinin
-    çevresinde dinlenip (otlayıp) yeni bir noktaya yürürler.
+    sürüleri (birinde boynuzlu erkek), açık çayırda yaban atı sürüleri
+    (doru ve kır), çayırda tavşan ve tilki; ormanda geyik, yaban domuzu,
+    kurt sürüsü, tilki ve nadiren ayı; çölde ceylan sürüleri; kar sınırı
+    altındaki dağda keçi; göl ve nehirde ördek, gölde kuğu çiftleri;
+    bataklıkta balıkçıl ve yaban domuzu. Evlerinin çevresinde dinlenip
+    (otlayıp) yeni bir noktaya yürürler.
   - **Kuşlar** haritanın üstünde V düzeninde uçar, yere gölge düşer.
     Hayvanlar ve kuşlar ½× ve üstünde görünür.
-  - **Bulutlar:** ¼× ve altında çok hafif, yavaş sürüklenen bulutlar ve
-    gölgeleri. Dört tip: kümülüs (yığın), stratus (uzun katman), sirrus
+  - **Bulutlar:** ¼× ve altında yarı saydam, yavaş sürüklenen iri
+    bulutlar ve gölgeleri; boyutları buluttan buluta değişir. Dört tip: kümülüs (yığın), stratus (uzun katman), sirrus
     (ince tüy) ve dağınık küçük kümeler.
-- **Su** derinliğe göre bantlı renk değiştirir, kıyıda köpük ve kumsal,
+- **Su** derinliğe göre bantlı renk değiştirir, kıyıda köpük ve kumsal
+  (kumsal kıyı boyunca genişleyip daralır, bazı kesimlerde hiç yoktur ve
+  çim suya iner),
   yüzeyde parıltı çizgileri taşır. Çayırda çimen dokusu ve çiçekler,
   ormanda ağaçlar bulunur.
 - Karo ızgarası çizilmez; yalnızca **imlecin altındaki karo** vurgulanır.
@@ -207,9 +242,16 @@ uzaklık olmalı; kimse tamamen dezavantajlı başlamamalı.
 - Her oyuncu harita üzerinde bir **başlangıç bölgesi** ile başlar.
 - Yalnızca **kendi hududu** içinde inşa edebilir.
 - Hudut (inşa edilebilir alan) merkez etrafında bir **karedir** ve aşamalı
-  büyür: **8×8 → 12×12 → 16×16 parsel**. Büyüme **başarımlarla** açılır;
-  kare merkezini korur.
-- **1 parsel = 4×4 karo** (yani 32×32 → 48×48 → 64×64 karo). Değerler
+  büyür: **8×8 → 10×10 → 12×12 → 14×14 → 16×16 parsel**. Büyüme **sarayın
+  seviyesine** bağlıdır (saray 1. seviye → 8×8, her seviye +2 parsel, 5. → 16×16); oyuncu boyutu
+  elle seçemez, sarayı yükseltir. Yükseltme bitince hudut genişler; kare
+  merkezini korur. Hudut haritada **kesikli** sarı çizgiyle gösterilir.
+- Krallık kurulurken oyuncu krallığına bir **isim** ve bir **renk** verir.
+  Lobi, büyüklüğü kadar renk sunar (9 ya da 18; `packages/shared/src/colors.ts`)
+  ve **bir renk lobide yalnızca bir krallığındır**: alınmış renk seçilemez. Sarayın
+  çatıları bu renkte çizilir. İsim, harita
+  uzaklaştırıldığında (½× ve altı) isim hududun üzerinde yazar.
+- **1 parsel = 4×4 karo** (yani 32×32 karodan 64×64 karoya). Değerler
   `config/balance/territory.json` içindedir.
 - Karenin içinde **yerleşim tamamen oyuncuya aittir**: neyi nereye inşa
   edeceğini, şehrin şeklini kendisi belirler.
@@ -342,6 +384,74 @@ Net    = Gelir - Gider  → hazineye eklenir
 Oyuncu vergi oranını ayarlayabilir (düşük / normal / yüksek / ağır).
 Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 
+### 6.4 Prototip ekonomisi (şu an uygulanan)
+
+> "Her şey parayla başlar." İlk sürümde ekonomi sadeleştirilmiştir; süreler
+> denemek için **saniye** mertebesindedir. Değerler
+> `config/balance/economy.json`, mantık `packages/shared/src/economy.ts`.
+
+- **Kaynaklar:** Altın + 3 hammadde: **Yemek**, **Yapı malzemesi**,
+  **Savaş malzemesi**. Başlangıçta her birinden bir miktar stok verilir.
+- **Kuruluş:** Hazır şehir düzeni yoktur. Krallık kurulunca oyuncu önce
+  **Sarayını** hudut içinde istediği yere yerleştirir (ücretsiz, anında);
+  ev, tarla vb. her şeyi de kendisi yerleştirir. Ticaret arsasına
+  **ücretsiz 1. seviye ticaret noktası** kurulur. Saray birkaç saray
+  hizmetlisi (köylü) barındırır.
+- **Ticaret noktası:** Kurulduğu an oyuncu satılacak malı seçer (3
+  hammaddeden biri; sonradan değiştirilebilir). Tüccar her **10 saniyede**
+  seçilen maldan bir miktar götürüp satar ve altın getirir. Seviye
+  yükseldikçe sefer başına satılan miktar artar.
+- **İnşa menüsü:** Altın (ve yapı malzemesi) harcanarak ev, tarla, oduncu
+  kampı, silah atölyesi kurulur. Yapılar süreyle inşa edilir (iskele
+  görünür), aynı anda en fazla 2 inşaat yürür. Yalnızca hudut içinde,
+  serbest karoya kurulur; altındaki ağaçlar temizlenir.
+- **Nüfus:** Evler köylü verir, üretim binaları işçi ister; köylü yetmezse
+  binalar orantılı daha az üretir. Köylüler her üretim turunda yemek yer.
+- **Biyom çarpanları:** Yerin çevresindeki araziye göre üretim çarpanı:
+  nehir/göl (balık) ve çayır (tarım) → yemek; orman → yapı malzemesi;
+  dağ → savaş malzemesi; bataklık hepsini biraz düşürür, kurak yemeği
+  düşürür. Çarpanlar kuruluşta sabitlenir.
+- **İskele:** Krallığın önceden belirli iskele arsasına kurulur (yer
+  seçilmez, tek tane). Balık tutar (yemek). İskelenin ahşap kısmı arsanın
+  en açık suya bakan kenarından nehre/göle doğru uzanır.
+- **Eğim:** Yokuşa kurulan yapı, en yüksek köşesi hizasında düz bir taş
+  kaide üzerinde durur (tarlada toprak set); kaide aşağıdaki zemine iner.
+- **Patikalar:** Her yapının kapısından saraya, yapıların etrafından
+  dolaşan toprak patikalar zemine işlenir.
+- **Duman:** Bacası olan her yapıdan (ev, atölye, oduncu, ticaret evi,
+  iskele) hareketli duman yükselir.
+- **Bina seviyeleri:** Ev, tarla, oduncu kampı, silah atölyesi ve iskele
+  **1–3. seviyededir**. Yükseltme altın + yapı malzemesi ve süre ister,
+  inşaat kuyruğundan bir yer tutar; sürerken bina iskeleye döner ve
+  üretmez. Her seviye daha çok üretir / daha çok köylü barındırır ve daha
+  çok işçi alabilir; her seviyenin **kendi görseli** vardır.
+- **Bina menüsü:** Haritada bir binanın üstüne gelince bina dış hatla
+  vurgulanır ve adı/seviyesi küçük bir etikette görünür; tıklayınca o
+  binanın menüsü açılır. Menüde:
+  - **İşçi sayısı:** 0 ile seviyenin üst sınırı arasında ayarlanır
+    (varsayılan: tam kadro). Üretim, atanan işçiyle orantılıdır; toplam
+    atanan işçi köylü sayısını aşarsa hepsi orantılı yavaşlar.
+  - **Ürün seçimi:** Tarla **buğday** (yemek) ya da **keten** (yapı
+    malzemesi, daha düşük oranda) eker. Silah atölyesi **demir dökümü**
+    (savaş malzemesi, arazi çarpanıyla) yapar ya da hammaddeden silah
+    işler: **kılıç** (savaş malzemesi), **kalkan** (savaş + yapı
+    malzemesi), **yay ve ok** (yapı malzemesi). Silahlar **cephanelikte**
+    birikir (Depo sekmesinde görünür) ve ileride ordu eğitiminde
+    kullanılacaktır. Hammadde yetmezse yetebildiği kadar işlenir.
+  - Ticaret noktası menüsü ticaret ayarlarını, saray menüsü krallık
+    özetini açar.
+- Köylüler, tüccar ve hayvanlar yapıların **içinden geçmez**: köylüler
+  yapıların etrafından yol bulur, hayvanlar yapı karolarında durmaz; bir
+  yapının arkasında kalan yürüyen yapının arkasında çizilir. Tarlalar düz
+  olduğu için üstünde yürünebilir.
+- Durum sunucudadır (§11.1): her komut `command` Edge Function'ında aynı
+  `advance` ve kurallarla doğrulanır; istemci sonucu beklerken komutu
+  yerelde uygular, reddedilirse sunucunun durumuna döner.
+- **Başka krallıklar:** Lobideki diğer krallıkların hududu kendi
+  renginde kesikli çizgiyle, binaları haritada görünür (tıklanamaz);
+  depoları gizlidir. Yeni bir krallığın yeri, son aşamadaki hududu başka
+  hudutlara `kingdomGapTiles` karodan yakın olmayacak şekilde seçilir.
+
 ---
 
 ## 7. Ticaret, Tüccarlar ve Kervanlar
@@ -409,12 +519,20 @@ fiyatı düşer, çok alınanın artar; zamanla dengeye döner.
 
 - Yoldaki orduya **anlık emir verilemez.** Yön değiştirme, geri çağırma,
   hedef değiştirme gibi emirler komutana **elçi** ile ulaştırılır.
-- Elçinin orduya ulaşması süre alır (varsayılan **1 oyun günü**; denge
-  yapılandırmasından okunur). Emir, elçi vardığında yürürlüğe girer; o ana
-  kadar ordu mevcut emrini uygulamaya devam eder.
+- Elçinin orduya ulaşması süre alır: **12 oyun saati = 30 gerçek dakika**
+  (`config/balance/time.json` → `messengerDelayGameDays`). Emir, elçi
+  vardığında (`effective_at`) yürürlüğe girer; o ana kadar ordu mevcut
+  emrini uygulamaya devam eder. Böylece ordu sistemi tam gerçek zamanlı
+  değildir: her ordunun en az 30 dakikalık geleceği önceden bellidir.
 - Kendi yerleşiminde/garnizonunda bekleyen orduya emir anında verilir.
-- Sunucuda ordu konumu saklanmaz; rota `origin`, `target`, `depart_at`,
-  `arrive_at` olarak tutulur, konum bu değerlerden hesaplanır.
+- Sunucuda ordu konumu saklanmaz; rota `path`, `depart_at`, `arrive_at`
+  olarak tutulur, konum bu değerlerden hesaplanır. Oyuncu oyunu kapatsa da
+  ordusu yoluna devam eder; **diğer oyuncular onu aynı formülle yolda ve
+  savaşta görür.**
+- **Bölme / birleşme:** Ordu bölünürse her parça ayrı bir ordudur (kendi
+  rotası, kendi karşılaşmaları). Bölme de bir emirdir; elçi vardığında
+  ordunun o anki konumunda iki ordu oluşur. Aynı karodaki dost ordular
+  birleş emriyle tek orduya döner.
 
 ### 8.2.2 Meydan muharebesi (yolda karşılaşma)
 
@@ -423,7 +541,13 @@ fiyatı düşer, çok alınanın artar; zamanla dengeye döner.
 - Emirler gecikmeli olduğu için rotalar önceden bellidir: karşılaşma, bir
   emir yürürlüğe girdiğinde rotaların zaman-mekân kesişimi hesaplanarak
   **zamanlanmış olay** olarak kaydedilir; sürekli konum taraması yapılmaz.
-- Muharebe otomatik çözülür (canlı yönetim yok); istemci sonucu birkaç
+- Bir rota değişirse o orduya ait bekleyen karşılaşmalar silinir ve
+  yeniden hesaplanır. Taraflar çevrimdışı olsa da savaş zamanında olur
+  (bkz. §11.1 olay işleyici).
+- **Takviye:** Aynı muharebe noktasına bir pencere içinde (ayar) varan dost
+  ordular aynı savaşa katılır; muharebe anlık değil, süreli bir olaydır.
+- Muharebe otomatik çözülür (canlı yönetim yok), sonucu olay kimliğinden
+  türeyen tohumla deterministiktir; istemci sonucu aynı tohumdan birkaç
   karelik basit bir animasyonla gösterir.
 - Aynı mekanik kervan yağması (§7.3) için de kullanılır.
 
@@ -537,7 +661,13 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
 
 ## 11. Çevrimiçi Altyapı Gereksinimleri (işlevsel)
 
-- **Hesap sistemi:** kayıt/giriş (e-posta + OAuth seçenekleri).
+- **Hesap sistemi:** e-posta + şifre ile kayıt/giriş (anonim giriş yok).
+  Kayıtta kullanıcı adı alınır; her hesabın bir **profili** vardır
+  (kullanıcı adı ve ayarlar: müzik açık/kapalı, müzik sesi). Ayarlar
+  profilde saklanır, cihazdan cihaza taşınır. E-posta onayı şimdilik
+  kapalıdır (yerleşik e-posta servisi saatte 2 e-posta ile sınırlı).
+- **Ana menü:** Giriş sonrası Lobiler / Nasıl oynanır / Ayarlar. Oyun
+  içinden Krallık sekmesindeki "Ana menü" ile dönülür.
 - **Lobi tarayıcısı:** halka açık lobiler listesi, özel lobiye kodla katılım.
 - **Sunucu otoriter (authoritative) mimari:** Tüm oyun durumu sunucuda;
   istemci yalnızca görüntüler ve komut gönderir (hile önleme).
@@ -548,8 +678,56 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   saniye her şeyi simüle etmeye gerek yoktur. Gerçek zamanlı simülasyon
   sadece aktif savaşlar ve izlenen alanlar için.
 - **Bildirimler:** Saldırı, inşaat bitişi, kervan varışı, casus ifşası.
-- **Sohbet:** Lobi geneli, diplomatik özel mesajlar.
+- **Sohbet:** Lobi geneli, diplomatik özel mesajlar (bkz. §11.1).
 - **Wipe otomasyonu:** Sezon sonu zamanlanmış görev.
+
+### 11.1 Sunucu mimarisi (en az kaynak ilkesi)
+
+Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
+`f(zaman)` olarak hesaplanır. Oyuncu çevrimdışıyken hiçbir şey yazılmaz.
+
+- **Sunucu saati:** İstemci girişte sunucu saatini çeker
+  (gidiş-dönüş/2 düzeltmeli `offset`), oyun saati `Date.now() + offset`
+  ile hesaplanır; birkaç dakikada bir ve sekme geri gelince yeniden
+  ölçülür. Cihaz saati yanlış olsa da herkes aynı gün/saati görür.
+- **Dünya saklanmaz:** Harita lobi tohumundan istemcide üretilir; hayvan,
+  kervan, bulut gibi görseller saatten hesaplanır, DB'ye dokunmaz.
+- **Tembel ekonomi:** Krallık tek satırdır (`state jsonb`, `version`,
+  `updated_at`). Sunucu yalnızca komut/okuma anında
+  `advance(state, now)` çalıştırır; saat başı cron yoktur. İnşaatlar
+  `finish_at` ile saklanır — oyuncu uyurken biter.
+- **Komutlar:** Edge Function, `packages/shared` içindeki aynı TS
+  mantığıyla doğrular; yazma iyimser kilitle (`version`) yapılır.
+  İstemci aynı `advance` ile yerelde tahmin eder, sunucuyu yoklamaz.
+- **Canlı güncelleme:** Lobi başına tek Realtime **Broadcast** kanalı,
+  küçük mesajlar (`{kingdom, v}`); `postgres_changes` kullanılmaz. Mesajlar
+  doğrudan veritabanı tetikleyicilerinden gönderilir; kanal **özeldir**,
+  yalnızca lobinin üyeleri dinleyebilir.
+- **Olaylar:** Krallıklar arası etkileşimler (muharebe, varış, yağma,
+  casus) `events` tablosuna `resolve_at` ile yazılır. **Dakikada bir
+  çalışan tek `pg_cron` işi** zamanı gelenleri sırayla işler; ilgili
+  krallıklar `now`'a değil olay anına ilerletilir.
+- **Tarih:** Gün tick'inde krallık başına küçük bir satır
+  (`kingdom_daily`: nüfus, altın, ordu gücü, toprak, skor) — gelişim
+  eğrisi ve sezon sıralaması buradan.
+- **Görünürlük:** RLS ile sahibi tüm `state`'i, diğerleri yalnızca
+  haritada görünen alanları (yer, isim, renk, binalar, ordular) görür.
+- **Lobi sohbeti:** Mesajlar kalıcıdır (`chat_messages` tablosu); her
+  mesajda krallığın o anki **adı ve rengi** de saklanır, böylece sohbet
+  geçmişi sonradan değişse de doğru görünür. Girişte son N mesaj çekilir,
+  yenileri aynı Broadcast kanalından gelir. Mesaj uzunluğu ve gönderim
+  sıklığı sınırlıdır. Wipe ile birlikte silinir.
+
+| Tablo | İçerik |
+| --- | --- |
+| `lobbies` | tohum, `season_start`, ayarlar |
+| `kingdoms` | `state jsonb`, `version`, `updated_at`, ad, renk |
+| `armies` | sahibi, birlikler, `path`, `depart_at`, `arrive_at` |
+| `orders` | elçi emirleri: `issued_at`, `effective_at`, içerik |
+| `events` | `resolve_at`, tür, katılanlar |
+| `battles` | sonuç raporu, tohum, kayıplar |
+| `kingdom_daily` | günlük istatistik |
+| `chat_messages` | lobi, gönderen krallık, ad, renk, metin, zaman |
 
 ---
 
@@ -584,10 +762,11 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
 
 Teknik detaylar ayrıca konuşulacak. Karar bekleyen başlıklar:
 
-- **Barındırma:** Supabase bulut projesi henüz açılmadı (free plan proje
-  sınırı dolu); şimdilik lokal Supabase ile geliştiriliyor.
+- **E-posta onayı ve şifre sıfırlama:** Özel SMTP (ör. Resend) bağlanınca
+  açılacak. Canlı (Vercel) adresi Auth "Site URL" olarak girilmeli.
+- **Davet linki ve sezon sonu wipe'ı** henüz yok.
 - **Parsel boyutu:** 1 parsel = 4×4 karo varsayımı onay bekliyor (§5.1).
-- **Hudut büyümesini açan başarımlar** neler?
+- **Saray seviyesi** dışında hududu büyüten başka bir şey (başarım vb.) olacak mı?
 - **Başlangıç yeri kuralları:** han/ticaret yoluna ve diğer krallıklara en
   az/en çok mesafe.
 - **Tünel** ne işe yarar (dağın öbür yanına geçiş mi, maden girişi mi)?
@@ -655,10 +834,15 @@ bun install          Bağımlılıkları kur
 bun run db:start     Lokal Supabase'i başlat (Docker/OrbStack açık olmalı)
 bun run db:stop      Lokal Supabase'i durdur
 bun run db:reset     Veritabanını migration'lardan yeniden kur
+bun run db:push      Migration'ları bağlı bulut projesine uygula
+bun run fn:deploy    Ortak kodu paketle, `command` fonksiyonunu yükle
+bun run lobby:create "Ad" [tohum] [--private] [--players n]
+                     Bulutta yeni lobi aç
 bun run dev          İstemciyi başlat (http://localhost:5173)
 bun run typecheck    Tüm paketlerde tip denetimi
 bun run build        İstemciyi derle
 ```
 
+Bulut projesi: `jafnaqdiukfmkefcjsqo` (CLI ile `supabase link` yapılmış).
 Lokal Supabase Studio: http://127.0.0.1:54323. İstemci ortam değişkenleri
 `apps/web/.env.local` içindedir (şablon: `apps/web/.env.example`).

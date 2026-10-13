@@ -1,10 +1,13 @@
-import type { World } from '@game/shared'
-import { paintChunk, preparePaint } from './chunkPainter'
-import type { PaintContext } from './chunkPainter'
+import type { Point, World } from '@game/shared'
+import { paintChunk, preparePaint, setStructures } from './chunkPainter'
+import type { PaintContext, Structure } from './chunkPainter'
 
 // Chunks are painted off the main thread, so panning and zooming never wait for them.
 
-export type PaintRequest = { world: World } | { id: number; cx: number; cy: number; lod: number }
+export type PaintRequest =
+  | { world: World }
+  | { structures: Structure[]; trails: Point[][] }
+  | { id: number; cx: number; cy: number; lod: number }
 
 export interface PaintResult {
   id: number
@@ -16,6 +19,10 @@ let context: PaintContext | undefined
 self.onmessage = async (e: MessageEvent<PaintRequest>) => {
   if ('world' in e.data) {
     context = preparePaint(e.data.world)
+    return
+  }
+  if ('structures' in e.data) {
+    setStructures(context!, e.data.structures, e.data.trails)
     return
   }
   const { id, cx, cy, lod } = e.data

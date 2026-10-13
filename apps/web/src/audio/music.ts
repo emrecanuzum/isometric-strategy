@@ -49,10 +49,13 @@ export interface Music {
   /** Resumes playback; must be called from a user gesture. Returns whether audio is running. */
   unlock(): boolean
   setMuted(muted: boolean): void
+  /** Loudness from 0 to 1 of the full level. */
+  setVolume(volume: number): void
   destroy(): void
 }
 
-export function startMusic(muted: boolean): Music {
+export function startMusic(muted: boolean, volume = 1): Music {
+  let level = VOLUME * Math.min(1, Math.max(0, volume))
   // iOS 17+: play through the ringer/silent switch like a media player instead of being muted by it.
   const session = (navigator as { audioSession?: { type: string } }).audioSession
   if (session) session.type = 'playback'
@@ -225,7 +228,7 @@ export function startMusic(muted: boolean): Music {
   const onVisibility = () => void (document.hidden ? ctx.suspend() : ctx.resume())
   document.addEventListener('visibilitychange', onVisibility)
 
-  if (!muted) fadeTo(VOLUME, FADE_IN_S)
+  if (!muted) fadeTo(level, FADE_IN_S)
 
   let unlocked = false
   return {
@@ -242,7 +245,12 @@ export function startMusic(muted: boolean): Music {
       return ctx.state === 'running'
     },
     setMuted(value) {
-      fadeTo(value ? 0 : VOLUME, value ? 0.4 : 1.5)
+      muted = value
+      fadeTo(value ? 0 : level, value ? 0.4 : 1.5)
+    },
+    setVolume(value) {
+      level = VOLUME * Math.min(1, Math.max(0, value))
+      if (!muted) fadeTo(level, 0.2)
     },
     destroy() {
       clearInterval(timer)

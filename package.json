@@ -1,7 +1,10 @@
 {
   "name": "isometric-strategy",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "bun --filter @game/web dev",
     "build": "bun --filter @game/web build",
@@ -9,9 +12,14 @@
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
-    "db:status": "supabase status"
+    "db:status": "supabase status",
+    "db:push": "supabase db push",
+    "fn:bundle": "bun build packages/shared/src/index.ts --format esm --target browser --outfile supabase/functions/_shared/game.js",
+    "fn:deploy": "bun run fn:bundle && supabase functions deploy command --use-api",
+    "lobby:create": "bun scripts/create-lobby.ts"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.45.0",
     "supabase": "^2.120.0",
     "typescript": "^5.6.0"
   }

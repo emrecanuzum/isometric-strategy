@@ -1,5 +1,6 @@
 {
   "gameDayMs": 3600000,
   "seasonGameDays": 336,
-  "messengerDelayGameDays": 1
+  "messengerDelayGameDays": 0.5,
+  "monthGameDays": 30
 }

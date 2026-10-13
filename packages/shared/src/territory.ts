@@ -174,3 +174,14 @@ export function assignStartSite(world: World, random: () => number): Point | nul
   }
   return null
 }
+
+// Fully grown territories of two kingdoms keep at least balance.territory.kingdomGapTiles apart, so borders never
+// touch and there is neutral land between kingdoms.
+export function siteIsClear(site: Point, others: Point[]) {
+  const { stageParcels, kingdomGapTiles: gap } = balance.territory
+  const a = territoryRect(site, stageParcels.length - 1)
+  return others.every((other) => {
+    const b = territoryRect(other, stageParcels.length - 1)
+    return a.x >= b.x + b.size + gap || b.x >= a.x + a.size + gap || a.y >= b.y + b.size + gap || b.y >= a.y + a.size + gap
+  })
+}

@@ -1,0 +1,168 @@
+{
+  "startStock": { "gold": 150, "food": 120, "materials": 120, "arms": 60 },
+  "siteRolls": 3,
+  "surveyMargin": 24,
+  "yield": { "base": 0.8, "min": 0.5, "max": 2.5, "foodPerWater": 5, "foodPerGrass": 0.7, "foodPerDesert": -0.6, "armsPerMountain": 5, "materialsPerForest": 1.2, "swampPenalty": -1.5 },
+  "productionSeconds": 10,
+  "foodPerVillager": 0.25,
+  "maxConstructions": 2,
+  "trade": {
+    "tripSeconds": 10,
+    "price": { "food": 2, "materials": 3, "arms": 4 },
+    "levels": [
+      {
+        "units": 10,
+        "cost": {}
+      },
+      {
+        "units": 20,
+        "cost": { "gold": 150, "materials": 60 }
+      },
+      {
+        "units": 35,
+        "cost": { "gold": 400, "materials": 150 }
+      }
+    ]
+  },
+  "buildings": {
+    "palace": {
+      "size": 3,
+      "villagers": 4,
+      "levels": [
+        { "cost": { "gold": 200, "materials": 100 }, "buildSeconds": 20, "villagers": 5 },
+        { "cost": { "gold": 350, "materials": 180 }, "buildSeconds": 30, "villagers": 6 },
+        { "cost": { "gold": 550, "materials": 280 }, "buildSeconds": 45, "villagers": 7 },
+        { "cost": { "gold": 800, "materials": 400 }, "buildSeconds": 60, "villagers": 8 }
+      ]
+    },
+    "tradePost": { "size": 2, "workers": 1 },
+    "house": {
+      "size": 1,
+      "cost": { "gold": 30, "materials": 20 },
+      "buildSeconds": 8,
+      "villagers": 3,
+      "levels": [
+        {
+          "cost": { "gold": 60, "materials": 40 },
+          "buildSeconds": 10,
+          "villagers": 5
+        },
+        {
+          "cost": { "gold": 120, "materials": 90 },
+          "buildSeconds": 14,
+          "villagers": 8
+        }
+      ]
+    },
+    "farm": {
+      "size": 2,
+      "cost": { "gold": 20 },
+      "buildSeconds": 6,
+      "workers": 2,
+      "produces": "food",
+      "amount": 4,
+      "products": {
+        "wheat": { "makes": "food", "rate": 1 },
+        "flax": { "makes": "materials", "rate": 0.5 }
+      },
+      "levels": [
+        {
+          "cost": { "gold": 40, "materials": 20 },
+          "buildSeconds": 8,
+          "workers": 3,
+          "amount": 7
+        },
+        {
+          "cost": { "gold": 90, "materials": 50 },
+          "buildSeconds": 12,
+          "workers": 4,
+          "amount": 11
+        }
+      ]
+    },
+    "lumberCamp": {
+      "size": 2,
+      "cost": { "gold": 40, "materials": 10 },
+      "buildSeconds": 10,
+      "workers": 3,
+      "produces": "materials",
+      "amount": 3,
+      "levels": [
+        {
+          "cost": { "gold": 70, "materials": 20 },
+          "buildSeconds": 12,
+          "workers": 4,
+          "amount": 5
+        },
+        {
+          "cost": { "gold": 140, "materials": 60 },
+          "buildSeconds": 16,
+          "workers": 5,
+          "amount": 8
+        }
+      ]
+    },
+    "dock": {
+      "size": 2,
+      "cost": { "gold": 50, "materials": 30 },
+      "buildSeconds": 12,
+      "workers": 2,
+      "produces": "food",
+      "amount": 5,
+      "levels": [
+        {
+          "cost": { "gold": 80, "materials": 50 },
+          "buildSeconds": 14,
+          "workers": 3,
+          "amount": 8
+        },
+        {
+          "cost": { "gold": 160, "materials": 100 },
+          "buildSeconds": 18,
+          "workers": 4,
+          "amount": 12
+        }
+      ]
+    },
+    "forge": {
+      "size": 2,
+      "cost": { "gold": 60, "materials": 30 },
+      "buildSeconds": 14,
+      "workers": 3,
+      "produces": "arms",
+      "amount": 2,
+      "products": {
+        "iron": { "makes": "arms", "rate": 1 },
+        "sword": {
+          "makes": "sword",
+          "rate": 0.5,
+          "uses": { "arms": 2 }
+        },
+        "shield": {
+          "makes": "shield",
+          "rate": 0.5,
+          "uses": { "arms": 1, "materials": 1 }
+        },
+        "bow": {
+          "makes": "bow",
+          "rate": 0.5,
+          "uses": { "materials": 2 }
+        }
+      },
+      "levels": [
+        {
+          "cost": { "gold": 100, "materials": 50 },
+          "buildSeconds": 16,
+          "workers": 4,
+          "amount": 3
+        },
+        {
+          "cost": { "gold": 200, "materials": 120 },
+          "buildSeconds": 20,
+          "workers": 5,
+          "amount": 5
+        }
+      ]
+    }
+  }
+}

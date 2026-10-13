@@ -3,8 +3,11 @@ dist/
 .env
 .env.*
 !.env.example
+# Public client settings for the deployed build (the publishable key is meant to be public).
+!apps/web/.env.production
 .DS_Store
 supabase/.branches/
 supabase/.temp/
 .vercel
 .playwright-mcp/
+supabase/functions/_shared/game.js

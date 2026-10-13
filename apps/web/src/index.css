@@ -1,3 +1,55 @@
+/* ==== Pixel interface ======================================================================================
+   The interface is drawn in the same pixel art as the map. One art pixel is --px screen pixels; frames, bevels,
+   meters and icons are built on whole art pixels, never on fractions, and nothing is rounded or blurred.
+   Every frame is the same recipe: a one-pixel dark outline with notched corners, a lit bevel along the top-left
+   and a shaded one along the bottom-right (light comes from the upper left, as on the map). */
+
+:root {
+  --px: 2px;
+
+  --ink: #120d0b;
+  --wood-0: #2a1c14;
+  --wood-1: #3d2a1d;
+  --wood-2: #5a3d28;
+  --wood-3: #7a5535;
+  --wood-4: #9c7245;
+  --panel: #241a14;
+  --panel-2: #2f2219;
+  --panel-hi: #4a3626;
+  --panel-lo: #140e0b;
+  --slot: #1a1310;
+
+  --text: #f3e6c8;
+  --muted: #c2ad88;
+  --gold: #f2d16b;
+  --gold-2: #c8952e;
+  --gold-3: #7a5a18;
+  --up: #9ee6a0;
+  --down: #ff9a8a;
+  --water: #6cc0d4;
+  --danger: #6a2018;
+  --danger-hi: #a83a2a;
+
+  --parch: #ead7ab;
+  --parch-hi: #f8ecca;
+  --parch-lo: #c4a46c;
+  --parch-ink: #3a2619;
+
+  --font: 'Pixelify Sans', ui-monospace, monospace;
+  --dock-h: calc(var(--px) * 32);
+  --gap: 12px;
+
+  /* The frame recipe; components set --face, --hi and --lo. */
+  --outline:
+    0 calc(var(--px) * -1) 0 0 var(--ink),
+    0 var(--px) 0 0 var(--ink),
+    calc(var(--px) * -1) 0 0 0 var(--ink),
+    var(--px) 0 0 0 var(--ink);
+  --bevel:
+    inset var(--px) var(--px) 0 0 var(--hi),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--lo);
+}
+
 html,
 body,
 #root {
@@ -5,8 +57,10 @@ body,
   height: 100%;
   overflow: hidden;
   background: #10141a;
-  color: #e6e1d3;
-  font-family: system-ui, sans-serif;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.35;
 }
 
 html,
@@ -17,17 +71,2013 @@ canvas {
   touch-action: none;
 }
 
-.hud {
-  position: fixed;
-  top: 12px;
-  left: 12px;
-  padding: 8px 12px;
-  background: rgb(16 20 26 / 80%);
-  border: 1px solid #3a4250;
-  border-radius: 6px;
+button {
+  font: inherit;
+  color: inherit;
+}
+
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+small {
   font-size: 13px;
-  line-height: 1.5;
+}
+
+.icon,
+.sprite {
+  flex: none;
+  image-rendering: pixelated;
+}
+
+.icon {
+  vertical-align: -2px;
+}
+
+.up {
+  color: var(--up) !important;
+}
+
+.down {
+  color: var(--down) !important;
+}
+
+:focus-visible {
+  outline: var(--px) solid var(--gold);
+  outline-offset: calc(var(--px) * 2);
+}
+
+/* ---- Frames and buttons ---- */
+
+.frame {
+  --hi: var(--panel-hi);
+  --lo: var(--panel-lo);
+  background: var(--panel);
+  box-shadow:
+    var(--bevel),
+    var(--outline),
+    0 calc(var(--px) * 3) 0 0 rgb(0 0 0 / 35%);
+}
+
+.btn {
+  --face: var(--wood-2);
+  --hi: var(--wood-4);
+  --lo: var(--wood-0);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--px) * 3);
+  min-height: 40px;
+  padding: 0 calc(var(--px) * 6);
+  border: 0;
+  border-radius: 0;
+  background: var(--face);
+  box-shadow: var(--bevel), var(--outline), 0 calc(var(--px) * 2) 0 0 var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.btn:hover:not(:disabled) {
+  --face: var(--wood-3);
+}
+
+.btn:active:not(:disabled) {
+  --hi: var(--wood-0);
+  --lo: var(--wood-3);
+  transform: translateY(var(--px));
+  box-shadow: var(--bevel), var(--outline), 0 var(--px) 0 0 var(--ink);
+}
+
+.btn:disabled {
+  --face: #3a2f28;
+  --hi: #4a3e35;
+  --lo: #241c17;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.btn.active,
+.btn[aria-checked='true'] {
+  --face: #5a4416;
+  --hi: var(--gold-2);
+  --lo: #2e2208;
+  color: var(--gold);
+}
+
+.btn.primary {
+  --face: var(--gold-2);
+  --hi: var(--gold);
+  --lo: var(--gold-3);
+  color: var(--wood-0);
+  font-weight: 700;
+}
+
+.btn.primary:hover:not(:disabled) {
+  --face: #d8a63a;
+}
+
+.btn.danger {
+  --face: var(--danger);
+  --hi: var(--danger-hi);
+  --lo: #2e0c08;
+  color: #ffd6d0;
+}
+
+.btn.small {
+  min-height: 34px;
+  padding: 0 calc(var(--px) * 5);
+  font-size: 15px;
+}
+
+.btn.wide {
+  width: 100%;
+  justify-content: space-between;
+  min-height: 44px;
+}
+
+.btn.primary.wide {
+  justify-content: center;
+}
+
+.btn.icon-only {
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* A sunken slot for art and meters. */
+.slot {
+  background: var(--slot);
+  box-shadow:
+    inset var(--px) var(--px) 0 0 var(--panel-lo),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--panel-hi);
+}
+
+/* ---- Meters and charts ---- */
+
+.meter {
+  --on: var(--gold);
+  display: inline-flex;
+  gap: var(--px);
+  padding: var(--px);
+  background: var(--ink);
+}
+
+.meter i {
+  width: calc(var(--px) * 3);
+  height: calc(var(--px) * 4);
+  background: #3a2a20;
+}
+
+.meter i.on {
+  background: var(--on);
+  box-shadow: inset 0 var(--px) 0 0 rgb(255 255 255 / 25%);
+}
+
+.meter.up {
+  --on: var(--up);
+}
+
+.meter.down {
+  --on: var(--down);
+}
+
+.meter.water {
+  --on: var(--water);
+}
+
+.history {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--px);
+  height: calc(var(--px) * 12);
+  padding: calc(var(--px) * 2);
+  background: var(--slot);
+}
+
+.history i {
+  flex: 1;
+  max-width: calc(var(--px) * 4);
+  background: var(--gold-3);
+}
+
+.history i:last-child {
+  background: var(--gold);
+}
+
+/* ---- Top: stores and constructions ---- */
+
+.top {
+  position: fixed;
+  top: var(--gap);
+  left: var(--gap);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--px) * 6);
+  max-width: calc(100vw - var(--gap) * 2 - 56px);
   pointer-events: none;
+  z-index: 4;
+}
+
+.top > * {
+  pointer-events: auto;
+}
+
+.topbar {
+  display: flex;
+  align-items: stretch;
+  padding: calc(var(--px) * 2);
+}
+
+.res {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  min-height: 44px;
+  padding: 0 calc(var(--px) * 5);
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+
+
+.res:hover {
+  background: var(--panel-2);
+}
+
+.res-wrap {
+  position: relative;
+  display: flex;
+}
+
+.res-wrap + .res-wrap {
+  box-shadow: calc(var(--px) * -1) 0 0 0 var(--panel-lo), calc(var(--px) * -2) 0 0 0 var(--panel-hi);
+}
+
+.clock {
+  cursor: default;
+}
+
+/* Hover cards under the store chips: shown while the chip is hovered or focused, never on touch screens. */
+.pop {
+  position: absolute;
+  top: calc(100% + var(--px) * 6);
+  left: 0;
+  z-index: 8;
+  display: none;
+  flex-direction: column;
+  gap: calc(var(--px) * 4);
+  width: 240px;
+  padding: calc(var(--px) * 5);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.pop.right {
+  left: auto;
+  right: 0;
+}
+
+/* A notch on the card's top edge points at its chip. */
+.pop::before {
+  content: '';
+  position: absolute;
+  top: calc(var(--px) * -4);
+  left: 24px;
+  width: calc(var(--px) * 3);
+  height: calc(var(--px) * 3);
+  background: var(--ink);
+}
+
+.pop.right::before {
+  left: auto;
+  right: 24px;
+}
+
+@media (hover: hover) {
+  .res-wrap:hover .pop,
+  .res-wrap:focus-within .pop {
+    display: flex;
+  }
+}
+
+.pop-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+}
+
+.pop-head b {
+  flex: 1;
+  font-size: 16px;
+}
+
+.pop-head strong {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--gold);
+}
+
+/* Two bars side by side in scale: what comes in and what goes out each round. */
+.flowbars {
+  display: grid;
+  grid-template-columns: 5ch 1fr 6ch;
+  align-items: center;
+  gap: calc(var(--px) * 2) calc(var(--px) * 4);
+  padding: calc(var(--px) * 3);
+  background: var(--slot);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.flowbars i {
+  display: block;
+  height: calc(var(--px) * 4);
+  min-width: var(--px);
+  background: var(--gold-2);
+  box-shadow: inset 0 var(--px) 0 0 rgb(255 255 255 / 25%);
+}
+
+.flowbars i.up {
+  background: var(--up);
+}
+
+.flowbars i.down {
+  background: var(--down);
+}
+
+.flowbars small {
+  text-align: right;
+  font-size: 12px;
+}
+
+.pop-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.pop-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--px) * 4);
+  color: var(--muted);
+}
+
+.pop-lines b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.pop-foot {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pop .history {
+  height: calc(var(--px) * 10);
+}
+
+/* The game day as 24 hour cells coloured by the light, with a marker at the current hour. */
+.daystrip {
+  position: relative;
+  display: flex;
+  gap: 1px;
+  height: calc(var(--px) * 6);
+  padding: var(--px);
+  background: var(--ink);
+}
+
+.daystrip i {
+  flex: 1;
+}
+
+.daystrip .night { background: #2a3260; }
+.daystrip .dawn { background: #b07a8a; }
+.daystrip .morning { background: #e8c070; }
+.daystrip .noon { background: #f6e08a; }
+.daystrip .afternoon { background: #e8c070; }
+.daystrip .dusk { background: #d07850; }
+
+.daystrip em {
+  position: absolute;
+  top: calc(var(--px) * -2);
+  bottom: calc(var(--px) * -2);
+  width: var(--px);
+  background: #fff;
+  box-shadow: 0 0 0 var(--px) var(--ink);
+}
+
+.daystrip-hours {
+  display: flex;
+  justify-content: space-between;
+  margin-top: calc(var(--px) * -2);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.res-value {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+
+.res-value b {
+  min-width: 3ch;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.res-value small {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.queue {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 4) calc(var(--px) * 6);
+  font-size: 14px;
+  pointer-events: none !important;
+}
+
+.queue-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+}
+
+.queue-item small {
+  min-width: 4ch;
+  text-align: right;
+  color: var(--muted);
+}
+
+.music {
+  position: fixed;
+  top: var(--gap);
+  right: var(--gap);
+  z-index: 4;
+}
+
+/* The music switch is a one-chip bar of its own, the height of the store bar and in the same frame. */
+.btn.music {
+  --face: var(--panel);
+  --hi: var(--panel-hi);
+  --lo: var(--panel-lo);
+  width: calc(44px + var(--px) * 4);
+  height: calc(44px + var(--px) * 4);
+  box-shadow: var(--bevel), var(--outline), 0 calc(var(--px) * 3) 0 0 rgb(0 0 0 / 35%);
+}
+
+.btn.music:hover:not(:disabled) {
+  --face: var(--panel-2);
+}
+
+/* Test only: starts the kingdom over. */
+.test-reset {
+  position: fixed;
+  top: calc(var(--gap) + 52px);
+  right: var(--gap);
+  z-index: 4;
+}
+
+.tile-tag {
+  position: fixed;
+  top: calc(var(--gap) + 6px);
+  right: calc(var(--gap) + 56px);
+  padding: calc(var(--px) * 2) calc(var(--px) * 5);
+  background: rgb(18 13 11 / 75%);
+  color: var(--muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.tile-tag b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* ---- Dock of tabs ---- */
+
+.dock {
+  position: fixed;
+  left: var(--gap);
+  bottom: var(--gap);
+  padding: calc(var(--px) * 2);
+  z-index: 6;
+}
+
+.dock [role='tablist'] {
+  display: flex;
+}
+
+.tab {
+  --hi: transparent;
+  --lo: transparent;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--px);
+  width: calc(var(--px) * 34);
+  height: var(--dock-h);
+  border: 0;
+  background: none;
+  box-shadow: var(--bevel);
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tab.gap {
+  margin-left: calc(var(--px) * 5);
+}
+
+/* A notch of panel between the groups. */
+.tab.gap::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--px) * -3);
+  top: calc(var(--px) * 4);
+  bottom: calc(var(--px) * 4);
+  width: var(--px);
+  background: var(--panel-lo);
+  box-shadow: var(--px) 0 0 0 var(--panel-hi);
+}
+
+.tab:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.tab[aria-selected='true'] {
+  --hi: var(--wood-4);
+  --lo: var(--wood-0);
+  background: var(--wood-2);
+  color: var(--gold);
+}
+
+/* The open tab carries a gold marker on its top edge. */
+.tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  top: calc(var(--px) * -2);
+  left: 30%;
+  right: 30%;
+  height: var(--px);
+  background: var(--gold);
+}
+
+.badge {
+  position: absolute;
+  top: calc(var(--px) * 2);
+  right: calc(var(--px) * 4);
+  min-width: 10px;
+  padding: 0 calc(var(--px) * 2);
+  background: #b0302a;
+  color: #fff3e8;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: var(--outline);
+}
+
+/* ---- Sheet: the open tab ---- */
+
+.sheet {
+  position: fixed;
+  left: var(--gap);
+  top: 120px;
+  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10);
+  width: min(400px, calc(100vw - var(--gap) * 2));
+  display: flex;
+  flex-direction: column;
+  z-index: 5;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 5);
+  padding: calc(var(--px) * 5) calc(var(--px) * 6);
+  background: var(--panel-2);
+  box-shadow: inset 0 calc(var(--px) * -1) 0 0 var(--panel-lo), inset var(--px) var(--px) 0 0 var(--panel-hi);
+}
+
+.sheet-head > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.sheet-head h2 {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--gold);
+  line-height: 1.1;
+}
+
+.sheet-head small {
+  color: var(--muted);
+}
+
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: calc(var(--px) * 6);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 8);
+  overflow-x: hidden;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+
+/* Scrollbars are pixel planks too; nothing scrolls sideways. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--wood-3) var(--panel-lo);
+}
+
+::-webkit-scrollbar {
+  width: calc(var(--px) * 5);
+  height: 0;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--panel-lo);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--wood-3);
+  box-shadow: inset var(--px) var(--px) 0 0 var(--wood-4), inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--wood-0);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 4);
+}
+
+.section h3 {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  padding-bottom: calc(var(--px) * 2);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  box-shadow: 0 var(--px) 0 0 var(--panel-lo), 0 calc(var(--px) * 2) 0 0 var(--panel-hi);
+}
+
+.section h3 span {
+  flex: 1;
+}
+
+.section h3 small {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.row,
+.segmented,
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 4);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--px);
+  padding: 0 calc(var(--px) * 3);
+  background: var(--panel-lo);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.chip.locked {
+  opacity: 0.75;
+}
+
+.stat {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 calc(var(--px) * 4);
+  align-items: baseline;
+}
+
+.stat > span {
+  color: var(--muted);
+}
+
+.stat b {
+  font-weight: 600;
+}
+
+.stat small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  color: var(--down);
+  font-size: 14px;
+}
+
+/* A large piece of art beside a title and a short text. */
+.feature {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 6);
+}
+
+.feature > canvas,
+.feature > .icon {
+  padding: calc(var(--px) * 3);
+}
+
+.feature > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--px) * 3);
+}
+
+.feature b {
+  font-size: 18px;
+}
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 8) calc(var(--px) * 4);
+  text-align: center;
+  color: var(--muted);
+}
+
+.placeholder b {
+  color: var(--text);
+  font-size: 17px;
+}
+
+.placeholder p {
+  font-size: 14px;
+  max-width: 32ch;
+}
+
+.locked {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.locked li {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+}
+
+/* ---- Costs ---- */
+
+.cost {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 5);
+}
+
+.cost span {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+}
+
+.cost .short {
+  color: var(--down);
+}
+
+.cost.free {
+  color: var(--up);
+}
+
+/* ---- İnşa ---- */
+
+.queue-list,
+.cards,
+.tally,
+.places {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.queue-list li {
+  display: grid;
+  grid-template-columns: 1fr auto 4ch;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+}
+
+.queue-list small {
+  text-align: right;
+  color: var(--muted);
+}
+
+.card {
+  --face: var(--panel-2);
+  --hi: var(--panel-hi);
+  --lo: var(--panel-lo);
+  display: flex;
+  align-items: stretch;
+  gap: calc(var(--px) * 5);
+  width: 100%;
+  padding: calc(var(--px) * 3);
+  border: 0;
+  background: var(--face);
+  box-shadow: var(--bevel), var(--outline);
+  text-align: left;
+  cursor: pointer;
+}
+
+.card:hover:not(:disabled) {
+  --face: #3a2a1e;
+  --hi: var(--wood-4);
+}
+
+.card:disabled {
+  cursor: not-allowed;
+}
+
+.card:disabled .card-art {
+  filter: grayscale(0.7) brightness(0.8);
+}
+
+.card-art {
+  flex: none;
+  display: grid;
+  place-items: end center;
+  width: calc(var(--px) * 40);
+  min-height: calc(var(--px) * 34);
+  padding-bottom: calc(var(--px) * 2);
+  overflow: hidden;
+  background: var(--slot);
+  box-shadow: inset var(--px) var(--px) 0 0 var(--panel-lo), inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--panel-hi);
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--px);
+  min-width: 0;
+}
+
+.card-body b {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.card-body small {
+  color: var(--muted);
+}
+
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--px) * 3) calc(var(--px) * 5);
+  margin-top: calc(var(--px) * 2);
+  font-size: 14px;
+}
+
+/* ---- Depo ---- */
+
+.store-row {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 5);
+  background: var(--panel-2);
+  box-shadow: inset var(--px) var(--px) 0 0 var(--panel-hi), inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--panel-lo);
+}
+
+.store-row header {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 5);
+}
+
+.store-row header span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.store-row header small {
+  color: var(--muted);
+}
+
+.store-row strong {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--gold);
+}
+
+.store-flow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: calc(var(--px) * 4);
+}
+
+.store-flow .stat {
+  grid-template-columns: 1fr;
+  padding: calc(var(--px) * 2) calc(var(--px) * 4);
+  background: var(--slot);
+}
+
+.store-flow .stat > span {
+  font-size: 12px;
+}
+
+/* ---- Krallık adı ---- */
+
+.name-field {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.name-row {
+  display: flex;
+  gap: calc(var(--px) * 4);
+}
+
+.name-row input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 calc(var(--px) * 5);
+  border: 0;
+  border-radius: 0;
+  background: var(--slot);
+  color: var(--gold);
+  font: inherit;
+  font-size: 18px;
+  box-shadow:
+    inset var(--px) var(--px) 0 0 var(--panel-lo),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--panel-hi),
+    var(--outline);
+  /* Touch gestures elsewhere drive the map; the field still takes taps and text. */
+  touch-action: manipulation;
+}
+
+.name-row input::placeholder {
+  color: #6b5a44;
+}
+
+.name-row input:focus-visible {
+  outline: var(--px) solid var(--gold);
+  outline-offset: calc(var(--px) * 2);
+}
+
+/* ---- Krallık rengi ---- */
+
+.color-field {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 6);
+}
+
+.swatches {
+  flex: 1;
+  min-width: 0;
+  /* Rows of nine (a lobby has 9 or 18 colours), each tile as wide as the row allows. */
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: calc(var(--px) * 3);
+}
+
+/* A square tile of roof colour with the frame bevel; the chosen one is ringed in gold. */
+.swatch {
+  --hi: rgb(255 255 255 / 30%);
+  --lo: rgb(0 0 0 / 35%);
+  width: 100%;
+  aspect-ratio: 1;
+  max-width: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--swatch);
+  box-shadow: var(--bevel), var(--outline);
+  cursor: pointer;
+}
+
+/* Another kingdom's colour: dimmed and crossed out. */
+.swatch:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+  background:
+    linear-gradient(45deg, transparent 45%, var(--ink) 45% 55%, transparent 55%),
+    var(--swatch);
+}
+
+.swatch.active {
+  outline: var(--px) solid var(--gold);
+  outline-offset: calc(var(--px) * 2);
+  transform: translateY(calc(var(--px) * -1));
+}
+
+.palace-preview {
+  flex: none;
+  display: grid;
+  place-items: end center;
+  padding: calc(var(--px) * 2);
+}
+
+/* ---- Hudut aşamaları ---- */
+
+.stages-track {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: calc(var(--px) * 4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stages-track li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(var(--px) * 3);
+  background: var(--slot);
+  color: var(--muted);
+  box-shadow: inset var(--px) var(--px) 0 0 var(--panel-lo), inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--panel-hi);
+}
+
+.stages-track li.past {
+  color: var(--text);
+}
+
+.stages-track li.now {
+  background: #3a2c12;
+  color: var(--gold);
+  box-shadow: inset var(--px) var(--px) 0 0 var(--gold-2), inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 #2e2208;
+}
+
+.stages-track small {
+  font-size: 12px;
+}
+
+/* ---- İnşaat onayı ---- */
+
+.confirm {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--gap) + 64px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: calc(var(--px) * 6);
+  width: min(440px, calc(100vw - var(--gap) * 2));
+  box-sizing: border-box;
+  padding: calc(var(--px) * 6);
+  z-index: 9;
+}
+
+.confirm-art {
+  flex: none;
+  display: grid;
+  place-items: end center;
+  min-width: calc(var(--px) * 36);
+  padding: calc(var(--px) * 3);
+}
+
+.confirm-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 3);
+  min-width: 0;
+}
+
+.confirm h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--gold);
+}
+
+/* ---- Dünya haritası ---- */
+
+.worldmap {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 4);
+  padding: var(--gap);
+  padding-bottom: calc(var(--gap) + env(safe-area-inset-bottom));
+  background: rgb(10 8 7 / 92%);
+}
+
+.worldmap-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 3) calc(var(--px) * 4);
+}
+
+.worldmap-head h2 {
+  flex: 1;
+  font-size: 18px;
+  color: var(--gold);
+}
+
+.worldmap-scroll {
+  flex: 1;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  touch-action: pan-x pan-y;
+}
+
+.worldmap-sheet {
+  position: relative;
+  min-width: 100%;
+}
+
+.worldmap-sheet canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  cursor: crosshair;
+}
+
+.worldmap-inn,
+.worldmap-name,
+.worldmap-here {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.worldmap-inn .icon {
+  display: block;
+}
+
+.worldmap-name {
+  padding: 0 calc(var(--px) * 3);
+  background: rgb(18 13 11 / 75%);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transform: translate(-50%, -150%);
+}
+
+.worldmap-name.mine {
+  font-size: 15px;
+  box-shadow: var(--outline);
+}
+
+.worldmap-here {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+.worldmap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--px) * 3) calc(var(--px) * 8);
+  padding: calc(var(--px) * 3) calc(var(--px) * 5);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.worldmap-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+}
+
+.worldmap-legend i {
+  width: 14px;
+  height: 4px;
+}
+
+.worldmap-legend i.here {
+  width: 8px;
+  height: 8px;
+  border: 2px solid #fff;
+}
+
+.worldmap-legend small {
+  margin-left: auto;
+}
+
+/* ---- Cephanelik ---- */
+
+.armory {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(var(--px) * 4);
+}
+
+.armory .slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--px);
+  padding: calc(var(--px) * 4) calc(var(--px) * 2);
+}
+
+.armory b {
+  font-size: 20px;
+  color: var(--gold);
+}
+
+.armory small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ---- Bina menüsü ---- */
+
+.feature > .slot {
+  flex: none;
+  display: grid;
+  place-items: end center;
+  min-width: calc(var(--px) * 40);
+  min-height: calc(var(--px) * 36);
+  padding: calc(var(--px) * 3);
+}
+
+.output {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  color: var(--up);
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+}
+
+.stepper-value {
+  min-width: 5ch;
+  text-align: center;
+  color: var(--muted);
+}
+
+.stepper-value b {
+  font-size: 22px;
+  color: var(--text);
+}
+
+.levels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(var(--px) * 4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.levels li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--px);
+  min-height: calc(var(--px) * 30);
+  padding: calc(var(--px) * 3);
+  background: var(--slot);
+  box-shadow: inset var(--px) var(--px) 0 0 var(--panel-lo), inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--panel-hi);
+  color: var(--muted);
+}
+
+.levels li:not(.now):not(.past) canvas {
+  filter: grayscale(1) brightness(0.6);
+}
+
+.levels li.now {
+  background: #3a2c12;
+  box-shadow: inset var(--px) var(--px) 0 0 var(--gold-2), inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 #2e2208;
+  color: var(--gold);
+}
+
+/* The label over the building under the pointer. */
+.map-tip {
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 10px));
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 2) calc(var(--px) * 5);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.map-tip small {
+  color: var(--muted);
+}
+
+.map-tip em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--gold);
+}
+
+/* A small notch under the label points at the building. */
+.map-tip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--px) * -4);
+  width: calc(var(--px) * 3);
+  height: calc(var(--px) * 3);
+  transform: translateX(-50%);
+  background: var(--ink);
+}
+
+@media (hover: none) {
+  .map-tip em {
+    display: none;
+  }
+}
+
+/* ---- Ticaret ---- */
+
+.goods {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(var(--px) * 5);
+}
+
+.goods.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.good {
+  --face: var(--panel-2);
+  --hi: var(--panel-hi);
+  --lo: var(--panel-lo);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--px);
+  padding: calc(var(--px) * 5) calc(var(--px) * 2);
+  border: 0;
+  background: var(--face);
+  box-shadow: var(--bevel), var(--outline);
+  text-align: center;
+  cursor: pointer;
+}
+
+.good:hover {
+  --face: #3a2a1e;
+}
+
+.good.active {
+  --face: #4a3812;
+  --hi: var(--gold-2);
+  --lo: #2e2208;
+}
+
+.good.active b {
+  color: var(--gold);
+}
+
+.good small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ---- Krallık ---- */
+
+.tally li,
+.places li {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 5);
+}
+
+.tally li > canvas,
+.places li > canvas {
+  width: auto;
+  min-width: calc(var(--px) * 18);
+}
+
+.tally li span,
+.places li span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.places small {
+  color: var(--muted);
+}
+
+/* ---- Halk ---- */
+
+.mood > .icon {
+  background: var(--slot);
+}
+
+.sign {
+  display: grid;
+  grid-template-columns: 9ch auto 1fr;
+  align-items: center;
+  gap: calc(var(--px) * 5);
+}
+
+.sign small {
+  color: var(--muted);
+}
+
+/* ---- Günlük: dispatches on parchment ---- */
+
+.letters {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 6);
+}
+
+.letters section {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 4);
+}
+
+.day-head {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.letter {
+  --hi: var(--parch-hi);
+  --lo: var(--parch-lo);
+  --tone: var(--gold-2);
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--px) * 5);
+  padding: calc(var(--px) * 5) calc(var(--px) * 6) calc(var(--px) * 5) calc(var(--px) * 7);
+  background: var(--parch);
+  color: var(--parch-ink);
+  box-shadow: inset calc(var(--px) * 3) 0 0 0 var(--tone), var(--bevel), var(--outline);
+}
+
+.letter.tone-good {
+  --tone: #4f8c40;
+}
+
+.letter.tone-bad {
+  --tone: #b0302a;
+}
+
+.letter > div {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.letter b {
+  display: block;
+  font-weight: 600;
+}
+
+.letter p {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.letter small {
+  color: #6b5034;
+  font-size: 12px;
+}
+
+/* ---- Main menu (before the map) ---- */
+
+.home-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--px) * 10);
+  padding: max(40px, 8vh) var(--gap) 40px;
+  box-sizing: border-box;
+  overflow: hidden auto;
+  /* The page scrolls here (the map screen blocks touch scrolling). */
+  touch-action: pan-y;
+  /* A night sky over dark hills, dithered in two-pixel steps like the map. */
+  background:
+    repeating-conic-gradient(rgb(255 255 255 / 2.5%) 0 25%, transparent 0 50%) 0 0 / calc(var(--px) * 2) calc(var(--px) * 2),
+    radial-gradient(ellipse 120% 60% at 50% 115%, #2a3a24 0 38%, transparent 38.5%),
+    radial-gradient(ellipse 90% 50% at 15% 110%, #1f2c1c 0 45%, transparent 45.5%),
+    linear-gradient(#0c1220, #1a2236 60%, #24283a);
+}
+
+.home-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  text-align: center;
+}
+
+.home-title h1 {
+  margin: 0;
+  color: var(--gold);
+  font-size: clamp(36px, 8vw, 56px);
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-shadow:
+    0 var(--px) 0 var(--gold-3),
+    0 calc(var(--px) * 2) 0 var(--ink),
+    0 calc(var(--px) * 4) 0 rgb(0 0 0 / 40%);
+}
+
+.home-title p {
+  color: var(--muted);
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  box-sizing: border-box;
+}
+
+.home-tabs {
+  display: flex;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 4) calc(var(--px) * 4) 0;
+}
+
+.home-tabs .btn {
+  flex: 1;
+  justify-content: center;
+  --face: var(--panel-2);
+  --hi: var(--panel-hi);
+  --lo: var(--panel-lo);
+  color: var(--muted);
+}
+
+.home-tabs .btn[aria-selected='true'] {
+  --face: var(--wood-2);
+  --hi: var(--wood-4);
+  --lo: var(--wood-0);
+  color: var(--gold);
+}
+
+.home-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 6);
+  padding: calc(var(--px) * 8);
+}
+
+.home-body h3 {
+  color: var(--gold);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.home-foot {
+  padding: 0 calc(var(--px) * 8) calc(var(--px) * 6);
+  color: var(--muted);
+}
+
+.row.spread {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.form label,
+.form .field {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+}
+
+.form .field > span,
+.form label > span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.form input:not([type='range']),
+.lobby-password input {
+  height: 40px;
+  padding: 0 calc(var(--px) * 5);
+  border: 0;
+  border-radius: 0;
+  background: var(--slot);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  box-shadow:
+    inset var(--px) var(--px) 0 0 var(--panel-lo),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--panel-hi),
+    var(--outline);
+  touch-action: manipulation;
+}
+
+.form input:focus-visible,
+.lobby-password input:focus-visible {
+  outline: var(--px) solid var(--gold);
+  outline-offset: calc(var(--px) * 2);
+}
+
+.form input[type='range'] {
+  accent-color: var(--gold-2);
+  touch-action: manipulation;
+}
+
+.form-error {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  color: var(--down);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.lobby-rows {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lobby-rows li {
+  background: var(--slot);
+  box-shadow: var(--outline);
+}
+
+.lobby-rows li.joined {
+  box-shadow:
+    inset var(--px) 0 0 0 var(--gold-2),
+    var(--outline);
+}
+
+.lobby-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 5);
+  padding: calc(var(--px) * 4) calc(var(--px) * 5);
+}
+
+.lobby-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lobby-name b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lobby-name small,
+.lobby-count {
+  color: var(--muted);
+}
+
+.lobby-count {
+  white-space: nowrap;
+}
+
+.lobby-password {
+  display: flex;
+  gap: calc(var(--px) * 3);
+  padding: 0 calc(var(--px) * 5) calc(var(--px) * 4);
+}
+
+.lobby-password input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+}
+
+.tutorial-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--px) * 5);
+  min-height: 220px;
+  text-align: center;
+  line-height: 1.45;
+}
+
+.tutorial-dots {
+  display: flex;
+  gap: calc(var(--px) * 3);
+}
+
+.tutorial-dots i {
+  width: calc(var(--px) * 4);
+  height: calc(var(--px) * 4);
+  background: var(--panel-hi);
+}
+
+.tutorial-dots i.on {
+  background: var(--gold);
+}
+
+.account {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: calc(var(--px) * 2) calc(var(--px) * 8);
+  margin: 0;
+}
+
+.account dt {
+  color: var(--muted);
+}
+
+.account dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 420px) {
+  .lobby-count {
+    display: none;
+  }
+}
+
+/* ---- Lobby chat ---- */
+
+.chat-toggle,
+.chat {
+  position: fixed;
+  left: var(--gap);
+  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10);
+  z-index: 5;
+}
+
+.chat-toggle .badge {
+  top: calc(var(--px) * -4);
+  right: calc(var(--px) * -4);
+}
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  width: min(340px, calc(100vw - var(--gap) * 2));
+  height: min(340px, 45vh);
+  box-sizing: border-box;
+}
+
+.chat header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(var(--px) * 3) calc(var(--px) * 3) calc(var(--px) * 3) calc(var(--px) * 6);
+  color: var(--gold);
+}
+
+.chat ol {
+  flex: 1;
+  margin: 0;
+  padding: calc(var(--px) * 2) calc(var(--px) * 6);
+  overflow: hidden auto;
+  list-style: none;
+  background: var(--slot);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.chat li {
+  display: flex;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 2) 0;
+}
+
+.chat li > i {
+  flex: none;
+  width: calc(var(--px) * 4);
+  height: calc(var(--px) * 4);
+  margin-top: calc(var(--px) * 2);
+  box-shadow: var(--outline);
+}
+
+.chat li small {
+  margin-left: calc(var(--px) * 3);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.chat li.own > span {
+  color: var(--parch-hi);
+}
+
+.chat li.empty {
+  color: var(--muted);
+}
+
+.chat form {
+  display: flex;
+  gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 4);
+}
+
+.chat input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 calc(var(--px) * 4);
+  border: 0;
+  border-radius: 0;
+  background: var(--slot);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  box-shadow: var(--outline);
+  touch-action: manipulation;
+}
+
+.chat input:focus-visible {
+  outline: var(--px) solid var(--gold);
+}
+
+/* An open sheet takes the left side. */
+:root[data-sheet='open'] .chat,
+:root[data-sheet='open'] .chat-toggle {
+  display: none;
+}
+
+/* ---- Before founding, dialogs, placing, toast ---- */
+
+.dialog {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--gap) * 2);
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 6);
+  width: min(460px, calc(100vw - var(--gap) * 2));
+  max-height: calc(100vh - 140px);
+  overflow: hidden auto;
+  padding: 0 0 calc(var(--px) * 6);
+  z-index: 7;
+}
+
+.dialog > :not(.sheet-head) {
+  margin: 0 calc(var(--px) * 6);
+}
+
+.dialog > .btn.wide {
+  width: auto;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgb(10 7 6 / 55%);
+  z-index: 8;
+}
+
+.modal .dialog {
+  top: 50%;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+}
+
+.yields {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 4);
+}
+
+.yield {
+  display: grid;
+  grid-template-columns: auto 1fr auto 5ch;
+  align-items: center;
+  gap: calc(var(--px) * 5);
+}
+
+.yield b {
+  text-align: right;
+}
+
+.placing {
+  position: fixed;
+  left: 50%;
+  bottom: var(--gap);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 6);
+  width: max-content;
+  max-width: calc(100vw - var(--gap) * 2);
+  box-sizing: border-box;
+  padding: calc(var(--px) * 4) calc(var(--px) * 4) calc(var(--px) * 4) calc(var(--px) * 6);
+  font-size: 15px;
+  z-index: 6;
+}
+
+.placing b {
+  color: var(--gold);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  top: 30%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 5) calc(var(--px) * 8);
+  --hi: #a83a2a;
+  --lo: #2e0c08;
+  background: #4a1a14;
+  color: #ffe2dc;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ---- Map controls ---- */
+
+.zoom {
+  position: fixed;
+  right: var(--gap);
+  bottom: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 5);
+  z-index: 3;
 }
 
 .minimap {
@@ -36,93 +2086,65 @@ canvas {
   bottom: -26px;
   /* Rotated and squashed so the square tile grid lines up with the isometric view. */
   transform: scaleY(0.5) rotate(45deg);
+  z-index: 2;
 }
 
 .minimap canvas {
   display: block;
-  border: 2px solid #3a4250;
   cursor: pointer;
   image-rendering: pixelated;
-}
-
-.stages {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  display: flex;
-  gap: 6px;
-}
-
-.zoom {
-  position: fixed;
-  left: 12px;
-  bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.stages button,
-.zoom button {
-  padding: 6px 10px;
-  background: rgb(16 20 26 / 80%);
-  color: inherit;
-  border: 1px solid #3a4250;
-  border-radius: 6px;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.stages button.active {
-  border-color: #f2d16b;
-  color: #f2d16b;
+  box-shadow:
+    0 0 0 3px var(--wood-3),
+    0 0 0 5px var(--wood-0),
+    0 0 0 7px var(--ink);
 }
 
 /* Pixel spinner: 8 squares on a 4x4 grid ring, each lit in turn. */
 .spinner {
-  --px: 4px;
-  --pad: 6px;
+  --sq: 4px;
+  --pad: 8px;
   position: fixed;
-  left: 12px;
-  bottom: 166px;
-  width: calc(var(--px) * 4);
-  height: calc(var(--px) * 4);
+  right: var(--gap);
+  bottom: 380px;
+  width: calc(var(--sq) * 4);
+  height: calc(var(--sq) * 4);
   padding: var(--pad);
-  background: rgb(16 20 26 / 80%);
-  border: 1px solid #3a4250;
-  border-radius: 6px;
+  --hi: var(--panel-hi);
+  --lo: var(--panel-lo);
+  background: var(--panel);
+  box-shadow: var(--bevel), var(--outline);
   pointer-events: none;
 }
 
 .spinner.big {
-  --px: 8px;
-  --pad: 10px;
+  --sq: 8px;
+  --pad: 12px;
   left: 50%;
   top: 50%;
+  right: auto;
   bottom: auto;
   transform: translate(-50%, -50%);
 }
 
 .spinner i {
   position: absolute;
-  width: var(--px);
-  height: var(--px);
-  background: #f2d16b;
+  width: var(--sq);
+  height: var(--sq);
+  background: var(--gold);
   opacity: 0.15;
   animation: pixel-blink 0.8s steps(1) infinite;
   animation-delay: calc(var(--i) * 0.1s - 0.8s);
 }
 
 /* Clockwise around the ring, starting top-left of the top edge. */
-.spinner i:nth-child(1) { left: calc(var(--pad) + var(--px) * 1); top: var(--pad); }
-.spinner i:nth-child(2) { left: calc(var(--pad) + var(--px) * 2); top: var(--pad); }
-.spinner i:nth-child(3) { left: calc(var(--pad) + var(--px) * 3); top: calc(var(--pad) + var(--px) * 1); }
-.spinner i:nth-child(4) { left: calc(var(--pad) + var(--px) * 3); top: calc(var(--pad) + var(--px) * 2); }
-.spinner i:nth-child(5) { left: calc(var(--pad) + var(--px) * 2); top: calc(var(--pad) + var(--px) * 3); }
-.spinner i:nth-child(6) { left: calc(var(--pad) + var(--px) * 1); top: calc(var(--pad) + var(--px) * 3); }
-.spinner i:nth-child(7) { left: var(--pad); top: calc(var(--pad) + var(--px) * 2); }
-.spinner i:nth-child(8) { left: var(--pad); top: calc(var(--pad) + var(--px) * 1); }
+.spinner i:nth-child(1) { left: calc(var(--pad) + var(--sq) * 1); top: var(--pad); }
+.spinner i:nth-child(2) { left: calc(var(--pad) + var(--sq) * 2); top: var(--pad); }
+.spinner i:nth-child(3) { left: calc(var(--pad) + var(--sq) * 3); top: calc(var(--pad) + var(--sq) * 1); }
+.spinner i:nth-child(4) { left: calc(var(--pad) + var(--sq) * 3); top: calc(var(--pad) + var(--sq) * 2); }
+.spinner i:nth-child(5) { left: calc(var(--pad) + var(--sq) * 2); top: calc(var(--pad) + var(--sq) * 3); }
+.spinner i:nth-child(6) { left: calc(var(--pad) + var(--sq) * 1); top: calc(var(--pad) + var(--sq) * 3); }
+.spinner i:nth-child(7) { left: var(--pad); top: calc(var(--pad) + var(--sq) * 2); }
+.spinner i:nth-child(8) { left: var(--pad); top: calc(var(--pad) + var(--sq) * 1); }
 
 @keyframes pixel-blink {
   0% { opacity: 1; }
@@ -131,48 +2153,231 @@ canvas {
   37.5% { opacity: 0.15; }
 }
 
-@media (max-width: 640px) {
-  .spinner:not(.big) {
-    left: 8px;
-    bottom: 162px;
-  }
+/* While a tab is open on wide screens, the constructions show inside İnşa instead of under the stores. */
+:root[data-sheet='open'] .top .queue {
+  display: none;
+}
 
-  .stages {
-    top: 8px;
-    left: 8px;
-    right: 8px;
-    flex-wrap: wrap;
-  }
+/* ---- Medium screens: a smaller minimap keeps clear of the dock ---- */
 
-  .hud {
-    top: 50px;
-    left: 8px;
-    right: 8px;
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-
-  .zoom {
-    left: 8px;
-    bottom: 8px;
-  }
-
+@media (max-width: 1100px) {
   .minimap {
-    /* Offsets account for the rotated box overflowing its 128px layout box. */
-    right: 34px;
-    bottom: -11px;
+    right: 40px;
+    bottom: -14px;
   }
 
   .minimap canvas {
-    width: 128px;
-    height: 128px;
+    width: 160px;
+    height: 160px;
+  }
+
+  .zoom {
+    bottom: 150px;
   }
 }
 
-.zoom button {
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  font-size: 22px;
-  line-height: 1;
+/* ---- Phones: the dock spans the bottom edge and tabs open as a sheet above it ---- */
+
+@media (max-width: 719px) {
+  :root {
+    --gap: 8px;
+    --dock-h: 56px;
+  }
+
+  html,
+  body,
+  #root {
+    font-size: 15px;
+  }
+
+  .top {
+    left: var(--gap);
+    right: calc(var(--gap) + 56px);
+    max-width: none;
+  }
+
+  .topbar {
+    width: 100%;
+    box-sizing: border-box;
+    justify-content: space-between;
+  }
+
+  .res-wrap {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .res {
+    flex: 1;
+    justify-content: center;
+    gap: var(--px);
+    min-width: 0;
+    padding: 0 var(--px);
+  }
+
+  .res .icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .res-value b {
+    min-width: 0;
+    font-size: 15px;
+  }
+
+  .res-value small,
+  .clock .icon,
+  .tile-tag {
+    display: none;
+  }
+
+  .dock {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: var(--px) var(--px) calc(var(--px) + env(safe-area-inset-bottom));
+  }
+
+  /* On phones every tab is a button of its own: a framed plank with gaps between them, and a wider gap
+     between the groups. */
+  .dock {
+    background: rgb(18 13 11 / 88%);
+    box-shadow: 0 calc(var(--px) * -1) 0 0 var(--ink);
+    padding-top: calc(var(--px) * 3);
+  }
+
+  .dock [role='tablist'] {
+    gap: calc(var(--px) * 3);
+  }
+
+  .tab {
+    --hi: var(--panel-hi);
+    --lo: var(--panel-lo);
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    height: calc(var(--dock-h) - var(--px) * 4);
+    background: var(--panel-2);
+    box-shadow: var(--bevel), var(--outline);
+    font-size: 11px;
+  }
+
+  .tab.gap {
+    margin-left: calc(var(--px) * 4);
+  }
+
+  .tab.gap::before {
+    display: none;
+  }
+
+  .tab:active {
+    transform: translateY(var(--px));
+  }
+
+  .confirm {
+    bottom: calc(var(--gap) + 76px);
+  }
+
+  .btn.music {
+    width: calc(40px + var(--px) * 4);
+  }
+
+  .sheet {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: calc(var(--dock-h) + var(--px) * 4 + env(safe-area-inset-bottom));
+    width: auto;
+    height: min(62vh, calc(100vh - 140px));
+  }
+
+  .zoom {
+    left: var(--gap);
+    right: auto;
+    bottom: calc(var(--dock-h) + 20px + env(safe-area-inset-bottom));
+  }
+
+  /* Above the zoom buttons. */
+  .chat-toggle {
+    bottom: calc(var(--dock-h) + 170px + env(safe-area-inset-bottom));
+  }
+
+  .chat {
+    left: var(--gap);
+    right: var(--gap);
+    width: auto;
+    bottom: calc(var(--dock-h) + var(--px) * 4 + env(safe-area-inset-bottom));
+    height: 50vh;
+  }
+
+  .minimap {
+    right: 34px;
+    bottom: calc(var(--dock-h) + 2px + env(safe-area-inset-bottom));
+  }
+
+  .minimap canvas {
+    width: 112px;
+    height: 112px;
+  }
+
+  .spinner:not(.big) {
+    right: var(--gap);
+    bottom: auto;
+    top: 64px;
+  }
+
+  /* The open sheet covers the map controls. */
+  :root[data-sheet='open'] .zoom,
+  :root[data-sheet='open'] .minimap {
+    display: none;
+  }
+
+  .placing {
+    left: var(--gap);
+    right: var(--gap);
+    transform: none;
+    width: auto;
+    font-size: 14px;
+  }
+
+  .dialog {
+    bottom: var(--gap);
+    max-height: calc(100vh - 90px);
+  }
+
+  .goods {
+    gap: calc(var(--px) * 3);
+  }
+}
+
+/* Very narrow phones: the dock shows icons only (names stay readable to screen readers). */
+@media (max-width: 420px) {
+  .tab span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (hover: none) {
+  .tile-tag {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner i {
+    animation-duration: 2.4s;
+  }
+
+  .btn:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+.form .btn.wide {
+  justify-content: center;
 }

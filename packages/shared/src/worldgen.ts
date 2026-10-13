@@ -48,6 +48,13 @@ export interface World {
   roads: Polyline[]
   // Rounded center lines of rivers in tile coordinates, in the direction the water flows.
   rivers: Polyline[]
+  // Stone bridges over rivers away from the trade routes, from a land point on one bank to one on the other.
+  crossings: Crossing[]
+}
+
+export interface Crossing {
+  a: Point
+  b: Point
 }
 
 // Rivers and roads are routed on a grid this many times coarser than the tile grid.
@@ -243,6 +250,22 @@ export function generateWorld(seed: number): World {
   const desertLevel = moistureAt(cfg.desertFraction)
   const forestLevel = moistureAt(1 - cfg.forestFraction)
   const swampLevel = moistureAt(1 - cfg.swampMoistureFraction)
+  const snowLevel = elevationAt(1 - cfg.snowFraction)
+
+  // High mountains ring the map, so the world seems to go on past its edges. The levels above come from the
+  // ground inside the ring; the ring's inner border wanders, and the ground climbs toward the edge.
+  const peak = mountainLevel + (snowLevel - mountainLevel) * cfg.borderPeak
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const edge = Math.min(x, y, size - 1 - x, size - 1 - y)
+      const wander = valueNoise(x / 37, y / 37, seed + 211) * 0.7 + valueNoise(x / 9, y / 9, seed + 213) * 0.3
+      const band = cfg.borderTiles * (1 - cfg.borderJitter + 2 * cfg.borderJitter * wander)
+      if (edge >= band) continue
+      const t = 1 - edge / band
+      const i = y * size + x
+      elevation[i] += Math.max(0, peak - elevation[i]) * t * t * (3 - 2 * t)
+    }
+  }
 
   const classify = (e: number, m: number) => {
     if (e <= lakeLevel) return Terrain.Lake
@@ -437,7 +460,6 @@ export function generateWorld(seed: number): World {
   }
 
   // Height in screen pixels: gently rolling lowlands, ridged mountains above the mountain line.
-  const snowLevel = elevationAt(1 - cfg.snowFraction)
   const height = new Float32Array(size * size)
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
@@ -516,6 +538,70 @@ export function generateWorld(seed: number): World {
     })
   }
 
+  // Stone bridges cross the rivers here and there away from the trade routes, so both banks can be walked to.
+  const crossings: Crossing[] = []
+  const spans: Point[] = []
+  for (let i = 0; i < feature.length; i++) if (feature[i] === Feature.Bridge) spans.push({ x: i % size, y: Math.floor(i / size) })
+  const wet = (p: Point) => {
+    const x = Math.floor(p.x)
+    const y = Math.floor(p.y)
+    if (x < 0 || y < 0 || x >= size || y >= size) return true
+    const t = terrain[y * size + x]
+    return t === Terrain.River || t === Terrain.Lake
+  }
+  const tryCrossing = (p: Point, dx: number, dy: number): Crossing | null => {
+    if (terrain[Math.floor(p.y) * size + Math.floor(p.x)] !== Terrain.River) return null
+    const length = Math.hypot(dx, dy) || 1
+    const nx = -dy / length
+    const ny = dx / length
+    const reachBank = (side: number) => {
+      for (let s = 0; s <= cfg.stoneBridgeMaxSpan / 2; s += 0.25) {
+        const q = { x: p.x + nx * s * side, y: p.y + ny * s * side }
+        if (!wet(q)) return s
+      }
+      return -1
+    }
+    const sa = reachBank(-1)
+    const sb = reachBank(1)
+    if (sa < 0 || sb < 0) return null
+    const a = { x: p.x - nx * (sa + 0.75), y: p.y - ny * (sa + 0.75) }
+    const b = { x: p.x + nx * (sb + 0.75), y: p.y + ny * (sb + 0.75) }
+    for (const q of [a, b]) {
+      // Not in the gorges where rivers leave through the mountain ring.
+      if (Math.min(q.x, q.y, size - q.x, size - q.y) < cfg.borderTiles || wet(q)) return null
+      const i = Math.floor(q.y) * size + Math.floor(q.x)
+      if (terrain[i] === Terrain.Mountain || height[i] > cfg.stoneBridgeMaxRise * 2) return null
+    }
+    const ha = height[Math.floor(a.y) * size + Math.floor(a.x)]
+    const hb = height[Math.floor(b.y) * size + Math.floor(b.x)]
+    if (Math.abs(ha - hb) > cfg.stoneBridgeMaxRise) return null
+    const near = (q: Point) => Math.hypot(q.x - p.x, q.y - p.y) < cfg.stoneBridgeClearance
+    if (spans.some(near) || crossings.some((c) => near(c.a))) return null
+    return { a, b }
+  }
+  const [gapMin, gapMax] = cfg.stoneBridgeGap
+  for (const river of rivers) {
+    const line = river.points
+    let travelled = 0
+    let next = gapMin * random()
+    for (let i = 1; i < line.length - 1; i++) {
+      travelled += Math.hypot(line[i].x - line[i - 1].x, line[i].y - line[i - 1].y)
+      if (travelled < next) continue
+      const crossing = tryCrossing(line[i], line[i + 1].x - line[i - 1].x, line[i + 1].y - line[i - 1].y)
+      if (!crossing) {
+        next = travelled + 2
+        continue
+      }
+      crossings.push(crossing)
+      next = travelled + gapMin + random() * (gapMax - gapMin)
+      const tile = (q: Point) => ({ x: Math.floor(q.x), y: Math.floor(q.y) })
+      walkLine(tile(crossing.a), tile(crossing.b), (x, y) => {
+        const t = terrain[y * size + x]
+        if (t === Terrain.River || t === Terrain.Lake) feature[y * size + x] = Feature.Bridge
+      })
+    }
+  }
+
   for (const inn of inns) {
     for (let oy = 0; oy < 2; oy++) {
       for (let ox = 0; ox < 2; ox++) feature[(inn.y + oy) * size + inn.x + ox] = Feature.Inn
@@ -542,5 +628,6 @@ export function generateWorld(seed: number): World {
     },
     roads,
     rivers,
+    crossings,
   }
 }

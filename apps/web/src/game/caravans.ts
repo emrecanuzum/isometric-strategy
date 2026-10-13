@@ -3,6 +3,7 @@ import type { World } from '@game/shared'
 import { Container, Sprite as PixiSprite } from 'pixi.js'
 import type { Texture } from 'pixi.js'
 import { ROUTE_STEP, deckHeight, findBridges, resampleRoute, roundRoute } from './chunkPainter'
+import { innLook } from './innSprites'
 import { SPRITES } from './sprites'
 import type { Sprite } from './sprites'
 import { textureOf } from './textures'
@@ -74,8 +75,8 @@ export function createCaravans(world: World): Caravans {
 
   // Inns are painted into the ground, below this layer; a walker behind or inside one is hidden wherever the
   // inn's pixels cover its feet, so caravans pass through inns instead of over their roofs.
-  const inn = SPRITES.inn
   const inns = world.inns.map((p) => ({
+    sprite: innLook(world, p).sprite,
     // Footprint center, and the screen position of the front corner the sprite is anchored at.
     cx: p.x + 1,
     cy: p.y + 1,
@@ -85,6 +86,7 @@ export function createCaravans(world: World): Caravans {
   const hiddenByInn = (x: number, y: number, sx: number, sy: number) =>
     inns.some((p) => {
       if (Math.abs(x - p.cx) > 5 || Math.abs(y - p.cy) > 5 || x + y > p.cx + p.cy + 2) return false
+      const inn = p.sprite
       const px = Math.round(sx - p.sx + inn.anchorX)
       const py = Math.round(sy - p.sy + inn.anchorY)
       return px >= 0 && py >= 0 && px < inn.width && py < inn.height && inn.pixels[py * inn.width + px] !== 0
