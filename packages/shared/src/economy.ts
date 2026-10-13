@@ -200,6 +200,8 @@ export interface Kingdom {
   lobbyKey?: number
   // Taken in a siege: no army may lay siege to the palace again until then (CLAUDE.md §8.3).
   shieldUntil?: number
+  // Battles and sieges won (kept by the server, for the lobby's ranking).
+  record?: { battlesWon?: number; siegesWon?: number }
 }
 
 export type EconomyEvent =
@@ -361,7 +363,7 @@ export function storageCap(kingdom: Kingdom, at: number) {
   const base = balance.economy.storage.baseByPalaceLevel
   let cap = base[Math.max(0, Math.min(base.length - 1, palaceLevel(kingdom, at) - 1))]
   for (const b of kingdom.buildings) if (b.doneAt <= at) cap += levelSpec(b.kind, b.level).storage ?? 0
-  return cap
+  return Math.round(cap * (1 + researchEffects(kingdom, at).storage))
 }
 
 // The palace's finished level (0 without a palace); a palace being raised counts at the level below.
@@ -435,7 +437,7 @@ export function recruitment(kingdom: Kingdom, at: number, unit: Unit = 'spear') 
 export function ledger(kingdom: Kingdom, at: number) {
   const { healthy } = population(kingdom, at)
   const upkeep = balance.military.warrior.upkeep
-  const paid = (kingdom.soldiers ?? 0) + (kingdom.fielded ?? 0)
+  const paid = ((kingdom.soldiers ?? 0) + (kingdom.fielded ?? 0)) * (1 - researchEffects(kingdom, at).upkeep)
   return {
     tax: healthy * taxSpec(kingdom.tax).goldPerVillager * (1 + researchEffects(kingdom, at).tax) * idleFactor(kingdom, at),
     soldiersGold: paid * upkeep.gold,
@@ -849,6 +851,7 @@ export function happinessFor(k: Kingdom, at: number) {
     taxFactor: sermonTaxFactor(k, at),
     extra:
       templeHappiness(k, at) +
+      researchEffects(k, at).happiness +
       (k.sickness ?? 0) * balance.institutions.sickness.happinessPerShare +
       fortune.happiness +
       (templeLevel > 0 ? fortune.templeHappiness : 0),

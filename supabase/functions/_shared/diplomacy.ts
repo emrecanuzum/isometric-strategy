@@ -36,7 +36,9 @@ export async function arrive(envoy: EnvoyRow, rows: Row[]) {
   }
   if (envoy.kind === 'improve' || envoy.kind === 'gift') {
     // A sender with many enemies is believed less.
-    const standing = await reputationOf(envoy.lobby_id, envoy.from_id, at)
+    const sender = rows.find((r) => r.id === envoy.from_id)?.state
+    // Diplomacy learnt at the university makes the envoy's words count for more.
+    const standing = (await reputationOf(envoy.lobby_id, envoy.from_id, at)) * (1 + (sender ? game.researchEffects(sender, at).diplomacy : 0))
     if (envoy.kind === 'improve') await changeRelation(envoy.lobby_id, envoy.from_id, envoy.to_id, d.improve.gain * standing, at)
     else {
       const gold = envoy.gold ?? 0

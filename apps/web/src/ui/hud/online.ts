@@ -1,4 +1,4 @@
-import type { Point } from '@game/shared'
+import type { Point, Score } from '@game/shared'
 import type { Layer } from '../../net/layer'
 import type { Command, IntelReport, Lobby } from '../../net/online'
 
@@ -18,6 +18,8 @@ export interface KingdomInfo {
   seenAt?: number | null
   // Shielded from sieges until then (taken in one a short while ago).
   shieldUntil?: number | null
+  // Its place in the lobby's ranking (the player's own worked out live).
+  score?: Score | null
   // Its buildings as seen on the map.
   buildings?: { kind: string; x: number; y: number; size: number; doneAt: number; broken?: boolean }[]
 }

@@ -173,7 +173,7 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
                 : spec.workers
                   ? `${spec.workers} işçi çalıştırır`
                   : null
-            const why = error ? (BLOCKED[error] ?? 'Şu an olmaz') : null
+            const why = error === 'locked' ? `${spec.requiresPalace ?? 1}. seviye saray` : error ? (BLOCKED[error] ?? 'Şu an olmaz') : null
             return (
               <li key={kind}>
                 <button className="card" disabled={why !== null} onClick={() => onPlace(kind)} aria-describedby={`why-${kind}`}>
@@ -624,7 +624,7 @@ function Society({ kingdom, now, online }: { kingdom: Kingdom; now: number; onli
         <Sickness kingdom={kingdom} now={now} />
         <p className="hint">
           Köylüler zaman zaman hastalanır; hasta köylü çalışmaz, vergi vermez ve halkın keyfini kaçırır. Kendiliğinden yavaşça iyileşirler,{' '}
-          {kingdom.buildings.some((b) => b.kind === 'hospital') ? 'hastane iyileşmeyi hızlandırıyor.' : 'hastane (2. seviye saray) iyileşmeyi hızlandırır.'}
+          {kingdom.buildings.some((b) => b.kind === 'hospital') ? 'hastane iyileşmeyi hızlandırıyor.' : 'hastane (3. seviye saray) iyileşmeyi hızlandırır.'}
         </p>
       </Section>
       <Section title="Gece mesaisi" icon={night ? 'moon' : 'sun'} aside={`şu an ${night ? 'gece' : 'gündüz'} · iş %${Math.round(rate * 100)}`}>

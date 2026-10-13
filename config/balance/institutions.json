@@ -1,120 +1,297 @@
 {
   "research": {
-    "architecture": {
-      "level": 1,
-      "cost": {
-        "gold": 150,
-        "materials": 80
-      },
-      "seconds": 60,
-      "queue": 1
-    },
-    "flax": {
-      "level": 1,
-      "cost": {
-        "gold": 60,
-        "materials": 20
-      },
-      "seconds": 30,
-      "unlocks": "flax"
-    },
     "irrigation": {
+      "category": "resources",
+      "tier": 1,
       "level": 1,
       "cost": {
-        "gold": 120,
-        "materials": 40
+        "gold": 600,
+        "materials": 300
       },
-      "seconds": 45,
+      "seconds": 120,
       "output": {
-        "farm": 0.2
+        "farm": 0.25
       }
     },
-    "fishing": {
+    "flax": {
+      "category": "resources",
+      "tier": 1,
       "level": 1,
       "cost": {
-        "gold": 100,
-        "materials": 40
+        "gold": 600,
+        "materials": 300
       },
-      "seconds": 40,
+      "seconds": 120,
+      "unlocks": "flax",
       "output": {
-        "dock": 0.25
+        "lumberCamp": 0.1
       }
     },
     "forestry": {
+      "category": "resources",
+      "tier": 2,
       "level": 2,
       "cost": {
-        "gold": 180,
-        "materials": 60
+        "gold": 1500,
+        "materials": 700,
+        "arms": 200
       },
-      "seconds": 60,
+      "seconds": 240,
       "output": {
-        "lumberCamp": 0.2
+        "lumberCamp": 0.25
+      }
+    },
+    "fishing": {
+      "category": "resources",
+      "tier": 2,
+      "level": 2,
+      "cost": {
+        "gold": 1500,
+        "materials": 700,
+        "arms": 200
+      },
+      "seconds": 240,
+      "output": {
+        "dock": 0.35
       }
     },
     "metallurgy": {
-      "level": 2,
+      "category": "resources",
+      "tier": 3,
+      "level": 3,
       "cost": {
-        "gold": 200,
-        "materials": 80,
-        "arms": 30
+        "gold": 3200,
+        "materials": 1500,
+        "arms": 500
       },
-      "seconds": 70,
+      "seconds": 420,
       "output": {
-        "forge": 0.2
+        "forge": 0.3
       }
     },
-    "shieldwall": {
-      "level": 2,
+    "granaries": {
+      "category": "resources",
+      "tier": 3,
+      "level": 3,
       "cost": {
-        "gold": 200,
-        "arms": 60
+        "gold": 3200,
+        "materials": 1500,
+        "arms": 500
       },
-      "seconds": 60
+      "seconds": 420,
+      "storage": 0.5
+    },
+    "shieldwall": {
+      "category": "war",
+      "tier": 1,
+      "level": 1,
+      "cost": {
+        "gold": 600,
+        "materials": 300
+      },
+      "seconds": 120
     },
     "siegecraft": {
+      "category": "war",
+      "tier": 1,
+      "level": 1,
+      "cost": {
+        "gold": 600,
+        "materials": 300
+      },
+      "seconds": 120
+    },
+    "tactics": {
+      "category": "war",
+      "tier": 2,
       "level": 2,
       "cost": {
-        "gold": 240,
-        "materials": 120,
-        "arms": 40
+        "gold": 1500,
+        "materials": 700,
+        "arms": 200
       },
-      "seconds": 70
+      "seconds": 240,
+      "battle": 0.5
+    },
+    "fortification": {
+      "category": "war",
+      "tier": 2,
+      "level": 2,
+      "cost": {
+        "gold": 1500,
+        "materials": 700,
+        "arms": 200
+      },
+      "seconds": 240,
+      "fortify": 6
+    },
+    "drill": {
+      "category": "war",
+      "tier": 3,
+      "level": 3,
+      "cost": {
+        "gold": 3200,
+        "materials": 1500,
+        "arms": 500
+      },
+      "seconds": 420,
+      "trainSpeed": 1
+    },
+    "quartermaster": {
+      "category": "war",
+      "tier": 3,
+      "level": 3,
+      "cost": {
+        "gold": 3200,
+        "materials": 1500,
+        "arms": 500
+      },
+      "seconds": 420,
+      "upkeep": 0.35
+    },
+    "architecture": {
+      "category": "state",
+      "tier": 1,
+      "level": 1,
+      "cost": {
+        "gold": 600,
+        "materials": 300
+      },
+      "seconds": 120,
+      "queue": 1
+    },
+    "bookkeeping": {
+      "category": "state",
+      "tier": 1,
+      "level": 1,
+      "cost": {
+        "gold": 600,
+        "materials": 300
+      },
+      "seconds": 120,
+      "tax": 0.2
+    },
+    "commerce": {
+      "category": "state",
+      "tier": 2,
+      "level": 2,
+      "cost": {
+        "gold": 1500,
+        "materials": 700,
+        "arms": 200
+      },
+      "seconds": 240,
+      "trade": 0.3
+    },
+    "diplomacy": {
+      "category": "state",
+      "tier": 2,
+      "level": 2,
+      "cost": {
+        "gold": 1500,
+        "materials": 700,
+        "arms": 200
+      },
+      "seconds": 240,
+      "diplomacy": 0.5
+    },
+    "spycraft": {
+      "category": "state",
+      "tier": 3,
+      "level": 3,
+      "cost": {
+        "gold": 3200,
+        "materials": 1500,
+        "arms": 500
+      },
+      "seconds": 420,
+      "counter": 2
+    },
+    "lawCode": {
+      "category": "state",
+      "tier": 3,
+      "level": 3,
+      "cost": {
+        "gold": 3200,
+        "materials": 1500,
+        "arms": 500
+      },
+      "seconds": 420,
+      "happiness": 6,
+      "diplomacy": 0.25
     },
     "medicine": {
-      "level": 2,
+      "category": "faith",
+      "tier": 1,
+      "level": 1,
       "cost": {
-        "gold": 220,
-        "food": 60
+        "gold": 600,
+        "materials": 300
       },
-      "seconds": 70,
+      "seconds": 120,
       "sickness": 0.5,
       "healing": 1.5
     },
-    "bookkeeping": {
+    "festivals": {
+      "category": "faith",
+      "tier": 1,
+      "level": 1,
+      "cost": {
+        "gold": 600,
+        "materials": 300
+      },
+      "seconds": 120,
+      "happiness": 8
+    },
+    "theology": {
+      "category": "faith",
+      "tier": 2,
       "level": 2,
       "cost": {
-        "gold": 250
+        "gold": 1500,
+        "materials": 700,
+        "arms": 200
       },
-      "seconds": 80,
-      "tax": 0.15
+      "seconds": 240,
+      "faith": 0.6
     },
-    "tactics": {
+    "charity": {
+      "category": "faith",
+      "tier": 2,
+      "level": 2,
+      "cost": {
+        "gold": 1500,
+        "materials": 700,
+        "arms": 200
+      },
+      "seconds": 240,
+      "sermon": 1,
+      "happiness": 3
+    },
+    "holyOath": {
+      "category": "faith",
+      "tier": 3,
       "level": 3,
       "cost": {
-        "gold": 300,
-        "arms": 80
+        "gold": 3200,
+        "materials": 1500,
+        "arms": 500
       },
-      "seconds": 90,
-      "battle": 0.5
+      "seconds": 420,
+      "battle": 0.6
     },
-    "commerce": {
+    "pilgrimage": {
+      "category": "faith",
+      "tier": 3,
       "level": 3,
       "cost": {
-        "gold": 320,
-        "materials": 100
+        "gold": 3200,
+        "materials": 1500,
+        "arms": 500
       },
-      "seconds": 90,
-      "trade": 0.25
+      "seconds": 420,
+      "trade": 0.15,
+      "happiness": 5
     }
   },
   "sickness": {
@@ -279,5 +456,11 @@
         }
       }
     }
-  }
+  },
+  "researchCategories": [
+    "resources",
+    "war",
+    "state",
+    "faith"
+  ]
 }

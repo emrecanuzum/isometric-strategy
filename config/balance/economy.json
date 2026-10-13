@@ -68,28 +68,29 @@
         },
         {
           "cost": {
-            "gold": 350,
-            "materials": 180
+            "gold": 900,
+            "materials": 500,
+            "arms": 120
           },
-          "buildSeconds": 30,
+          "buildSeconds": 90,
           "villagers": 6
         },
         {
           "cost": {
-            "gold": 1500,
-            "materials": 900,
-            "arms": 250
+            "gold": 2600,
+            "materials": 1500,
+            "arms": 500
           },
-          "buildSeconds": 180,
+          "buildSeconds": 300,
           "villagers": 7
         },
         {
           "cost": {
-            "gold": 3200,
-            "materials": 1800,
-            "arms": 600
+            "gold": 5000,
+            "materials": 3000,
+            "arms": 1000
           },
-          "buildSeconds": 360,
+          "buildSeconds": 480,
           "villagers": 8
         }
       ]
@@ -412,7 +413,7 @@
     },
     "university": {
       "size": 3,
-      "requiresPalace": 2,
+      "requiresPalace": 3,
       "unique": true,
       "cost": {
         "gold": 200,
@@ -438,7 +439,7 @@
     },
     "hospital": {
       "size": 2,
-      "requiresPalace": 2,
+      "requiresPalace": 3,
       "unique": true,
       "cost": {
         "gold": 140,
@@ -467,7 +468,7 @@
     },
     "temple": {
       "size": 2,
-      "requiresPalace": 2,
+      "requiresPalace": 3,
       "unique": true,
       "cost": {
         "gold": 160,

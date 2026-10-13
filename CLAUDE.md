@@ -954,18 +954,28 @@ mertebesindedir.
 ### 9.8 Prototip: kurumlar ve günün olayları (şu an uygulanan)
 
 Değerler `config/balance/institutions.json`, mantık
-`packages/shared/src/institutions.ts`. Üç bina da 2. seviye saray ister,
+`packages/shared/src/institutions.ts`. Üç bina da 3. seviye saray ister,
 krallıkta birer tane olur ve 3 seviyelidir.
 
-- **Üniversite:** Aynı anda bir **araştırma** yürütür (altın/malzeme ve
-  süre). Daha ileri araştırmalar daha yüksek üniversite seviyesi ister:
-  - 1: **Mimarlık** (inşaat kuyruğu 2 → 3), **Keten tarımı** (tarla keten
-    ekebilir; öncesinde yalnızca buğday), **Sulama** (tarla +%20),
-    **Balıkçılık** (iskele +%25).
-  - 2: **Ormancılık** (oduncu +%20), **Metalurji** (atölye +%20), **Tıp**
-    (hastalık yarıya, iyileşme ×1,5), **Muhasebe** (vergi +%15), **Kalkan
-    duvarı** (kalkanlı piyade), **Kuşatma sanatı** (mancınık).
-  - 3: **Savaş taktikleri** (zar +0,5), **Ticaret hukuku** (tüccar +%25).
+- **Üniversite (araştırma ağacı):** Dört dal (sekme): **Hammadde**,
+  **Savaş**, **Devlet**, **Din ve halk**. Her dalda üç kademe, her kademede
+  iki yol vardır; **birini seçen ötekine bir daha gidemez**. Bir kademe,
+  aynı daldaki alt kademe öğrenilince ve üniversite o seviyeye gelince
+  açılır. Aynı anda bir araştırma yürür; araştırmalar pahalıdır (kademe
+  1/2/3: ~600/1500/3200 altın ve malzeme, 2/4/7 dakika).
+  - Hammadde: Sulama | Keten tarımı → Ormancılık | Balıkçılık → Metalurji |
+    Ambarcılık (depo +%50).
+  - Savaş: Kalkan duvarı (kalkanlı piyade) | Kuşatma sanatı (mancınık) →
+    Savaş taktikleri (zar +0,5) | İstihkâm (kuşatmada +6 sur) → Talim (iki
+    kat hızlı eğitim) | İaşe (asker bakımı −%35).
+  - Devlet: Mimarlık (inşaat kuyruğu 3) | Muhasebe (vergi +%20) → Ticaret
+    hukuku (tüccar +%30) | Diplomasi okulu (elçi etkisi +%50) → Casusluk
+    okulu (karşı casusluk +2) | Kanunname (mutluluk +6, elçi +%25).
+  - Din ve halk: Tıp | Şenlikler (mutluluk +8) → İlahiyat (tapınak imanı
+    +%60) | Hayır işleri (vaaz 2 kat uzun) → Kutsal yemin (zar +0,6) | Hac
+    yolu (tüccar +%15, mutluluk +5).
+- Saray 3. ve 4. seviye yükseltmeleri pahalıdır (3: 900 altın, 500 malzeme,
+  120 savaş malzemesi; 4: 2600 / 1500 / 500; 5: 5000 / 3000 / 1000).
 - **Hastalık ve hastane:** Köylülerin bir payı hastadır; hasta köylü
   çalışmaz, vergi vermez ve mutluluğu düşürür. Her tur birkaç kişi
   hastalanır (hasta çoksa, açlıkta ve soğukta daha hızlı yayılır) ve
@@ -1006,6 +1016,20 @@ krallıkta birer tane olur ve 3 seviyelidir.
 ---
 
 ## 10. Puanlama ve Sezon Sonu
+
+**Şu an uygulanan (lobi sıralaması):** Her krallığın bir puanı vardır
+(`packages/shared/src/score.ts`, ağırlıklar `society.json` → `score`):
+- **Hazine:** altın / 10 + depodaki mallar / 25.
+- **Gelişim:** saray seviyesi × 120, kurum binaları (üniversite, hastane,
+  tapınak, kışla, casus evi, pazar, ambar) seviye × 30, diğer binalar
+  seviye × 10, sur ve kapı 1.
+- **Nüfus:** köylü + asker × 3. **Ordu:** asker × 2 + cephanelik / 10.
+- **Zafer:** kazanılan muharebe × 40, alınan saray (kuşatma) × 120,
+  kraliçe 40, rehine × 60.
+- **Bilgi:** öğrenilen araştırma × kademe × 50.
+Puanı sunucu, krallığı her yazışında hesaplar ve satırına yazar; böylece
+herkes aynı tabloyu görür ama kimsenin deposu görünmez. Sohbetteki
+**Sıralama** sekmesi krallıkları puana göre dizer ve dökümünü gösterir.
 
 Sezon sonunda sıralama birden fazla kategoride yapılır:
 

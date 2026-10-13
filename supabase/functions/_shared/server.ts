@@ -72,6 +72,8 @@ export interface Row {
   sites: Point[]
   state: Kingdom | null
   version: number
+  // The lobby ranking's breakdown (game.scoreOf), written with the state.
+  score?: unknown
 }
 
 export async function loadKingdoms(lobby: string): Promise<Row[]> {
@@ -111,7 +113,7 @@ export async function mutateKingdom(
     if (next === null) return row
     const { data: written } = await admin
       .from('kingdoms')
-      .update({ state: next, version: row.version + 1, updated_at: iso(Date.now()), ...extra(row) })
+      .update({ state: next, version: row.version + 1, updated_at: iso(Date.now()), score: game.scoreOf(next, at), ...extra(row) })
       .eq('id', id)
       .eq('version', row.version)
       .select()

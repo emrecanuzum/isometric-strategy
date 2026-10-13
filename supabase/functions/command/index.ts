@@ -290,6 +290,8 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
   }
   // Any command of a founded kingdom marks its ruler as present.
   if (next?.state) next = { ...next, state: { ...next.state, lastSeenAt: now, lobbyKey: game.lobbyKeyOf(lobby) } }
+  // The lobby's ranking reads the score kept beside the state.
+  if (next?.state) next = { ...next, score: game.scoreOf(next.state as Kingdom, now) }
 
   const { data, error } = await admin
     .from('kingdoms')

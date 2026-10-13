@@ -240,7 +240,8 @@ async function startBattle(
       defenders.unshift({ kingdom: besieged, army: null, soldiers: game.countOf(garrison), morale: settled.happiness ?? 60, familiarity: 100, units: garrison, faith: game.battleSpirit(settled, t) })
       const standingAt = (kind: string) => settled.buildings.filter((x: { kind: string; doneAt: number; broken?: boolean }) => x.kind === kind && x.doneAt <= t && !x.broken).length
       // Gates stand in the wall like any other stretch of it.
-      defense = { towers: standingAt('watchtower'), walls: standingAt('wall') + standingAt('gate') }
+      // Fortification learnt at the university counts as more wall.
+      defense = { towers: standingAt('watchtower'), walls: standingAt('wall') + standingAt('gate') + game.researchEffects(settled, t).fortify }
     }
   }
   // The kingdom that declared the war attacks; in a siege, the besieger.
@@ -343,6 +344,19 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
   }
   await settle(battle.attackers, plan.attackerLosses, plan.attackerMorale, plan.winner === 'attackers')
   await settle(battle.defenders, plan.defenderLosses, plan.defenderMorale, plan.winner === 'defenders')
+
+  // The winners' record, for the lobby's ranking: a field battle or a defence counts as a battle won, a palace taken
+  // as a siege won.
+  const winners = new Set((plan.winner === 'attackers' ? battle.attackers : battle.defenders).map((f) => f.kingdom))
+  const siegeTaken = battle.kind === 'siege' && plan.winner === 'attackers'
+  for (const id of winners) {
+    await mutateKingdom(id, at, (k) => {
+      const record = { ...(k.record ?? {}) }
+      if (siegeTaken) record.siegesWon = (record.siegesWon ?? 0) + 1
+      else record.battlesWon = (record.battlesWon ?? 0) + 1
+      return { ...k, record }
+    })
+  }
 
   // A palace taken: its stores are looted and part of its walls knocked down.
   if (battle.kind === 'siege' && battle.besieged !== null && plan.winner === 'attackers') {

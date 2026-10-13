@@ -1,5 +1,6 @@
 import {
   RESEARCH,
+  RESEARCH_CATEGORIES,
   RESEARCH_IDS,
   balance,
   battleSpirit,
@@ -18,8 +19,9 @@ import {
   workerSlots,
 } from '@game/shared'
 import type { Building, Kingdom } from '@game/shared'
+import { Fragment, useState } from 'react'
 import { Icon } from '../icons'
-import { FORTUNE_TEXTS, RESEARCH_NAMES, SCOPE_NAMES } from '../names'
+import { FORTUNE_TEXTS, RESEARCH_CATEGORY_NAMES, RESEARCH_NAMES, SCOPE_NAMES } from '../names'
 import { CostList } from '../panels'
 import { Meter, Section, Stat } from './primitives'
 import type { HudData } from './tabs'
@@ -32,8 +34,10 @@ const secs = (ms: number) => (ms >= 60_000 ? `${Math.ceil(ms / 60_000)} dk` : `$
 const RESEARCH_BLOCKED: Record<string, string> = {
   building: 'Üniversite inşa ediliyor',
   have: 'Öğrenildi',
-  locked: 'Daha yüksek seviye üniversite gerekir',
-  busy: 'Başka bir araştırma sürüyor',
+  locked: 'Üniversiteyi yükselt',
+  prereq: 'Önce alt kademe',
+  excluded: 'Kapandı',
+  busy: 'Başka araştırma sürüyor',
   cost: 'Kaynak yetersiz',
 }
 
@@ -41,8 +45,10 @@ export function UniversityPanel({ data }: { data: HudData }) {
   const { kingdom, now, online } = data
   const level = levelOf(kingdom, 'university', now)
   const current = researching(kingdom, now)
+  const [branch, setBranch] = useState(RESEARCH_CATEGORIES[0])
+  const tiers = [...new Set(RESEARCH_IDS.filter((id) => RESEARCH[id].category === branch).map((id) => RESEARCH[id].tier))].sort((a, b) => a - b)
   return (
-    <Section title="Araştırmalar" icon="book" aside={`üniversite ${level}. seviye`}>
+    <Section title="Araştırma ağacı" icon="book" aside={`üniversite ${level}. seviye`}>
       {current && (
         <div className="sign">
           <span>{RESEARCH_NAMES[current.id]?.name ?? current.id}</span>
@@ -50,34 +56,70 @@ export function UniversityPanel({ data }: { data: HudData }) {
           <small>{secs(current.doneAt - now)}</small>
         </div>
       )}
-      <ul className="research-list">
-        {RESEARCH_IDS.map((id) => {
-          const spec = RESEARCH[id]
-          const r = RESEARCH_NAMES[id]
-          const error = researchError(kingdom, id, now)
-          const done = (kingdom.researches ?? []).some((x) => x.id === id && x.doneAt <= now)
+      <div className="branch-tabs" role="tablist" aria-label="Araştırma dalı">
+        {RESEARCH_CATEGORIES.map((c) => (
+          <button key={c} className="btn small" role="tab" aria-selected={branch === c} aria-pressed={branch === c} onClick={() => setBranch(c)}>
+            <Icon name={RESEARCH_CATEGORY_NAMES[c]?.icon ?? 'book'} size={16} />
+            <span>{RESEARCH_CATEGORY_NAMES[c]?.name ?? c}</span>
+          </button>
+        ))}
+      </div>
+      <ol className="tree">
+        {tiers.map((tier) => {
+          const pair = RESEARCH_IDS.filter((id) => RESEARCH[id].category === branch && RESEARCH[id].tier === tier)
           return (
-            <li key={id} className={done ? 'done' : error === 'locked' ? 'locked' : ''}>
-              <Icon name={r?.icon ?? 'book'} size={16} />
-              <div>
-                <b>{r?.name ?? id}</b>
-                <small>
-                  {r?.note} · {spec.level}. seviye · {spec.seconds} sn
-                </small>
+            <li key={tier} className="tree-tier">
+              <small className="tree-label">{tier}. kademe · üniversite {RESEARCH[pair[0]].level}. seviye</small>
+              <div className="tree-pair">
+                {pair.map((id, k) => (
+                  <Fragment key={id}>
+                    {k > 0 && <span className="tree-or">ya da</span>}
+                    <ResearchNode id={id} data={data} onStart={() => online?.act({ type: 'research', id })} />
+                  </Fragment>
+                ))}
               </div>
-              {done ? (
-                <span className="chip up">Öğrenildi</span>
-              ) : (
-                <button className="btn small" disabled={error !== null} title={error ? RESEARCH_BLOCKED[error] : undefined} onClick={() => online?.act({ type: 'research', id })}>
-                  <CostList cost={spec.cost} stock={kingdom.stock} />
-                </button>
-              )}
             </li>
           )
         })}
-      </ul>
-      <p className="hint">Aynı anda bir araştırma yürür. Üniversiteyi yükseltmek daha ileri araştırmaları açar.</p>
+      </ol>
+      <p className="hint">
+        Her kademede iki yoldan yalnızca biri seçilebilir; seçilmeyen yol sonsuza dek kapanır. Bir kademe, aynı daldaki bir alt kademe öğrenilince
+        açılır. Aynı anda bir araştırma yürür.
+      </p>
     </Section>
+  )
+}
+
+function ResearchNode({ id, data, onStart }: { id: string; data: HudData; onStart: () => void }) {
+  const { kingdom, now } = data
+  const spec = RESEARCH[id]
+  const r = RESEARCH_NAMES[id]
+  const error = researchError(kingdom, id, now)
+  const done = (kingdom.researches ?? []).some((x) => x.id === id && x.doneAt <= now)
+  const going = (kingdom.researches ?? []).some((x) => x.id === id && x.doneAt > now)
+  const state = done ? 'done' : going ? 'going' : error === 'excluded' ? 'closed' : error === 'prereq' || error === 'locked' ? 'locked' : 'open'
+  return (
+    <div className={`tree-node ${state}`}>
+      <span className="tree-head">
+        <Icon name={r?.icon ?? 'book'} size={16} />
+        <b>{r?.name ?? id}</b>
+      </span>
+      <small>{r?.note}</small>
+      {done ? (
+        <span className="chip up">Öğrenildi</span>
+      ) : going ? (
+        <span className="chip">Araştırılıyor</span>
+      ) : error === 'excluded' ? (
+        <span className="chip down">Kapandı</span>
+      ) : (
+        <>
+          <CostList cost={spec.cost} stock={kingdom.stock} />
+          <button className="btn small" disabled={error !== null} onClick={onStart}>
+            {error ? RESEARCH_BLOCKED[error] ?? 'Şu an olmaz' : `Araştır · ${secs(spec.seconds * 1000)}`}
+          </button>
+        </>
+      )}
+    </div>
   )
 }
 

@@ -100,20 +100,39 @@ export const PRODUCT_NAMES: Record<string, string> = {
   bow: 'Yay ve ok',
 }
 
-// University studies (institutions.json research).
+// University studies (institutions.json research), by branch.
+export const RESEARCH_CATEGORY_NAMES: Record<string, { name: string; icon: IconName }> = {
+  resources: { name: 'Hammadde', icon: 'materials' },
+  war: { name: 'Savaş', icon: 'swords' },
+  state: { name: 'Devlet', icon: 'crown' },
+  faith: { name: 'Din ve halk', icon: 'temple' },
+}
+
 export const RESEARCH_NAMES: Record<string, { name: string; note: string; icon: IconName }> = {
-  architecture: { name: 'Mimarlık', note: 'Aynı anda bir inşaat daha (3)', icon: 'build' },
-  flax: { name: 'Keten tarımı', note: 'Tarlalar keten ekebilir (yapı malzemesi)', icon: 'materials' },
-  irrigation: { name: 'Sulama', note: 'Tarlalar %20 daha çok ürün verir', icon: 'food' },
-  fishing: { name: 'Balıkçılık', note: 'İskele %25 daha çok balık tutar', icon: 'food' },
-  forestry: { name: 'Ormancılık', note: 'Oduncu kampları %20 daha çok üretir', icon: 'materials' },
-  metallurgy: { name: 'Metalurji', note: 'Silah atölyesi %20 daha çok üretir', icon: 'arms' },
+  irrigation: { name: 'Sulama', note: 'Tarlalar %25 daha çok ürün verir', icon: 'food' },
+  flax: { name: 'Keten tarımı', note: 'Tarlalar keten ekebilir; oduncular %10 daha çok üretir', icon: 'materials' },
+  forestry: { name: 'Ormancılık', note: 'Oduncu kampları %25 daha çok üretir', icon: 'materials' },
+  fishing: { name: 'Balıkçılık', note: 'İskele %35 daha çok balık tutar', icon: 'food' },
+  metallurgy: { name: 'Metalurji', note: 'Silah atölyesi %30 daha çok üretir', icon: 'arms' },
+  granaries: { name: 'Ambarcılık', note: 'Depolar %50 daha çok alır', icon: 'chest' },
   shieldwall: { name: 'Kalkan duvarı', note: 'Kışlada kalkanlı piyade yetiştirilir', icon: 'shield' },
   siegecraft: { name: 'Kuşatma sanatı', note: 'Kışlada mancınık yapılır', icon: 'catapult' },
-  medicine: { name: 'Tıp', note: 'Hastalık yarı yarıya azalır, iyileşme hızlanır', icon: 'heal' },
-  bookkeeping: { name: 'Muhasebe', note: 'Vergiler %15 daha çok altın getirir', icon: 'gold' },
   tactics: { name: 'Savaş taktikleri', note: 'Askerler zara +0,5 ekler', icon: 'swords' },
-  commerce: { name: 'Ticaret hukuku', note: 'Tüccar %25 daha çok altın getirir', icon: 'trade' },
+  fortification: { name: 'İstihkâm', note: 'Kuşatmada sarayın 6 sur fazlasıyla savunur', icon: 'shield' },
+  drill: { name: 'Talim', note: 'Askerler iki kat hızlı yetişir', icon: 'people' },
+  quartermaster: { name: 'İaşe', note: 'Asker maaşı ve yemeği %35 azalır', icon: 'food' },
+  architecture: { name: 'Mimarlık', note: 'Aynı anda bir inşaat daha (3)', icon: 'build' },
+  bookkeeping: { name: 'Muhasebe', note: 'Vergiler %20 daha çok altın getirir', icon: 'gold' },
+  commerce: { name: 'Ticaret hukuku', note: 'Tüccar %30 daha çok altın getirir', icon: 'trade' },
+  diplomacy: { name: 'Diplomasi okulu', note: 'Elçilerin ilişki kazancı %50 artar', icon: 'scroll' },
+  spycraft: { name: 'Casusluk okulu', note: 'Karşı casusluk +2', icon: 'eye' },
+  lawCode: { name: 'Kanunname', note: 'Mutluluk +6, elçilerin ilişki kazancı %25 artar', icon: 'scroll' },
+  medicine: { name: 'Tıp', note: 'Hastalık yarı yarıya azalır, iyileşme hızlanır', icon: 'heal' },
+  festivals: { name: 'Şenlikler', note: 'Mutluluk +8', icon: 'happy' },
+  theology: { name: 'İlahiyat', note: 'Tapınağın askerlere imanı %60 artar', icon: 'temple' },
+  charity: { name: 'Hayır işleri', note: 'Vaazlar iki kat uzun sürer, mutluluk +3', icon: 'heal' },
+  holyOath: { name: 'Kutsal yemin', note: 'Askerler zara +0,6 ekler', icon: 'swords' },
+  pilgrimage: { name: 'Hac yolu', note: 'Tüccar %15 daha çok altın getirir, mutluluk +5', icon: 'temple' },
 }
 
 // Whether a fortune falls on the whole lobby or on the player's kingdom alone.

@@ -70,21 +70,26 @@ export function wallsOf(kingdom: Holding): Blocked {
   return (x, y) => taken.has(y * 65536 + x)
 }
 
-// `route` cut short just before it first steps onto a tile where `stop` holds (unchanged if it never does).
+// `route` cut short in the last tile before it first touches a tile where `stop` holds (unchanged if it never does).
 export function haltBefore(route: Point[], stop: Blocked): Point[] {
   const out = [route[0]]
   for (let i = 1; i < route.length; i++) {
     const a = route[i - 1]
     const b = route[i]
-    const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 4))
-    let last = a
-    for (let k = 1; k <= steps; k++) {
-      const p = { x: a.x + ((b.x - a.x) * k) / steps, y: a.y + ((b.y - a.y) * k) / steps }
-      if (stop(Math.floor(p.x), Math.floor(p.y))) {
-        out.push(last)
-        return out
+    let last: Point | null = null
+    let halted = false
+    walkTiles(a, b, (x, y) => {
+      if (stop(x, y)) {
+        halted = true
+        return false
       }
-      last = p
+      last = { x: x + 0.5, y: y + 0.5 }
+      return true
+    })
+    if (halted) {
+      // Stand in the middle of the last tile reached (or where this leg began if the first tile was already a wall).
+      out.push(last ?? a)
+      return out
     }
     out.push(b)
   }
@@ -115,16 +120,46 @@ export function standingSpot(world: Ground, p: Point, blocked?: Blocked): Point 
   return p
 }
 
-// Whether a straight walk from `a` to `b` stays on passable ground (sampled every quarter tile).
-function clearLine(world: Ground, a: Point, b: Point, blocked?: Blocked) {
-  const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 4))
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps
-    const x = Math.floor(a.x + (b.x - a.x) * t)
-    const y = Math.floor(a.y + (b.y - a.y) * t)
-    if (!passable(world, x, y) || blocked?.(x, y)) return false
+// Every tile a straight walk from `a` to `b` touches, in order (a grid traversal, not sampling, so nothing slips
+// between two tiles that meet at a corner: where the walk passes exactly through a corner, both tiles beside it are
+// visited too). `visit` returns false to stop; the result says whether the walk was completed.
+export function walkTiles(a: Point, b: Point, visit: (x: number, y: number) => boolean) {
+  let x = Math.floor(a.x)
+  let y = Math.floor(a.y)
+  const ex = Math.floor(b.x)
+  const ey = Math.floor(b.y)
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const sx = Math.sign(dx)
+  const sy = Math.sign(dy)
+  const tdx = dx === 0 ? Infinity : Math.abs(1 / dx)
+  const tdy = dy === 0 ? Infinity : Math.abs(1 / dy)
+  let tx = dx === 0 ? Infinity : (sx > 0 ? x + 1 - a.x : a.x - x) * tdx
+  let ty = dy === 0 ? Infinity : (sy > 0 ? y + 1 - a.y : a.y - y) * tdy
+  if (!visit(x, y)) return false
+  for (let guard = 0; (x !== ex || y !== ey) && guard < 100000; guard++) {
+    if (Math.abs(tx - ty) < 1e-9) {
+      // Through a corner: the two tiles beside it count as touched.
+      if (!visit(x + sx, y) || !visit(x, y + sy)) return false
+      x += sx
+      y += sy
+      tx += tdx
+      ty += tdy
+    } else if (tx < ty) {
+      x += sx
+      tx += tdx
+    } else {
+      y += sy
+      ty += tdy
+    }
+    if (!visit(x, y)) return false
   }
   return true
+}
+
+// Whether a straight walk from `a` to `b` stays on passable ground, off buildings and walls.
+function clearLine(world: Ground, a: Point, b: Point, blocked?: Blocked) {
+  return walkTiles(a, b, (x, y) => passable(world, x, y) && !blocked?.(x, y))
 }
 
 // A binary heap of [priority, value] pairs, smallest first.

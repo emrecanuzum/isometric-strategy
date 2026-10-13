@@ -10,6 +10,10 @@ const I = balance.institutions
 // ---- University: research ----------------------------------------------------------------------------------------
 
 export interface ResearchSpec {
+  // Its branch of the tree and its tier there: each tier offers two studies and only one of them may be taken; a tier
+  // waits for the one below it in the same branch.
+  category: string
+  tier: number
   // The university level it waits for.
   level: number
   cost: Cost
@@ -27,7 +31,21 @@ export interface ResearchSpec {
   tax?: number
   trade?: number
   battle?: number
+  // More room in the stores (a share), more walls in a siege, faster training (a share), cheaper soldiers' upkeep (a
+  // share off), happiness, more of the temple's faith (a share), longer sermons (a share), counter-espionage, and
+  // relation gains from envoys (a share).
+  storage?: number
+  fortify?: number
+  trainSpeed?: number
+  upkeep?: number
+  happiness?: number
+  faith?: number
+  sermon?: number
+  counter?: number
+  diplomacy?: number
 }
+
+export const RESEARCH_CATEGORIES = I.researchCategories as string[]
 
 export const RESEARCH = I.research as Record<string, ResearchSpec>
 export type ResearchId = keyof typeof I.research
@@ -42,15 +60,32 @@ const finished = (k: Kingdom, at: number) => (k.researches ?? []).filter((r) => 
 
 // What all finished research adds up to.
 export function researchEffects(k: Kingdom, at: number) {
-  const out = { queue: 0, output: {} as Record<string, number>, sickness: 1, healing: 1, tax: 0, trade: 0, battle: 0 }
+  const out = {
+    queue: 0,
+    output: {} as Record<string, number>,
+    sickness: 1,
+    healing: 1,
+    tax: 0,
+    trade: 0,
+    battle: 0,
+    storage: 0,
+    fortify: 0,
+    trainSpeed: 0,
+    upkeep: 0,
+    happiness: 0,
+    faith: 0,
+    sermon: 0,
+    counter: 0,
+    diplomacy: 0,
+  }
   for (const r of finished(k, at)) {
     out.queue += r.queue ?? 0
     for (const [kind, v] of Object.entries(r.output ?? {})) out.output[kind] = (out.output[kind] ?? 0) + v
     out.sickness *= r.sickness ?? 1
     out.healing *= r.healing ?? 1
-    out.tax += r.tax ?? 0
-    out.trade += r.trade ?? 0
-    out.battle += r.battle ?? 0
+    for (const key of ['tax', 'trade', 'battle', 'storage', 'fortify', 'trainSpeed', 'upkeep', 'happiness', 'faith', 'sermon', 'counter', 'diplomacy'] as const) {
+      out[key] += r[key] ?? 0
+    }
   }
   return out
 }
@@ -69,8 +104,25 @@ const byLevel = (values: number[], level: number) => (level <= 0 ? 0 : values[Ma
 
 export const templeHappiness = (k: Kingdom, at: number) => byLevel(I.temple.happinessByLevel, levelOf(k, 'temple', at))
 
-// What soldiers add to their rolls: faith from the temple and the tactics learnt at the university.
-export const battleSpirit = (k: Kingdom, at: number) => byLevel(I.temple.faithByLevel, levelOf(k, 'temple', at)) + researchEffects(k, at).battle
+// What soldiers add to their rolls: faith from the temple (more with theology) and what was learnt at the university.
+export const battleSpirit = (k: Kingdom, at: number) => {
+  const learnt = researchEffects(k, at)
+  return byLevel(I.temple.faithByLevel, levelOf(k, 'temple', at)) * (1 + learnt.faith) + learnt.battle
+}
+
+// The other study of the same tier of a branch (taking one closes the other).
+export const rivalOf = (id: string) =>
+  Object.keys(RESEARCH).find((other) => other !== id && RESEARCH[other].category === RESEARCH[id]?.category && RESEARCH[other].tier === RESEARCH[id]?.tier) ?? null
+
+// Studies the kingdom has taken or is taking.
+export const taken = (k: Kingdom, id: string) => (k.researches ?? []).some((r) => r.id === id)
+
+// Whether the branch's tier below `id` has been learnt (either of its two studies).
+export function tierOpen(k: Kingdom, id: string, at: number) {
+  const spec = RESEARCH[id]
+  if (!spec || spec.tier <= 1) return true
+  return Object.entries(RESEARCH).some(([other, o]) => o.category === spec.category && o.tier === spec.tier - 1 && hasResearch(k, other, at))
+}
 
 // A sermon telling the people their taxes are good: while it lasts the tax weighs less on their mood.
 export const preaching = (k: Kingdom, at: number) => (k.sermonUntil ?? 0) > at

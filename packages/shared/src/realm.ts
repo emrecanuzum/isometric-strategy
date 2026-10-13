@@ -3,7 +3,7 @@ import { affordable, armoryOf, palaceLevel, population, recruitment } from './ec
 import type { Cost, Good, Kingdom, Resource, Stock } from './economy'
 import { buyPrice } from './market'
 import type { Market } from './market'
-import { RESEARCH, hasResearch, levelOf, researching, sermonReadyAt } from './institutions'
+import { RESEARCH, hasResearch, levelOf, researchEffects, researching, rivalOf, sermonReadyAt, taken, tierOpen } from './institutions'
 import { TAX_LEVELS } from './society'
 import type { TaxLevel } from './society'
 import { countOf, garrisonOf, hasUnits, subtractUnits, unitSpec } from './units'
@@ -22,7 +22,7 @@ const standing = (kingdom: Kingdom, kind: string, at: number) => kingdom.buildin
 
 export const setTax = (kingdom: Kingdom, tax: TaxLevel): Kingdom => (TAX_LEVELS.includes(tax) ? { ...kingdom, tax } : kingdom)
 
-export type RealmError = 'locked' | 'cost' | 'people' | 'have' | 'building' | 'none' | 'busy' | 'research'
+export type RealmError = 'locked' | 'cost' | 'people' | 'have' | 'building' | 'none' | 'busy' | 'research' | 'excluded' | 'prereq'
 
 export function queenError(kingdom: Kingdom, at: number): RealmError | null {
   const q = balance.society.queen
@@ -57,7 +57,7 @@ export function trainSoldiers(kingdom: Kingdom, count: number, at: number, unit:
   const { cost, weapons, pool } = recruitment(kingdom, at, unit)
   const queue = kingdom.training ?? []
   const start = Math.max(at, ...queue.map((t) => t.doneAt))
-  const doneAt = start + count * unitSpec(unit).trainSeconds * 1000
+  const doneAt = start + (count * unitSpec(unit).trainSeconds * 1000) / (1 + researchEffects(kingdom, at).trainSpeed)
   const armory = { ...armoryOf(kingdom) }
   for (const [w, n] of Object.entries(weapons)) armory[w as keyof typeof armory] -= (n ?? 0) * count
   return {
@@ -116,6 +116,10 @@ export function researchError(kingdom: Kingdom, id: string, at: number): RealmEr
   const level = levelOf(kingdom, 'university', at)
   if (level === 0) return 'building'
   if ((kingdom.researches ?? []).some((r) => r.id === id)) return 'have'
+  // The other road of this tier was taken: this one is closed for good.
+  const rival = rivalOf(id)
+  if (rival && taken(kingdom, rival)) return 'excluded'
+  if (!tierOpen(kingdom, id, at)) return 'prereq'
   if (level < spec.level) return 'locked'
   if (researching(kingdom, at)) return 'busy'
   if (!affordable(kingdom.stock, spec.cost)) return 'cost'
@@ -139,5 +143,5 @@ export function sermonError(kingdom: Kingdom, at: number): RealmError | null {
 export function preach(kingdom: Kingdom, at: number): Kingdom {
   if (sermonError(kingdom, at)) return kingdom
   const s = balance.institutions.temple.sermon
-  return { ...kingdom, stock: pay(kingdom.stock, s.cost as Cost), sermonUntil: at + s.seconds * 1000, lastSermonAt: at }
+  return { ...kingdom, stock: pay(kingdom.stock, s.cost as Cost), sermonUntil: at + s.seconds * 1000 * (1 + researchEffects(kingdom, at).sermon), lastSermonAt: at }
 }

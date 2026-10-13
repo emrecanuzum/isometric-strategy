@@ -3,6 +3,7 @@ import { KINGDOM_COLORS } from '../game/buildingSprites'
 import type { KingdomColor } from '../game/buildingSprites'
 import type { ChatMessage } from '../net/online'
 import type { KingdomInfo } from './hud/online'
+import type { Score } from '@game/shared'
 import { lastSeen } from './hud/online'
 import { Icon } from './icons'
 
@@ -33,7 +34,7 @@ export function Chat({
   onLocate: (site: { x: number; y: number }) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [tab, setTab] = useState<'chat' | 'kingdoms'>('chat')
+  const [tab, setTab] = useState<'chat' | 'kingdoms' | 'ranking'>('chat')
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [seen, setSeen] = useState(messages.length ? messages[messages.length - 1].id : 0)
@@ -79,12 +80,17 @@ export function Chat({
           <button role="tab" aria-selected={tab === 'kingdoms'} className="btn small" onClick={() => setTab('kingdoms')}>
             Krallıklar ({kingdoms.length})
           </button>
+          <button role="tab" aria-selected={tab === 'ranking'} className="btn small" onClick={() => setTab('ranking')}>
+            Sıralama
+          </button>
         </span>
         <button className="btn small icon-only" onClick={() => setOpen(false)} aria-label="Sohbeti kapat">
           <Icon name="close" size={16} />
         </button>
       </header>
-      {tab === 'kingdoms' ? (
+      {tab === 'ranking' ? (
+        <Ranking kingdoms={kingdoms} mine={mine} onKingdom={onKingdom} />
+      ) : tab === 'kingdoms' ? (
         <ol className="chat-kingdoms">
           {kingdoms.map((k) => (
             <li key={k.id}>
@@ -135,5 +141,46 @@ export function Chat({
         </button>
       </form>
     </section>
+  )
+}
+
+const PARTS: { key: keyof Omit<Score, 'total'>; name: string }[] = [
+  { key: 'economy', name: 'Hazine' },
+  { key: 'growth', name: 'Gelişim' },
+  { key: 'people', name: 'Nüfus' },
+  { key: 'army', name: 'Ordu' },
+  { key: 'glory', name: 'Zafer' },
+  { key: 'learning', name: 'Bilgi' },
+]
+
+// The lobby's ranking: kingdoms by score, each with what its score is made of.
+function Ranking({ kingdoms, mine, onKingdom }: { kingdoms: KingdomInfo[]; mine: number | null; onKingdom: (id: number) => void }) {
+  const ranked = [...kingdoms].sort((a, b) => (b.score?.total ?? 0) - (a.score?.total ?? 0))
+  return (
+    <ol className="chat-ranking">
+      {ranked.map((k, i) => (
+        <li key={k.id} className={k.id === mine ? 'own' : undefined}>
+          <button onClick={() => k.id !== mine && onKingdom(k.id)} disabled={k.id === mine}>
+            <span className="rank">{i + 1}.</span>
+            <i style={{ background: swatch(k.color) }} />
+            <span className="who">
+              <b style={{ color: `color-mix(in srgb, ${swatch(k.color)} 45%, #f3e6c8)` }}>{k.name}</b>
+              <small>
+                {k.score
+                  ? PARTS.filter((p) => k.score![p.key] > 0)
+                      .map((p) => `${p.name} ${k.score![p.key].toLocaleString('tr-TR')}`)
+                      .join(' · ')
+                  : 'henüz puanlanmadı'}
+              </small>
+            </span>
+            <strong>{(k.score?.total ?? 0).toLocaleString('tr-TR')}</strong>
+          </button>
+        </li>
+      ))}
+      <li className="ranking-note">
+        Puan: hazine (altın ve depo), gelişim (saray ve bina seviyeleri), nüfus, ordu, zafer (kazanılan muharebe ve kuşatmalar, kraliçe, rehineler) ve
+        bilgi (araştırmalar).
+      </li>
+    </ol>
   )
 }

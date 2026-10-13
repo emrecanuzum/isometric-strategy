@@ -1,4 +1,5 @@
 import { balance } from './balance'
+import { researchEffects } from './institutions'
 import type { Kingdom } from './economy'
 import { mulberry32 } from './worldgen'
 
@@ -24,7 +25,8 @@ export interface SpyMission {
 export function counterOf(kingdom: Kingdom) {
   const e = balance.espionage
   const house = kingdom.buildings.find((b) => b.kind === 'spyHouse')
-  return (kingdom.spies ?? 0) * e.counterPerSpy + (house ? (house.level ?? 1) * e.counterPerLevel : 0)
+  // A spy school learnt at the university adds to it (as of the kingdom's last settling).
+  return (kingdom.spies ?? 0) * e.counterPerSpy + (house ? (house.level ?? 1) * e.counterPerLevel : 0) + researchEffects(kingdom, kingdom.settledAt).counter
 }
 
 // A kingdom that dislikes the spy's master watches its people closely: against a bad relation the network grows more

@@ -9,6 +9,7 @@ import {
   buildError,
   canPlace,
   fits,
+  scoreOf,
   gateAlong,
   gateTiles,
   dockPier,
@@ -207,7 +208,7 @@ const BUILD_ERRORS: Record<BuildError, string> = {
   spot: 'Buraya inşa edilemez',
   top: 'En yüksek seviyede',
   busy: 'Bina şu an inşaatta',
-  locked: 'Önce sarayı 2. seviyeye yükselt',
+  locked: 'Önce sarayı yükselt (bu yapı daha yüksek seviye saray ister)',
   limit: 'Bu yapının sınırı dolu (evlerde nüfus sınırı); sarayı yükselt',
 }
 
@@ -833,9 +834,9 @@ function App({
   const kingdoms: KingdomInfo[] = useMemo(
     () => [
       ...(kingdom
-        ? [{ id: mine.id, name: kingdom.name ?? 'Krallığın', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null }]
+        ? [{ id: mine.id, name: kingdom.name ?? 'Krallığın', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null, score: scoreOf(kingdom, now) }]
         : []),
-      ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings, shieldUntil: r.shield_until })),
+      ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings, shieldUntil: r.shield_until, score: r.score ?? null })),
     ],
     // Palace levels only change with the buildings.
     // eslint-disable-next-line react-hooks/exhaustive-deps
