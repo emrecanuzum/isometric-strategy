@@ -3,6 +3,7 @@ import { affordable, armoryOf, palaceLevel, population, recruitment } from './ec
 import type { Cost, Good, Kingdom, Resource, Stock } from './economy'
 import { buyPrice } from './market'
 import type { Market } from './market'
+import { RESEARCH, levelOf, researching, sermonReadyAt } from './institutions'
 import { TAX_LEVELS } from './society'
 import type { TaxLevel } from './society'
 import { countOf, garrisonOf, hasUnits, subtractUnits, unitSpec } from './units'
@@ -21,7 +22,7 @@ const standing = (kingdom: Kingdom, kind: string, at: number) => kingdom.buildin
 
 export const setTax = (kingdom: Kingdom, tax: TaxLevel): Kingdom => (TAX_LEVELS.includes(tax) ? { ...kingdom, tax } : kingdom)
 
-export type RealmError = 'locked' | 'cost' | 'people' | 'have' | 'building' | 'none'
+export type RealmError = 'locked' | 'cost' | 'people' | 'have' | 'building' | 'none' | 'busy'
 
 export function queenError(kingdom: Kingdom, at: number): RealmError | null {
   const q = balance.society.queen
@@ -105,4 +106,37 @@ export function repairWalls(kingdom: Kingdom): Kingdom {
   const cost = repairCost(kingdom)
   if (!Object.values(cost).some((v) => (v ?? 0) > 0) || !affordable(kingdom.stock, cost)) return kingdom
   return { ...kingdom, stock: pay(kingdom.stock, cost), buildings: kingdom.buildings.map((b) => (b.broken ? { ...b, broken: false } : b)) }
+}
+
+// A study at the university (CLAUDE.md §9.8): one at a time, each once, the harder ones at a higher university level.
+export function researchError(kingdom: Kingdom, id: string, at: number): RealmError | null {
+  const spec = RESEARCH[id]
+  if (!spec) return 'none'
+  const level = levelOf(kingdom, 'university', at)
+  if (level === 0) return 'building'
+  if ((kingdom.researches ?? []).some((r) => r.id === id)) return 'have'
+  if (level < spec.level) return 'locked'
+  if (researching(kingdom, at)) return 'busy'
+  if (!affordable(kingdom.stock, spec.cost)) return 'cost'
+  return null
+}
+
+export function startResearch(kingdom: Kingdom, id: string, at: number): Kingdom {
+  if (researchError(kingdom, id, at)) return kingdom
+  const spec = RESEARCH[id]
+  return { ...kingdom, stock: pay(kingdom.stock, spec.cost), researches: [...(kingdom.researches ?? []), { id, doneAt: at + spec.seconds * 1000 }] }
+}
+
+// A sermon at the temple that the taxes are good: for a while the tax weighs less on the people's mood.
+export function sermonError(kingdom: Kingdom, at: number): RealmError | null {
+  if (levelOf(kingdom, 'temple', at) === 0) return 'building'
+  if (sermonReadyAt(kingdom) > at) return 'busy'
+  if (!affordable(kingdom.stock, balance.institutions.temple.sermon.cost as Cost)) return 'cost'
+  return null
+}
+
+export function preach(kingdom: Kingdom, at: number): Kingdom {
+  if (sermonError(kingdom, at)) return kingdom
+  const s = balance.institutions.temple.sermon
+  return { ...kingdom, stock: pay(kingdom.stock, s.cost as Cost), sermonUntil: at + s.seconds * 1000, lastSermonAt: at }
 }

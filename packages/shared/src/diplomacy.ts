@@ -26,7 +26,7 @@ export interface Pact {
   ended_at: string | null
 }
 
-export type EnvoyKind = 'improve' | 'gift' | 'tribute' | 'alliance' | 'peace'
+export type EnvoyKind = 'improve' | 'gift' | 'tribute' | 'alliance' | 'peace' | 'insult'
 
 // What a peace offer asks: nothing, gold from the other side, a tribute from it, or gold given to it.
 export type PeaceTerms = { kind: 'white' } | { kind: 'gold'; gold: number } | { kind: 'tribute'; gold: number } | { kind: 'offer'; gold: number }
@@ -160,3 +160,32 @@ export function peaceTermsError(terms: PeaceTerms, score: number): PeaceError | 
 
 // A side that has crushed the other dictates the peace: it is accepted on arrival.
 export const enforcedPeace = (score: number) => score >= balance.diplomacy.peace.enforceScore
+
+// A kingdom's standing (CLAUDE.md §9.7): the more kingdoms it has made enemies of, the less its envoys' courtesies and
+// gifts move anyone. A factor on relation gains from 1 down to 1 − maxPenalty, from its relations with everyone.
+export function reputation(relations: number[]) {
+  const r = balance.diplomacy.reputation
+  const hostility = relations.reduce((sum, v) => sum + Math.max(0, -v - r.freeHostility), 0)
+  return Math.max(1 - r.maxPenalty, 1 - hostility / r.perPenalty)
+}
+
+// A kingdom's relations with all the others at `now` (0 with those it has none with).
+export const relationsOf = (relations: Relation[], me: number, others: number[], now: number) =>
+  others.filter((o) => o !== me).map((o) => relationBetween(relations, me, o, now))
+
+// ---- Raiding a trade route ---------------------------------------------------------------------------------------
+
+// Soldiers of the garrison fall on the merchant of another kingdom: the goods he carries are taken and the trade post
+// is wrecked until its owner repairs it. Watchtowers near the trade post make it harder.
+export function raidChance(towersNear: number) {
+  const r = balance.diplomacy.raid
+  return Math.max(r.minChance, r.baseChance - towersNear * r.towerPenalty)
+}
+
+export const towersNear = (buildings: { kind: string; x: number; y: number; size: number; doneAt: number; broken?: boolean }[], at: number) => {
+  const post = buildings.find((b) => b.kind === 'tradePost')
+  if (!post) return 0
+  const cx = post.x + post.size / 2
+  const cy = post.y + post.size / 2
+  return buildings.filter((b) => b.kind === 'watchtower' && b.doneAt <= at && Math.hypot(b.x + 0.5 - cx, b.y + 0.5 - cy) <= balance.diplomacy.raid.towerTiles).length
+}

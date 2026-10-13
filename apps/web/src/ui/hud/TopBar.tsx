@@ -132,7 +132,7 @@ function ResourceCard({ resource: r, kingdom, now, history }: { resource: Resour
 }
 
 function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
-  const { villagers, jobs, efficiency, cap, soldiers, housing } = population(kingdom, now)
+  const { villagers, jobs, efficiency, cap, soldiers, housing, sick, healthy } = population(kingdom, now)
   const homes = kingdom.buildings.filter((b) => b.doneAt <= now && (BUILDINGS[b.kind].villagers ?? 0) > 0).length
   const most = Math.max(villagers, jobs, 1)
   return (
@@ -163,6 +163,12 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
             <b>{soldiers}</b>
           </li>
         )}
+        {sick >= 0.5 && (
+          <li>
+            <span>Hasta</span>
+            <b className="down">{Math.round(sick)}</b>
+          </li>
+        )}
         <li>
           <span>Barınak (ev, saray)</span>
           <b>
@@ -175,7 +181,7 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
         </li>
         <li>
           <span>Boşta köylü</span>
-          <b>{Math.max(0, villagers - jobs)}</b>
+          <b>{Math.max(0, Math.floor(healthy) - jobs)}</b>
         </li>
       </ul>
     </>

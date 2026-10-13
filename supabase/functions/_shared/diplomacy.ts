@@ -2,7 +2,7 @@
 // `command` function (answers, intel) and the `tick` function (arrivals, expiries).
 
 import * as game from './game.js'
-import { admin, changeRelation, grantClaim, iso, loadKingdoms, lobbyMarket, ms, mutateKingdom, nameOf, notify, pactsOf, relationOf, scoreOf, setRelation } from './server.ts'
+import { admin, changeRelation, grantClaim, iso, loadKingdoms, lobbyMarket, ms, mutateKingdom, nameOf, notify, pactsOf, relationOf, reputationOf, counterAgainst, scoreOf, setRelation } from './server.ts'
 import type { Row } from './server.ts'
 
 const d = game.balance.diplomacy
@@ -12,7 +12,7 @@ export interface EnvoyRow {
   lobby_id: string
   from_id: number
   to_id: number
-  kind: 'improve' | 'gift' | 'tribute' | 'alliance' | 'peace'
+  kind: 'improve' | 'gift' | 'tribute' | 'alliance' | 'peace' | 'insult'
   gold: number | null
   sent_at: string
   arrive_at: string
@@ -25,12 +25,23 @@ export interface EnvoyRow {
 export async function arrive(envoy: EnvoyRow, rows: Row[]) {
   const at = ms(envoy.arrive_at)
   const from = nameOf(rows, envoy.from_id)
+  // An insult: the relation sours and the insulted may go to war over it.
+  if (envoy.kind === 'insult') {
+    await changeRelation(envoy.lobby_id, envoy.from_id, envoy.to_id, d.insult.relation, at)
+    await grantClaim(envoy.lobby_id, envoy.to_id, envoy.from_id, 'insult', at)
+    await admin.from('envoys').update({ status: 'done', resolved_at: iso(at) }).eq('id', envoy.id)
+    await notify(envoy.lobby_id, [envoy.to_id], 'envoy_insult', { from, seed: envoy.id }, at)
+    await notify(envoy.lobby_id, [envoy.from_id], 'insult_delivered', { to: nameOf(rows, envoy.to_id) }, at)
+    return
+  }
   if (envoy.kind === 'improve' || envoy.kind === 'gift') {
-    if (envoy.kind === 'improve') await changeRelation(envoy.lobby_id, envoy.from_id, envoy.to_id, d.improve.gain, at)
+    // A sender with many enemies is believed less.
+    const standing = await reputationOf(envoy.lobby_id, envoy.from_id, at)
+    if (envoy.kind === 'improve') await changeRelation(envoy.lobby_id, envoy.from_id, envoy.to_id, d.improve.gain * standing, at)
     else {
       const gold = envoy.gold ?? 0
       await mutateKingdom(envoy.to_id, at, (k) => ({ ...k, stock: { ...k.stock, gold: k.stock.gold + gold } }))
-      await changeRelation(envoy.lobby_id, envoy.from_id, envoy.to_id, Math.min(d.gift.maxGain, gold * d.gift.relationPerGold), at)
+      await changeRelation(envoy.lobby_id, envoy.from_id, envoy.to_id, Math.min(d.gift.maxGain, gold * d.gift.relationPerGold) * standing, at)
     }
     await admin.from('envoys').update({ status: 'done', resolved_at: iso(at) }).eq('id', envoy.id)
     await notify(envoy.lobby_id, [envoy.to_id], 'envoy_courtesy', { kind: envoy.kind, from, gold: envoy.gold }, at)
@@ -132,7 +143,9 @@ export async function endTribute(pact: any, by: number, at: number, lobby: strin
   await mutateKingdom(receiver, at, drop(payer))
   await changeRelation(lobby, payer, receiver, by === payer ? d.tribute.renege : d.tribute.release, at)
   if (by === payer) await grantClaim(lobby, receiver, payer, 'renege', at)
+  // Word of a broken promise spreads: everyone else trusts the payer a little less.
   const rows = await loadKingdoms(lobby)
+  if (by === payer) for (const r of rows) if (r.state && r.id !== payer && r.id !== receiver) await changeRelation(lobby, payer, r.id, d.tribute.renegeInfamy, at)
   await notify(lobby, [by === payer ? receiver : payer], 'tribute_ended', { by: nameOf(rows, by), payer: nameOf(rows, payer), renege: by === payer }, at)
 }
 
@@ -147,7 +160,7 @@ export async function intel(lobby: string, me: number, targetId: number, now: nu
   if (!target?.state) return null
   const state = game.advance(target.state, now, await lobbyMarket(lobby)).kingdom
   const { data: mine } = await admin.from('spy_missions').select('*').eq('owner_id', me).eq('target_id', targetId).is('ended_at', null)
-  const counter = game.counterOf(state)
+  const counter = await counterAgainst(lobby, me, targetId, state, now)
   const strength = Object.fromEntries(game.SPY_TOPICS.map((t: string) => [t, Math.round(game.strengthOf(mine ?? [], me, targetId, t, counter, now))]))
   const est = (value: number, topic: string, salt: number) => game.estimate(value, strength[topic], seedOf(me, targetId, salt), now)
   const { data: armies } = await admin.from('armies').select('soldiers, units').eq('kingdom_id', targetId)

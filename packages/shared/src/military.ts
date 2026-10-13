@@ -215,13 +215,24 @@ export interface Fighter {
   familiarity: number
   // Of which kinds (all spearmen when absent).
   units?: Units
+  // Added to the roll: faith from the temple and tactics from the university (institutions.ts battleSpirit).
+  faith?: number
+}
+
+// What stands with each side besides its soldiers: its watchtowers within reach of the battle (attackers' too in a
+// field battle) and, for a besieged palace, its walls.
+export interface Defense {
+  towers: number
+  walls: number
+  attackerTowers?: number
 }
 
 export interface SideRound {
   roll: number
   bonus: number
-  // Soldiers killed and morale knocked off the other side this round.
+  // Soldiers killed (of them by towers) and morale knocked off the other side this round.
   kills: number
+  towerKills?: number
   moraleHit: number
   // This side after the round.
   soldiers: number
@@ -248,6 +259,8 @@ export interface BattlePlan {
   attackerCounter: number
   defenderCounter: number
   walls: number
+  attackerFaith?: number
+  defenderFaith?: number
 }
 
 const total = (side: Fighter[]) => side.reduce((s, f) => s + f.soldiers, 0)
@@ -277,8 +290,11 @@ function share(side: Fighter[], lost: number) {
 // Plays a battle out round by round (EU4-like): each round both sides roll a die, add their bonuses, and kill and
 // shake the other side in proportion. A side whose morale breaks or who has no one left loses; after the last round
 // the attackers give up. Deterministic from the seed, so every screen can replay it as it happens.
-export function planBattle(attackers: Fighter[], defenders: Fighter[], seed: number, defense = { towers: 0, walls: 0 }): BattlePlan {
+export function planBattle(attackers: Fighter[], defenders: Fighter[], seed: number, defense: Defense = { towers: 0, walls: 0 }): BattlePlan {
   const b = balance.military.battle
+  const tower = balance.military.tower
+  const aTowers = defense.attackerTowers ?? 0
+  const dTowers = defense.towers
   const random = mulberry32(seed)
   const unitsOf = (side: Fighter[]) =>
     side.reduce<Units>((all, f) => {
@@ -292,11 +308,15 @@ export function planBattle(attackers: Fighter[], defenders: Fighter[], seed: num
   const walls = Math.max(0, defense.walls - (aUnits.catapult ?? 0) * balance.military.catapult.wallsPerCatapult)
   const attackerCounter = counterBonus(aUnits, dUnits)
   const defenderCounter = counterBonus(dUnits, aUnits)
-  const attackerBonus = familiarityBonus(weighted(attackers, (f) => f.familiarity)) + attackerCounter
+  const attackerFaith = weighted(attackers, (f) => f.faith ?? 0)
+  const defenderFaith = weighted(defenders, (f) => f.faith ?? 0)
+  const attackerBonus =
+    familiarityBonus(weighted(attackers, (f) => f.familiarity)) + attackerCounter + attackerFaith + Math.min(b.maxTowerBonus, aTowers * b.towerBonus)
   const defenderBonus =
     familiarityBonus(weighted(defenders, (f) => f.familiarity)) +
     defenderCounter +
-    Math.min(b.maxTowerBonus, defense.towers * b.towerBonus) +
+    defenderFaith +
+    Math.min(b.maxTowerBonus, dTowers * b.towerBonus) +
     Math.min(b.maxWallBonus, Math.floor(walls / b.wallsForBonus))
   // Soldiers strike as hard as their kinds: cavalry harder, catapults weakly in the field.
   const weight = (units: Units) => mightOf(units) / Math.max(1, Object.values(units).reduce((s, n) => s + (n ?? 0), 0))
@@ -312,8 +332,11 @@ export function planBattle(attackers: Fighter[], defenders: Fighter[], seed: num
     const rd = 1 + Math.floor(random() * b.dice)
     const sa = Math.max(1, ra + attackerBonus)
     const sd = Math.max(1, rd + defenderBonus)
-    const killsByA = Math.min(d.soldiers, Math.round(a.soldiers * aWeight * b.killRate * sa))
-    const killsByD = Math.min(a.soldiers, Math.round(d.soldiers * dWeight * b.killRate * sd))
+    // Towers shoot every round, with or without soldiers beside them.
+    const towersA = Math.min(d.soldiers, aTowers * tower.killsPerRound)
+    const towersD = Math.min(a.soldiers, dTowers * tower.killsPerRound)
+    const killsByA = Math.min(d.soldiers, Math.round(a.soldiers * aWeight * b.killRate * sa) + towersA)
+    const killsByD = Math.min(a.soldiers, Math.round(d.soldiers * dWeight * b.killRate * sd) + towersD)
     const hitByA = sa * b.moraleHit * Math.sqrt(Math.max(1, a.soldiers) / Math.max(1, d.soldiers))
     const hitByD = sd * b.moraleHit * Math.sqrt(Math.max(1, d.soldiers) / Math.max(1, a.soldiers))
     a.soldiers -= killsByD
@@ -321,11 +344,13 @@ export function planBattle(attackers: Fighter[], defenders: Fighter[], seed: num
     a.morale = Math.max(0, a.morale - hitByD)
     d.morale = Math.max(0, d.morale - hitByA)
     rounds.push({
-      attackers: { roll: ra, bonus: attackerBonus, kills: killsByA, moraleHit: hitByA, soldiers: a.soldiers, morale: a.morale },
-      defenders: { roll: rd, bonus: defenderBonus, kills: killsByD, moraleHit: hitByD, soldiers: d.soldiers, morale: d.morale },
+      attackers: { roll: ra, bonus: attackerBonus, kills: killsByA, towerKills: towersA, moraleHit: hitByA, soldiers: a.soldiers, morale: a.morale },
+      defenders: { roll: rd, bonus: defenderBonus, kills: killsByD, towerKills: towersD, moraleHit: hitByD, soldiers: d.soldiers, morale: d.morale },
     })
-    const aBroken = a.soldiers <= 0 || a.morale <= b.retreatMorale
-    const dBroken = d.soldiers <= 0 || d.morale <= b.retreatMorale
+    // A side left with no soldiers but towers holds out for a few rounds while the towers shoot.
+    const holding = (side: { soldiers: number }, towers: number) => side.soldiers <= 0 && towers > 0 && i + 1 < tower.holdRounds
+    const aBroken = !holding(a, aTowers) && (a.soldiers <= 0 || a.morale <= b.retreatMorale)
+    const dBroken = !holding(d, dTowers) && (d.soldiers <= 0 || d.morale <= b.retreatMorale)
     if (aBroken || dBroken) {
       winner = dBroken && (!aBroken || d.morale < a.morale) ? 'attackers' : 'defenders'
       break
@@ -343,6 +368,8 @@ export function planBattle(attackers: Fighter[], defenders: Fighter[], seed: num
     attackerCounter,
     defenderCounter,
     walls,
+    attackerFaith,
+    defenderFaith,
   }
 }
 

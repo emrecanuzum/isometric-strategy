@@ -72,10 +72,10 @@ kararlar verebilmeli; sürekli başında durmak zorunlu olmamalı. Kritik sürel
 ### 3.2 Lobi yaşam döngüsü
 
 1. **Oluşturma** — harita üretilir (seed), oyuncu slotları açılır.
-2. **Katılım** — oyuncuya başlangıç bölgesi **rastgele atanır**; yerini
-   kendisi seçemez. Ancak **3 yer hakkı** vardır: atanan yerin biyom
-   çarpanlarını görür, beğenmezse yeni bir yer keşfettirir; gördüğü (en çok
-   3) yerden birinde krallığını kurar (bkz. §6.4).
+2. **Katılım** — oyuncuya **3 başlangıç yeri** rastgele atanır; yerini
+   haritadan kendisi seçemez. Üç yer baştan yan yana büyük kartlarda
+   gösterilir (biyom çarpanları ve arazi payları); oyuncu birini seçip
+   krallığını kurar (bkz. §6.4).
 3. **Aktif sezon** — 2 hafta (336 oyun günü).
 4. **Sezon sonu** — skor tablosu, ödüller/başarımlar kaydedilir.
 5. **Wipe** — dünya sıfırlanır; özel lobide aynı grup yeni sezona devam eder.
@@ -429,16 +429,35 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     onay penceresi adedi ve toplam maliyeti gösterir. Sur parçaları inşaat
     sırasına girmez (aynı anda kurulur); evler sıraya girer, yer boşaldıkça
     başlar.
+  - **Surlar insanları da tutar:** köylüler ve tüccar saraydan yürüyerek
+    çıkar; ayakta duran sur parçasından geçemez, yalnızca **sur kapısından**
+    (saray 2. seviye, 1 karo) ya da yıkık bir sur kesiminden geçer. Saraydan
+    yürüyerek ulaşılamayan bina çalışmaz ("Sur arkasında kaldı"); surla
+    çevrilmiş ticaret noktası ya da surun içinde kalan tüccar hiçbir şey
+    satmaz. Ordular bundan etkilenmez; kuşatmada kapı sur sayılır
+    (`packages/shared/src/walls.ts`).
   - **İlk oduncu kampı, ilk ev ve ilk tarla ücretsizdir** (bir kez), böylece
     bütün malzemesini harcayan oyuncu kilitlenmez.
-  - **Ev sınırı** saray seviyesiyle artar: 4 / 6 / 8 / 10 / 12. Nüfusu
-    büyütmek için evleri yükseltmek de gerekir.
+  - **Ev ve nüfus sınırı:** Evler (ve sarayın kendi odaları) nüfus
+    sınırından (saray seviyesi × 16) fazla barınak sağlayamaz. Planlanan
+    barınak (inşaattakiler ve yükseltilenler hedef seviyesiyle sayılır)
+    sınıra ulaşınca yeni ev kurulmaz, ev yükseltilmez; sarayı yükseltmek
+    gerekir.
+  - **Saray 4. ve 5. seviye** çok pahalı ve uzundur (savaş malzemesi de
+    ister; `economy.json`).
   - Saray ve ticaret noktası dışındaki her yapı **yıkılabilir**: inşa ve
     yükseltme maliyetinin yarısı geri döner (ücretsiz ilk yapının inşa
     maliyeti dönmez).
 - **Ticaret noktası:** satılacak mal yerine **hiçbir şey satma** da
   seçilebilir (tüccar evde bekler). Sefer başına kazanç lobinin anlık
-  fiyatından gösterilir.
+  fiyatından gösterilir. Ticaret menüsünde satış seçimi en üsttedir;
+  **pazara tıklamak da ticaret menüsünü açar** (fiyatlar ve alım tek
+  satırda üç sütun).
+- **Yokluk cezası:** Oyuncunun son görülmesinden (her komut ve oyun
+  açıkken birkaç dakikada bir) 1 saat sonra, geçen her saat binaların
+  üretimi, vergi ve tüccarın altını %10 azalır (en az %20'ye kadar;
+  `economy.json` → `idle`). Diğer oyuncular Krallıklar sekmesinde
+  "çevrimiçi / X önce görüldü" bilgisini görür.
 - **Duman:** Bacası olan her yapıdan (ev, atölye, oduncu, ticaret evi,
   iskele) hareketli duman yükselir.
 - **Bina seviyeleri:** Ev, tarla, oduncu kampı, silah atölyesi ve iskele
@@ -706,7 +725,7 @@ mertebesindedir.
 
 **Gece ve gece mesaisi**
 
-- Oyun saatinde **gece** (20:30–05:00, haritanın karardığı saatler) halk
+- Oyun saatinde **gece** (22:00–04:00, haritanın karardığı saatler) halk
   dinlenir: binalar **%50** hızla üretir.
 - Halk sekmesinden **gece mesaisi** açılabilir: gece de tam çalışılır ama
   mutluluk hedefi düşer ve her gece turunda **yorgunluk** birikir;
@@ -738,6 +757,21 @@ mertebesindedir.
     haracı kendisi kaldırabilir.
   - **İttifak teklifi:** en az **+50** ilişki ister. İttifakı bozmak
     ilişkiyi çok düşürür.
+  - **İtibar:** Bir krallığın −20'nin altındaki ilişkileri toplandıkça
+    itibarı düşer (en fazla %60): elçilerinin ilişki geliştirmesi ve
+    hediyeleri o oranda az etki eder. **Haracı kesen**, haraç alanla −45'in
+    yanında diğer bütün krallıklarla −5 ilişki kaybeder ve haraç alan savaş
+    gerekçesi kazanır.
+  - **Hakaret:** elçi hakaret götürür (bekleme süresiyle); varınca ilişki
+    −25 düşer ve hakarete uğrayan savaş gerekçesi kazanır.
+  - **Ticaret yolu yağması:** garnizondan 10 asker (bekleme süresiyle,
+    müttefike yapılamaz) hedefin tüccarını basar. Şans %75'ten başlar,
+    hedefin ticaret noktası yakınındaki (8 karo) her gözcü kulesi %15
+    düşürür (en az %15). Başarıda sattığı maldan 3 seferlik pay alınır ve
+    **ticaret noktası harap olur**: sahibi altın + malzemeyle onarana kadar
+    tüccar satış yapamaz. Her durumda saldıran asker kaybeder (başarıda
+    %10, başarısızlıkta %40), ilişki −30 düşer ve hedef savaş gerekçesi
+    kazanır.
   - **Savaş ilanı:** ilişki en fazla **−50** olmalı; **savaş gerekçen**
     (casus belli) varsa **−20** yeter. Gerekçesiz savaş açan, lobideki
     diğer bütün krallıklarla −10 ilişki kaybeder.
@@ -769,6 +803,9 @@ mertebesindedir.
 - Rapor tahminidir: ağ gücü arttıkça hata payı küçülür (ör. "120–180
   yemek"). Diplomasi konusu hedefin yoldaki elçilerini ve casuslarını
   gösterir.
+- Hedefin seninle **ilişkisi kötüyse** seni gözler: kötü ilişki karşı
+  casusluğa eklenir (−100'de +2), ağ daha yavaş kurulur, casus daha
+  çabuk yakalanır.
 - Casusun **yakalanma** anı görev başında hedefin karşı casusluğuna göre
   belirlenir; yakalanınca casus ölür, hedef kimin gönderdiğini öğrenir,
   ilişki düşer ve hedef savaş gerekçesi kazanır.
@@ -814,15 +851,20 @@ mertebesindedir.
   geçenlere de) ve **surlar** (savunmayı güçlendirir, kuşatmada hasar alır,
   yıkılan sur onarılmalıdır) savunur. Kazanan saldıran depolardan yağma
   alır.
+- **Gözcü kuleleri muharebede:** Bir muharebenin yakınındaki (8 karo) kuleler
+  sahiplerinin tarafına zar bonusu verir ve her tur birkaç düşman vurur;
+  meydan muharebesinde iki taraf için de geçerlidir. Garnizonu boş saray
+  kuşatılırsa kuleler birkaç tur direnir ve saldırana kayıp verdirir, sonra
+  saray düşer.
 - **Moral** (0–100, ordu başına): yürürken düşer; durunca kendi
   topraklarında toparlanır, bir **hanın** yakınında çok daha hızlı
   toparlanır, açık arazide yavaşça sarkar.
 - **Saha bilgisi** (0–100): ordu bir yerde durdukça artar, kamptan
   uzaklaştıkça azalır; zara en fazla +1,5 ekler.
-- **Muharebe turları** (EU4 gibi): her tur (45 sn) iki taraf da d10 atar,
+- **Muharebe turları** (EU4 gibi): her tur (30 sn) iki taraf da d10 atar,
   zara saha bilgisi (kuşatılan saray için kule ve sur bonusu) eklenir;
   sonuca göre karşı taraf asker ve moral kaybeder. Morali ya da askeri
-  biten taraf yenilir; son turda saldıran çekilir. Savaşlar ~10 tur sürer
+  biten taraf yenilir; son turda (14.) saldıran çekilir. Savaşlar ~8 tur sürer
   ve tur tur izlenebilir (zarlar, bonuslar, moral, kayıplar). Yenilen ordu
   eve çekilir ve eve varana kadar yeniden yakalanamaz.
 - Savaştayken elçiler yalnızca barış götürür (ilişki geliştirme, hediye ve
@@ -832,6 +874,39 @@ mertebesindedir.
   işaretlenir. Başkasının ordusunun gücü yalnızca casusla tahmin edilir.
 - Muharebe başlayınca ve bitince **elçi** ekranda bir pencereyle haber
   verir (kim, nerede, sonuç, kayıplar).
+
+### 9.8 Prototip: kurumlar ve günün olayları (şu an uygulanan)
+
+Değerler `config/balance/institutions.json`, mantık
+`packages/shared/src/institutions.ts`. Üç bina da 2. seviye saray ister,
+krallıkta birer tane olur ve 3 seviyelidir.
+
+- **Üniversite:** Aynı anda bir **araştırma** yürütür (altın/malzeme ve
+  süre). Daha ileri araştırmalar daha yüksek üniversite seviyesi ister:
+  - 1: **Mimarlık** (inşaat kuyruğu 2 → 3), **Keten tarımı** (tarla keten
+    ekebilir; öncesinde yalnızca buğday), **Sulama** (tarla +%20),
+    **Balıkçılık** (iskele +%25).
+  - 2: **Ormancılık** (oduncu +%20), **Metalurji** (atölye +%20), **Tıp**
+    (hastalık yarıya, iyileşme ×1,5), **Muhasebe** (vergi +%15).
+  - 3: **Savaş taktikleri** (zar +0,5), **Ticaret hukuku** (tüccar +%25).
+- **Hastalık ve hastane:** Köylülerin bir payı hastadır; hasta köylü
+  çalışmaz, vergi vermez ve mutluluğu düşürür. Her tur birkaç kişi
+  hastalanır (hasta çoksa, açlıkta ve soğukta daha hızlı yayılır) ve
+  hastalar kendiliğinden yavaşça iyileşir. **Hastane** doktorlarıyla (işçi)
+  her tur hastaların bir payını daha iyileştirir.
+- **Tapınak:** Mutluluk hedefini yükseltir; askerler **iman gücüyle** zara
+  bonus ekler (seviyeyle artar). **Vaaz:** altınla, bekleme süresiyle;
+  bir süre verginin mutluluğa olumsuz etkisi azalır ("vergiler iyidir").
+- **Günün olayları:** Her krallığın başına ara sıra (5 dakikalık
+  pencerelerde, ~%60 şansla) birkaç dakika süren bir olay gelir: kavurucu
+  güneş (yemek −%30), bereketli yağmur, salgın (bir anda hastalık), halk
+  şenliği, orman yangını, maden damarı, gezgin tüccarlar, ambar yangını,
+  define, soğuk dalgası, hacılar. Olay krallıktan ve zamandan
+  deterministik hesaplanır (saklanmaz; sunucu ve istemci aynı olayı
+  görür); anlık etkileri (kayıp, define, salgın) başladığı üretim turunda
+  bir kez uygulanır.
+- **Günlük:** Olaylar ayrı (mor) kâğıtta, elçinin diğer krallıklardan
+  getirdiği haberler (savaş, teklif, casus…) ayrı (mühürlü) kâğıtta yazılır.
 
 ---
 
@@ -854,7 +929,15 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   profilde saklanır, cihazdan cihaza taşınır. E-posta onayı şimdilik
   kapalıdır (yerleşik e-posta servisi saatte 2 e-posta ile sınırlı).
 - **Ana menü:** Giriş sonrası Lobiler / Nasıl oynanır / Ayarlar. Oyun
-  içinden Krallık sekmesindeki "Ana menü" ile dönülür.
+  içinden Krallık sekmesindeki "Ana menü" ile dönülür. Lobi silinirse
+  içindeki oyuncular kendiliğinden ana menüye döner (yayın + dakikalık
+  yoklama).
+- **Ayarlar ve ses:** Harita ekranının köşesindeki dişli **Ayarlar**
+  penceresini açar: müzik ve **ses efektleri** ayrı ayrı açılıp kapanır,
+  sesleri yüzde olarak ayarlanır (profilde saklanır). Efektler tarayıcıda
+  sentezlenir (`apps/web/src/audio/sfx.ts`): savaş davulu ve boru,
+  savaş ilanı, elçi borusu, kötü haber çanı, inşaat başlarken testere ve
+  tokmak, bina bitince çekiç, günün olayları için arp.
 - **Lobi tarayıcısı:** halka açık lobiler listesi, özel lobiye kodla katılım.
 - **Sunucu otoriter (authoritative) mimari:** Tüm oyun durumu sunucuda;
   istemci yalnızca görüntüler ve komut gönderir (hile önleme).

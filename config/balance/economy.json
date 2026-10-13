@@ -47,7 +47,11 @@
           "materials": 150
         }
       }
-    ]
+    ],
+    "repairCost": {
+      "gold": 60,
+      "materials": 40
+    }
   },
   "buildings": {
     "palace": {
@@ -72,18 +76,20 @@
         },
         {
           "cost": {
-            "gold": 550,
-            "materials": 280
+            "gold": 1500,
+            "materials": 900,
+            "arms": 250
           },
-          "buildSeconds": 45,
+          "buildSeconds": 180,
           "villagers": 7
         },
         {
           "cost": {
-            "gold": 800,
-            "materials": 400
+            "gold": 3200,
+            "materials": 1800,
+            "arms": 600
           },
-          "buildSeconds": 60,
+          "buildSeconds": 360,
           "villagers": 8
         }
       ]
@@ -117,13 +123,6 @@
           "buildSeconds": 14,
           "villagers": 8
         }
-      ],
-      "maxByPalaceLevel": [
-        4,
-        6,
-        8,
-        10,
-        12
       ]
     },
     "farm": {
@@ -142,7 +141,8 @@
         },
         "flax": {
           "makes": "materials",
-          "rate": 0.5
+          "rate": 0.5,
+          "research": "flax"
         }
       },
       "levels": [
@@ -295,7 +295,8 @@
         "materials": 80
       },
       "buildSeconds": 25,
-      "workers": 1
+      "workers": 1,
+      "unique": true
     },
     "barracks": {
       "size": 3,
@@ -315,7 +316,8 @@
           "buildSeconds": 40,
           "workers": 3
         }
-      ]
+      ],
+      "unique": true
     },
     "spyHouse": {
       "size": 2,
@@ -340,7 +342,8 @@
           },
           "buildSeconds": 40
         }
-      ]
+      ],
+      "unique": true
     },
     "watchtower": {
       "size": 1,
@@ -361,6 +364,97 @@
       },
       "buildSeconds": 4,
       "outsideQueue": true
+    },
+    "gate": {
+      "size": 1,
+      "requiresPalace": 2,
+      "cost": {
+        "gold": 20,
+        "materials": 25
+      },
+      "buildSeconds": 6,
+      "outsideQueue": true
+    },
+    "university": {
+      "size": 3,
+      "requiresPalace": 2,
+      "unique": true,
+      "cost": {
+        "gold": 200,
+        "materials": 120
+      },
+      "buildSeconds": 35,
+      "levels": [
+        {
+          "cost": {
+            "gold": 300,
+            "materials": 180
+          },
+          "buildSeconds": 45
+        },
+        {
+          "cost": {
+            "gold": 450,
+            "materials": 260
+          },
+          "buildSeconds": 60
+        }
+      ]
+    },
+    "hospital": {
+      "size": 2,
+      "requiresPalace": 2,
+      "unique": true,
+      "cost": {
+        "gold": 140,
+        "materials": 80
+      },
+      "buildSeconds": 25,
+      "workers": 2,
+      "levels": [
+        {
+          "cost": {
+            "gold": 220,
+            "materials": 120
+          },
+          "buildSeconds": 35,
+          "workers": 3
+        },
+        {
+          "cost": {
+            "gold": 340,
+            "materials": 180
+          },
+          "buildSeconds": 45,
+          "workers": 4
+        }
+      ]
+    },
+    "temple": {
+      "size": 2,
+      "requiresPalace": 2,
+      "unique": true,
+      "cost": {
+        "gold": 160,
+        "materials": 100
+      },
+      "buildSeconds": 30,
+      "levels": [
+        {
+          "cost": {
+            "gold": 240,
+            "materials": 150
+          },
+          "buildSeconds": 40
+        },
+        {
+          "cost": {
+            "gold": 360,
+            "materials": 220
+          },
+          "buildSeconds": 50
+        }
+      ]
     }
   },
   "maxBatch": 64,
@@ -369,5 +463,10 @@
     "house",
     "farm"
   ],
-  "demolishRefund": 0.5
+  "demolishRefund": 0.5,
+  "idle": {
+    "graceHours": 1,
+    "perHour": 0.1,
+    "min": 0.2
+  }
 }

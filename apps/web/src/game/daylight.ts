@@ -1,17 +1,21 @@
+import { balance } from '@game/shared'
+
 // The light over the map through the day: a colour the scene is multiplied by, white at noon, warm at dawn and dusk,
 // dim blue at night (never so dark that the map cannot be read), and the name of that part of the day.
 
-// [hour, colour] keyframes around the clock; colours are blended between them.
+// [hour, colour] keyframes around the clock; colours are blended between them. Full night runs from the night's start
+// to its end on the game clock (balance.society.night), with dusk and dawn either side.
+const { startHour, endHour } = balance.society.night
 const KEYS: [number, number][] = [
   [0, 0x6a78b8],
-  [4.5, 0x6a78b8],
-  [5.5, 0xb898b8],
-  [6.5, 0xffc8a0],
-  [8, 0xffffff],
-  [17, 0xffffff],
-  [18.5, 0xffb488],
-  [19.5, 0xa890c0],
-  [20.5, 0x6a78b8],
+  [endHour - 0.5, 0x6a78b8],
+  [endHour + 0.5, 0xb898b8],
+  [endHour + 1.5, 0xffc8a0],
+  [endHour + 3, 0xffffff],
+  [startHour - 3.5, 0xffffff],
+  [startHour - 2, 0xffb488],
+  [startHour - 1, 0xa890c0],
+  [startHour, 0x6a78b8],
   [24, 0x6a78b8],
 ]
 
@@ -32,8 +36,8 @@ export function daylight(hour: number): number {
 export type DayPhase = 'night' | 'dawn' | 'morning' | 'noon' | 'afternoon' | 'dusk'
 
 export function dayPhase(hour: number): DayPhase {
-  if (hour < 5 || hour >= 20.5) return 'night'
-  if (hour < 7) return 'dawn'
+  if (hour < endHour || hour >= startHour) return 'night'
+  if (hour < endHour + 2) return 'dawn'
   if (hour < 11) return 'morning'
   if (hour < 14) return 'noon'
   if (hour < 18) return 'afternoon'

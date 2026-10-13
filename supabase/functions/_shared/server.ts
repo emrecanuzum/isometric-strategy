@@ -137,6 +137,18 @@ export async function relationOf(lobby: string, x: number, y: number, now: numbe
   return { value: data ? game.relationAt(data.value, ms(data.at), now) : 0, row: data, lobby }
 }
 
+// A kingdom's standing with the whole lobby (see game.reputation).
+export async function reputationOf(lobby: string, kingdom: number, now: number) {
+  const { data } = await admin.from('relations').select('*').eq('lobby_id', lobby).or(`a.eq.${kingdom},b.eq.${kingdom}`)
+  return game.reputation((data ?? []).map((r: { value: number; at: string }) => game.relationAt(r.value, ms(r.at), now))) as number
+}
+
+// The counter-espionage a spy of `owner` meets in `target`: the target's own, and its wariness of the owner.
+export async function counterAgainst(lobby: string, owner: number, target: number, state: Kingdom, now: number) {
+  const { value } = await relationOf(lobby, owner, target, now)
+  return (game.counterOf(state) + game.wariness(value)) as number
+}
+
 // Adds `delta` to the relation of two kingdoms (after its drift up to now).
 export async function changeRelation(lobby: string, x: number, y: number, delta: number, now: number, improved = false) {
   const { a, b } = game.pairOf(x, y)

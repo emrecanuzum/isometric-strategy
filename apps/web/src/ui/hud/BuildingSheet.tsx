@@ -1,11 +1,12 @@
-import { BUILDINGS, buildingOutput, demolishRefund, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
+import { BUILDINGS, buildingOutput, cutOff, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
 import type { Building, BuildingKind, Good, Product, Resource } from '@game/shared'
 import { useState } from 'react'
 import { looksOf } from '../../game/buildingSprites'
 import { Icon } from '../icons'
 import type { IconName } from '../icons'
-import { BUILDING_NAMES, PRODUCT_NAMES, RESOURCE_ICONS, RESOURCE_NAMES, WEAPON_ICONS, WEAPON_NAMES } from '../names'
-import { CostList } from '../panels'
+import { BUILDING_NAMES, BUILDING_NOTES, PRODUCT_NAMES, RESEARCH_NAMES, RESOURCE_ICONS, RESOURCE_NAMES, WEAPON_ICONS, WEAPON_NAMES } from '../names'
+import { CostList, Missing } from '../panels'
+import { HospitalPanel, TemplePanel, UniversityPanel } from './institutions'
 import { Meter, Section, SpriteView } from './primitives'
 import { KingdomTab, TradeTab } from './tabs'
 import type { HudData } from './tabs'
@@ -26,6 +27,7 @@ const UPGRADE_BLOCKED: Record<string, string> = {
   busy: 'İnşaat sürüyor',
   cost: 'Kaynak yetersiz',
   queue: 'İnşaat kuyruğu dolu',
+  limit: 'Evler nüfus sınırını dolduruyor: önce sarayı yükselt',
 }
 
 const isGood = (v: string): v is Good => v === 'food' || v === 'materials' || v === 'arms'
@@ -54,7 +56,7 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
         </button>
       </header>
       <div className="sheet-body">
-        {b.kind === 'tradePost' ? (
+        {b.kind === 'tradePost' || (b.kind === 'market' && b.doneAt <= now) ? (
           <TradeTab {...data} />
         ) : b.kind === 'palace' ? (
           <KingdomTab {...data} />
@@ -76,7 +78,10 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
                 )}
               </div>
             </div>
-            {BUILDINGS[b.kind].products && <Products building={b} onProduct={commands.onProduct} />}
+            {!building && b.kind === 'university' && <UniversityPanel data={data} />}
+            {!building && b.kind === 'hospital' && <HospitalPanel building={b} data={data} />}
+            {!building && b.kind === 'temple' && <TemplePanel data={data} />}
+            {BUILDINGS[b.kind].products && <Products building={b} data={data} onProduct={commands.onProduct} />}
             {workerSlots(b) > 0 && <Workers building={b} data={data} onWorkers={commands.onWorkers} />}
             {top > 1 && <Levels building={b} data={data} onUpgrade={commands.onUpgrade} />}
             <Demolish building={b} data={data} onDemolish={commands.onDemolish} />
@@ -90,6 +95,14 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
 function Output({ building: b, data }: { building: Building; data: HudData }) {
   const { kingdom, now } = data
   const spec = levelSpec(b.kind, b.level)
+  if (!spec.villagers && cutOff(kingdom.buildings, kingdom.site, now).has(b.id)) {
+    return (
+      <>
+        <b className="down">Sur arkasında kaldı</b>
+        <small className="hint">Köylüler buraya yürüyerek ulaşamıyor, üretim durdu. Sura bir kapı yap ya da bir parçasını yık.</small>
+      </>
+    )
+  }
   if (spec.villagers) {
     return (
       <>
@@ -98,6 +111,7 @@ function Output({ building: b, data }: { building: Building; data: HudData }) {
       </>
     )
   }
+  if (b.kind === 'university' || b.kind === 'hospital' || b.kind === 'temple') return <b>{BUILDING_NOTES[b.kind]}</b>
   const out = buildingOutput(kingdom, b, now)
   if (!out) return <b>Üretim yok</b>
   return (
@@ -117,18 +131,30 @@ function Output({ building: b, data }: { building: Building; data: HudData }) {
   )
 }
 
-function Products({ building: b, onProduct }: { building: Building; onProduct: BuildingCommands['onProduct'] }) {
+function Products({ building: b, data, onProduct }: { building: Building; data: HudData; onProduct: BuildingCommands['onProduct'] }) {
   const products = BUILDINGS[b.kind].products!
-  const chosen = productOf(b)
+  const chosen = productAllowed(data.kingdom, b.kind, productOf(b)!, data.now) ? productOf(b) : Object.keys(products)[0]
   return (
     <Section title="Ne üretsin?" icon="chest">
       <div className={Object.keys(products).length === 4 ? 'goods two' : 'goods'} role="radiogroup" aria-label="Ürün">
         {Object.entries(products).map(([id, p]) => (
-          <button key={id} role="radio" aria-checked={id === chosen} className={id === chosen ? 'good active' : 'good'} onClick={() => onProduct(b.id, id)}>
+          <button
+            key={id}
+            role="radio"
+            aria-checked={id === chosen}
+            className={id === chosen ? 'good active' : 'good'}
+            disabled={!productAllowed(data.kingdom, b.kind, id, data.now)}
+            title={p.research && !productAllowed(data.kingdom, b.kind, id, data.now) ? `Üniversitede ${RESEARCH_NAMES[p.research]?.name ?? p.research} araştırılmalı` : undefined}
+            onClick={() => onProduct(b.id, id)}
+          >
             <Icon name={iconOf(p.makes)} size={24} />
             <b>{PRODUCT_NAMES[id] ?? id}</b>
             {nameOf(p.makes) !== PRODUCT_NAMES[id] && <small>{nameOf(p.makes)}</small>}
-            {p.uses ? (
+            {!productAllowed(data.kingdom, b.kind, id, data.now) ? (
+              <small>
+                <Icon name="lock" size={8} /> {RESEARCH_NAMES[p.research!]?.name}
+              </small>
+            ) : p.uses ? (
               <span className="cost">
                 {Object.entries(p.uses).map(([r, per]) => (
                   <span key={r}>
@@ -150,9 +176,9 @@ function Products({ building: b, onProduct }: { building: Building; onProduct: B
 function Workers({ building: b, data, onWorkers }: { building: Building; data: HudData; onWorkers: BuildingCommands['onWorkers'] }) {
   const slots = workerSlots(b)
   const staff = staffOf(b)
-  const { villagers, jobs } = population(data.kingdom, data.now)
+  const { villagers, healthy, jobs } = population(data.kingdom, data.now)
   return (
-    <Section title="İşçiler" icon="villager" aside={`${villagers} köylü · ${jobs} iş`}>
+    <Section title="İşçiler" icon="villager" aside={`${Math.floor(healthy)} sağlıklı / ${villagers} köylü · ${jobs} iş`}>
       <div className="stepper">
         <button className="btn icon-only" disabled={staff === 0} onClick={() => onWorkers(b.id, staff - 1)} aria-label="Bir işçi azalt">
           <Icon name="minus" size={16} />
@@ -165,7 +191,7 @@ function Workers({ building: b, data, onWorkers }: { building: Building; data: H
         </button>
         <Meter value={slots ? staff / slots : 0} tone={staff === slots ? 'up' : 'gold'} label="Kadro" segments={slots * 2} />
       </div>
-      {villagers < jobs && <p className="alert">Köylü yetmiyor: bütün yapılar %{Math.round((villagers / jobs) * 100)} hızla çalışıyor.</p>}
+      {healthy < jobs && <p className="alert">Sağlıklı köylü yetmiyor: bütün yapılar %{Math.round((healthy / jobs) * 100)} hızla çalışıyor.</p>}
     </Section>
   )
 }
@@ -203,7 +229,7 @@ function Levels({ building: b, data, onUpgrade }: { building: Building; data: Hu
             </span>
             <CostList cost={up.cost} stock={data.kingdom.stock} />
           </button>
-          {error && <small className="down">{UPGRADE_BLOCKED[error] ?? 'Şu an olmaz'}</small>}
+          {error === 'cost' ? <Missing cost={up.cost} stock={data.kingdom.stock} /> : error && <small className="down">{UPGRADE_BLOCKED[error] ?? 'Şu an olmaz'}</small>}
         </>
       )}
     </Section>

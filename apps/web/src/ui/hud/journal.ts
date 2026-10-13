@@ -2,7 +2,7 @@ import { gameTime } from '@game/shared'
 import type { EconomyEvent, Good, Kingdom, Resource, Stock } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { IconName } from '../icons'
-import { BUILDING_NAMES, RESOURCE_NAMES } from '../names'
+import { BUILDING_NAMES, FORTUNE_TEXTS, RESEARCH_NAMES, RESOURCE_NAMES } from '../names'
 
 // The envoy's journal: what happened in the kingdom, told as short dispatches. Single events (a building done, the
 // merchant coming back empty) are written at once; everything else is gathered into one report per day.
@@ -12,7 +12,9 @@ export const REPORT_ROUNDS = 6
 const KEEP_ENTRIES = 60
 const KEEP_HISTORY = 24
 
-export type Tone = 'good' | 'bad' | 'info'
+// 'fortune' and 'envoy' entries stand out on their own paper: the day's random events, and the envoy's news from
+// other kingdoms.
+export type Tone = 'good' | 'bad' | 'info' | 'fortune' | 'envoy'
 
 export interface Entry {
   id: number
@@ -34,6 +36,8 @@ export interface Journal {
   tally: { rounds: number; produced: Partial<Stock>; tradeGold: number; trips: number; emptyTrip: boolean }
   // Stores after each production round, oldest first, for the storehouse charts.
   history: Stock[]
+  // The envoy's notices already written down.
+  notices?: number[]
 }
 
 const fresh = (): Journal => ({
@@ -73,15 +77,36 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
         j = write({ ...j, tally: { ...tally, emptyTrip: true } }, seasonStart, at, {
           tone: 'bad',
           icon: 'warn',
-          title: 'Tüccar eli boş döndü',
-          text: `Depoda satacak ${RESOURCE_NAMES[event.good].toLowerCase()} kalmadı. Başka bir mal seç ya da üretimi artır.`,
+          title: event.damaged ? 'Ticaret noktası harap' : event.walledIn ? 'Tüccar surların içinde kaldı' : 'Tüccar eli boş döndü',
+          text: event.damaged
+            ? 'Yağmacılar ticaret noktasını harap etti; onarılana kadar tüccar satış yapamaz. Ticaret sekmesinden onar.'
+            : event.walledIn
+            ? 'Saraydan ticaret noktasına sur kapısı olmadan yol yok. Sura bir kapı yap ya da bir parçasını yık.'
+            : `Depoda satacak ${RESOURCE_NAMES[event.good].toLowerCase()} kalmadı. Başka bir mal seç ya da üretimi artır.`,
         })
       } else j = { ...j, tally }
     } else if (event.kind === 'trained') {
       j = write(j, seasonStart, at, { tone: 'good', icon: 'people', title: `${event.count} savaşçı eğitimini bitirdi`, text: 'Askerler sarayda garnizonda bekliyor.' })
+    } else if (event.kind === 'researched') {
+      const r = RESEARCH_NAMES[event.id]
+      j = write(j, seasonStart, at, { tone: 'good', icon: r?.icon ?? 'book', title: `Üniversite: ${r?.name ?? event.id} öğrenildi`, text: r?.note })
+    } else if (event.kind === 'fortune') {
+      const f = FORTUNE_TEXTS[event.fortune]
+      const extra = [
+        ...Object.entries(event.lost ?? {}).filter(([, v]) => (v ?? 0) > 0).map(([g, v]) => `${fmt(v ?? 0)} ${RESOURCE_NAMES[g as Good].toLowerCase()} kayboldu`),
+        ...(event.gold ? [`+${fmt(event.gold)} altın`] : []),
+      ]
+      const minutes = Math.max(1, Math.round((event.until - at) / 60_000))
+      j = write(j, seasonStart, at, {
+        tone: 'fortune',
+        icon: f?.icon ?? 'star',
+        title: f?.title ?? 'Beklenmedik bir olay',
+        text: [f?.text, ...extra, `Yaklaşık ${minutes} dk sürecek.`].filter(Boolean).join(' '),
+      })
     } else if (event.kind === 'spy') {
       j = write(j, seasonStart, at, { tone: 'info', icon: 'lock', title: 'Casus evi yeni bir casus yetiştirdi' })
     } else {
+      if (event.kind !== 'produced') continue
       const produced = { ...j.tally.produced }
       for (const [r, v] of Object.entries(event.delta)) produced[r as Resource] = (produced[r as Resource] ?? 0) + (v ?? 0)
       j = { ...j, tally: { ...j.tally, rounds: j.tally.rounds + 1, produced }, history: [...j.history, { ...kingdom.stock }].slice(-KEEP_HISTORY) }
@@ -151,6 +176,11 @@ export function useJournal(key: string, seasonStart: number) {
         if (ref.current.unread > 0) update((j) => ({ ...j, unread: 0 }))
       },
       reset: () => update(() => fresh()),
+      // News the envoy brought (from the lobby's notices), each written once.
+      notice: (id: number, at: number, entry: Omit<Entry, 'id' | 'at' | 'day' | 'tone'>) => {
+        if (ref.current.notices?.includes(id)) return
+        update((j) => ({ ...write(j, seasonStart, at, { ...entry, tone: 'envoy' }), notices: [id, ...(j.notices ?? [])].slice(0, 200) }))
+      },
     }),
     [update, seasonStart],
   )

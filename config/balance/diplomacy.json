@@ -20,7 +20,8 @@
     "accept": -5,
     "reject": -30,
     "renege": -45,
-    "release": 5
+    "release": 5,
+    "renegeInfamy": -5
   },
   "alliance": {
     "minRelation": 50,
@@ -46,5 +47,26 @@
     "seconds": 7200,
     "maxRelation": -20,
     "infamy": -10
+  },
+  "reputation": {
+    "freeHostility": 20,
+    "perPenalty": 200,
+    "maxPenalty": 0.6
+  },
+  "insult": {
+    "relation": -25,
+    "cooldownSeconds": 180
+  },
+  "raid": {
+    "soldiers": 10,
+    "cooldownSeconds": 240,
+    "baseChance": 0.75,
+    "towerPenalty": 0.15,
+    "towerTiles": 8,
+    "minChance": 0.15,
+    "lootTrips": 3,
+    "lossOnSuccess": 0.1,
+    "lossOnFailure": 0.4,
+    "relation": -30
   }
 }

@@ -12,7 +12,20 @@ import type { Online } from './hud/online'
 
 const fmt = (v: number) => Math.round(v).toLocaleString('tr-TR')
 
-function describe(n: Notice, online: Online): { icon: IconName; title: string; text: string } {
+// What the insulting envoy says at the gate (one of these, by the envoy's number).
+const INSULTS = [
+  'Efendim der ki: kralınızın sakalı keçininkinden seyrek, ordunuz da tavuk kümesinden düzensiz!',
+  'Efendim der ki: sarayınızın kokusu üç vadi öteden duyuluyor; hamamı hiç mi duymadınız?',
+  'Efendim der ki: atalarınız domuz güderdi, siz ise onları bile güdemezsiniz!',
+  'Efendim der ki: sancağınızı gördük, sandık ki çamaşır asmışsınız.',
+  'Efendim der ki: askerleriniz tahta kılıçla bile birbirini yaralar!',
+  'Efendim der ki: hazineniz fare yuvasından boş, tüccarınız da dilenciden fakir.',
+  'Efendim der ki: kralınız ata binemez, eşeği bile ondan utanır!',
+  'Efendim der ki: surlarınızı çocuklar bile kumdan daha sağlam yapar.',
+]
+
+
+export function describe(n: Notice, online: Online): { icon: IconName; title: string; text: string } {
   const p = n.payload as Record<string, never>
   const kind = (k: unknown) => ENVOY_NAMES[k as EnvoyRow['kind']] ?? String(k)
   const me = online.kingdoms.find((k) => k.id === online.me)?.name
@@ -81,6 +94,18 @@ function describe(n: Notice, online: Online): { icon: IconName; title: string; t
       return { icon: 'eye', title: 'Casus yakalandı', text: `Topraklarında ${p.owner} adına ${TOPIC_NAMES[p.topic as SpyTopic]} bilgisi toplayan bir casus yakalandı.` }
     case 'spy_lost':
       return { icon: 'eye', title: 'Casusun yakalandı', text: `${p.target} krallığındaki casusun yakalandı. İlişkiniz bozuldu.` }
+    case 'envoy_insult':
+      return { icon: 'unhappy', title: `${p.from} elçisi hakaret etti!`, text: `"${INSULTS[Number(p.seed ?? 0) % INSULTS.length]}" İlişkiniz ${balance.diplomacy.insult.relation} düştü; artık onlara karşı savaş gerekçen var.` }
+    case 'insult_delivered':
+      return { icon: 'scroll', title: 'Hakaretin iletildi', text: `Elçin ${p.to} sarayında ağzına geleni söyledi. İlişkiniz ${balance.diplomacy.insult.relation} düştü; onlar da sana karşı savaş gerekçesi kazandı.` }
+    case 'trade_raided':
+      return {
+        icon: 'warn',
+        title: 'Ticaret yolun yağmalandı!',
+        text: `${p.by} askerleri tüccarını bastı${p.units ? ` ve ${fmt(Number(p.units))} ${RESOURCE_NAMES[p.good as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? ''} götürdü` : ''}. Ticaret noktan harap; onarmadan satış yapılamaz. Savaş gerekçen var.`,
+      }
+    case 'raid_repelled':
+      return { icon: 'shield', title: 'Yağmacılar püskürtüldü', text: `${p.by} askerleri ticaret yolunu basmaya çalıştı ama geri püskürtüldü. Savaş gerekçen var.` }
     case 'battle_start':
       return {
         icon: 'swords',

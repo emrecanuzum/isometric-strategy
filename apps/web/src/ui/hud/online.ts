@@ -14,6 +14,20 @@ export interface KingdomInfo {
   queen: boolean
   // Palace level as seen from outside.
   palace: number
+  // When its player was last seen (ms; null when unknown).
+  seenAt?: number | null
+  // Its buildings as seen on the map.
+  buildings?: { kind: string; x: number; y: number; size: number; doneAt: number; broken?: boolean }[]
+}
+
+// "çevrimiçi" within a few minutes, otherwise how long ago.
+export function lastSeen(seenAt: number | null | undefined, now: number) {
+  if (!seenAt) return 'son görülme bilinmiyor'
+  const min = Math.max(0, Math.floor((now - seenAt) / 60_000))
+  if (min < 6) return 'çevrimiçi'
+  if (min < 60) return `${min} dk önce görüldü`
+  const h = Math.floor(min / 60)
+  return h < 48 ? `${h} sa önce görüldü` : `${Math.floor(h / 24)} gün önce görüldü`
 }
 
 export interface Online extends Layer {

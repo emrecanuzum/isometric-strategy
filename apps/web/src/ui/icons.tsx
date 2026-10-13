@@ -58,6 +58,11 @@ const MAPS = {
   horse: ['........', '.....kk.', '....kbbk', 'kkkkbbk.', 'kbbbbbk.', 'kbbbbbk.', '.k.k.k..', '.k.k.k..'],
   catapult: ['......kk', '.....kbk', '....kbk.', '...kbk..', '..kbk...', 'kkkkkkkk', '.kd..dk.', '.kk..kk.'],
   dice: ['kkkkkkk.', 'kwwwwwk.', 'kwkwwwk.', 'kwwkwwk.', 'kwwwkwk.', 'kwwwwwk.', 'kkkkkkk.', '........'],
+  book: ['........', 'kkkk.kkk', 'kwwlklwk', 'kwwlklwk', 'kwwlklwk', 'kwwlklwk', 'kkkkkkkk', '..kRRk..'],
+  heal: ['..kkkk..', '..kRRk..', 'kkkRRkkk', 'kRRRRRRk', 'kRRRRRRk', 'kkkRRkkk', '..kRRk..', '..kkkk..'],
+  temple: ['...yy...', '...ky...', '..kssk..', '.kssssk.', 'kkkkkkkk', '.ksksks.', '.ksksks.', 'kkkkkkkk'],
+  gear: ['...ww...', '.w.ww.w.', '..wwww..', 'www..www', 'www..www', '..wwww..', '.w.ww.w.', '...ww...'],
+  star: ['...yy...', '...yy...', 'yyywwyyy', '.yywwyy.', '..yyyy..', '.yy..yy.', '.y....y.', '........'],
 } as const
 
 export type IconName = keyof typeof MAPS

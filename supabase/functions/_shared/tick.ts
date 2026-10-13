@@ -21,6 +21,7 @@ interface Fighter {
   morale: number
   familiarity: number
   units?: Record<string, number>
+  faith?: number
 }
 interface Plan {
   winner: 'attackers' | 'defenders'
@@ -221,19 +222,21 @@ async function startBattle(
   const fighter = (l: Live) => {
     const owner = states.get(l.army.kingdom_id)
     const now = owner ? armyNow(l.army, world, owner, t) : { morale: l.army.morale, familiarity: 0, here: point }
-    return { kingdom: l.army.kingdom_id, army: l.army.id, soldiers: l.army.soldiers, morale: now.morale, familiarity: now.familiarity, units: unitsOf(l.army) }
+    const faith = owner ? game.battleSpirit(owner, t) : 0
+    return { kingdom: l.army.kingdom_id, army: l.army.id, soldiers: l.army.soldiers, morale: now.morale, familiarity: now.familiarity, units: unitsOf(l.army), faith }
   }
   const attackers = a.map(fighter)
   const defenders = b.map(fighter)
-  let defense = { towers: 0, walls: 0 }
+  let defense: { towers: number; walls: number; attackerTowers?: number } = { towers: 0, walls: 0 }
   if (besieged !== null) {
     const state = states.get(besieged)
     if (state) {
       const settled = game.advance(state, t).kingdom
       const garrison = game.garrisonOf(settled)
-      defenders.unshift({ kingdom: besieged, army: null, soldiers: game.countOf(garrison), morale: settled.happiness ?? 60, familiarity: 100, units: garrison })
+      defenders.unshift({ kingdom: besieged, army: null, soldiers: game.countOf(garrison), morale: settled.happiness ?? 60, familiarity: 100, units: garrison, faith: game.battleSpirit(settled, t) })
       const standingAt = (kind: string) => settled.buildings.filter((x: { kind: string; doneAt: number; broken?: boolean }) => x.kind === kind && x.doneAt <= t && !x.broken).length
-      defense = { towers: standingAt('watchtower'), walls: standingAt('wall') }
+      // Gates stand in the wall like any other stretch of it.
+      defense = { towers: standingAt('watchtower'), walls: standingAt('wall') + standingAt('gate') }
     }
   }
   // The kingdom that declared the war attacks; in a siege, the besieger.
@@ -242,6 +245,20 @@ async function startBattle(
   const seed = crypto.getRandomValues(new Uint32Array(1))[0] >>> 1
   const att = swap ? defenders : attackers
   const def = swap ? attackers : defenders
+  // In the field, each side's watchtowers within reach of the battle stand with it.
+  if (besieged === null) {
+    const towersOf = (side: Fighter[]) => {
+      const kingdoms = new Set(side.map((f) => f.kingdom))
+      let n = 0
+      for (const k of kingdoms) {
+        for (const b of states.get(k)?.buildings ?? []) {
+          if (b.kind === 'watchtower' && b.doneAt <= t && dist({ x: b.x + 0.5, y: b.y + 0.5 }, point) <= m.tower.battleRange) n++
+        }
+      }
+      return n
+    }
+    defense = { towers: towersOf(def), walls: 0, attackerTowers: towersOf(att) }
+  }
   const plan = game.planBattle(att, def, seed, defense)
   const ends = t + game.battleMs(plan)
   const { data: battle } = await admin

@@ -22,6 +22,7 @@ import {
   loadKingdoms,
   lobbyMarket,
   makeWorld,
+  counterAgainst,
   ms,
   mutateKingdom,
   notify,
@@ -46,7 +47,7 @@ type Pact = any
 const GOODS: string[] = [...game.GOODS]
 // What a player may place: the palace once, then the buildable kinds (the trade post comes with the kingdom).
 const PLACEABLE: string[] = ['palace', ...game.BUILDABLE]
-const ENVOYS = ['improve', 'gift', 'tribute', 'alliance', 'peace']
+const ENVOYS = ['improve', 'gift', 'tribute', 'alliance', 'peace', 'insult']
 const isId = (v: unknown): v is number => Number.isSafeInteger(v)
 const whole = (v: unknown, min: number, max: number) => (Number.isInteger(v) && (v as number) >= min && (v as number) <= max ? (v as number) : refuse('rejected'))
 const dip = game.balance.diplomacy
@@ -60,6 +61,13 @@ async function rollSite(world: World, lobby: string, seen: Point[]): Promise<Poi
     if (site && game.siteIsClear(site, taken) && !seen.some((s) => s.x === site.x && s.y === site.y)) return site
   }
   return refuse('full')
+}
+
+// All the sites a player may choose from, shown together from the start (CLAUDE.md §3.2).
+async function rollSites(world: World, lobby: string, seen: Point[]): Promise<Point[]> {
+  const sites = [...seen]
+  while (sites.length < game.balance.economy.siteRolls) sites.push(await rollSite(world, lobby, sites))
+  return sites
 }
 
 const MAX_OPEN_LOBBIES = 3
@@ -115,7 +123,10 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
     if (error) throw error
     if (reply !== 'ok') refuse(reply)
     const { data } = await admin.from('kingdoms').select('*').eq('lobby_id', lobby).eq('user_id', user).single()
-    return data as Row
+    const joined = data as Row
+    const sites = await rollSites(world, lobby, joined.sites)
+    await admin.from('kingdoms').update({ sites }).eq('id', joined.id)
+    return { ...joined, sites }
   }
   if (!row) return refuse('member')
 
@@ -131,7 +142,8 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
   switch (cmd.type) {
     case 'roll': {
       if (row.state || row.sites.length >= game.balance.economy.siteRolls) refuse('rejected')
-      next = { sites: [...row.sites, await rollSite(world, lobby, row.sites)] }
+      // Every remaining site at once (older rows were given one at a time).
+      next = { sites: await rollSites(world, lobby, row.sites) }
       break
     }
     case 'found': {
@@ -197,7 +209,8 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       // setProduct keeps the building as it is unless the product is one of its own.
       const k = need()
       if (!isId(cmd.id) || typeof cmd.product !== 'string') refuse('rejected')
-      next = changed(game.setProduct(k, cmd.id, cmd.product))
+      if (!k.buildings.some((b: { id: number; kind: string }) => b.id === cmd.id && game.productAllowed(k, b.kind, cmd.product, now))) refuse('locked')
+      next = changed(game.setProduct(k, cmd.id, cmd.product, now))
       break
     }
     case 'tax':
@@ -240,6 +253,22 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       bought = { good: cmd.good, units }
       break
     }
+    case 'research': {
+      if (typeof cmd.id !== 'string') refuse('rejected')
+      const error = game.researchError(need(), cmd.id, now)
+      if (error) refuse(error)
+      next = changed(game.startResearch(need(), cmd.id, now))
+      break
+    }
+    case 'sermon': {
+      const error = game.sermonError(need(), now)
+      if (error) refuse(error)
+      next = changed(game.preach(need(), now))
+      break
+    }
+    case 'repairTrade':
+      next = changed(game.repairTrade(need()))
+      break
     case 'repairWalls':
       next = changed(game.repairWalls(need()))
       break
@@ -248,11 +277,17 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       await admin.from('armies').delete().eq('kingdom_id', row.id)
       await admin.from('spy_missions').update({ ended_at: iso(now), end_reason: 'reset' }).eq('owner_id', row.id).is('ended_at', null)
       await admin.from('pacts').update({ ended_at: iso(now), ended_by: row.id }).or(`from_id.eq.${row.id},to_id.eq.${row.id}`).is('ended_at', null)
-      next = { state: null, name: null, color: null, sites: [await rollSite(world, lobby, [])] }
+      next = { state: null, name: null, color: null, sites: await rollSites(world, lobby, []) }
+      break
+    case 'seen':
+      // The player has the game open (see game.idleFactor).
+      next = { state: need() }
       break
     default:
       refuse('unknown')
   }
+  // Any command of a founded kingdom marks its ruler as present.
+  if (next?.state) next = { ...next, state: { ...next.state, lastSeenAt: now } }
 
   const { data, error } = await admin
     .from('kingdoms')
@@ -324,6 +359,16 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         await mutateKingdom(me.id, now, (k) => (k.stock.gold >= gold! ? { ...k, stock: { ...k.stock, gold: k.stock.gold - gold! } } : refuse('cost')))
       } else if (cmd.kind === 'tribute') {
         gold = whole(cmd.gold, dip.tribute.minGold, dip.tribute.maxGold)
+      } else if (cmd.kind === 'insult') {
+        // One insult to the same kingdom every few minutes.
+        const { count: recent } = await admin
+          .from('envoys')
+          .select('id', { count: 'exact', head: true })
+          .eq('from_id', me.id)
+          .eq('to_id', to.id)
+          .eq('kind', 'insult')
+          .gte('sent_at', iso(now - dip.insult.cooldownSeconds * 1000))
+        if (recent) refuse('cooldown')
       }
       await admin.from('envoys').insert({
         lobby_id: lobby,
@@ -385,7 +430,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       const target = other(cmd.target)
       if (!game.OPERATIONS.includes(cmd.op)) refuse('rejected')
       const theirs = game.advance(target.state, now).kingdom
-      const counter = game.counterOf(theirs)
+      const counter = await counterAgainst(lobby, me.id, target.id, theirs, now)
       const { data: missions } = await admin.from('spy_missions').select('*').eq('owner_id', me.id).eq('target_id', target.id).is('ended_at', null)
       const strength = game.bestStrength(missions ?? [], me.id, target.id, counter, now)
       const error = game.operationError(cmd.op, strength, game.advance(me.state, now).kingdom, theirs)
@@ -437,6 +482,44 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       await notify(lobby, [target.id], 'operation_struck', { op: cmd.op, by: cmd.op === 'kidnap' ? me.name : null }, now)
       return { success: true }
     }
+    case 'raid': {
+      // Soldiers of the garrison fall on another kingdom's merchant: the goods he carries are taken and the trade
+      // post is wrecked until repaired. Paid in soldiers either way; the victim learns who did it.
+      const target = other(cmd.target)
+      const r = dip.raid
+      if (game.allied(pacts, me.id, target.id)) refuse('relation')
+      const theirs = game.advance(target.state, now).kingdom
+      if (!game.hasTradePost(theirs)) refuse('target')
+      if (theirs.trade.damaged) refuse('already')
+      const pause = r.cooldownSeconds * 1000
+      await mutateKingdom(me.id, now, (k) => {
+        if ((k.lastRaidAt ?? 0) + pause > now) refuse('cooldown')
+        if ((k.soldiers ?? 0) < r.soldiers) refuse('soldiers')
+        return { ...k, lastRaidAt: now }
+      })
+      const chance = game.raidChance(game.towersNear(theirs.buildings, now))
+      const success = Math.random() < chance
+      const lost = Math.round(r.soldiers * (success ? r.lossOnSuccess : r.lossOnFailure))
+      let loot: { good: string; units: number } | null = null
+      if (success) {
+        await mutateKingdom(target.id, now, (k) => {
+          const good = k.trade.good ?? 'food'
+          const units = Math.floor(Math.min(k.stock[good], game.tradeUnits(k) * r.lootTrips))
+          loot = { good, units }
+          return { ...k, stock: { ...k.stock, [good]: k.stock[good] - units }, trade: { ...k.trade, damaged: true } }
+        })
+      }
+      await mutateKingdom(me.id, now, (k) => {
+        const units = game.takeShare(game.garrisonOf(k), lost).left
+        const stock = { ...k.stock }
+        if (loot) stock[loot.good] += loot.units
+        return { ...k, units, soldiers: game.countOf(units), stock }
+      })
+      await changeRelation(lobby, me.id, target.id, r.relation, now)
+      await grantClaim(lobby, target.id, me.id, 'raid', now)
+      await notify(lobby, [target.id], success ? 'trade_raided' : 'raid_repelled', { by: me.name, ...(loot ?? {}) }, now)
+      return { success, lost, loot }
+    }
     case 'ransom': {
       // Paying for the queen's return; checked and paid in one write, so two requests cannot both pay.
       const ransom = game.balance.espionage.operations.kidnap.ransom
@@ -473,7 +556,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
     case 'spy': {
       const target = other(cmd.target)
       if (!game.SPY_TOPICS.includes(cmd.topic)) refuse('rejected')
-      const counter = game.counterOf(game.advance(target.state, now).kingdom)
+      const counter = await counterAgainst(lobby, me.id, target.id, game.advance(target.state, now).kingdom, now)
       const caught = game.catchTime(crypto.getRandomValues(new Uint32Array(1))[0], counter, now)
       await mutateKingdom(me.id, now, (k) =>
         (k.spies ?? 0) >= 1 ? { ...k, spies: (k.spies ?? 0) - 1, spiesAway: (k.spiesAway ?? 0) + 1 } : refuse('spies'),
@@ -549,7 +632,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
   }
 }
 
-const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'buy', 'repairWalls', 'reset'])
+const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'seen', 'reset'])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

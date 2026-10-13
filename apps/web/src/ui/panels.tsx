@@ -23,6 +23,18 @@ export function CostList({ cost, stock }: { cost?: Cost; stock?: Kingdom['stock'
   )
 }
 
+// What is missing for a cost, spelt out: "Eksik: 250 savaş malzemesi (sende 0)". Nothing when it can be paid.
+export function missingText(cost: Cost | undefined, stock: Kingdom['stock']) {
+  const short = (Object.entries(cost ?? {}) as [Resource, number][]).filter(([r, v]) => stock[r] < v)
+  if (short.length === 0) return null
+  return `Eksik: ${short.map(([r, v]) => `${fmt(Math.ceil(v - stock[r]))} ${RESOURCE_NAMES[r].toLowerCase()} (sende ${fmt(Math.floor(stock[r]))})`).join(', ')}`
+}
+
+export function Missing({ cost, stock }: { cost?: Cost; stock: Kingdom['stock'] }) {
+  const text = missingText(cost, stock)
+  return text ? <small className="down missing">{text}</small> : null
+}
+
 // Running constructions under the top bar, so progress shows with every tab closed.
 export function Constructions({ kingdom, now }: { kingdom: Kingdom; now: number }) {
   const list = constructing(kingdom, now)
@@ -133,24 +145,19 @@ const NAME_KINDS = ['Krallığı', 'Beyliği', 'Diyarı', 'Hanedanı']
 const suggestName = () =>
   `${NAME_ROOTS[Math.floor(Math.random() * NAME_ROOTS.length)]} ${NAME_KINDS[Math.floor(Math.random() * NAME_KINDS.length)]}`
 
-// Before founding: the land around the assigned site and what it would yield; the player may look at a few sites.
+// Before founding: the sites the player was given, side by side, with what the land around each would yield; the
+// player picks one of them.
 export function SitePicker({
-  survey,
-  seen,
+  surveys,
   selected,
-  rollsLeft,
   onSelect,
-  onRoll,
   onFound,
   colors,
   taken,
 }: {
-  survey: Survey | null
-  seen: number
+  surveys: Survey[]
   selected: number
-  rollsLeft: number
   onSelect: (index: number) => void
-  onRoll: () => void
   onFound: (name: string, color: KingdomColor) => void
   // The lobby's colours, and those other kingdoms already fly.
   colors: KingdomColor[]
@@ -162,6 +169,7 @@ export function SitePicker({
   const free = colors.filter((c) => !taken.has(c))
   const color = chosen && !taken.has(chosen) ? chosen : (free[0] ?? null)
   const trimmed = name.trim()
+  const survey = surveys[selected] ?? null
   return (
     <section className="dialog site-picker frame" aria-labelledby="site-title">
       <header className="sheet-head">
@@ -171,42 +179,32 @@ export function SitePicker({
           <small>Arazi, üretim çarpanlarını belirler</small>
         </div>
       </header>
-      <div className="segmented" role="radiogroup" aria-label="Keşfedilen yerler">
-        {Array.from({ length: seen }, (_, i) => (
-          <button key={i} role="radio" aria-checked={i === selected} className={i === selected ? 'btn small active' : 'btn small'} onClick={() => onSelect(i)}>
-            Yer {i + 1}
-          </button>
-        ))}
-        <button className="btn small" disabled={rollsLeft === 0} onClick={onRoll}>
-          Yeni yer keşfet <small>({rollsLeft} hak)</small>
-        </button>
-      </div>
-      {survey ? (
+      {surveys.length === 0 ? (
+        <p className="hint">Uygun yerler aranıyor…</p>
+      ) : (
         <>
-          <div className="yields">
-            {GOODS.map((good) => (
-              <div key={good} className="yield" title={WHY[good]}>
-                <Icon name={RESOURCE_ICONS[good]} size={24} />
-                <span>{RESOURCE_NAMES[good]}</span>
-                <Meter
-                  value={survey.yields[good] / balance.economy.yield.max}
-                  tone={survey.yields[good] >= 1 ? 'up' : 'down'}
-                  label={`${RESOURCE_NAMES[good]} çarpanı`}
-                  segments={10}
-                />
-                <b className={survey.yields[good] >= 1 ? 'up' : 'down'}>{times(survey.yields[good])}</b>
-              </div>
+          <p className="hint">Sana {surveys.length} yer gösterildi; birini seç. Seçtiğin yer haritada görünür.</p>
+          <div className="site-cards" role="radiogroup" aria-label="Keşfedilen yerler">
+            {surveys.map((s, i) => (
+              <button key={i} role="radio" aria-checked={i === selected} className={i === selected ? 'site-card active' : 'site-card'} onClick={() => onSelect(i)}>
+                <b>{i + 1}. yer</b>
+                {GOODS.map((good) => (
+                  <span key={good} className="site-yield" title={WHY[good]}>
+                    <Icon name={RESOURCE_ICONS[good]} size={16} />
+                    <Meter value={s.yields[good] / balance.economy.yield.max} tone={s.yields[good] >= 1 ? 'up' : 'down'} label={`${RESOURCE_NAMES[good]} çarpanı`} segments={6} />
+                    <b className={s.yields[good] >= 1 ? 'up' : 'down'}>{times(s.yields[good])}</b>
+                  </span>
+                ))}
+                <small>
+                  {LAND.filter(([k]) => s[k] >= 0.05)
+                    .map(([k, name]) => `${name} %${Math.round(s[k] * 100)}`)
+                    .join(' · ')}
+                </small>
+              </button>
             ))}
           </div>
-          <p className="hint">
-            {LAND.filter(([k]) => survey[k] >= 0.01)
-              .map(([k, name]) => `${name} %${Math.round(survey[k] * 100)}`)
-              .join(' · ')}
-          </p>
           <p className="hint">Nehir ve çayır yemeği, orman yapı malzemesini, dağ savaş malzemesini artırır; bataklık hepsini biraz düşürür.</p>
         </>
-      ) : (
-        <p className="hint">Uygun yer aranıyor…</p>
       )}
       <label className="name-field">
         <span>Krallığının adı</span>

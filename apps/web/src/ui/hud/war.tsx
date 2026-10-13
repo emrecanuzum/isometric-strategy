@@ -327,13 +327,15 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
     const now = last ? last[who] : start
     const bonus = who === 'attackers' ? battle.plan.attackerBonus : battle.plan.defenderBonus
     const counter = who === 'attackers' ? battle.plan.attackerCounter : battle.plan.defenderCounter
+    const faith = (who === 'attackers' ? battle.plan.attackerFaith : battle.plan.defenderFaith) ?? 0
+    const towers = (who === 'attackers' ? battle.plan.defense?.attackerTowers : battle.plan.defense?.towers) ?? 0
     const units = fighters.reduce<Units>((all, f) => {
       for (const [u, n] of Object.entries(f.units ?? { spear: f.soldiers })) all[u as Unit] = (all[u as Unit] ?? 0) + (n ?? 0)
       return all
     }, {})
     const names = [...new Set(fighters.map((f) => (f.army === null ? `${kingdomName(online, f.kingdom)} garnizonu` : kingdomName(online, f.kingdom))))]
     const colors = [...new Set(fighters.map((f) => online.kingdoms.find((k) => k.id === f.kingdom)?.color))]
-    return { start, now, bonus, counter, units, names, colors }
+    return { start, now, bonus, counter, faith, towers, units, names, colors }
   }
   const a = side('attackers')
   const d = side('defenders')
@@ -374,13 +376,22 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
                 <small>%{Math.round(s.now.morale)}</small>
               </span>
               <UnitRow units={s.units} />
-              <Stat label="Zar bonusu" value={`${s.bonus >= 0 ? '+' : '−'}${Math.abs(s.bonus).toFixed(1).replace('.', ',')}`} note={s.counter ? `birlik üstünlüğü ${s.counter >= 0 ? '+' : '−'}${Math.abs(s.counter).toFixed(1).replace('.', ',')}` : undefined} />
+              <Stat label="Zar bonusu" value={`${s.bonus >= 0 ? '+' : '−'}${Math.abs(s.bonus).toFixed(1).replace('.', ',')}`} note={
+                  [
+                    s.counter ? `birlik üstünlüğü ${s.counter >= 0 ? '+' : '−'}${Math.abs(s.counter).toFixed(1).replace('.', ',')}` : '',
+                    s.faith ? `iman +${s.faith.toFixed(1).replace('.', ',')}` : '',
+                    s.towers ? `${s.towers} kule` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || undefined
+                }
+              />
               {roll && (
                 <div className="dice" aria-label={`Son zar ${roll.roll}`}>
                   <Icon name="dice" size={24} />
                   {face(roll.roll)}
                   <small>
-                    + {roll.bonus.toFixed(1).replace('.', ',')} bonus → rakipten {roll.kills} asker, −{Math.round(roll.moraleHit)} moral
+                    + {roll.bonus.toFixed(1).replace('.', ',')} bonus → rakipten {roll.kills} asker{roll.towerKills ? ` (${roll.towerKills} kuleden)` : ''}, −{Math.round(roll.moraleHit)} moral
                   </small>
                 </div>
               )}
@@ -392,7 +403,7 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
           {defense && (defense.towers || defense.walls)
             ? `; kuşatılan saray ${defense.towers} kule ve ${defense.walls} sur ile savunuyor${battle.plan.walls !== undefined && battle.plan.walls < defense.walls ? ` (mancınıklar ${defense.walls - battle.plan.walls} suru etkisiz kıldı)` : ''}`
             : ''}
-          ; birlik türlerinin üstünlüğü (mızrak &gt; süvari &gt; okçu &gt; mızrak) de eklenir. Morali
+          ; tapınağın imanı ve yakındaki gözcü kuleleri de zara eklenir, kuleler her tur birkaç düşman vurur (askersiz bile birkaç tur direnir); birlik türlerinin üstünlüğü (mızrak &gt; süvari &gt; okçu &gt; mızrak) de eklenir. Morali
           biten ya da askeri kalmayan taraf yenilir.
         </p>
         {shown > 0 && (

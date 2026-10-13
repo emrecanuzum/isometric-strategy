@@ -12,7 +12,10 @@
   "allyTiles": 6,
   "tower": {
     "range": 6,
-    "secondsPerKill": 20
+    "secondsPerKill": 20,
+    "killsPerRound": 2,
+    "holdRounds": 3,
+    "battleRange": 8
   },
   "wall": {
     "breakShare": 0.3
@@ -34,8 +37,8 @@
     "maxBonus": 1.5
   },
   "battle": {
-    "roundSeconds": 45,
-    "maxRounds": 20,
+    "roundSeconds": 30,
+    "maxRounds": 14,
     "dice": 10,
     "killRate": 0.008,
     "moraleHit": 1.6,

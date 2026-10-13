@@ -33,6 +33,8 @@ export interface Rival {
   buildings: Pick<Building, 'id' | 'kind' | 'x' | 'y' | 'size' | 'doneAt' | 'level' | 'broken'>[]
   queen: boolean
   version: number
+  // When its player was last seen (ms).
+  seen_at: number | null
 }
 
 export interface ChatMessage {
@@ -94,7 +96,8 @@ export async function getLobby(id: string): Promise<Lobby | null> {
 }
 
 export async function loadMine(lobby: string): Promise<Mine | null> {
-  const { data } = await supabase.from('kingdoms').select('id, version, sites, state').eq('lobby_id', lobby).maybeSingle()
+  const { data, error } = await supabase.from('kingdoms').select('id, version, sites, state').eq('lobby_id', lobby).maybeSingle()
+  if (error) throw error
   return data as Mine | null
 }
 
@@ -138,7 +141,12 @@ export type Command =
   | { type: 'queen' }
   | { type: 'train'; count: number; unit: Unit }
   | { type: 'nightShift'; on: boolean }
+  | { type: 'research'; id: string }
+  | { type: 'sermon' }
+  | { type: 'seen' }
   | { type: 'operation'; target: number; op: Operation }
+  | { type: 'raid'; target: number }
+  | { type: 'repairTrade' }
   | { type: 'ransom' }
   | { type: 'release'; target: number }
   | { type: 'buy'; good: string; units: number }
@@ -197,6 +205,8 @@ export interface LobbyFeed {
   // A table of the layer between kingdoms changed (for notices: whose).
   onChange(table: string, kingdom?: number): void
   onMarket(market: Market): void
+  // The lobby was closed (deleted).
+  onClosed(): void
 }
 
 // The lobby's private broadcast topic: only members may join it (see the migrations).
@@ -207,6 +217,7 @@ export function subscribe(lobby: string, feed: LobbyFeed) {
     .on('broadcast', { event: 'chat' }, ({ payload }) => feed.onChat(payload as ChatMessage))
     .on('broadcast', { event: 'change' }, ({ payload }) => feed.onChange(payload.table, payload.kingdom))
     .on('broadcast', { event: 'market' }, ({ payload }) => feed.onMarket(payload.market as Market))
+    .on('broadcast', { event: 'closed' }, () => feed.onClosed())
     .subscribe()
   return () => {
     supabase.removeChannel(channel)
@@ -236,7 +247,7 @@ export interface Battle {
   attackers: Fighter[]
   defenders: Fighter[]
   besieged: number | null
-  plan: BattlePlan & { defense?: { towers: number; walls: number } }
+  plan: BattlePlan & { defense?: { towers: number; walls: number; attackerTowers?: number } }
   resolved: boolean
   report: { winner: 'attackers' | 'defenders'; losses: Record<string, number>; loot?: Record<string, number> } | null
 }

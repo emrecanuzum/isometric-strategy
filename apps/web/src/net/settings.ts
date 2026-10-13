@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { startMusic } from '../audio/music'
+import { setSfx, unlockSfx } from '../audio/sfx'
 import type { Music } from '../audio/music'
 import { supabase } from '../lib/supabase'
 
@@ -9,9 +10,12 @@ export interface Settings {
   music: boolean
   // 0..100
   musicVolume: number
+  // Sound effects (the envoy's news, battles, the day's events), and how loud, 0..100.
+  sfx: boolean
+  sfxVolume: number
 }
 
-export const DEFAULT_SETTINGS: Settings = { music: true, musicVolume: 70 }
+export const DEFAULT_SETTINGS: Settings = { music: true, musicVolume: 70, sfx: true, sfxVolume: 70 }
 
 export interface Profile {
   username: string
@@ -49,7 +53,8 @@ export function useMusic(settings: Settings) {
     const events = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'] as const
     const unlock = () => {
       music.current ??= startMusic(!current.current.music, current.current.musicVolume / 100)
-      if (music.current.unlock()) for (const type of events) window.removeEventListener(type, unlock)
+      const sfx = unlockSfx()
+      if (music.current.unlock() && sfx) for (const type of events) window.removeEventListener(type, unlock)
     }
     for (const type of events) window.addEventListener(type, unlock)
     return () => {
@@ -62,6 +67,7 @@ export function useMusic(settings: Settings) {
     music.current?.setMuted(!settings.music)
     music.current?.setVolume(settings.musicVolume / 100)
   }, [settings.music, settings.musicVolume])
+  useEffect(() => setSfx(settings.sfx, settings.sfxVolume / 100), [settings.sfx, settings.sfxVolume])
 }
 
 // Settings change at once on screen and are written to the profile a moment after the last change. `load` takes the

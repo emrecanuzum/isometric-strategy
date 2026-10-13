@@ -809,9 +809,99 @@ function watchtower(): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
+const PLASTER = ramp(0x8a8270, 0xb4ac98, 0xd4ccb6, 0xe8e2cc, 0xf6f2e2)
+const TERRACOTTA = ramp(0x5a2416, 0x7a3420, 0x9a4a2c, 0xb8603a, 0xd07a4c, 0xe49464)
+const VERDIGRIS = ramp(0x1e4a44, 0x2a6a5e, 0x3a8a78, 0x52a690, 0x74c2aa, 0x9adcc4)
+
+// A flat paved yard over a footprint's diamond.
+function yard(canvas: Canvas, cx: number, base: number, h: number, colors: Uint32Array, seed: number) {
+  for (let y = base - h * 2; y <= base; y++) {
+    for (let x = cx - (h * 2 - 4); x <= cx + (h * 2 - 4); x++) {
+      const a = (x - cx) / (h * 2 - 6)
+      const b = (y - (base - h)) / (h - 3)
+      if (Math.abs(a) + Math.abs(b) <= 1) canvas.set(x, y, pick(colors, 1.2 + (((x >> 2) + (y >> 1)) % 2) * 0.8 + (hash(x, y, seed) - 0.5)))
+    }
+  }
+}
+
+// The university: a long stone college with a slate roof and rows of lit windows, an observatory tower with a copper
+// dome behind it (taller with each level) and a gilded armillary on top.
+function university(level = 1): Sprite {
+  const { canvas, cx, base, h } = footprint(3, 130 + (level - 1) * 16)
+  yard(canvas, cx, base, h, KEEP, 91)
+  const tall = 54 + (level - 1) * 14
+  const dome = tower(canvas, cx + 34, base - h - 10, 12, tall, KEEP, VERDIGRIS, true)
+  const hallTop = hall(canvas, cx - 6, base - 10, { w: 62 + (level - 1) * 4, wall: 34 + (level - 1) * 6, roof: 26, walls: KEEP, roofs: SLATE, masonry: true, bay: 10, door: true, chimney: 0.55, trim: level > 2 ? BRASS[2] : undefined })
+  // An armillary sphere on the dome: a ring and a cross of brass.
+  const ax = dome.x
+  const ay = dome.y - 6
+  for (let a = 0; a < 24; a++) {
+    const t = (a / 24) * Math.PI * 2
+    canvas.set(ax + Math.round(Math.cos(t) * 4), ay + Math.round(Math.sin(t) * 4), BRASS[a < 12 ? 3 : 1])
+  }
+  for (let d = -4; d <= 4; d++) canvas.set(ax + d, ay, BRASS[2])
+  for (let z = 0; z < 6; z++) canvas.set(ax, ay + 4 + z, BRASS[1])
+  // Books stacked by the door: a few coloured spines.
+  for (let i = 0; i < 4; i++) for (let x = 0; x < 6; x++) canvas.set(cx - 44 + x, base - 10 - i * 2, CLOTH[i % 4][x < 3 ? 2 : 1])
+  if (level > 1) banner(canvas, cx - 40, base - 40, 8)
+  return smoky(canvas.sprite(cx, base, 0), [hallTop])
+}
+
+// The hospital: a whitewashed hall with a terracotta roof and a red-cross banner over the door, a well and a walled
+// herb garden in front; a second wing at level 3.
+function hospital(level = 1): Sprite {
+  const { canvas, cx, base, h } = footprint(2, 90 + (level - 1) * 12)
+  yard(canvas, cx, base, h, PLASTER, 47)
+  if (level > 2) hall(canvas, cx + 22, base - h - 2, { w: 28, wall: 30, roof: 20, walls: PLASTER, roofs: TERRACOTTA, masonry: true, bay: 10 })
+  const top = hall(canvas, cx - 2, base - 6, { w: 40 + (level - 1) * 4, wall: 28 + (level - 1) * 8, roof: 22, walls: PLASTER, roofs: TERRACOTTA, masonry: true, bay: 12, door: true, chimney: 0.5 })
+  // The cross on a white cloth over the door (left wall).
+  const fx = cx - 18
+  const fy = base - 40 - (level - 1) * 6
+  for (let y = 0; y < 11; y++) for (let x = 0; x < 9; x++) canvas.set(fx + x, fy + y + Math.floor(x / 2), x === 0 || x === 8 || y === 10 ? CRIMSON[1] : PLASTER[4])
+  for (let i = 2; i <= 8; i++) {
+    for (const w of [0, 1]) {
+      canvas.set(fx + 4 + w, fy + i + 2, CRIMSON[2])
+      canvas.set(fx + i - 1, fy + 4 + w + Math.floor((i - 1) / 2), CRIMSON[2])
+    }
+  }
+  // Herb beds in rows.
+  for (let r = 0; r < 3; r++) {
+    for (let t = 0; t < 14; t++) {
+      const x = cx + 6 + t
+      const y = base - 8 - r * 4 + Math.floor(t / 2)
+      canvas.set(x, y, hash(t, r, 13) > 0.4 ? GREENS[1 + (t % 3)] : FRUIT[(t + r) % 4])
+    }
+  }
+  return smoky(canvas.sprite(cx, base, 0), [top])
+}
+
+// The temple: a stone nave with a slate roof and a bell tower whose spire grows with each level, a gilded finial and a
+// lit rose window.
+function temple(level = 1): Sprite {
+  const { canvas, cx, base, h } = footprint(2, 130 + (level - 1) * 24)
+  yard(canvas, cx, base, h, KEEP, 37)
+  const spire = tower(canvas, cx + 18, base - h - 2, 9, 48 + (level - 1) * 16, KEEP, level > 2 ? VERDIGRIS : SLATE, true)
+  finial(canvas, spire.x, spire.y, 6 + level)
+  // A cross on the finial.
+  for (let d = -2; d <= 2; d++) canvas.set(spire.x + d, spire.y - 4 - level, BRASS[3])
+  hall(canvas, cx - 6, base - 6, { w: 40, wall: 30 + (level - 1) * 4, roof: 30, walls: KEEP, roofs: SLATE, masonry: true, bay: 0, door: true, trim: level > 1 ? BRASS[2] : undefined })
+  // Rose window on the left wall.
+  const rx = cx - 30
+  const ry = base - 6 - 24 - (level - 1) * 2
+  for (let y = -4; y <= 4; y++) {
+    for (let x = -4; x <= 4; x++) {
+      const d = Math.hypot(x, y)
+      if (d > 4.3) continue
+      canvas.set(rx + x, ry + y + Math.round(x / 2), d > 3.4 ? TIMBER[0] : (x + y) % 2 === 0 ? EMBER[2] : GLASS[2])
+    }
+  }
+  return canvas.sprite(cx, base, 0)
+}
+
 // A section of wall filling one tile: masonry on the two front faces, a walkway on top and battlements; a broken one
 // is a heap of rubble with a stump of wall.
-function wall(broken = false): Sprite {
+// `door`: a gate, with an arched wooden door through both front faces under a banner.
+function wall(broken = false, door = false): Sprite {
   const { canvas, cx, base, w, h } = footprint(1, 50)
   const tall = broken ? 8 : 26
   for (const side of [-1, 1]) {
@@ -824,6 +914,11 @@ function wall(broken = false): Sprite {
         const course = Math.floor(z / 4)
         const mortar = z % 4 === 0 || (t + (course & 1) * 3) % 8 === 0
         canvas.set(x, ground - z, pick(KEEP, (lit ? 3 : 1.3) - (mortar ? 0.8 : 0) + (hash(t >> 2, course, 17 + side) > 0.85 ? 0.6 : 0)))
+        // The arch: planks with iron bands, rounded at the top.
+        const mid = Math.abs(t - w / 2)
+        if (door && mid < 9 && z < 16 + Math.sqrt(Math.max(0, 81 - mid * mid)) * 0.5) {
+          canvas.set(x, ground - z, mid > 7.5 ? TIMBER[0] : z % 6 === 3 ? STONE[1] : PLANK[lit ? (Math.floor(t / 3) % 2 ? 3 : 2) : 1])
+        }
       }
       if (!broken && t % 8 < 4) for (let z = height + 1; z <= height + 5; z++) canvas.set(x, ground - z, pick(KEEP, lit ? 3.4 : 1.8))
     }
@@ -837,6 +932,7 @@ function wall(broken = false): Sprite {
     }
   }
   if (broken) shadeBlobs(canvas, [{ x: cx - 18, y: base - 6, r: 5 }, { x: cx + 14, y: base - 4, r: 4 }, { x: cx + 2, y: base - 2, r: 3.5 }], STONE, 4)
+  if (door) banner(canvas, cx, base - h * 2 - tall + 2, 8)
   return canvas.sprite(cx, base, 0)
 }
 
@@ -869,6 +965,9 @@ export const LEVEL_SPRITES: Partial<Record<BuildingKind, Sprite[][]>> = {
   dock: [2, 3].map((level) => [dock(level)]),
   barracks: [[barracks(2)]],
   spyHouse: [2, 3].map((level) => [spyHouse(level)]),
+  university: [2, 3].map((level) => [university(level)]),
+  hospital: [2, 3].map((level) => [hospital(level)]),
+  temple: [2, 3].map((level) => [temple(level)]),
 }
 
 // The palace in each kingdom colour, made when first seen.
@@ -896,6 +995,10 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   spyHouse: [spyHouse()],
   watchtower: [watchtower()],
   wall: [wall()],
+  gate: [wall(false, true)],
+  university: [university()],
+  hospital: [hospital()],
+  temple: [temple()],
   brokenWall: [wall(true)],
   scaffold: [scaffold(1), scaffold(2), scaffold(3)],
 }
@@ -934,7 +1037,8 @@ export function structureParts(world: World, s: Structure): Part[] {
   const fy = s.y + s.size
   const looks =
     s.look === 'scaffold' ? [STRUCTURE_SPRITES.scaffold[s.size - 1]] : s.look === 'palace' ? [palaceIn(s.color)] : looksOf(s.look, s.level)
-  const flat = s.look === 'farm'
+  // Fields and gates are walked over (through).
+  const flat = s.look === 'farm' || s.look === 'gate'
   const parts: Part[] = []
   let z = at(s.x + s.size / 2, s.y + s.size / 2)
   if (high - low >= LEVEL_TOLERANCE) {

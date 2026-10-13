@@ -1,0 +1,204 @@
+{
+  "research": {
+    "architecture": {
+      "level": 1,
+      "cost": {
+        "gold": 150,
+        "materials": 80
+      },
+      "seconds": 60,
+      "queue": 1
+    },
+    "flax": {
+      "level": 1,
+      "cost": {
+        "gold": 60,
+        "materials": 20
+      },
+      "seconds": 30,
+      "unlocks": "flax"
+    },
+    "irrigation": {
+      "level": 1,
+      "cost": {
+        "gold": 120,
+        "materials": 40
+      },
+      "seconds": 45,
+      "output": {
+        "farm": 0.2
+      }
+    },
+    "fishing": {
+      "level": 1,
+      "cost": {
+        "gold": 100,
+        "materials": 40
+      },
+      "seconds": 40,
+      "output": {
+        "dock": 0.25
+      }
+    },
+    "forestry": {
+      "level": 2,
+      "cost": {
+        "gold": 180,
+        "materials": 60
+      },
+      "seconds": 60,
+      "output": {
+        "lumberCamp": 0.2
+      }
+    },
+    "metallurgy": {
+      "level": 2,
+      "cost": {
+        "gold": 200,
+        "materials": 80,
+        "arms": 30
+      },
+      "seconds": 70,
+      "output": {
+        "forge": 0.2
+      }
+    },
+    "medicine": {
+      "level": 2,
+      "cost": {
+        "gold": 220,
+        "food": 60
+      },
+      "seconds": 70,
+      "sickness": 0.5,
+      "healing": 1.5
+    },
+    "bookkeeping": {
+      "level": 2,
+      "cost": {
+        "gold": 250
+      },
+      "seconds": 80,
+      "tax": 0.15
+    },
+    "tactics": {
+      "level": 3,
+      "cost": {
+        "gold": 300,
+        "arms": 80
+      },
+      "seconds": 90,
+      "battle": 0.5
+    },
+    "commerce": {
+      "level": 3,
+      "cost": {
+        "gold": 320,
+        "materials": 100
+      },
+      "seconds": 90,
+      "trade": 0.25
+    }
+  },
+  "sickness": {
+    "perRound": 0.001,
+    "spread": 0.01,
+    "starvingFactor": 2,
+    "recoveryPerRound": 0.02,
+    "max": 0.6,
+    "happinessPerShare": -40,
+    "hospitalHealByLevel": [
+      0.04,
+      0.07,
+      0.1
+    ]
+  },
+  "temple": {
+    "happinessByLevel": [
+      6,
+      10,
+      14
+    ],
+    "faithByLevel": [
+      0.5,
+      0.8,
+      1.2
+    ],
+    "sermon": {
+      "cost": {
+        "gold": 30
+      },
+      "seconds": 120,
+      "cooldownSeconds": 300,
+      "taxFactorByLevel": [
+        0.5,
+        0.35,
+        0.2
+      ]
+    }
+  },
+  "events": {
+    "windowSeconds": 300,
+    "chance": 0.6,
+    "minSeconds": 120,
+    "maxSeconds": 240,
+    "kinds": {
+      "drought": {
+        "weight": 3,
+        "output": {
+          "food": -0.3
+        }
+      },
+      "rain": {
+        "weight": 3,
+        "output": {
+          "food": 0.25
+        }
+      },
+      "plague": {
+        "weight": 2,
+        "sicken": 0.15
+      },
+      "festival": {
+        "weight": 2,
+        "happiness": 12
+      },
+      "forestFire": {
+        "weight": 2,
+        "output": {
+          "materials": -0.3
+        }
+      },
+      "oreVein": {
+        "weight": 2,
+        "output": {
+          "arms": 0.4
+        }
+      },
+      "merchants": {
+        "weight": 2,
+        "trade": 0.3
+      },
+      "granaryFire": {
+        "weight": 1,
+        "lose": {
+          "food": 0.1
+        }
+      },
+      "treasure": {
+        "weight": 1,
+        "gold": 60
+      },
+      "coldSnap": {
+        "weight": 2,
+        "sickSpread": 2,
+        "work": -0.1
+      },
+      "pilgrims": {
+        "weight": 2,
+        "happiness": 6,
+        "templeHappiness": 6
+      }
+    }
+  }
+}

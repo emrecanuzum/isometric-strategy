@@ -48,5 +48,6 @@
       "workRate": 0.5
     },
     "cooldownSeconds": 30
-  }
+  },
+  "warinessCounter": 2
 }

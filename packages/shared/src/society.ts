@@ -23,6 +23,9 @@ export interface Moods {
   nightShift?: boolean
   queenTaken?: boolean
   revolt?: boolean
+  // How much of the tax's weight on the mood is felt (a temple's sermon lightens it), and everything else.
+  taxFactor?: number
+  extra?: number
 }
 
 // Where happiness is heading: the base, the tax, the queen and whether the granary is empty.
@@ -30,12 +33,13 @@ export function happinessTarget(tax: TaxLevel | undefined, queen: boolean, starv
   const h = balance.society.happiness
   const target =
     h.base +
-    taxSpec(tax).happiness +
+    (taxSpec(tax).happiness < 0 ? taxSpec(tax).happiness * (moods.taxFactor ?? 1) : taxSpec(tax).happiness) +
     (queen ? h.queen : 0) +
     (starving ? h.starving : 0) +
     (moods.nightShift ? balance.society.night.shiftHappiness : 0) +
     (moods.queenTaken ? balance.espionage.operations.kidnap.happiness : 0) +
-    (moods.revolt ? balance.espionage.operations.revolt.happiness : 0)
+    (moods.revolt ? balance.espionage.operations.revolt.happiness : 0) +
+    (moods.extra ?? 0)
   return Math.max(0, Math.min(100, target))
 }
 

@@ -27,6 +27,10 @@ export function counterOf(kingdom: Kingdom) {
   return (kingdom.spies ?? 0) * e.counterPerSpy + (house ? (house.level ?? 1) * e.counterPerLevel : 0)
 }
 
+// A kingdom that dislikes the spy's master watches its people closely: against a bad relation the network grows more
+// slowly and spies are caught sooner, as if more counter-espionage stood against them.
+export const wariness = (relation: number) => (Math.max(0, -relation) / 100) * balance.espionage.warinessCounter
+
 // Network strength (0..100) after `ms` with `spies` on the topic against `counter`.
 export function networkStrength(ms: number, spies: number, counter: number) {
   if (spies <= 0 || ms <= 0) return 0

@@ -2,6 +2,10 @@ import {
   OPERATIONS,
   UNITS,
   allied,
+  raidChance,
+  relationsOf,
+  towersNear,
+  reputation,
   alliesOf,
   atWar,
   balance,
@@ -26,7 +30,7 @@ import { Icon } from '../icons'
 import { RESOURCE_NAMES, UNIT_NAMES } from '../names'
 import type { HudData } from './tabs'
 import type { KingdomInfo, Online } from './online'
-import { kingdomName } from './online'
+import { kingdomName, lastSeen } from './online'
 import { Meter, Placeholder, Section, SpriteView, Stat, fmt } from './primitives'
 
 // The diplomacy tab (CLAUDE.md §9.7): the kingdoms of the lobby and the player's standing with each, a kingdom
@@ -43,6 +47,7 @@ export const ENVOY_NAMES: Record<Envoy['kind'], string> = {
   tribute: 'Haraç isteği',
   alliance: 'İttifak teklifi',
   peace: 'Barış teklifi',
+  insult: 'Hakaret',
 }
 export const TOPIC_NAMES: Record<SpyTopic, string> = { stores: 'Hammadde', army: 'Ordu', diplomacy: 'Diplomasi' }
 export const OPERATION_NAMES: Record<Operation, string> = {
@@ -64,6 +69,8 @@ export const CLAIM_NAMES: Record<string, string> = {
   alliance: 'ittifak bozuldu',
   kidnap: 'kraliçe kaçırıldı',
   sabotage: 'sabotaj',
+  insult: 'hakarete uğradı',
+  raid: 'ticaret yolu yağmalandı',
 }
 export const TERMS_NAMES: Record<PeaceTerms['kind'], string> = {
   white: 'Beyaz barış',
@@ -137,6 +144,7 @@ function KingdomList({ data, online }: { data: HudData; online: Online }) {
           <b>{k.name}</b>
           <small>
             {k.username ?? '—'} · {k.palace}. seviye saray{k.queen ? ' · kraliçe' : ''}
+            {k.id !== online.me && <> · {lastSeen(k.seenAt, data.now)}</>}
           </small>
           <span className="chips">
             {stateChips(online, k.id).map((c) => (
@@ -239,6 +247,8 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
   const [outcome, setOutcome] = useState<string | null>(null)
   const me = online.me
   const relation = relationBetween(online.relations, me, target.id, now)
+  // Enemies elsewhere make the player's courtesies count for less.
+  const standing = reputation(relationsOf(online.relations, me, online.kingdoms.map((k) => k.id), now))
   const war = atWar(online.pacts, me, target.id)
   const ally = allied(online.pacts, me, target.id)
   const theyPay = tributeBetween(online.pacts, me, target.id)
@@ -278,7 +288,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
         <div>
           <b>{target.name}</b>
           <p className="hint">
-            {target.username ?? '—'} · {target.palace}. seviye saray{target.queen ? ' · kraliçesi var' : ''}
+            {target.username ?? '—'} · {target.palace}. seviye saray{target.queen ? ' · kraliçesi var' : ''} · {lastSeen(target.seenAt, now)}
           </p>
         </div>
         <button className="btn icon-only" onClick={() => data.onShow(target.site)} aria-label="Haritada göster">
@@ -312,8 +322,18 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
           {d.casusBelli.maxRelation} yeter. Gerekçesiz savaş açan, diğer bütün krallıklarla {d.casusBelli.infamy} ilişki kaybeder.
         </p>
       </Section>
+      <Hostility data={data} online={online} target={target} />
       <Section title="Elçi gönder" icon="scroll" aside={`${d.envoySeconds} sn yol`}>
         {war && <p className="hint">Savaştayken elçiler yalnızca barış götürür.</p>}
+        {standing < 0.995 && (
+          <p className="hint">
+            <Icon name="warn" size={16} /> İtibarın %{Math.round(standing * 100)}: başka krallıklarla aran kötü olduğu için ilişki geliştirme ve hediyeler daha az
+            etkili.
+          </p>
+        )}
+        {relation < 0 && (
+          <p className="hint">Sana kötü gözle baktıkları için buradaki casus ağın daha yavaş kurulur ve casusların daha çabuk yakalanır.</p>
+        )}
         <div className="actions">
           {!war && (
           <button
@@ -322,7 +342,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
             onClick={() => envoy('improve')}
             title={cooling > 0 ? `${Math.ceil(cooling / 1000)} sn sonra yeniden` : undefined}
           >
-            İlişki geliştir · {d.improve.cost.gold} altın (+{d.improve.gain})
+            İlişki geliştir · {d.improve.cost.gold} altın (+{Math.round(d.improve.gain * standing)})
           </button>
           )}
           {!war && (
@@ -631,5 +651,50 @@ function Spies({ data, online }: { data: HudData; online: Online }) {
         )}
       </Section>
     </>
+  )
+}
+
+// Ways to sour a relation on purpose: an envoy with insults, and soldiers sent to rob the other's merchant.
+function Hostility({ data, online, target }: { data: HudData; online: Online; target: KingdomInfo }) {
+  const { now, kingdom } = data
+  const [outcome, setOutcome] = useState<string | null>(null)
+  const me = online.me
+  const r = d.raid
+  const towers = towersNear(target.buildings ?? [], now)
+  const chance = raidChance(towers)
+  const raidReady = (kingdom.lastRaidAt ?? 0) + r.cooldownSeconds * 1000
+  const insulting = online.envoys.some((e) => e.from_id === me && e.to_id === target.id && e.kind === 'insult' && e.status === 'traveling')
+  const ally = allied(online.pacts, me, target.id)
+  const raid = async () => {
+    const res = await online.act<{ success: boolean; lost: number; loot: { good: string; units: number } | null }>({ type: 'raid', target: target.id })
+    if (!res) return
+    setOutcome(
+      res.success
+        ? `Yağma başarılı: ${res.loot?.units ?? 0} ${RESOURCE_NAMES[res.loot?.good as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? ''} getirildi, ${res.lost} asker kaybedildi. Ticaret noktaları harap.`
+        : `Yağmacılar püskürtüldü: ${res.lost} asker kaybedildi.`,
+    )
+  }
+  return (
+    <Section title="Düşmanlık" icon="swords">
+      <div className="actions">
+        <button className="btn small danger" disabled={insulting} onClick={() => online.act({ type: 'envoy', to: target.id, kind: 'insult' })}>
+          Hakaret et ({d.insult.relation} ilişki)
+        </button>
+        <button
+          className="btn small danger"
+          disabled={ally || (kingdom.soldiers ?? 0) < r.soldiers || raidReady > now || !(target.buildings ?? []).some((b) => b.kind === 'tradePost')}
+          title={raidReady > now ? `${Math.ceil((raidReady - now) / 1000)} sn sonra` : undefined}
+          onClick={raid}
+        >
+          Ticaret yolunu yağmala · {r.soldiers} asker · şans %{Math.round(chance * 100)}
+        </button>
+      </div>
+      <p className="hint">
+        Hakaret: elçin gider, ilişkiniz {d.insult.relation} düşer ve onlar sana karşı savaş gerekçesi kazanır. Yağma: garnizondan {r.soldiers} asker
+        tüccarlarını basar; başarırsa sattıkları maldan yüklü bir pay getirir ve ticaret noktaları onarılana kadar satış yapamaz. Ticaret noktasının
+        yakınındaki gözcü kuleleri ({towers}) şansı düşürür. Her durumda asker kaybedersin, ilişki {r.relation} düşer ve onlar savaş gerekçesi kazanır.
+      </p>
+      {outcome && <p className="alert">{outcome}</p>}
+    </Section>
   )
 }

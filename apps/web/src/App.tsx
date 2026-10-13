@@ -24,6 +24,7 @@ import {
   setWorkers,
   upgradeBuilding,
   upgradeError,
+  upgradeSpec,
   upgradeTrade,
 } from '@game/shared'
 import type { BuildError, Building, BuildingKind, Good, Kingdom, Point, World } from '@game/shared'
@@ -43,7 +44,10 @@ import { CHAT_KEEP, CommandError, loadChat, loadMine, loadRivals, markSeen, post
 import type { ChatMessage, Command, IntelReport, Lobby, Mine, Rival } from './net/online'
 import { useLayer } from './net/layer'
 import type { MapArmy } from './game/armies'
-import { EnvoyDialog } from './ui/Envoy'
+import { play } from './audio/sfx'
+import type { Cue } from './audio/sfx'
+import { SoundSettings } from './ui/home/SettingsPanel'
+import { EnvoyDialog, describe as describeNotice } from './ui/Envoy'
 import type { KingdomInfo, Online } from './ui/hud/online'
 import { BattleView } from './ui/hud/war'
 import type { Settings } from './net/settings'
@@ -51,14 +55,14 @@ import { Chat } from './ui/Chat'
 import { findPath } from './game/town'
 import type { Errand } from './game/town'
 import { Icon } from './ui/icons'
-import { BUILDING_NAMES, RESOURCE_NAMES } from './ui/names'
+import { BUILDING_NAMES, FORTUNE_TEXTS, RESOURCE_NAMES } from './ui/names'
 import { Dock, Sheet, TopBar, useTabKeys } from './ui/hud/Hud'
 import type { TabId } from './ui/hud/Hud'
 import { useJournal } from './ui/hud/journal'
 import { BuildingSheet } from './ui/hud/BuildingSheet'
 import { MapTip } from './ui/hud/MapTip'
 import type { HudData } from './ui/hud/tabs'
-import { Constructions, GoodPicker, SitePicker } from './ui/panels'
+import { Constructions, GoodPicker, SitePicker, missingText } from './ui/panels'
 
 const TERRAIN_NAMES: Record<number, string> = {
   [Terrain.Grass]: 'Çayır',
@@ -112,6 +116,26 @@ const refusal = (e: unknown) => {
   return REFUSALS[code] ?? BUILD_ERRORS[code as BuildError] ?? 'Komut reddedildi'
 }
 
+// The sound each kind of news comes with (the envoy's fanfare otherwise).
+const NOTICE_CUES: Record<string, Cue> = {
+  battle_start: 'battle',
+  battle_end: 'battle',
+  war_declared: 'war',
+  tower_losses: 'bad',
+  operation_struck: 'bad',
+  spy_caught: 'bad',
+  spy_lost: 'bad',
+  alliance_broken: 'bad',
+  order_failed: 'bad',
+  peace_enforced: 'war',
+  envoy_courtesy: 'good',
+  queen_released: 'good',
+  ransom_paid: 'coin',
+  envoy_insult: 'war',
+  trade_raided: 'battle',
+  raid_repelled: 'good',
+}
+
 // Kingdom colours as numbers for the map.
 const hexOf = (color: string | null | undefined) => KINGDOM_COLORS[color as KingdomColor]?.swatch ?? '#f2d16b'
 const colorOf = (color: string | null | undefined) => parseInt((KINGDOM_COLORS[color as KingdomColor]?.swatch ?? '#f2d16b').slice(1), 16)
@@ -128,7 +152,7 @@ const BUILD_ERRORS: Record<BuildError, string> = {
   top: 'En yüksek seviyede',
   busy: 'Bina şu an inşaatta',
   locked: 'Önce sarayı 2. seviyeye yükselt',
-  limit: 'Bu saray seviyesinde daha fazla kurulamaz; sarayı yükselt ya da mevcutları geliştir',
+  limit: 'Evler nüfus sınırını dolduruyor; sarayı yükselt',
 }
 
 // Walkers keep to dry land below the mountains.
@@ -178,6 +202,8 @@ function App({
   onExit: () => void
 }) {
   const seed = lobby.seed
+  const exitRef = useRef(onExit)
+  exitRef.current = onExit
   const seasonStart = Date.parse(lobby.season_start)
   const host = useRef<HTMLDivElement>(null)
   const [view, setView] = useState<WorldView | null>(null)
@@ -214,7 +240,8 @@ function App({
   }, [seed])
 
   const muted = !settings.music
-  const toggleMusic = () => onSettings({ music: muted })
+  // The sound settings, opened from the corner button or the kingdom tab.
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // The server's copy of the player's row, and the kingdom as shown: the server's state settled up to now by the same
   // `advance` the server runs, with the player's commands applied at once while the server confirms them.
@@ -259,6 +286,22 @@ function App({
     },
     [lobby.id, accept, setKingdom],
   )
+  // While the game is open and visible, the server hears every few minutes that the ruler is present (an absent
+  // ruler's lands give less); silently, as nothing on screen depends on it.
+  const founded_ = !!mine.state
+  useEffect(() => {
+    if (!founded_) return
+    const ping = () => {
+      if (document.visibilityState === 'visible') send(lobby.id, { type: 'seen' }).then(accept, () => {})
+    }
+    ping()
+    const id = setInterval(ping, 5 * 60_000)
+    document.addEventListener('visibilitychange', ping)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', ping)
+    }
+  }, [lobby.id, accept, founded_])
   // Commands that reach other kingdoms: their answer comes back (undefined when refused).
   const act = useCallback(
     async <T,>(cmd: Command): Promise<T | undefined> => {
@@ -303,7 +346,7 @@ function App({
       onKingdom(id, version) {
         if (id === mineRef.current.id) {
           // Changed from another tab or device.
-          if (version > mineRef.current.version) loadMine(lobby.id).then((row) => live && row && accept(row))
+          if (version > mineRef.current.version) loadMine(lobby.id).then((row) => live && row && accept(row), () => {})
           return
         }
         clearTimeout(rivalTimer)
@@ -316,10 +359,14 @@ function App({
         onLayerChange(table, kingdom, mineRef.current.id)
       },
       onMarket,
+      onClosed: () => live && exitRef.current(),
     })
+    // In case the closing broadcast was missed: a lobby that is gone takes the player's row with it.
+    const alive = setInterval(() => loadMine(lobby.id).then((row) => live && !row && exitRef.current(), () => {}), 60_000)
     return () => {
       live = false
       clearTimeout(rivalTimer)
+      clearInterval(alive)
       unsubscribe()
     }
   }, [lobby.id, accept, onLayerChange, onMarket])
@@ -343,7 +390,8 @@ function App({
 
   // Before founding, the site under consideration; afterwards, the kingdom's own.
   const choosing = kingdom ? null : (mine.sites[selectedSite] ?? null)
-  const survey = useMemo(() => (view && choosing ? surveySite(view.world, choosing) : null), [view, choosing])
+  // The land around each site the player may choose from.
+  const surveys = useMemo(() => (view && !kingdom ? mine.sites.map((site) => surveySite(view.world, site)) : []), [view, kingdom, mine.sites])
   const site = kingdom?.site ?? choosing
   const plots = useMemo(() => {
     if (!view || !site) return null
@@ -370,7 +418,7 @@ function App({
   }, [view, site, stage, plots, kingdom])
 
   // The envoy's journal of what happened, kept in this browser per lobby.
-  const { journal, record: recordJournal, markRead, reset: resetJournal } = useJournal(`journal-v2:${lobby.id}`, seasonStart)
+  const { journal, record: recordJournal, markRead, reset: resetJournal, notice: noteJournal } = useJournal(`journal-v2:${lobby.id}`, seasonStart)
 
   // The clock: settle whatever came due and show it on the map.
   const [now, setNow] = useState(serverNow)
@@ -385,12 +433,23 @@ function App({
       const { kingdom: next, events } = advance(current, time, marketRef.current)
       if (next !== current) setKingdom(next)
       recordJournal(events, next, time)
+      // A sound for what stands out (one per tick, the most important).
+      const cue: Cue | null = events.some((e) => e.kind === 'fortune')
+        ? FORTUNE_TEXTS[(events.find((e) => e.kind === 'fortune') as { fortune: string }).fortune]?.tone === 'bad'
+          ? 'omen'
+          : 'fortune'
+        : events.some((e) => e.kind === 'researched' || e.kind === 'trained')
+          ? 'good'
+          : events.some((e) => e.kind === 'built')
+            ? 'build'
+            : null
+      if (cue) play(cue)
       const palace = next.buildings.find((b) => b.kind === 'palace')
       for (const event of events) {
         if (event.kind === 'trade' && palace) {
           view.float(
             center(palace),
-            event.sold > 0 ? `+${event.gold} altın` : `Satacak ${RESOURCE_NAMES[event.good].toLowerCase()} yok`,
+            event.sold > 0 ? `+${event.gold} altın` : event.walledIn ? 'Tüccar surdan çıkamıyor: kapı yap' : `Satacak ${RESOURCE_NAMES[event.good].toLowerCase()} yok`,
             event.sold > 0 ? 0xf2d16b : 0xff7a6a,
           )
         } else if (event.kind === 'built') {
@@ -422,7 +481,8 @@ function App({
     const palace = buildings.find((b) => b.kind === 'palace')
     const solid = new Set<number>()
     for (const b of buildings) {
-      if (b.kind === 'farm') continue
+      // Fields and gates are walked over; everything else is walked around.
+      if (b.kind === 'farm' || b.kind === 'gate') continue
       for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) solid.add(y * view.world.size + x)
     }
     // Villagers also wear paths on their daily walks from home to work, so every route walked is a footpath (and
@@ -572,6 +632,7 @@ function App({
       setPreview(null)
       return
     }
+    play('start')
     command({ type: 'build', kind: placingKind, ...preview }, build(view.world, current, stage, placingKind, preview, time))
     cancelPlacing()
   }
@@ -593,6 +654,7 @@ function App({
       setToast(BUILD_ERRORS.cost)
       return setPreviewMany(null)
     }
+    play('start')
     command({ type: 'buildMany', kind: placingKind, spots: previewMany }, predicted)
     cancelPlacing()
   }
@@ -604,6 +666,7 @@ function App({
     setPanel(null)
     // The dock has its own plot on the shore: no placing, it goes straight there.
     if (kind === 'dock' && view && kingdom?.dockPlot) {
+      play('start')
       command({ type: 'build', kind: 'dock', x: kingdom.dockPlot.x, y: kingdom.dockPlot.y }, build(view.world, kingdom, stage, 'dock', kingdom.dockPlot, serverNow()))
       view.centerOn({ x: kingdom.dockPlot.x + 1, y: kingdom.dockPlot.y + 1 })
       return
@@ -615,7 +678,9 @@ function App({
   const upgrade = (id: number) => {
     if (!kingdom) return
     const error = upgradeError(kingdom, id, serverNow())
+    if (error === 'cost') return setToast(missingText(upgradeSpec(kingdom.buildings.find((b) => b.id === id)!)?.cost, kingdom.stock) ?? BUILD_ERRORS.cost)
     if (error) return setToast(BUILD_ERRORS[error])
+    play('start')
     command({ type: 'upgrade', id }, upgradeBuilding(kingdom, id, serverNow()))
   }
 
@@ -623,10 +688,13 @@ function App({
     if (!choosing) return
     command({ type: 'found', site: selectedSite, name, color })
   }
-  const roll = async () => {
-    await command({ type: 'roll' })
-    setSelectedSite(mineRef.current.sites.length - 1)
-  }
+  // Older rows were given one site at a time: ask for the rest, so all of them can be compared at once.
+  const rolled = useRef(false)
+  useEffect(() => {
+    if (kingdom || rolled.current || mine.sites.length === 0 || mine.sites.length >= balance.economy.siteRolls) return
+    rolled.current = true
+    void command({ type: 'roll' })
+  })
 
   const [confirmReset, setConfirmReset] = useState(false)
   const reset = () => {
@@ -661,7 +729,7 @@ function App({
       ...(kingdom
         ? [{ id: mine.id, name: kingdom.name ?? 'Krallığın', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings) }]
         : []),
-      ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings) })),
+      ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings })),
     ],
     // Palace levels only change with the buildings.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -711,6 +779,20 @@ function App({
 
   // The envoy's dialogs, one at a time, once their moment has come.
   const notice = layer.notices.find((n) => Date.parse(n.show_at) <= now) ?? null
+  // Every piece of news is also written in the journal, on the envoy's paper, and announced with a sound.
+  const heard = useRef(new Set<number>())
+  useEffect(() => {
+    for (const n of layer.notices) {
+      const at = Date.parse(n.show_at)
+      if (at > now) continue
+      if (!heard.current.has(n.id)) {
+        heard.current.add(n.id)
+        play(NOTICE_CUES[n.kind] ?? 'envoy')
+      }
+      const { icon, title, text } = describeNotice(n, online)
+      noteJournal(n.id, at, { icon, title, text: text || undefined })
+    }
+  })
   const closeNotice = () => {
     if (!notice) return
     markSeen([notice.id])
@@ -732,9 +814,9 @@ function App({
           confirmReset,
           onPlace: startPlacing,
           onGood: chooseGood,
-          onUpgrade: () => command({ type: 'upgradeTrade' }, upgradeTrade(kingdom)),
+          onUpgrade: () => (play('start'), command({ type: 'upgradeTrade' }, upgradeTrade(kingdom))),
           onUpgradeBuilding: upgrade,
-          onMute: toggleMusic,
+          onMute: () => setSettingsOpen(true),
           onExit,
           onReset: reset,
           onShow: (tile) => view.centerOn(tile),
@@ -760,9 +842,28 @@ function App({
         {kingdom && <TopBar kingdom={kingdom} now={now} seasonStart={seasonStart} history={journal.history} onOpen={setPanel} />}
         {kingdom && <Constructions kingdom={kingdom} now={now} />}
       </div>
-      <button className="btn icon-only music frame" aria-pressed={!muted} onClick={toggleMusic} title={muted ? 'Müziği aç' : 'Müziği kapat'}>
-        <Icon name="music" size={16} slash={muted} />
+      <button className="btn icon-only music frame" onClick={() => setSettingsOpen(true)} title="Ayarlar" aria-label="Ayarlar">
+        <Icon name="gear" size={16} />
       </button>
+      {settingsOpen && (
+        <div className="modal" role="dialog" aria-labelledby="settings-title" onClick={(e) => e.target === e.currentTarget && setSettingsOpen(false)}>
+          <section className="dialog frame settings-dialog">
+            <header className="sheet-head">
+              <Icon name="gear" size={32} />
+              <div>
+                <h2 id="settings-title">Ayarlar</h2>
+                <small>Ses ve müzik</small>
+              </div>
+              <button className="btn icon-only" onClick={() => setSettingsOpen(false)} aria-label="Kapat">
+                <Icon name="close" size={16} />
+              </button>
+            </header>
+            <div className="form">
+              <SoundSettings settings={settings} onChange={onSettings} />
+            </div>
+          </section>
+        </div>
+      )}
       <div className="tile-tag" aria-hidden>
         {hover ? (
           <>
@@ -776,12 +877,9 @@ function App({
       </div>
       {view && !kingdom && (
         <SitePicker
-          survey={survey}
-          seen={mine.sites.length}
+          surveys={surveys}
           selected={selectedSite}
-          rollsLeft={balance.economy.siteRolls - mine.sites.length}
           onSelect={setSelectedSite}
-          onRoll={roll}
           colors={lobbyColors(lobby.max_players)}
           taken={new Set(rivals.map((r) => r.color))}
           onFound={found}
@@ -798,7 +896,7 @@ function App({
           commands={{
             onUpgrade: upgrade,
             onWorkers: commandWorkers,
-            onProduct: (id, product) => command({ type: 'product', id, product }, setProduct(kingdom, id, product)),
+            onProduct: (id, product) => command({ type: 'product', id, product }, setProduct(kingdom, id, product, now)),
             onDemolish: (id) => {
               command({ type: 'demolish', id }, demolish(kingdom, id))
               closeTab()

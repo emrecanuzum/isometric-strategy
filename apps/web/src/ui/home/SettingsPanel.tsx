@@ -17,26 +17,7 @@ export function SettingsPanel({
   return (
     <div className="home-body form">
       <h3>Ses</h3>
-      <div className="row spread">
-        <span>Müzik</span>
-        <button className="btn small" aria-pressed={settings.music} onClick={() => onChange({ music: !settings.music })}>
-          <Icon name="music" size={16} slash={!settings.music} /> {settings.music ? 'Açık' : 'Kapalı'}
-        </button>
-      </div>
-      <label>
-        <span>
-          Müzik sesi: <b>{settings.musicVolume}</b>
-        </span>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={5}
-          value={settings.musicVolume}
-          disabled={!settings.music}
-          onChange={(e) => onChange({ musicVolume: Number(e.target.value) })}
-        />
-      </label>
+      <SoundSettings settings={settings} onChange={onChange} />
       <h3>Hesap</h3>
       <dl className="account">
         <dt>Kullanıcı adı</dt>
@@ -48,5 +29,41 @@ export function SettingsPanel({
         Çıkış yap
       </button>
     </div>
+  )
+}
+
+// Music and sound effects: each can be turned off, and has its own volume. Used on the main menu and in the game.
+export function SoundSettings({ settings, onChange }: { settings: Settings; onChange: (change: Partial<Settings>) => void }) {
+  const rows: { label: string; on: keyof Settings; volume: keyof Settings; icon: 'music' | 'swords' }[] = [
+    { label: 'Müzik', on: 'music', volume: 'musicVolume', icon: 'music' },
+    { label: 'Ses efektleri', on: 'sfx', volume: 'sfxVolume', icon: 'swords' },
+  ]
+  return (
+    <>
+      {rows.map((r) => (
+        <div key={r.on} className="sound-row">
+          <div className="row spread">
+            <span>{r.label}</span>
+            <button className="btn small" aria-pressed={!!settings[r.on]} onClick={() => onChange({ [r.on]: !settings[r.on] })}>
+              <Icon name={r.icon} size={16} slash={!settings[r.on]} /> {settings[r.on] ? 'Açık' : 'Kapalı'}
+            </button>
+          </div>
+          <label>
+            <span>
+              {r.label} sesi: <b>%{settings[r.volume] as number}</b>
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={settings[r.volume] as number}
+              disabled={!settings[r.on]}
+              onChange={(e) => onChange({ [r.volume]: Number(e.target.value) })}
+            />
+          </label>
+        </div>
+      ))}
+    </>
   )
 }

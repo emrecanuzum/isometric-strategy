@@ -4,6 +4,9 @@ import { priceAt } from './market'
 import type { Market } from './market'
 import { happinessStep, happinessTarget, isNightAt, popCapFor, recruitTerms, taxSpec } from './society'
 import { addUnits, countOf, garrisonOf, unitSpec } from './units'
+import { cutOff } from './walls'
+import { fortuneAt, fortuneBegun, hasResearch, hospitalHeal, levelOf, researchEffects, sermonTaxFactor, templeHappiness } from './institutions'
+import type { FortuneKind } from './institutions'
 import type { Unit, Units } from './units'
 import type { TaxLevel } from './society'
 import { TileRule, findPlot, territoryRect, tileRule } from './territory'
@@ -21,7 +24,7 @@ export type Resource = 'gold' | Good
 export type Stock = Record<Resource, number>
 export type Cost = Partial<Stock>
 
-export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall'] as const
+export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple'] as const
 export type BuildingKind = 'palace' | 'tradePost' | (typeof BUILDABLE)[number]
 
 // Weapons are worked from raw goods in the forge and kept in the armory, apart from the tradeable stores.
@@ -34,6 +37,8 @@ export interface Product {
   makes: Good | Weapon
   rate: number
   uses?: Cost
+  // The research it waits for (institutions.ts).
+  research?: string
 }
 
 // The parts of a building that change with its level.
@@ -51,6 +56,8 @@ export interface BuildingSpec extends LevelSpec {
   requiresPalace?: number
   // Built without taking one of the construction slots (wall segments).
   outsideQueue?: boolean
+  // Only one may stand.
+  unique?: boolean
   // How many may stand at each palace level (houses), so growing the town means raising them too.
   maxByPalaceLevel?: number[]
   produces?: Good
@@ -137,6 +144,8 @@ export interface Kingdom {
     good: Good | null
     // The player chose to sell nothing for now (the merchant stays home without asking again).
     idle?: boolean
+    // Wrecked by raiders: the merchant cannot trade until it is repaired.
+    damaged?: boolean
     level: number
     // The current trip started here and ends one trip length later.
     departedAt: number
@@ -166,19 +175,31 @@ export interface Kingdom {
   freeUsed?: BuildingKind[]
   // When this kingdom's spies last tried an operation (they pause between tries).
   lastOperationAt?: number
+  // When its soldiers last raided another kingdom's trade route.
+  lastRaidAt?: number
   // Spies at home (idle or on counter-espionage) and out on missions; the next one the spy house trains.
   spies?: number
   spiesAway?: number
   nextSpyAt?: number
   tributes?: Tribute[]
+  // Studies at the university (finished once doneAt has passed; one at a time), the share of the villagers lying
+  // sick, and the temple's sermon on taxes.
+  researches?: { id: string; doneAt: number }[]
+  sickness?: number
+  sermonUntil?: number
+  lastSermonAt?: number
+  // When the player last gave a command or had the game open (an absent ruler's lands give less, see idleFactor).
+  lastSeenAt?: number
 }
 
 export type EconomyEvent =
-  | { kind: 'trade'; good: Good; sold: number; gold: number }
+  | { kind: 'trade'; good: Good; sold: number; gold: number; walledIn?: boolean; damaged?: boolean }
   | { kind: 'built'; building: Building }
   | { kind: 'produced'; delta: Partial<Stock>; weapons?: Partial<Armory> }
   | { kind: 'trained'; count: number }
   | { kind: 'spy' }
+  | { kind: 'researched'; id: string }
+  | { kind: 'fortune'; fortune: FortuneKind; until: number; lost?: Partial<Stock>; gold?: number }
 
 const tripMs = () => balance.economy.trade.tripSeconds * 1000
 const productionMs = () => balance.economy.productionSeconds * 1000
@@ -309,11 +330,21 @@ export function population(kingdom: Kingdom, at: number) {
   const cap = popCapFor(palaceLevel(kingdom, at))
   const soldiers = soldiersOf(kingdom)
   const villagers = Math.max(0, Math.min(housing, cap) - soldiers)
-  // When more hands are set to work than there are villagers, every building works at a matching fraction.
-  return { villagers, housing, cap, soldiers, jobs, efficiency: jobs === 0 ? 1 : Math.min(1, villagers / jobs) }
+  // The sick neither work nor pay taxes.
+  const healthy = villagers * (1 - (kingdom.sickness ?? 0))
+  // When more hands are set to work than there are healthy villagers, every building works at a matching fraction.
+  return { villagers, healthy, sick: villagers - healthy, housing, cap, soldiers, jobs, efficiency: jobs === 0 ? 1 : Math.min(1, healthy / jobs) }
 }
 
 export const happinessOf = (kingdom: Kingdom) => kingdom.happiness ?? balance.society.happiness.start
+
+// Lands without their ruler give less (CLAUDE.md §6.4): after a grace period, every hour since the player was last
+// seen takes a share off what buildings make, the taxes and the merchant's gold, down to a floor.
+export function idleFactor(kingdom: Kingdom, at: number) {
+  const i = balance.economy.idle
+  const hours = (at - (kingdom.lastSeenAt ?? at)) / 3_600_000 - i.graceHours
+  return hours <= 0 ? 1 : Math.max(i.min, 1 - hours * i.perHour)
+}
 
 // The share of a full day's work the people put in at `at`: a fifth at night unless on a night shift, less when
 // tired from night shifts, half during an incited revolt.
@@ -321,7 +352,8 @@ export function workRate(kingdom: Kingdom, at: number) {
   const n = balance.society.night
   const night = isNightAt(at) && !kingdom.nightShift ? n.workRate : 1
   const revolt = (kingdom.revoltUntil ?? 0) > at ? balance.espionage.operations.revolt.workRate : 1
-  return night * (1 - (kingdom.fatigue ?? 0)) * revolt
+  const fortune = 1 + (fortuneAt(kingdom, at)?.spec.work ?? 0)
+  return night * (1 - (kingdom.fatigue ?? 0)) * revolt * fortune
 }
 
 // The most people that would take up arms: a share of the population that grows with its happiness.
@@ -344,11 +376,11 @@ export function recruitment(kingdom: Kingdom, at: number, unit: Unit = 'spear') 
 
 // The gold side of a round apart from the buildings: taxes, soldiers' pay and tributes (for the ledger as well).
 export function ledger(kingdom: Kingdom, at: number) {
-  const { villagers } = population(kingdom, at)
+  const { healthy } = population(kingdom, at)
   const upkeep = balance.military.warrior.upkeep
   const paid = (kingdom.soldiers ?? 0) + (kingdom.fielded ?? 0)
   return {
-    tax: villagers * taxSpec(kingdom.tax).goldPerVillager,
+    tax: healthy * taxSpec(kingdom.tax).goldPerVillager * (1 + researchEffects(kingdom, at).tax) * idleFactor(kingdom, at),
     soldiersGold: paid * upkeep.gold,
     soldiersFood: paid * upkeep.food,
     tributes: (kingdom.tributes ?? []).map((t) => ({ ...t, gold: t.dir === 'in' ? t.gold : -t.gold })),
@@ -361,13 +393,24 @@ const isGood = (v: string): v is Good => (GOODS as readonly string[]).includes(v
 export function buildingOutput(kingdom: Kingdom, b: Building, at: number) {
   const spec = levelSpec(b.kind, b.level)
   if (!done(b, at) || !spec.amount) return null
+  // Behind a wall with no gate the workers cannot get there.
+  if (cutOff(kingdom.buildings, kingdom.site, at).has(b.id)) return null
   const slots = workerSlots(b)
   const crew = slots === 0 ? 1 : staffOf(b) / slots
-  const choice = productOf(b)
+  let choice = productOf(b)
+  // A product still to be learnt at the university falls back to the first one.
+  if (choice && spec.products![choice].research && !hasResearch(kingdom, spec.products![choice].research!, at)) choice = Object.keys(spec.products!)[0]
   const product: Product = choice ? spec.products![choice] : { makes: spec.produces!, rate: 1 }
-  // The land's yield only helps raw goods; worked goods depend on the hands alone.
-  const land = isGood(product.makes) && !product.uses ? kingdom.yields[product.makes] : 1
-  return { makes: product.makes, units: spec.amount * product.rate * land * crew * population(kingdom, at).efficiency * workRate(kingdom, at), uses: product.uses }
+  // The land's yield and the fortunes of the day only touch raw goods; worked goods depend on the hands alone.
+  const raw = isGood(product.makes) && !product.uses
+  const land = raw ? kingdom.yields[product.makes as Good] : 1
+  const fortune = raw ? 1 + (fortuneAt(kingdom, at)?.spec.output?.[product.makes as Good] ?? 0) : 1
+  const learnt = 1 + (researchEffects(kingdom, at).output[b.kind] ?? 0)
+  return {
+    makes: product.makes,
+    units: spec.amount * product.rate * land * fortune * learnt * crew * population(kingdom, at).efficiency * workRate(kingdom, at) * idleFactor(kingdom, at),
+    uses: product.uses,
+  }
 }
 
 // One production round: what it adds to and takes from the stores, and the weapons it works. Worked goods only use
@@ -407,6 +450,9 @@ export const constructing = (kingdom: Kingdom, at: number) => kingdom.buildings.
 
 // The building sites that hold one of the construction slots.
 export const queued = (kingdom: Kingdom, at: number) => constructing(kingdom, at).filter((b) => !BUILDINGS[b.kind].outsideQueue)
+
+// How many buildings may go up at once (one more with architecture learnt).
+export const maxConstructions = (kingdom: Kingdom, at: number) => balance.economy.maxConstructions + researchEffects(kingdom, at).queue
 
 // ---- Commands -----------------------------------------------------------------------------------------------------
 
@@ -454,8 +500,16 @@ export function demolish(kingdom: Kingdom, id: number): Kingdom {
 
 export type BuildError = 'palace' | 'unique' | 'cost' | 'queue' | 'spot' | 'top' | 'busy' | 'locked' | 'limit'
 
+// The homes of every building at the level it is (or is being raised to): what the town will house once built.
+export const plannedHousing = (kingdom: Kingdom) => kingdom.buildings.reduce((n, b) => n + (levelSpec(b.kind, b.level).villagers ?? 0), 0)
+
+// Homes beyond the palace's population cap would stand empty, so none is built (nor raised) once the planned homes
+// reach it; raising the palace makes room.
+export const housingFull = (kingdom: Kingdom, at: number) => plannedHousing(kingdom) >= popCapFor(palaceLevel(kingdom, at))
+
 // How many of a kind may stand now, or Infinity without a limit.
 export function buildLimit(kingdom: Kingdom, kind: BuildingKind, at: number) {
+  if ((BUILDINGS[kind].villagers ?? 0) > 0 && kind !== 'palace' && housingFull(kingdom, at)) return buildingCount(kingdom, kind)
   const caps = BUILDINGS[kind].maxByPalaceLevel
   if (!caps) return Infinity
   return caps[Math.max(0, Math.min(caps.length - 1, palaceLevel(kingdom, at) - 1))]
@@ -469,9 +523,9 @@ export function buildError(world: World, kingdom: Kingdom, stage: number, kind: 
   if (kind === 'dock' && (!kingdom.dockPlot || kingdom.buildings.some((b) => b.kind === 'dock'))) return 'unique'
   if ((spec.requiresPalace ?? 0) > palaceLevel(kingdom, now)) return 'locked'
   if (buildingCount(kingdom, kind) >= buildLimit(kingdom, kind, now)) return 'limit'
-  if ((kind === 'market' || kind === 'barracks' || kind === 'spyHouse') && kingdom.buildings.some((b) => b.kind === kind)) return 'unique'
+  if (spec.unique && kingdom.buildings.some((b) => b.kind === kind)) return 'unique'
   if (!affordable(kingdom.stock, buildCost(kingdom, kind))) return 'cost'
-  if (kind !== 'palace' && !spec.outsideQueue && queued(kingdom, now).length >= balance.economy.maxConstructions) return 'queue'
+  if (kind !== 'palace' && !spec.outsideQueue && queued(kingdom, now).length >= maxConstructions(kingdom, now)) return 'queue'
   // The dock goes on its plot, which may lie outside the territory; everything else where the player puts it.
   if (spot && kind !== 'dock' && !canPlace(world, kingdom, stage, { ...spot, size: spec.size })) return 'spot'
   return null
@@ -510,7 +564,7 @@ export function buildMany(world: World, kingdom: Kingdom, stage: number, kind: B
     if (!spec.outsideQueue) {
       // The moment a slot frees up: once fewer than the slot count are still being built.
       const ends = queued(k, now).map((b) => b.doneAt).sort((a, b) => b - a)
-      const slots = balance.economy.maxConstructions
+      const slots = maxConstructions(k, now)
       if (ends.length >= slots) start = Math.max(now, ends[slots - 1])
     }
     const building: Building = { id: k.nextId, kind, x: spot.x, y: spot.y, size: spec.size, doneAt: start + (spec.buildSeconds ?? 0) * 1000, ...(free && { free }) }
@@ -532,8 +586,9 @@ export function upgradeError(kingdom: Kingdom, id: number, now: number): BuildEr
   const up = b && upgradeSpec(b)
   if (!b || !up) return 'top'
   if (!done(b, now)) return 'busy'
+  if (b.kind !== 'palace' && (up.villagers ?? 0) > 0 && housingFull(kingdom, now)) return 'limit'
   if (!affordable(kingdom.stock, up.cost)) return 'cost'
-  if (queued(kingdom, now).length >= balance.economy.maxConstructions) return 'queue'
+  if (queued(kingdom, now).length >= maxConstructions(kingdom, now)) return 'queue'
   return null
 }
 
@@ -554,14 +609,27 @@ const editBuilding = (kingdom: Kingdom, id: number, change: (b: Building) => Bui
 export const setWorkers = (kingdom: Kingdom, id: number, workers: number): Kingdom =>
   editBuilding(kingdom, id, (b) => ({ ...b, workers: Math.min(workerSlots(b), Math.max(0, Math.round(workers))) }))
 
-export const setProduct = (kingdom: Kingdom, id: number, product: string): Kingdom =>
-  editBuilding(kingdom, id, (b) => (BUILDINGS[b.kind].products?.[product] ? { ...b, product } : b))
+// A product that waits for research can be chosen once it is learnt.
+export const productAllowed = (kingdom: Kingdom, kind: BuildingKind, product: string, at: number) => {
+  const p = BUILDINGS[kind].products?.[product]
+  return !!p && (!p.research || hasResearch(kingdom, p.research, at))
+}
 
-// Choosing (or changing) the good sends the merchant off on a fresh trip.
+export const setProduct = (kingdom: Kingdom, id: number, product: string, at = Infinity): Kingdom =>
+  editBuilding(kingdom, id, (b) => (productAllowed(kingdom, b.kind, product, at) ? { ...b, product } : b))
+
 // Choosing (or changing) the good sends the merchant off on a fresh trip; null keeps him home.
 export function setTradeGood(kingdom: Kingdom, good: Good | null, now: number): Kingdom {
   if (!hasTradePost(kingdom) || (kingdom.trade.good === good && (good !== null || kingdom.trade.idle))) return kingdom
   return { ...kingdom, trade: { ...kingdom.trade, good, idle: good === null, departedAt: now } }
+}
+
+// A trade post wrecked by raiders stands again for this.
+export const tradeRepairCost = () => balance.economy.trade.repairCost as Cost
+
+export function repairTrade(kingdom: Kingdom): Kingdom {
+  if (!kingdom.trade.damaged || !affordable(kingdom.stock, tradeRepairCost())) return kingdom
+  return { ...kingdom, stock: pay(kingdom.stock, tradeRepairCost()), trade: { ...kingdom.trade, damaged: false } }
 }
 
 export const tradeUpgradeCost = (kingdom: Kingdom): Cost | null =>
@@ -603,6 +671,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
     k.soldiers = countOf(k.units)
     events.push({ kind: 'trained', count })
   }
+  for (const r of kingdom.researches ?? []) if (r.doneAt > kingdom.settledAt && r.doneAt <= now) events.push({ kind: 'researched', id: r.id })
   // A building counts from the moment it is done, so production rounds after that use it.
   const finishing = kingdom.buildings.filter((b) => b.doneAt > kingdom.settledAt && b.doneAt <= now)
   for (;;) {
@@ -611,15 +680,27 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
     if (next > now) break
     edit()
     if (next === k.nextProductionAt) {
+      // A fortune that befell the kingdom since the last round: what it does at once.
+      if (k.buildings.some((b) => b.kind === 'palace')) {
+        const begun = fortuneBegun(k, next - productionMs(), next)
+        if (begun) {
+          const lost: Partial<Stock> = {}
+          for (const [g, share] of Object.entries(begun.spec.lose ?? {})) {
+            lost[g as Good] = Math.floor(k.stock[g as Good] * (share ?? 0))
+            k.stock[g as Good] -= lost[g as Good]!
+          }
+          if (begun.spec.gold) k.stock.gold += begun.spec.gold
+          if (begun.spec.sicken) k.sickness = Math.min(balance.institutions.sickness.max, (k.sickness ?? 0) + begun.spec.sicken)
+          events.push({ kind: 'fortune', fortune: begun.kind, until: begun.end, ...(Object.keys(lost).length > 0 && { lost }), ...(begun.spec.gold && { gold: begun.spec.gold }) })
+        }
+      }
       const { delta, weapons } = roundOutcome(k, next)
       for (const [r, v] of Object.entries(delta)) k.stock[r as Resource] = Math.max(0, k.stock[r as Resource] + (v ?? 0))
       for (const [w, v] of Object.entries(weapons)) k.armory![w as Weapon] += v ?? 0
-      // The people's mood drifts toward what the taxes, the queen and the granary make of it.
+      k.sickness = sicknessStep(k, next)
+      // The people's mood drifts toward what the taxes, the queen, the granary, the temple and the day make of it.
       const n = balance.society.night
-      k.happiness = happinessStep(
-        happinessOf(k),
-        happinessTarget(k.tax, !!k.queen, k.stock.food <= 0, { nightShift: k.nightShift, queenTaken: !!k.queenHeldBy, revolt: (k.revoltUntil ?? 0) > next }),
-      )
+      k.happiness = happinessStep(happinessOf(k), happinessFor(k, next))
       // Night shifts tire the people; rest brings them back.
       k.fatigue =
         k.nightShift && isNightAt(next)
@@ -640,19 +721,56 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       events.push({ kind: 'produced', delta, weapons })
     } else {
       const good = k.trade.good!
-      const sold = Math.min(tradeUnits(k), Math.floor(k.stock[good]))
-      const gold = Math.round(sold * priceAt(market, good, next))
+      // Walled in without a gate, the merchant cannot reach the trade post.
+      const post = k.buildings.find((b) => b.kind === 'tradePost')
+      const walledIn = !!post && cutOff(k.buildings, k.site, next).has(post.id)
+      const damaged = !!k.trade.damaged
+      const sold = walledIn || damaged ? 0 : Math.min(tradeUnits(k), Math.floor(k.stock[good]))
+      const fortune = fortuneAt(k, next)?.spec.trade ?? 0
+      const gold = Math.round(sold * priceAt(market, good, next) * (1 + researchEffects(k, next).trade + fortune) * idleFactor(k, next))
       soldTotal[good] = (soldTotal[good] ?? 0) + sold
       k.stock[good] -= sold
       k.stock.gold += gold
       k.trade.departedAt = next
-      events.push({ kind: 'trade', good, sold, gold })
+      events.push({ kind: 'trade', good, sold, gold, ...(walledIn && { walledIn }), ...(damaged && { damaged }) })
     }
   }
   for (const building of finishing) events.push({ kind: 'built', building })
   if (finishing.length > 0) edit()
   if (k !== kingdom) k.settledAt = now
   return { kingdom: k, events, sold: soldTotal }
+}
+
+// Where the people's mood is heading at `at`.
+export function happinessFor(k: Kingdom, at: number) {
+  const fortune = fortuneAt(k, at)?.spec
+  const templeLevel = levelOf(k, 'temple', at)
+  return happinessTarget(k.tax, !!k.queen, k.stock.food <= 0, {
+    nightShift: k.nightShift,
+    queenTaken: !!k.queenHeldBy,
+    revolt: (k.revoltUntil ?? 0) > at,
+    taxFactor: sermonTaxFactor(k, at),
+    extra:
+      templeHappiness(k, at) +
+      (k.sickness ?? 0) * balance.institutions.sickness.happinessPerShare +
+      (fortune?.happiness ?? 0) +
+      (templeLevel > 0 ? (fortune?.templeHappiness ?? 0) : 0),
+  })
+}
+
+// One round of sickness: some fall ill (faster when many are already sick, when hungry and in the cold), some get
+// well on their own, and the hospital's staff heal more.
+export function sicknessStep(k: Kingdom, at: number) {
+  const s = balance.institutions.sickness
+  const share = k.sickness ?? 0
+  const learnt = researchEffects(k, at)
+  const spread = fortuneAt(k, at)?.spec.sickSpread ?? 1
+  const falling = (s.perRound + s.spread * share) * (1 - share) * (k.stock.food <= 0 ? s.starvingFactor : 1) * spread * learnt.sickness
+  const hospital = k.buildings.find((b) => b.kind === 'hospital')
+  const crew = hospital && done(hospital, at) ? (workerSlots(hospital) === 0 ? 1 : staffOf(hospital) / workerSlots(hospital)) * population(k, at).efficiency : 0
+  const healing = share * (s.recoveryPerRound + hospitalHeal(levelOf(k, 'hospital', at)) * crew) * learnt.healing
+  const next = Math.max(0, Math.min(s.max, share + falling - healing))
+  return next < 1e-4 ? 0 : next
 }
 
 const isWater = (world: World, x: number, y: number) =>
