@@ -116,5 +116,10 @@
   "catapult": {
     "wallsPerCatapult": 2,
     "breakPerCatapult": 0.1
+  },
+  "fear": {
+    "tiles": 6,
+    "seconds": 120,
+    "happiness": -12
   }
 }

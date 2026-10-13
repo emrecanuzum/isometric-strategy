@@ -619,10 +619,15 @@ fiyatı düşer, çok alınanın artar; zamanla dengeye döner.
 - **Takip et:** Ordu kartındaki düğme kamerayı orduya kilitler; kamera
   orduyla birlikte kayar. Düğmeye yeniden basınca, alttaki şeritteki
   "Bırak" ile ya da harita sürüklenince takip biter.
-- **Hızlı hedefler:** Ordu "Hareket" ile gönderilirken sağda, savaşta
+- **Hızlı hedefler:** Ordu "Hareket" ile gönderilirken solda, savaşta
   olunan krallıkların listesi açılır: sarayını kuşat (kalkan süresiyle),
-  ticaret noktasına git, ordularından birine saldır; ayrıca eve dön ve
-  haritada göster. Haritaya tıklamak da hâlâ geçerlidir.
+  gözdağı ver (sınırının 3 karo dışına git ve bekle), ticaret noktasına
+  git, ordularından birine muharebeye git; ayrıca eve dön ve haritada
+  göster. Haritaya tıklamak da hâlâ geçerlidir.
+- **Gözdağı:** Savaşta olunan bir krallığın hududuna 6 karodan yakın
+  bekleyen (yürümeyen) ordu, o krallığın halkını korkutur: 2 dakika
+  boyunca mutluluk hedefi −12 (ordu kaldıkça yenilenir). Korkutulan
+  krallığa elçi haber getirir; Halk sekmesinde uyarı çıkar.
 - **İletişim penceresi:** Elçi orduya ulaşıp emri verdikten sonra
   **30 saniye** komutanın yanında kalır; bu sürede verilen yeni emirler
   elçi beklemeden hemen uygulanır (`time.json` → `contactSeconds`). Kalan
@@ -962,7 +967,8 @@ mertebesindedir.
   türleri tek satırda, moral ve saha bilgisi yan yana, emir düğmeleri üçlü
   sütunlarda.
 - Haritada ordular krallığın sancağıyla görünür; görünen asker sayısı
-  ordunun büyüklüğüyle artar (yaklaşık her 3 askere bir figür, 2–12) ve
+  ordunun büyüklüğüyle artar (yaklaşık her 2 askere bir figür, 2–20,
+  sık dörtlü saflarda) ve
   mancınığı olan ordunun **arkasından** ayrı bir mancınık gelir: ordunun
   gittiği yöne bakar, yuvarlanırken (yakınlaştırınca) tekerlekleri döner. Rakipler yalnızca bu kaba
   büyüklüğü görür, kesin sayıyı casuslar söyler; oyuncunun yoldaki

@@ -201,6 +201,8 @@ export interface Kingdom {
   lobbyKey?: number
   // Taken in a siege: no army may lay siege to the palace again until then (CLAUDE.md §8.3).
   shieldUntil?: number
+  // An enemy army camped at the border frightens the people until then (CLAUDE.md §9.7).
+  fearUntil?: number
   // Battles and sieges won (kept by the server, for the lobby's ranking).
   record?: { battlesWon?: number; siegesWon?: number }
 }
@@ -864,6 +866,7 @@ export function happinessFor(k: Kingdom, at: number) {
     revolt: (k.revoltUntil ?? 0) > at,
     taxFactor: sermonTaxFactor(k, at),
     extra:
+      ((k.fearUntil ?? 0) > at ? balance.military.fear.happiness : 0) +
       templeHappiness(k, at) +
       researchEffects(k, at).happiness +
       (k.sickness ?? 0) * balance.institutions.sickness.happinessPerShare +

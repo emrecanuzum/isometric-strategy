@@ -654,6 +654,11 @@ function Society({ kingdom, now, online }: { kingdom: Kingdom; now: number; onli
           <small>verim −%{Math.round(fatigue * 100)}</small>
         </div>
       </Section>
+      {(kingdom.fearUntil ?? 0) > now && (
+        <p className="alert">
+          <Icon name="warn" size={16} /> Sınırında düşman ordusu bekliyor: halk korkuyor (mutluluk {balance.military.fear.happiness}).
+        </p>
+      )}
       {(kingdom.revoltUntil ?? 0) > now && (
         <p className="alert">
           <Icon name="warn" size={16} /> Halk ayaklandı: {Math.ceil(((kingdom.revoltUntil ?? 0) - now) / 60000)} dakika daha üretim yarıda ve mutluluk düşük.

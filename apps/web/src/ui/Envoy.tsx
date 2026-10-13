@@ -98,6 +98,8 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       return { icon: 'unhappy', title: `${p.from} elçisi hakaret etti!`, text: `"${INSULTS[Number(p.seed ?? 0) % INSULTS.length]}" İlişkiniz ${balance.diplomacy.insult.relation} düştü; artık onlara karşı savaş gerekçen var.` }
     case 'insult_delivered':
       return { icon: 'scroll', title: 'Hakaretin iletildi', text: `Elçin ${p.to} sarayında ağzına geleni söyledi. İlişkiniz ${balance.diplomacy.insult.relation} düştü; onlar da sana karşı savaş gerekçesi kazandı.` }
+    case 'army_threat':
+      return { icon: 'warn', title: 'Düşman ordusu sınırda!', text: `${p.by} ordusu sınırına kamp kurdu. Ordu orada kaldıkça halkın korkuyor ve mutluluğu düşüyor.` }
     case 'trade_raided':
       return {
         icon: 'warn',

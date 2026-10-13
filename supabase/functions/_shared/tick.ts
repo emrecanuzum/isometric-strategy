@@ -173,6 +173,27 @@ async function moveArmies(lobby: string, world: LobbyWorld, rows: Row[], pacts: 
     }
   }
 
+  // Enemy armies camped near a kingdom's border frighten its people for a while (renewed while they stay).
+  const fear = m.fear
+  for (const l of live) {
+    const a = l.army
+    if (l.engaged || a.status === 'battle' || (a.status === 'moving' && ms(a.arrive_at) > now)) continue
+    const here = game.armyAt(a, now) as Point
+    for (const [id, st] of states) {
+      if (id === a.kingdom_id || !game.atWar(pacts, a.kingdom_id, id)) continue
+      const rect = game.territoryRect(st.site, game.territoryStage(st, now))
+      const dx = Math.max(rect.x - here.x, 0, here.x - (rect.x + rect.size))
+      const dy = Math.max(rect.y - here.y, 0, here.y - (rect.y + rect.size))
+      if (Math.hypot(dx, dy) > fear.tiles) continue
+      const until = (st.fearUntil ?? 0) as number
+      // Written only when it would otherwise run out within the minute.
+      if (until > now + 60_000) continue
+      await mutateKingdom(id, now, (k) => ({ ...k, fearUntil: now + fear.seconds * 1000 }))
+      st.fearUntil = now + fear.seconds * 1000
+      if (until <= now) await notify(lobby, [id], 'army_threat', { by: nameOf(rows, a.kingdom_id) }, now)
+    }
+  }
+
   for (const [id, seconds] of exposure) {
     const l = live.find((x) => x.army.id === id)!
     const total = (l.army.exposure ?? 0) + seconds

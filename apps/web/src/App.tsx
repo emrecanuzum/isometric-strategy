@@ -179,12 +179,13 @@ const NOTICE_CUES: Record<string, Cue> = {
   queen_released: 'good',
   ransom_paid: 'coin',
   envoy_insult: 'war',
+  army_threat: 'war',
   trade_raided: 'battle',
   raid_repelled: 'good',
 }
 
 // News that goes against the player: kept under the journal's "Önemli" tab.
-const HURTFUL = new Set(['war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
+const HURTFUL = new Set(['army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
 function noticeHurts(n: Notice, me: string | undefined) {
   if (HURTFUL.has(n.kind)) return true
   const p = n.payload as { kind?: string; accepted?: boolean; report?: { losses?: Record<string, number> } }
@@ -908,7 +909,7 @@ function App({
         battle: a.status === 'battle',
         selected: a.id === armyFocus,
         // Own armies by their exact size; others by what everyone can see of them.
-        figures: a.soldiers !== null ? Math.min(12, Math.max(2, Math.ceil(a.soldiers / 3))) : (a.figures ?? 3),
+        figures: a.soldiers !== null ? Math.min(20, Math.max(2, Math.ceil(a.soldiers / 2))) : (a.figures ?? 3),
         catapult: a.units ? (a.units.catapult ?? 0) > 0 : !!a.catapults,
       })),
       layer.battles
@@ -1170,6 +1171,10 @@ function App({
           online={online}
           rivals={rivals}
           now={now}
+          from={(() => {
+            const army = layer.armies.find((a) => a.id === aiming)
+            return army ? armyAt(army, now) : null
+          })()}
           onSend={(tile) => sendArmy(aiming, tile)}
           onHome={() => {
             act({ type: 'army', army: aiming, order: { kind: 'home' } })

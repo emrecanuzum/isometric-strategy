@@ -46,9 +46,9 @@ const roofsOf = (color: string | null) => (KINGDOM_COLORS[color as KingdomColor]
 // a catapult on wheels at the back when the army has one; two frames of the march.
 export function squad(color: string | null, frame: number, figures = 3): Sprite {
   const tunic = roofsOf(color)
-  const canvas = new Canvas(46, 50)
-  const base = 46
-  const ox = 18
+  const canvas = new Canvas(52, 58)
+  const base = 56
+  const ox = 22
   // The march in four frames: a stride one way, feet together (body up a pixel), a stride the other way, together.
   const STRIDE = [1, 0, -1, 0]
   const LIFT = [0, 1, 0, 1]
@@ -77,26 +77,27 @@ export function squad(color: string | null, frame: number, figures = 3): Sprite 
   }
   // The banner stands behind the rear soldier.
   const bx = ox + 4
-  for (let y = base - 42; y < base - 18; y++) canvas.set(bx, y, TIMBER[1])
+  for (let y = base - 50; y < base - 26; y++) canvas.set(bx, y, TIMBER[1])
   for (let y = 0; y < 7; y++) {
     for (let x = 1; x <= 9; x++) {
       const wave = Math.round(Math.sin(x * 0.7 + frame * 1.5) * 0.8)
       if (x > 7 && (y === 0 || y === 6)) continue
-      canvas.set(bx + x, base - 42 + y + wave, y === 0 ? tunic[5] : tunic[y < 3 ? 3 : 2])
+      canvas.set(bx + x, base - 50 + y + wave, y === 0 ? tunic[5] : tunic[y < 3 ? 3 : 2])
     }
   }
   // Ranks of three, back to front, each a little lower and to the side on the iso grid.
   const spots: [number, number][] = []
   for (let i = 0; i < figures; i++) {
-    const rank = Math.floor(i / 3)
-    const file = i % 3
-    spots.push([ox + file * 5 - rank * 4, base - 16 + rank * 4 + file * 2])
+    // Ranks of four, packed close so a big army reads as a crowd.
+    const rank = Math.floor(i / 4)
+    const file = i % 4
+    spots.push([ox + file * 4 - rank * 4 - 2, base - 22 + rank * 3 + file * 2])
   }
   spots.sort((a, b) => a[1] - b[1])
   // Neighbours out of step with each other, so the column ripples as it marches.
   spots.forEach(([x, y], i) => soldier(x, y, frame + (i % 2) * 2))
-  shadow(canvas, ox + 2, base - 8, 6 + Math.ceil(figures / 3) * 3)
-  return canvas.sprite(ox + 4, base - 6, 0)
+  shadow(canvas, ox, base - 12, 8 + Math.ceil(figures / 4) * 3)
+  return canvas.sprite(ox + 2, base - 10, 0)
 }
 
 // A catapult on its wheeled bed, facing right (mirrored to face left): the throwing arm leans back over the bed and the

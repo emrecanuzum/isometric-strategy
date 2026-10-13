@@ -3365,11 +3365,11 @@ kbd {
   margin-right: 0;
 }
 
-/* Quick targets for an army being sent somewhere, down the right side. */
+/* Quick targets for an army being sent somewhere, down the left side (where the menus open). */
 .war-targets {
   position: fixed;
-  right: var(--gap);
-  top: calc(var(--gap) + 120px);
+  left: var(--gap);
+  top: 110px;
   z-index: 6;
   display: grid;
   gap: calc(var(--px) * 3);
