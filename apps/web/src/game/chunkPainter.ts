@@ -1,0 +1,729 @@
+import { Feature, MAX_HEIGHT, TILE_HEIGHT, TILE_WIDTH, Terrain, balance, hash, heightAt, valueNoise } from '@game/shared'
+import type { Point, World } from '@game/shared'
+import { BAYER, SPRITES, ramp } from './sprites'
+import type { Sprite } from './sprites'
+
+// This module has no DOM dependency: it runs in a worker (and in headless previews) and returns raw pixels.
+
+// Screen pixels kept above a chunk for raised ground and for trees and buildings on its top rows.
+export const CHUNK_PAD = Math.ceil((MAX_HEIGHT + 64) / 32) * 32
+// Tiles around a chunk whose sprites can reach into it.
+const SPRITE_MARGIN = 3
+
+export interface ChunkImage {
+  width: number
+  height: number
+  data: Uint8ClampedArray<ArrayBuffer>
+}
+
+export interface PaintContext {
+  world: World
+  // Per tile: how much the slope faces the light (upper left of the screen).
+  lit: Float32Array
+  // Per tile: broad patches of tone variation.
+  patch: Float32Array
+  // Per tile: distance to the nearest trade route center line, in tiles.
+  road: Float32Array
+  bridges: Bridge[]
+}
+
+// A straight wooden bridge carrying a route over water, from bank point `a` to bank point `b`.
+export interface Bridge {
+  // The stretch of the resampled route (see resampleRoute) the bridge replaces.
+  from: number
+  to: number
+  ax: number
+  ay: number
+  bx: number
+  by: number
+  // Ground height at each end, where the deck meets the bank.
+  ha: number
+  hb: number
+}
+
+const GRASS = ramp(0x16382c, 0x1c4433, 0x24523a, 0x2f663d, 0x3d7c40, 0x4f9142, 0x66a546, 0x80b74e, 0x9cc85a, 0xb9d86e)
+const SAND = ramp(0x8a6844, 0xa98250, 0xc39b5e, 0xd6b471, 0xe4c988, 0xefdba3, 0xf7eac0)
+const ROCK = ramp(0x2e2c3d, 0x423f50, 0x595563, 0x726d78, 0x8c878c, 0xa6a19f, 0xbfbab1, 0xd8d3c5)
+const SNOW = ramp(0x7f93bd, 0xa7b8d8, 0xc9d6ea, 0xe6edf7, 0xffffff)
+const WATER = ramp(0x8fd6dc, 0x6cc0d4, 0x4fa6cc, 0x3c8cc0, 0x2f73b0, 0x275c9c, 0x214884, 0x1b376b)
+const FOAM = ramp(0xeaf8fa)
+const SWAMP = ramp(0x2a3b36, 0x36493c, 0x445a43, 0x556c4a, 0x687e52, 0x7c905c)
+const POOL = ramp(0x22343f, 0x2a4450, 0x35565c)
+const BEACH = ramp(0xc7a970, 0xdcc388, 0xecd9a2, 0xf6e8bd)
+const ROAD = ramp(0x5e4630, 0x7c5f3f, 0x9b7c52, 0xb89866, 0xcdb07e)
+const WOOD = ramp(0x3a2619, 0x5a3d28, 0x7a5535, 0x9c7245, 0xb98d58)
+const EARTH = ramp(0x2a1f1c, 0x3d2c24, 0x54392b)
+const FLOWERS = [ramp(0xf6f3e4), ramp(0xf2cf4a), ramp(0xe2798f), ramp(0xb48be0)]
+
+const ROAD_HALF = 0.62
+// Bridge shape: deck lift above the banks (pixels), half width (tiles), deck thickness and railing height (pixels),
+// length of the ramp onto each bank and the spacing of the piers (tiles).
+const BRIDGE_LIFT = 12
+const BRIDGE_HALF = 0.55
+const DECK_THICK = 3
+const RAIL_HEIGHT = 7
+const BRIDGE_RAMP = 1.2
+const PIER_SPACING = 1.5
+const NO_GROUND = -32768
+// Light climbs this many pixels per tile diagonal; shadows are searched this many diagonals toward the light.
+const SHADOW_RISE = 30
+const SHADOW_STEPS = Math.ceil(MAX_HEIGHT / SHADOW_RISE)
+
+const smoothstep = (a: number, b: number, v: number) => {
+  const t = Math.min(1, Math.max(0, (v - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
+
+export function preparePaint(world: World): PaintContext {
+  const { size, height, seed } = world
+  const lit = new Float32Array(size * size)
+  const patch = new Float32Array(size * size)
+  const at = (x: number, y: number) => height[Math.min(size - 1, Math.max(0, y)) * size + Math.min(size - 1, Math.max(0, x))]
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const hx = (at(x + 1, y) - at(x - 1, y)) / 2
+      const hy = (at(x, y + 1) - at(x, y - 1)) / 2
+      // Slope toward screen right and toward the viewer, in height pixels per ground pixel.
+      let light = ((hx - hy) / TILE_WIDTH) * 0.85 + ((hx + hy) / TILE_WIDTH) * 0.2
+      // Cast shadow: higher ground toward the light (screen left) blocks it.
+      let blocked = 0
+      for (let step = 1; step <= SHADOW_STEPS; step++) {
+        blocked = Math.max(blocked, at(x - step, y + step) - at(x, y) - step * SHADOW_RISE)
+      }
+      light -= Math.min(1, blocked / 24) * 0.2
+      lit[y * size + x] = light
+      // Sampled on a rotated lattice so the patches do not line up with the tile grid.
+      patch[y * size + x] = valueNoise((x * 0.83 + y * 0.56) * 0.13, (y * 0.83 - x * 0.56) * 0.13, seed + 4)
+    }
+  }
+
+  const road = new Float32Array(size * size).fill(Infinity)
+  const reach = 2
+  const bridges: Bridge[] = []
+  for (const route of world.roads) {
+    const line = roundRoute(route.points)
+    bridges.push(...findBridges(world, resampleRoute(line)))
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1]
+      const b = line[i]
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const lengthSq = dx * dx + dy * dy || 1
+      const xEnd = Math.min(size - 1, Math.floor(Math.max(a.x, b.x)) + reach)
+      const yEnd = Math.min(size - 1, Math.floor(Math.max(a.y, b.y)) + reach)
+      for (let y = Math.max(0, Math.floor(Math.min(a.y, b.y)) - reach); y <= yEnd; y++) {
+        for (let x = Math.max(0, Math.floor(Math.min(a.x, b.x)) - reach); x <= xEnd; x++) {
+          const t = Math.min(1, Math.max(0, ((x + 0.5 - a.x) * dx + (y + 0.5 - a.y) * dy) / lengthSq))
+          const d = Math.hypot(x + 0.5 - a.x - dx * t, y + 0.5 - a.y - dy * t)
+          if (d < road[y * size + x]) road[y * size + x] = d
+        }
+      }
+    }
+  }
+  for (let i = 0; i < road.length; i++) if (road[i] === Infinity) road[i] = reach + 1
+  return { world, lit, patch, road, bridges }
+}
+
+// How a biome border looks around a point: finely dithered, in blotches and islands, or in frayed fibres. The
+// threshold a biome's weight must beat there is shared by the painter (which adds per-pixel dither) and by sprite
+// placement, so trees never stand on a patch painted as rock.
+export function borderStyle(world: World, rx: number, ry: number) {
+  const { seed } = world
+  const fray = valueNoise(rx * 1.3, ry * 1.3, seed + 13) - 0.5
+  const patch = valueNoise(rx * 0.35, ry * 0.35, seed + 18) - 0.5
+  const style = valueNoise(rx * 0.035, ry * 0.035, seed + 17)
+  const fine = smoothstep(0.55, 0.72, style)
+  const blotch = 1 - smoothstep(0.28, 0.45, style)
+  const fibre = 1 - fine - blotch
+  // Kept off 0 and 1, so ground far from a border never flips to the other biome.
+  const threshold = Math.min(0.9, Math.max(0.1, 0.5 + patch * 1.3 * blotch + fray * 1.5 * fibre))
+  return { fray, patch, fine, blotch, threshold }
+}
+
+// How far a ground point lies into bare rock, 0..1, before the per-pixel threshold that dithers the border.
+// `rx`, `ry` are the tile position on the rotated lattice that keeps noise off the tile grid.
+export function rockWeight(world: World, e: number, rx: number, ry: number) {
+  const meander = valueNoise(rx * 0.09, ry * 0.09, world.seed + 12) - 0.5
+  return smoothstep(-0.011, 0.005, e + meander * 0.02 - world.levels.mountain)
+}
+
+// Bilinear sample of a per-tile field; a tile's own value sits at its center.
+function sample(world: World, field: Float32Array, x: number, y: number) {
+  const { size } = world
+  const fx = Math.min(size - 1.001, Math.max(0, x - 0.5))
+  const fy = Math.min(size - 1.001, Math.max(0, y - 0.5))
+  const ix = Math.floor(fx)
+  const iy = Math.floor(fy)
+  const tx = fx - ix
+  const ty = fy - iy
+  const i = iy * size + ix
+  const top = field[i] * (1 - tx) + field[i + 1] * tx
+  return top * (1 - ty) + (field[i + size] * (1 - tx) + field[i + size + 1] * tx) * ty
+}
+
+// Corner cutting rounds the bends of a route, the same way for the painted road and anything travelling on it.
+export function roundRoute(points: Point[]): Point[] {
+  let line = points
+  for (let pass = 0; pass < 2 && line.length > 2; pass++) {
+    const smooth = [line[0]]
+    for (let i = 0; i < line.length - 1; i++) {
+      const a = line[i]
+      const b = line[i + 1]
+      smooth.push({ x: a.x * 0.75 + b.x * 0.25, y: a.y * 0.75 + b.y * 0.25 })
+      smooth.push({ x: a.x * 0.25 + b.x * 0.75, y: a.y * 0.25 + b.y * 0.75 })
+    }
+    smooth.push(line[line.length - 1])
+    line = smooth
+  }
+  return line
+}
+
+// Points along a rounded route about ROUTE_STEP tiles apart.
+export const ROUTE_STEP = 0.25
+export function resampleRoute(line: Point[]): Point[] {
+  const points: Point[] = []
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1]
+    const b = line[i]
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / ROUTE_STEP))
+    for (let s = 0; s < n; s++) points.push({ x: a.x + ((b.x - a.x) * s) / n, y: a.y + ((b.y - a.y) * s) / n })
+  }
+  points.push(line[line.length - 1])
+  return points
+}
+
+// Height of a bridge's deck `t` of the way from its first end to its second.
+export function deckHeight(bridge: Bridge, t: number) {
+  const length = Math.hypot(bridge.bx - bridge.ax, bridge.by - bridge.ay)
+  const rise = smoothstep(0, 1, Math.min(t * length, (1 - t) * length) / BRIDGE_RAMP)
+  return bridge.ha + (bridge.hb - bridge.ha) * t + BRIDGE_LIFT * rise
+}
+
+// Each stretch of a resampled route over water becomes a straight bridge reaching a little onto both banks.
+export function findBridges(world: World, points: Point[]): Bridge[] {
+  const wet = points.map((p) => sample(world, world.elevation, p.x, p.y) < world.levels.lake)
+  const bridges: Bridge[] = []
+  const landing = Math.round(0.75 / ROUTE_STEP)
+  for (let i = 0; i < points.length; i++) {
+    if (!wet[i]) continue
+    let end = i
+    while (end + 1 < points.length && wet[end + 1]) end++
+    const from = Math.max(0, i - landing)
+    const to = Math.min(points.length - 1, end + landing)
+    const a = points[from]
+    const b = points[to]
+    bridges.push({
+      from,
+      to,
+      ax: a.x,
+      ay: a.y,
+      bx: b.x,
+      by: b.y,
+      ha: heightAt(world, a.x, a.y),
+      hb: heightAt(world, b.x, b.y),
+    })
+    i = end
+  }
+  return bridges
+}
+
+interface Placed {
+  sprite: Sprite
+  // Canvas position of the anchor and the ground row it stands on.
+  x: number
+  y: number
+  row: number
+  own: boolean
+}
+
+// Paints one chunk at `k` texture pixels per screen pixel. Each ground point is colored from the continuous
+// elevation and moisture fields and drawn lifted by its height, back to front, so nearer ground covers
+// farther ground. Sprites are then composited against the depth of the ground they stand behind.
+export function paintChunk(context: PaintContext, cx: number, cy: number, k: number): ChunkImage {
+  const { world, lit, patch, road, bridges } = context
+  const { size, seed, elevation, moisture, height, levels } = world
+  const S = balance.map.chunkSize
+  const chunkCount = size / S
+  const W = S * TILE_WIDTH
+  const H = S * TILE_HEIGHT
+  const width = W * k
+  const rows = H * k
+  const pad = CHUNK_PAD * k
+  const canvasHeight = rows + pad
+  const out = new Uint32Array(width * canvasHeight)
+  const depth = new Int16Array(width * canvasHeight).fill(NO_GROUND)
+
+  const x0 = cx * S
+  const y0 = cy * S
+  // Position of the canvas in world pixels at this scale; textures and dither stay continuous across chunks.
+  const gx0 = ((cx - cy) * S * (TILE_WIDTH / 2) - W / 2) * k
+  const gy0 = (cx + cy) * S * (TILE_HEIGHT / 2) * k - pad
+  const relief = levels.mountain - levels.lake
+
+  for (let px = 0; px < width; px++) {
+    const sx = (px + 0.5) / k - W / 2
+    const a = sx / (TILE_WIDTH / 2)
+    const inset = Math.abs(sx) / 2
+    const first = Math.max(0, Math.ceil(inset * k - 0.5))
+    const last = Math.min(rows - 1, Math.ceil((H - inset) * k - 0.5) - 1)
+    const gx = gx0 + px
+    let previous = 0
+
+    for (let row = first - 1; row <= last; row++) {
+      const b = (row + 0.5) / k / (TILE_HEIGHT / 2)
+      const wx = x0 + (a + b) / 2
+      const wy = y0 + (b - a) / 2
+
+      // Bilinear weights, with each tile's own value at the tile center.
+      const fx = Math.min(size - 1.001, Math.max(0, wx - 0.5))
+      const fy = Math.min(size - 1.001, Math.max(0, wy - 0.5))
+      const ix = Math.floor(fx)
+      const iy = Math.floor(fy)
+      const tx = fx - ix
+      const ty = fy - iy
+      const i00 = iy * size + ix
+      const i10 = i00 + size
+      const w00 = (1 - tx) * (1 - ty)
+      const w01 = tx * (1 - ty)
+      const w10 = (1 - tx) * ty
+      const w11 = tx * ty
+
+      const h = height[i00] * w00 + height[i00 + 1] * w01 + height[i10] * w10 + height[i10 + 1] * w11
+      const e = elevation[i00] * w00 + elevation[i00 + 1] * w01 + elevation[i10] * w10 + elevation[i10 + 1] * w11
+      const way = road[i00] * w00 + road[i00 + 1] * w01 + road[i10] * w10 + road[i10 + 1] * w11
+      const depthBelow = levels.lake - e
+
+      const y = row + pad - Math.round(h * k)
+      if (row < first) {
+        previous = y
+        continue
+      }
+      const gy = gy0 + y
+      const dither = BAYER[(gx & 3) | ((gy & 3) << 2)] - 0.5
+      const speck = hash(gx, gy, seed + 6)
+
+      const rx = wx * 0.83 + wy * 0.56
+      const ry = wy * 0.83 - wx * 0.56
+      const mid = valueNoise(rx * 0.45, ry * 0.45, seed + 3) - 0.5
+      const broad = patch[i00] * w00 + patch[i00 + 1] * w01 + patch[i10] * w10 + patch[i10 + 1] * w11 - 0.5
+      const light = lit[i00] * w00 + lit[i00 + 1] * w01 + lit[i10] * w10 + lit[i10 + 1] * w11
+
+      let colors: Uint32Array
+      let tone: number
+      let spread = 0.4
+      if (depthBelow > 0) {
+        colors = WATER
+        tone = Math.min(1, depthBelow / 0.03) * 7
+        spread = 0.7
+        if (depthBelow < 0.0014 + mid * 0.0012) {
+          colors = FOAM
+        } else if (depthBelow > 0.004 && depthBelow < 0.0052 && mid > 0.08) {
+          tone -= 1.5
+        } else {
+          // Glints: short horizontal dashes scattered over the surface.
+          const dash = Math.floor((gx + Math.floor(hash(gy, 1, seed + 5) * 9)) / 9)
+          if (hash(dash, gy, seed + 5) > 0.965 && (gx + Math.floor(hash(gy, 1, seed + 5) * 9)) % 9 < 4) tone -= 1.6
+        }
+      } else if (way < ROAD_HALF + dither * 0.06) {
+        colors = ROAD
+        tone = way > ROAD_HALF - 0.13 ? 0.6 : 2.6 + broad * 1.5 + (speck > 0.9 ? 1 : speck < 0.12 ? -1 : 0)
+        tone += light * 6
+        spread = 0.3
+      } else {
+        const land = -depthBelow
+        const m = moisture[i00] * w00 + moisture[i00 + 1] * w01 + moisture[i10] * w10 + moisture[i10 + 1] * w11
+        const wobble = mid * 0.012 + broad * 0.012
+        const grain = speck > 0.92 ? -1 : speck < 0.07 ? 1 : 0
+        // Biomes meet over a band. Each biome has a continuous weight, and a pixel shows the neighbouring ground
+        // where that weight beats a per-pixel threshold. How the threshold varies changes from stretch to stretch
+        // of a border: fine dithering, blotches and islands, or frayed fibres.
+        const { fray, patch, fine, blotch, threshold } = borderStyle(world, rx, ry)
+        const clump = hash(gx >> 1, gy >> 1, seed + 14)
+        const pick = Math.min(0.97, Math.max(0.03, threshold + (dither - 0.5) * (0.15 + 0.45 * fine) + (clump - 0.5) * 0.12))
+        // The weights rise over a narrow band (a few tiles) and their borders wander with broad noise; where a
+        // field changes slowly a wide band would smear into a large dithered area.
+        const drift = valueNoise(rx * 0.09, ry * 0.09, seed + 19) - 0.5
+        const lowland = 1 - smoothstep(-0.01, 0.006, e + mid * 0.004 + drift * 0.02 - levels.swampMaxElevation)
+        const rockW = rockWeight(world, e, rx, ry)
+        const swampW = smoothstep(-0.014, 0.006, m + wobble + drift * 0.025 - levels.swamp) * lowland
+        const dryW = smoothstep(-0.01, 0.01, levels.desert - (m + wobble + drift * 0.025))
+        // Wide, smooth versions for tinting the ground and scattering stones, mud and sand ahead of a border.
+        const rockNear = smoothstep(-0.03, 0, e - levels.mountain)
+        const marsh = smoothstep(levels.swamp - 0.03, levels.swamp, m) * lowland
+        const parched = 1 - smoothstep(levels.desert - 0.03, levels.desert + 0.03, m)
+        const wooded = smoothstep(levels.forest - 0.045, levels.forest + 0.03, m + wobble + fray * 0.01)
+        const shore = 0.0045 + mid * 0.002 + patch * 0.003 * blotch + dither * 0.0006
+        // Tufts and stones of one ground left on the other near their border.
+        const tuft = (weight: number) => weight - pick < 0.12 && clump < 0.32
+        const speckOf = (weight: number) => weight > 0.35 && clump > 1 - (weight - 0.35) * 0.12
+        if (rockW > pick && !tuft(rockW)) {
+          if (h + mid * 30 + light * 40 + dither * 6 > balance.world.snowHeight) {
+            colors = SNOW
+            tone = 2.4 + light * 5 + mid * 1.2
+          } else {
+            colors = ROCK
+            // Strata follow the height contours.
+            const strata = Math.abs(light) > 0.07 && Math.sin(h * 0.8 + mid * 4) > 0.72 ? -1 : 0
+            // Shade is limited so deep shadow keeps its texture instead of flattening into one dark tone.
+            tone = Math.max(1.2, 3.4 + Math.max(-0.3, light) * 5.5 + mid * 0.8 + strata + grain * 0.8)
+            spread = 0.5
+          }
+        } else if (land < shore) {
+          colors = BEACH
+          tone = 1 + (land / 0.0045) * 2 + grain * 0.6
+          // Grass creeps onto the upper beach.
+          if (land > shore * 0.65 && clump < 0.22 && dryW < 0.5) {
+            colors = GRASS
+            tone = 5 + light * 6
+          }
+        } else if (swampW > pick && !tuft(swampW)) {
+          const pool = -0.14 + (dither - 0.5) * 0.025
+          if (mid < pool && swampW > pick + 0.15) {
+            colors = POOL
+            tone = 1 + broad * 2
+          } else {
+            colors = SWAMP
+            tone = 2.6 + broad * 3 + mid * 3 + grain
+            // A ring of dark mud around the pools.
+            if (mid < pool + 0.04 && swampW > pick + 0.1) tone = 0.8 + broad * 2
+          }
+        } else if (dryW > pick && !tuft(dryW)) {
+          colors = SAND
+          tone = 3.3 + Math.sin(wx * 0.9 + wy * 0.5 + broad * 9) * 0.8 + broad * 2 + light * 7 + grain * 0.7
+        } else {
+          colors = GRASS
+          // The forest floor darkens in step with the woods, unevenly where they begin.
+          const canopy = wooded > pick ? 1 : 0
+          tone = 5.3 + broad * 2.6 + mid * 1.1 + light * 7 + (land / relief) * 0.9 + parched * 2
+          tone -= wooded * 1.8 + canopy * wooded * 0.9 + rockNear * 0.9 + marsh * 0.9
+          // Tufts are two pixels tall; meadows carry a few flowers.
+          tone += hash(gx, gy >> 1, seed + 7) > 0.9 ? -1 : speck < 0.05 ? 1 : 0
+          if (wooded < 0.3 && dryW < 0.3 && broad > 0.04 && hash(gx >> 1, gy >> 1, seed + 8) > 0.9975) {
+            colors = FLOWERS[Math.floor(hash(gx >> 6, gy >> 5, seed + 9) * FLOWERS.length)]
+          }
+          // Stones below the rock, mud near the swamp, bare sand toward the desert.
+          if (speckOf(Math.max(rockW, rockNear))) {
+            colors = ROCK
+            tone = 4 + light * 5 + (speck > 0.5 ? 1 : 0)
+          } else if (speckOf(Math.max(swampW, marsh))) {
+            colors = SWAMP
+            tone = 1 + broad * 2
+          } else if (speckOf(Math.max(dryW, parched))) {
+            colors = SAND
+            tone = 3 + light * 6
+          }
+        }
+      }
+
+      const top = y > previous + 1 ? previous + 1 : y
+      for (let yy = top; yy <= y; yy++) {
+        const d = yy === y ? dither : BAYER[(gx & 3) | (((gy0 + yy) & 3) << 2)] - 0.5
+        const index = Math.floor(tone + 0.5 + d * spread)
+        out[yy * width + px] = colors[index < 0 ? 0 : index >= colors.length ? colors.length - 1 : index]
+        depth[yy * width + px] = row
+      }
+      previous = y
+    }
+
+    // The world's front edges show the earth under the raised ground.
+    const frontEdge = sx > 0 ? cx === chunkCount - 1 : cy === chunkCount - 1
+    if (frontEdge && last >= first) {
+      for (let yy = previous + 1; yy <= last + pad; yy++) {
+        out[yy * width + px] = EARTH[yy - previous < 3 * k ? 0 : (gx & 7) === 0 ? 0 : sx > 0 ? 1 : 2]
+      }
+    }
+  }
+
+  for (const bridge of bridges) paintBridge(world, bridge, out, depth, x0, y0, k)
+
+  const data = new Uint8ClampedArray(out.buffer)
+  if (k < 0.25) return { width, height: canvasHeight, data }
+
+  // Sprites: gathered from this chunk and a margin around it, so shapes crossing a chunk border match up.
+  const placed: Placed[] = []
+  const place = (sprite: Sprite, tx: number, ty: number, own: boolean) => {
+    const u = tx - x0
+    const v = ty - y0
+    const row = Math.round((u + v) * (TILE_HEIGHT / 2) * k)
+    placed.push({
+      sprite,
+      x: Math.round(((u - v) * (TILE_WIDTH / 2) + W / 2) * k),
+      y: row + pad - Math.round(heightAt(world, tx, ty) * k),
+      row,
+      own,
+    })
+  }
+  const clear = (x: number, y: number) =>
+    [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => {
+      const nx = Math.min(size - 1, Math.max(0, x + dx))
+      const ny = Math.min(size - 1, Math.max(0, y + dy))
+      return world.feature[ny * size + nx] === Feature.None
+    })
+  const choose = <T>(list: T[], r: number) => list[Math.floor(r * list.length)]
+  const xEnd = Math.min(size, x0 + S + SPRITE_MARGIN)
+  const yEnd = Math.min(size, y0 + S + SPRITE_MARGIN)
+  for (let y = Math.max(0, y0 - SPRITE_MARGIN); y < yEnd; y++) {
+    for (let x = Math.max(0, x0 - SPRITE_MARGIN); x < xEnd; x++) {
+      const i = y * size + x
+      const own = x >= x0 && y >= y0 && x < x0 + S && y < y0 + S
+      const terrain = world.terrain[i]
+      if (terrain === Terrain.Lake || terrain === Terrain.River || !clear(x, y)) continue
+      const spot = (n: number) =>
+        [x + 0.15 + hash(x, y, seed + 21 + n) * 0.7, y + 0.15 + hash(x, y, seed + 31 + n) * 0.7] as const
+      const roll = (n: number) => hash(x, y, seed + 11 + n)
+      const kind = hash(x, y, seed + 41)
+      const variant = hash(x, y, seed + 43)
+      const upland = (elevation[i] - levels.lake) / relief
+      // Woods thin out over a band of moisture with ragged edges, so the forest has no hard border.
+      const edge = (valueNoise(x * 0.15, y * 0.15, seed + 49) - 0.5) * 0.04
+      const woods = smoothstep(levels.forest - 0.05, levels.forest + 0.03, moisture[i] + edge)
+      const tree = (n: number) => {
+        const conifer = hash(x, y, seed + 45 + n) < upland * 1.3 - 0.25
+        place(choose(conifer ? SPRITES.pine : SPRITES.leaf, hash(x, y, seed + 47 + n)), ...spot(n), own)
+      }
+      // Bare rock, wherever the painted ground shows it, carries rock formations and no trees.
+      const climb = (elevation[i] - levels.mountain) / (levels.snow - levels.mountain)
+      const rx = (x + 0.5) * 0.83 + (y + 0.5) * 0.56
+      const ry = (y + 0.5) * 0.83 - (x + 0.5) * 0.56
+      const rockW = rockWeight(world, elevation[i], rx, ry)
+      if (terrain === Terrain.Mountain || rockW > borderStyle(world, rx, ry).threshold + (roll(5) - 0.5) * 0.1) {
+        const r = roll(0)
+        const high = heightAt(world, x + 0.5, y + 0.5) > balance.world.snowHeight - 20
+        const foot = Math.max(0, 1 - Math.max(0, climb) / 0.35)
+        if (high) {
+          if (r < 0.035) place(choose(SPRITES.snowCrag, variant), ...spot(0), own)
+        } else if (r < 0.04) place(choose(SPRITES.boulder, variant), ...spot(0), own)
+        else if (r < 0.07) place(choose(SPRITES.scree, variant), ...spot(0), own)
+        else if (r < 0.085) place(choose(SPRITES.slab, variant), ...spot(0), own)
+        else if (r < 0.095 + Math.max(0, climb) * 0.04) place(choose(SPRITES.crag, variant), ...spot(0), own)
+        else if (r < 0.105 + Math.max(0, climb) * 0.04) place(choose(SPRITES.tor, variant), ...spot(0), own)
+        // Moss and alpine grass hold on low down.
+        else if (r < 0.105 + Math.max(0, climb) * 0.04 + foot * 0.14) place(choose(SPRITES.tuft, kind), ...spot(1), own)
+        continue
+      }
+      // Fewer trees toward bare rock and dry ground.
+      const dry = 1 - smoothstep(levels.desert - 0.025, levels.desert + 0.02, moisture[i] + edge)
+      const thin = (1 - rockW) ** 2 * (1 - dry)
+      if (terrain === Terrain.Forest || terrain === Terrain.Grass) {
+        let trees = 0
+        for (let n = 0; n < 2; n++) {
+          if (roll(n) < ((n === 0 ? 0.02 : 0) + woods * 0.8) * thin) {
+            tree(n)
+            trees++
+          }
+        }
+        if (trees === 0 && roll(2) < 0.04 * (1 - woods) + 0.03 * woods * (1 - woods) * 4) {
+          place(choose(SPRITES.bush, variant), ...spot(2), own)
+        }
+      } else if (terrain === Terrain.Swamp) {
+        // Living trees reach a little way into the swamp from the woods around it.
+        if (roll(2) < woods * 0.5 * (1 - smoothstep(levels.swamp, levels.swamp + 0.025, moisture[i] + edge))) tree(2)
+        else if (roll(0) < 0.12) place(choose(SPRITES.dead, variant), ...spot(0), own)
+        if (roll(1) < 0.3) place(choose(SPRITES.reeds, kind), ...spot(1), own)
+      } else if (terrain === Terrain.Desert) {
+        if (roll(0) < 0.025) place(choose(SPRITES.boulder, variant), ...spot(0), own)
+        else if (roll(0) < 0.035) place(choose(SPRITES.dead, variant), ...spot(0), own)
+      }
+    }
+  }
+  for (const p of world.inns) {
+    if (p.x < x0 - SPRITE_MARGIN || p.y < y0 - SPRITE_MARGIN || p.x >= xEnd || p.y >= yEnd) continue
+    const own = p.x >= x0 && p.y >= y0 && p.x < x0 + S && p.y < y0 + S
+    // Stands on the footprint's front corner, at the height of its center.
+    const u = p.x + 2 - x0
+    const v = p.y + 2 - y0
+    const row = Math.round((u + v) * (TILE_HEIGHT / 2) * k)
+    placed.push({
+      sprite: SPRITES.inn,
+      x: Math.round(((u - v) * (TILE_WIDTH / 2) + W / 2) * k),
+      y: row + pad - Math.round(heightAt(world, p.x + 1, p.y + 1) * k),
+      row,
+      own,
+    })
+  }
+  placed.sort((p, q) => p.row - q.row || p.x - q.x)
+
+  // Shadows darken the ground once, however many of them overlap.
+  const shaded = new Uint8Array(width * canvasHeight)
+  for (const { sprite, x, y, row } of placed) {
+    if (sprite.shadow === 0) continue
+    const rx = sprite.shadow * k
+    const ry = rx * 0.5
+    const ox = x + Math.round(rx * 0.45)
+    for (let dy = -Math.ceil(ry); dy <= ry; dy++) {
+      const yy = y + dy
+      if (yy < 0 || yy >= canvasHeight) continue
+      const half = rx * Math.sqrt(Math.max(0, 1 - (dy / ry) ** 2))
+      for (let xx = Math.max(0, Math.ceil(ox - half)); xx <= Math.min(width - 1, ox + half); xx++) {
+        const o = yy * width + xx
+        if (shaded[o] || depth[o] === NO_GROUND || Math.abs(depth[o] - row) > ry + 3) continue
+        shaded[o] = 1
+        data[o * 4] *= 0.66
+        data[o * 4 + 1] *= 0.72
+        data[o * 4 + 2] *= 0.8
+      }
+    }
+  }
+
+  // Marks pixels outside this chunk's ground that one of its own sprites covered.
+  const covered = shaded.fill(0)
+  const step = 1 / k
+  for (const { sprite, x, y, row, own } of placed) {
+    const w = Math.ceil(sprite.width * k)
+    const h = Math.ceil(sprite.height * k)
+    const left = x - Math.round(sprite.anchorX * k)
+    const top = y - Math.round(sprite.anchorY * k)
+    for (let dy = 0; dy < h; dy++) {
+      const yy = top + dy
+      if (yy < 0 || yy >= canvasHeight) continue
+      const source = Math.min(sprite.height - 1, Math.floor((dy + 0.5) * step)) * sprite.width
+      for (let dx = 0; dx < w; dx++) {
+        const xx = left + dx
+        if (xx < 0 || xx >= width) continue
+        const color = sprite.pixels[source + Math.min(sprite.width - 1, Math.floor((dx + 0.5) * step))]
+        if (color === 0) continue
+        const o = yy * width + xx
+        if (depth[o] === NO_GROUND) {
+          // Ground of another chunk: that chunk decides, unless our own sprite already stands here.
+          if (!own && !covered[o]) continue
+          covered[o] = 1
+        } else if (depth[o] > row + 2) {
+          continue
+        }
+        out[o] = color
+      }
+    }
+  }
+  return { width, height: canvasHeight, data }
+}
+
+// Draws a bridge as small 3D parts sampled finely enough to cover every pixel. Each sample carries the ground row
+// it stands on, so nearer ground hides the bridge ends and the bridge hides the water and ground behind it.
+function paintBridge(
+  world: World,
+  bridge: Bridge,
+  out: Uint32Array,
+  depth: Int16Array,
+  x0: number,
+  y0: number,
+  k: number,
+) {
+  const { seed } = world
+  const S = balance.map.chunkSize
+  const { ax, ay, bx, by } = bridge
+  const margin = 4
+  if (Math.max(ax, bx) < x0 - margin || Math.min(ax, bx) > x0 + S + margin) return
+  if (Math.max(ay, by) < y0 - margin || Math.min(ay, by) > y0 + S + margin) return
+  const W = S * TILE_WIDTH
+  const width = W * k
+  const pad = CHUNK_PAD * k
+  const canvasHeight = S * TILE_HEIGHT * k + pad
+  const length = Math.hypot(bx - ax, by - ay)
+  const dx = (bx - ax) / length
+  const dy = (by - ay) / length
+  // Across the deck.
+  const nx = -dy
+  const ny = dx
+  const id = Math.floor(ax * 7 + ay * 13)
+
+  const deckAt = (t: number) => deckHeight(bridge, t)
+  // How much a vertical face with outward normal (fx, fy) faces the light from the upper left of the screen.
+  const facing = (fx: number, fy: number) => -fx * 0.6 + fy * 0.8
+
+  const plot = (wx: number, wy: number, z: number, colors: Uint32Array, tone: number) => {
+    const u = wx - x0
+    const v = wy - y0
+    const exact = (u + v) * (TILE_HEIGHT / 2) * k
+    const row = Math.round(exact)
+    const px = Math.round(((u - v) * (TILE_WIDTH / 2) + W / 2) * k)
+    // Rounded once, so neighboring samples never skip a pixel row.
+    const py = Math.round(exact - z * k) + pad
+    if (px < 0 || py < 0 || px >= width || py >= canvasHeight) return
+    const o = py * width + px
+    const own = wx >= x0 && wy >= y0 && wx < x0 + S && wy < y0 + S
+    if (depth[o] === NO_GROUND ? !own : depth[o] > row + 1) return
+    const index = Math.round(tone + (BAYER[(px & 3) | ((py & 3) << 2)] - 0.5) * 0.5)
+    out[o] = colors[index < 0 ? 0 : index >= colors.length ? colors.length - 1 : index]
+    depth[o] = row
+  }
+  // Point on the bridge `t` along it and `s` tiles across it.
+  const at = (t: number, s: number) => [ax + (bx - ax) * t + nx * s, ay + (by - ay) * t + ny * s] as const
+  // Samples per tile and per pixel of height, dense enough to leave no holes at this zoom.
+  const fine = Math.ceil(TILE_WIDTH * k)
+  const dt = 1 / (length * fine)
+  const ds = 1 / fine
+  const dz = 0.5 / k
+
+  // A square post from z0 to z1 centered on (t, s), its sides shaded by the way they face.
+  const post = (t: number, s: number, half: number, z0: number, z1: number, colors: Uint32Array, base: number) => {
+    const [cx, cy] = at(t, s)
+    for (let z = z0; z <= z1; z += dz) {
+      for (let q = -half; q <= half; q += ds) {
+        for (const [fx, fy] of [[dx, dy], [-dx, -dy], [nx, ny], [-nx, -ny]]) {
+          const ex = fx === dx || fx === -dx ? nx : dx
+          const ey = fx === dx || fx === -dx ? ny : dy
+          plot(cx + fx * half + ex * q, cy + fy * half + ey * q, z, colors, base + facing(fx, fy) * 1.4)
+        }
+      }
+    }
+  }
+
+  // Piers: pairs of legs standing in the water, tied together by a beam under the deck.
+  const spans = Math.max(1, Math.round((length - BRIDGE_RAMP * 2) / PIER_SPACING))
+  for (let p = 0; p <= spans; p++) {
+    const t = (BRIDGE_RAMP + ((length - BRIDGE_RAMP * 2) * p) / spans) / length
+    const [px, py] = at(t, 0)
+    if (sample(world, world.elevation, px, py) >= world.levels.lake) continue
+    const top = deckAt(t) - DECK_THICK
+    if (top < BRIDGE_LIFT / 2) continue
+    // Legs stand just outside the deck edges so they show beside it from every side.
+    const leg = BRIDGE_HALF + 0.04
+    for (const side of [-1, 1]) {
+      const [lx, ly] = at(t, side * leg)
+      // A ring of foam where the leg meets the water.
+      for (let a = 0; a < Math.PI * 2; a += ds * 3) plot(lx + Math.cos(a) * 0.13, ly + Math.sin(a) * 0.13, 0, FOAM, 0)
+      post(t, side * leg, 0.065, 0, top + DECK_THICK, WOOD, 1)
+    }
+    for (let s = -leg; s <= leg; s += ds) {
+      for (let z = top - 2; z <= top; z += dz) {
+        const [wx, wy] = at(t, s)
+        plot(wx + dx * 0.06, wy + dy * 0.06, z, WOOD, 0.8)
+        plot(wx - dx * 0.06, wy - dy * 0.06, z, WOOD, 0.8)
+      }
+    }
+  }
+
+  // The deck's edge beams, then its planks.
+  for (let t = 0; t <= 1; t += dt) {
+    const deck = deckAt(t)
+    for (const side of [-1, 1]) {
+      const [wx, wy] = at(t, side * BRIDGE_HALF)
+      for (let z = deck - DECK_THICK; z <= deck; z += dz) plot(wx, wy, z, WOOD, 1.3 + facing(side * nx, side * ny) * 1.4)
+    }
+    const plank = Math.floor(t * length * 5)
+    const gap = (t * length * 5) % 1 < 0.14
+    const grain = hash(plank, id, seed + 61) - 0.5
+    for (let s = -BRIDGE_HALF; s <= BRIDGE_HALF; s += ds) {
+      const [wx, wy] = at(t, s)
+      const edge = Math.abs(s) > BRIDGE_HALF - 0.08
+      plot(wx, wy, deck, WOOD, edge ? 1.6 : gap ? 1.2 : 2.9 + (plank & 1) * 0.5 + grain * 0.8)
+    }
+  }
+
+  // Railings: posts along both edges carrying a hand rail.
+  const posts = Math.max(2, Math.round(length / 0.6))
+  for (const side of [-1, 1]) {
+    const s = side * (BRIDGE_HALF - 0.04)
+    for (let p = 0; p <= posts; p++) {
+      const t = p / posts
+      post(t, s, 0.035, deckAt(t), deckAt(t) + RAIL_HEIGHT, WOOD, 0.6)
+    }
+    for (let t = 0; t <= 1; t += dt) {
+      const [wx, wy] = at(t, s)
+      const deck = deckAt(t)
+      for (let z = deck + RAIL_HEIGHT - 1.5; z <= deck + RAIL_HEIGHT - 0.5; z += dz) plot(wx, wy, z, WOOD, 1)
+      plot(wx, wy, deck + RAIL_HEIGHT, WOOD, 3.6)
+      plot(wx, wy, deck + RAIL_HEIGHT * 0.45, WOOD, 0.4)
+    }
+  }
+}

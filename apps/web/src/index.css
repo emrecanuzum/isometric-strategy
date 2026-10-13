@@ -1,0 +1,62 @@
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #10141a;
+  color: #e6e1d3;
+  font-family: system-ui, sans-serif;
+}
+
+.hud {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  padding: 8px 12px;
+  background: rgb(16 20 26 / 80%);
+  border: 1px solid #3a4250;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+.minimap {
+  position: fixed;
+  right: 64px;
+  bottom: -26px;
+  /* Rotated and squashed so the square tile grid lines up with the isometric view. */
+  transform: scaleY(0.5) rotate(45deg);
+}
+
+.minimap canvas {
+  display: block;
+  border: 2px solid #3a4250;
+  cursor: pointer;
+  image-rendering: pixelated;
+}
+
+.stages {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+}
+
+.stages button {
+  padding: 6px 10px;
+  background: rgb(16 20 26 / 80%);
+  color: inherit;
+  border: 1px solid #3a4250;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.stages button.active {
+  border-color: #f2d16b;
+  color: #f2d16b;
+}

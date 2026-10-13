@@ -1,0 +1,9 @@
+{
+  "parcelTiles": 4,
+  "stageParcels": [8, 12, 16],
+  "startMaxBlockedFraction": 0.05,
+  "startSearchStep": 8,
+  "plotTiles": 2,
+  "plotSearchRadius": 400,
+  "startEdgeMargin": 48
+}

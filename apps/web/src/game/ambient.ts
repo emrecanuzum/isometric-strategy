@@ -1,0 +1,489 @@
+import { Feature, MAX_HEIGHT, TILE_HEIGHT, TILE_WIDTH, Terrain, balance, hash, heightAt } from '@game/shared'
+import type { World } from '@game/shared'
+import { Container, Sprite as PixiSprite } from 'pixi.js'
+import type { Texture } from 'pixi.js'
+import { ROUTE_STEP, resampleRoute } from './chunkPainter'
+import { SPRITES, cloudShapes } from './sprites'
+import type { Sprite } from './sprites'
+import { textureOf } from './textures'
+
+// Ambient life drawn over the painted ground: the current on rivers, animals, birds and clouds. It is purely
+// visual and follows from the clock and the world seed, so every client shows the same scene without storing it.
+
+export interface View {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+// Zoom ranges where each kind of life shows.
+const FLOW_MIN_ZOOM = 1
+const LIFE_MIN_ZOOM = 0.5
+const CLOUD_MAX_ZOOM = 0.25
+// Tiles per side of the buckets things are looked up in by position.
+const CELL = 16
+
+// River current: glints drift downstream for FLOW_LIFE tiles while fading in and out.
+const FLOW_LIFE = 2.5
+const FLOW_SPEED = [0.8, 1.3]
+const FLOW_ALPHA = 0.6
+
+// Birds fly in loose V formations at this height above the ground (pixels), in tiles per second.
+const FLOCKS = 160
+const BIRD_ALTITUDE = 150
+const BIRD_SPEED = [2.2, 3.6]
+
+// Clouds: drawn magnified by CLOUD_SCALE, drifting in pixels per second; opacity at the farthest zoom.
+const CLOUDS = 90
+// How common each cloud type is (cumulus, stratus, cirrus, scattered) and how opaque it looks.
+const CLOUD_TYPES = [
+  { weight: 0.35, alpha: 1 },
+  { weight: 0.2, alpha: 0.85 },
+  { weight: 0.25, alpha: 0.6 },
+  { weight: 0.2, alpha: 0.9 },
+]
+const CLOUD_SCALE = 8
+const CLOUD_DRIFT = [18, 36]
+const CLOUD_ALPHA = 0.38
+
+interface Kind {
+  frames: Sprite[][]
+  // Seconds per rest-and-move cycle, the share of it spent moving, and how far from home it roams (tiles).
+  period: number
+  move: number
+  range: number
+  strides: number
+  // Animals on water float at the water surface.
+  water: boolean
+  allowed: (terrain: number) => boolean
+}
+
+const KINDS: Record<string, Kind> = {
+  deer: {
+    frames: [SPRITES.deer, SPRITES.stag],
+    period: 11,
+    move: 0.3,
+    range: 4,
+    strides: 4,
+    water: false,
+    allowed: (t) => t === Terrain.Grass || t === Terrain.Forest,
+  },
+  hare: {
+    frames: [SPRITES.hare],
+    period: 6,
+    move: 0.25,
+    range: 3,
+    strides: 6,
+    water: false,
+    allowed: (t) => t === Terrain.Grass,
+  },
+  goat: {
+    frames: [SPRITES.goat],
+    period: 12,
+    move: 0.3,
+    range: 3,
+    strides: 5,
+    water: false,
+    allowed: (t) => t === Terrain.Mountain,
+  },
+  duck: {
+    frames: [SPRITES.duck],
+    period: 9,
+    move: 0.5,
+    range: 3,
+    strides: 0,
+    water: true,
+    allowed: (t) => t === Terrain.Lake || t === Terrain.River,
+  },
+  heron: {
+    frames: [SPRITES.heron],
+    period: 14,
+    move: 0.25,
+    range: 2,
+    strides: 3,
+    water: false,
+    allowed: (t) => t === Terrain.Swamp,
+  },
+}
+
+interface Animal {
+  kind: Kind
+  look: Sprite[]
+  frames: Texture[]
+  homeX: number
+  homeY: number
+  id: number
+  offset: number
+}
+
+interface Streak {
+  river: number
+  base: number
+  lateral: number
+  speed: number
+  phase: number
+  texture: Texture
+}
+
+interface RiverTrack {
+  x: Float32Array
+  y: Float32Array
+  // Points hidden behind nearer raised ground or under a bridge.
+  hidden: Uint8Array
+  length: number
+}
+
+// Sprites handed out each frame and hidden again when no longer needed.
+class Pool {
+  private sprites: PixiSprite[] = []
+  private used = 0
+  private layer: Container
+  constructor(layer: Container) {
+    this.layer = layer
+  }
+  take(texture: Texture): PixiSprite {
+    let sprite = this.sprites[this.used]
+    if (!sprite) {
+      sprite = new PixiSprite(texture)
+      this.layer.addChild(sprite)
+      this.sprites.push(sprite)
+    }
+    this.used++
+    sprite.texture = texture
+    sprite.visible = true
+    return sprite
+  }
+  finish() {
+    for (let i = this.used; i < this.sprites.length; i++) this.sprites[i].visible = false
+    this.used = 0
+  }
+}
+
+const anchored = (sprite: PixiSprite, source: Sprite) =>
+  sprite.anchor.set(source.anchorX / source.width, source.anchorY / source.height)
+
+export interface Ambient {
+  // Ground-level overlays (the current, bird shadows), below the walkers.
+  under: Container
+  // Birds and clouds, above everything on the ground.
+  sky: Container
+  update(seconds: number, view: View, zoom: number): void
+}
+
+export function createAmbient(world: World, actors: Container): Ambient {
+  const { size, seed } = world
+  const under = new Container()
+  const sky = new Container()
+  const cells = size / CELL
+  const bucket = <T>() => Array.from({ length: cells * cells }, () => [] as T[])
+  const cellOf = (x: number, y: number) =>
+    Math.min(cells - 1, Math.max(0, Math.floor(y / CELL))) * cells + Math.min(cells - 1, Math.max(0, Math.floor(x / CELL)))
+  const terrainAt = (x: number, y: number) => {
+    const tx = Math.floor(x)
+    const ty = Math.floor(y)
+    if (tx < 0 || ty < 0 || tx >= size || ty >= size) return -1
+    return world.feature[ty * size + tx] === Feature.None ? world.terrain[ty * size + tx] : -1
+  }
+  const toScreen = (x: number, y: number, z: number) => ({
+    x: (x - y) * (TILE_WIDTH / 2),
+    y: (x + y) * (TILE_HEIGHT / 2) - z,
+  })
+
+  // Buckets overlapping the view; raised ground below the view's bottom edge can reach into it.
+  function visibleCells(view: View, reach: number) {
+    const corners = [
+      [view.left, view.top],
+      [view.right, view.top],
+      [view.left, view.bottom + reach],
+      [view.right, view.bottom + reach],
+    ].map(([sx, sy]) => ({
+      x: (sy / (TILE_HEIGHT / 2) + sx / (TILE_WIDTH / 2)) / 2,
+      y: (sy / (TILE_HEIGHT / 2) - sx / (TILE_WIDTH / 2)) / 2,
+    }))
+    const clamp = (v: number) => Math.min(cells - 1, Math.max(0, Math.floor(v / CELL)))
+    const x0 = clamp(Math.min(...corners.map((c) => c.x)))
+    const x1 = clamp(Math.max(...corners.map((c) => c.x)))
+    const y0 = clamp(Math.min(...corners.map((c) => c.y)))
+    const y1 = clamp(Math.max(...corners.map((c) => c.y)))
+    const list: number[] = []
+    for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) list.push(cy * cells + cx)
+    return list
+  }
+  const inView = (view: View, sx: number, sy: number, margin: number) =>
+    sx > view.left - margin && sx < view.right + margin && sy > view.top - margin && sy < view.bottom + margin
+
+  // --- River current ---
+  const tracks: RiverTrack[] = world.rivers.map((river) => {
+    const line = resampleRoute(river.points)
+    const n = line.length
+    const track: RiverTrack = {
+      x: Float32Array.from(line, (p) => p.x),
+      y: Float32Array.from(line, (p) => p.y),
+      hidden: new Uint8Array(n),
+      length: (n - 1) * ROUTE_STEP,
+    }
+    for (let i = 0; i < n; i++) {
+      const { x, y } = line[i]
+      let hidden = false
+      for (let dy = -1; dy <= 1 && !hidden; dy++) {
+        for (let dx = -1; dx <= 1 && !hidden; dx++) hidden = world.feature[(Math.floor(y) + dy) * size + Math.floor(x) + dx] === Feature.Bridge
+      }
+      // Ground d tiles nearer the viewer along the line of sight covers the water if it rises above it.
+      for (let d = 0.5; !hidden && d * TILE_HEIGHT <= MAX_HEIGHT; d += 0.5) {
+        if (x + d >= size || y + d >= size) break
+        hidden = heightAt(world, x + d, y + d) > d * TILE_HEIGHT
+      }
+      track.hidden[i] = hidden ? 1 : 0
+    }
+    return track
+  })
+  const streaks = bucket<Streak>()
+  world.rivers.forEach((river, r) => {
+    const track = tracks[r]
+    const spacing = 1.6 / river.width
+    for (let i = 0, base = 0; base < track.length; i++, base += spacing) {
+      const roll = (n: number) => hash(r * 7919 + i, n, seed + 501)
+      const at = Math.min(track.x.length - 1, Math.floor(base / ROUTE_STEP))
+      streaks[cellOf(track.x[at], track.y[at])].push({
+        river: r,
+        base: base + roll(0) * spacing,
+        lateral: (roll(1) - 0.5) * river.width * 0.6,
+        speed: FLOW_SPEED[0] + roll(2) * (FLOW_SPEED[1] - FLOW_SPEED[0]),
+        phase: roll(3),
+        texture: textureOf(SPRITES.ripple[roll(4) < 0.6 ? 0 : 1]),
+      })
+    }
+  })
+  const flowPool = new Pool(under)
+
+  function updateFlow(seconds: number, view: View) {
+    for (const cell of visibleCells(view, 0)) {
+      for (const s of streaks[cell]) {
+        const track = tracks[s.river]
+        const p = (seconds * s.speed / FLOW_LIFE + s.phase) % 1
+        const along = s.base + p * FLOW_LIFE
+        const f = Math.floor(along / ROUTE_STEP)
+        if (f >= track.x.length - 1 || track.hidden[f]) continue
+        const t = along / ROUTE_STEP - f
+        const dx = track.x[f + 1] - track.x[f]
+        const dy = track.y[f + 1] - track.y[f]
+        const length = Math.hypot(dx, dy) || 1
+        const x = track.x[f] + dx * t - (dy / length) * s.lateral
+        const y = track.y[f] + dy * t + (dx / length) * s.lateral
+        const screen = toScreen(x, y, 0)
+        if (!inView(view, screen.x, screen.y, 8)) continue
+        const sprite = flowPool.take(s.texture)
+        sprite.anchor.set(0.5, 0)
+        sprite.position.set(Math.round(screen.x), Math.round(screen.y))
+        sprite.alpha = Math.sin(p * Math.PI) * FLOW_ALPHA
+      }
+    }
+    flowPool.finish()
+  }
+
+  // --- Animals ---
+  const animals = bucket<Animal>()
+  const step = 6
+  let nextId = 0
+  const spawn = (kind: Kind, x: number, y: number, count: number, variant: number) => {
+    for (let m = 0; m < count; m++) {
+      const id = nextId++
+      const homeX = x + (hash(id, 1, seed + 601) - 0.5) * 2
+      const homeY = y + (hash(id, 2, seed + 601) - 0.5) * 2
+      if (!kind.allowed(terrainAt(homeX, homeY))) continue
+      // A herd has one animal of the second look (a stag), if the kind has one.
+      const look = kind.frames[m === 0 ? Math.min(kind.frames.length - 1, variant) : 0]
+      animals[cellOf(homeX, homeY)].push({
+        kind,
+        look,
+        frames: look.map(textureOf),
+        homeX,
+        homeY,
+        id,
+        offset: hash(id, 3, seed + 601) * 50,
+      })
+    }
+  }
+  for (let cy = 0; cy < size / step; cy++) {
+    for (let cx = 0; cx < size / step; cx++) {
+      const roll = (n: number) => hash(cx, cy * 16 + n, seed + 401)
+      const x = cx * step + roll(0) * step
+      const y = cy * step + roll(1) * step
+      const terrain = terrainAt(x, y)
+      const r = roll(2)
+      const herd = 2 + Math.floor(roll(3) * 3)
+      const nearForest = [[3, 0], [-3, 0], [0, 3], [0, -3], [2, 2], [-2, -2]].some(
+        ([dx, dy]) => terrainAt(x + dx, y + dy) === Terrain.Forest,
+      )
+      if (terrain === Terrain.Grass) {
+        if (nearForest && r < 0.12) spawn(KINDS.deer, x, y, herd, roll(4) < 0.5 ? 1 : 0)
+        else if (r < 0.035) spawn(KINDS.hare, x, y, 1 + Math.floor(roll(5) * 2), 0)
+      } else if (terrain === Terrain.Mountain) {
+        if (r < 0.05 && heightAt(world, x, y) < balance.world.snowHeight * 0.8) spawn(KINDS.goat, x, y, herd, 0)
+      } else if (terrain === Terrain.Lake) {
+        if (r < 0.15) spawn(KINDS.duck, x, y, herd, 0)
+      } else if (terrain === Terrain.River) {
+        if (r < 0.06) spawn(KINDS.duck, x, y, 2, 0)
+      } else if (terrain === Terrain.Swamp) {
+        if (r < 0.08) spawn(KINDS.heron, x, y, 1 + Math.floor(roll(6) * 2), 0)
+      }
+    }
+  }
+
+  // Where an animal rests during cycle k: a random spot near home it is allowed on, else home itself.
+  const waypoint = (a: Animal, k: number) => {
+    const x = a.homeX + (hash(a.id, k * 2, seed + 701) - 0.5) * 2 * a.kind.range
+    const y = a.homeY + (hash(a.id, k * 2 + 1, seed + 701) - 0.5) * 2 * a.kind.range
+    return a.kind.allowed(terrainAt(x, y)) ? { x, y } : { x: a.homeX, y: a.homeY }
+  }
+  const lifePool = new Pool(actors)
+
+  function updateLife(seconds: number, view: View) {
+    for (const cell of visibleCells(view, MAX_HEIGHT)) {
+      for (const a of animals[cell]) {
+        const { kind } = a
+        const u = seconds / kind.period + a.offset
+        const k = Math.floor(u)
+        const f = u - k
+        const here = waypoint(a, k)
+        const moving = f > 1 - kind.move
+        const from = moving ? here : waypoint(a, k - 1)
+        const to = moving ? waypoint(a, k + 1) : here
+        const s = moving ? (f - (1 - kind.move)) / kind.move : 1
+        const x = from.x + (to.x - from.x) * s
+        const y = from.y + (to.y - from.y) * s
+        const screen = toScreen(x, y, kind.water ? 0 : heightAt(world, x, y))
+        if (!inView(view, screen.x, screen.y, 24)) continue
+        let frame: number
+        if (kind.water) frame = Math.floor(seconds * 1.5 + a.offset) % 2
+        else if (moving) frame = Math.floor(Math.hypot(to.x - from.x, to.y - from.y) * s * kind.strides) % 2
+        else frame = hash(a.id, k, seed + 703) < 0.6 ? 2 : 0
+        const sprite = lifePool.take(a.frames[frame])
+        anchored(sprite, a.look[frame])
+        sprite.position.set(Math.round(screen.x), Math.round(screen.y))
+        sprite.zIndex = screen.y
+        sprite.scale.x = to.x - from.x - (to.y - from.y) < 0 ? -1 : 1
+      }
+    }
+    lifePool.finish()
+  }
+
+  // --- Birds ---
+  const flocks = Array.from({ length: FLOCKS }, (_, i) => {
+    const roll = (n: number) => hash(i, n, seed + 801)
+    const angle = roll(0) * Math.PI * 2
+    return {
+      x: roll(1) * size,
+      y: roll(2) * size,
+      dx: Math.cos(angle),
+      dy: Math.sin(angle),
+      speed: BIRD_SPEED[0] + roll(3) * (BIRD_SPEED[1] - BIRD_SPEED[0]),
+      members: 3 + Math.floor(roll(4) * 5),
+    }
+  })
+  const birdTextures = SPRITES.bird.map(textureOf)
+  const shadowTexture = textureOf(SPRITES.ripple[0])
+  const birdShadows = new Pool(under)
+  const birdPool = new Pool(sky)
+  const wrap = (v: number) => ((v % size) + size) % size
+
+  function updateBirds(seconds: number, view: View) {
+    flocks.forEach((flock, i) => {
+      for (let m = 0; m < flock.members; m++) {
+        // V formation: the leader in front, the others trailing off to alternate sides.
+        const row = Math.ceil(m / 2)
+        const side = (m % 2 === 0 ? 1 : -1) * row * 0.7
+        const x = wrap(flock.x + flock.dx * (seconds * flock.speed - row * 0.9) - flock.dy * side)
+        const y = wrap(flock.y + flock.dy * (seconds * flock.speed - row * 0.9) + flock.dx * side)
+        const ground = heightAt(world, x, y)
+        const alt = BIRD_ALTITUDE + Math.sin(seconds * 0.7 + i + m) * 6
+        const screen = toScreen(x, y, ground + alt)
+        if (!inView(view, screen.x, screen.y, 16)) continue
+        const bird = birdPool.take(birdTextures[Math.floor(seconds * 5 + m * 1.7 + i) % 2])
+        bird.anchor.set(0.5, 0.5)
+        bird.position.set(Math.round(screen.x), Math.round(screen.y))
+        // Light comes from the upper left, so shadows fall a little down and to the right.
+        const shade = toScreen(x, y, ground)
+        const shadow = birdShadows.take(shadowTexture)
+        shadow.anchor.set(0.5, 0.5)
+        shadow.tint = 0x000000
+        shadow.alpha = 0.25
+        shadow.position.set(Math.round(shade.x + alt * 0.25), Math.round(shade.y + alt * 0.12))
+      }
+    })
+    birdPool.finish()
+    birdShadows.finish()
+  }
+
+  // --- Clouds ---
+  const span = { left: -size * (TILE_WIDTH / 2), width: size * TILE_WIDTH, height: size * (TILE_HEIGHT / 2) * 2 }
+  const clouds = Array.from({ length: CLOUDS }, (_, i) => {
+    const roll = (n: number) => hash(i, n, seed + 901)
+    let pick = roll(4)
+    let type = 0
+    while (type < CLOUD_TYPES.length - 1 && pick > CLOUD_TYPES[type].weight) pick -= CLOUD_TYPES[type++].weight
+    const shapes = cloudShapes()[type]
+    return {
+      x: roll(0) * span.width,
+      y: roll(1) * span.height - span.height * 0.25,
+      drift: CLOUD_DRIFT[0] + roll(2) * (CLOUD_DRIFT[1] - CLOUD_DRIFT[0]),
+      sprite: shapes[Math.floor(roll(3) * shapes.length)],
+      alpha: CLOUD_TYPES[type].alpha,
+    }
+  })
+  const shadowLayer = new Container()
+  const cloudLayer = new Container()
+  sky.addChild(shadowLayer, cloudLayer)
+  const cloudShadows = new Pool(shadowLayer)
+  const cloudPool = new Pool(cloudLayer)
+
+  function updateClouds(seconds: number, view: View, alpha: number) {
+    for (const cloud of clouds) {
+      const sx = span.left + ((((cloud.x + seconds * cloud.drift) % span.width) + span.width) % span.width)
+      const sy = cloud.y
+      const reach = cloud.sprite.width * CLOUD_SCALE
+      if (!inView(view, sx, sy, reach)) continue
+      // Only over the map: the center must fall on a tile.
+      const tx = (sy / (TILE_HEIGHT / 2) + sx / (TILE_WIDTH / 2)) / 2
+      const ty = (sy / (TILE_HEIGHT / 2) - sx / (TILE_WIDTH / 2)) / 2
+      if (tx < 0 || ty < 0 || tx >= size || ty >= size) continue
+      const texture = textureOf(cloud.sprite)
+      const shadow = cloudShadows.take(texture)
+      anchored(shadow, cloud.sprite)
+      shadow.scale.set(CLOUD_SCALE)
+      shadow.tint = 0x000000
+      shadow.alpha = alpha * cloud.alpha * 0.22
+      shadow.position.set(Math.round(sx + 700), Math.round(sy + 900))
+      const sprite = cloudPool.take(texture)
+      anchored(sprite, cloud.sprite)
+      sprite.scale.set(CLOUD_SCALE)
+      sprite.alpha = alpha * cloud.alpha
+      sprite.position.set(Math.round(sx), Math.round(sy))
+    }
+    cloudShadows.finish()
+    cloudPool.finish()
+  }
+
+  return {
+    under,
+    sky,
+    update(seconds, view, zoom) {
+      if (zoom >= FLOW_MIN_ZOOM) updateFlow(seconds, view)
+      else flowPool.finish()
+      if (zoom >= LIFE_MIN_ZOOM) {
+        updateLife(seconds, view)
+        updateBirds(seconds, view)
+      } else {
+        lifePool.finish()
+        birdPool.finish()
+        birdShadows.finish()
+      }
+      if (zoom <= CLOUD_MAX_ZOOM) updateClouds(seconds, view, zoom <= 0.125 ? CLOUD_ALPHA : CLOUD_ALPHA * 0.55)
+      else {
+        cloudShadows.finish()
+        cloudPool.finish()
+      }
+    },
+  }
+}
