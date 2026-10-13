@@ -14,6 +14,9 @@ import {
   hasTradePost,
   lobbyColors,
   setTradeGood,
+  STROKE_KINDS,
+  buildMany,
+  demolish,
   surveySite,
   territoryRect,
   territoryStage,
@@ -125,6 +128,7 @@ const BUILD_ERRORS: Record<BuildError, string> = {
   top: 'En yüksek seviyede',
   busy: 'Bina şu an inşaatta',
   locked: 'Önce sarayı 2. seviyeye yükselt',
+  limit: 'Bu saray seviyesinde daha fazla kurulamaz; sarayı yükselt ya da mevcutları geliştir',
 }
 
 // Walkers keep to dry land below the mountains.
@@ -181,6 +185,7 @@ function App({
   const [cameraCenter, setCameraCenter] = useState<Point | null>(null)
   const [loading, setLoading] = useState(true)
   const tapRef = useRef<(tile: Point, building?: number, army?: number) => void>(() => {})
+  const strokeRef = useRef<(spots: Point[]) => void>(() => {})
 
   useEffect(() => {
     let cancelled = false
@@ -193,6 +198,7 @@ function App({
         onCamera: setCameraCenter,
         onLoading: setLoading,
         onTap: (tile, building, army) => tapRef.current(tile, building, army),
+        onStroke: (spots) => strokeRef.current(spots),
       },
       serverNow,
     ).then((v) => {
@@ -477,6 +483,9 @@ function App({
   const needsPalace = kingdom !== null && !hasPalace(kingdom)
   const placingKind: BuildingKind | null = needsPalace ? 'palace' : placing
   const [preview, setPreview] = useState<Point | null>(null)
+  // A row drawn by dragging (walls, houses), awaiting confirmation.
+  const [previewMany, setPreviewMany] = useState<Point[] | null>(null)
+  const stroking = placingKind !== null && STROKE_KINDS.includes(placingKind)
   useEffect(() => {
     if (!toast) return
     const id = setTimeout(() => setToast(null), 2200)
@@ -490,14 +499,21 @@ function App({
       return
     }
     const size = BUILDINGS[placingKind].size
-    view.setPlacement({ size, valid: (origin) => canPlace(view.world, kingdom, stage, { ...origin, size }), pinned: preview ?? undefined })
-  }, [view, placingKind, kingdom, stage, preview])
+    view.setPlacement({
+      size,
+      valid: (origin) => canPlace(view.world, kingdom, stage, { ...origin, size }),
+      pinned: preview ?? undefined,
+      stroke: stroking,
+      pinnedMany: previewMany ?? undefined,
+    })
+  }, [view, placingKind, kingdom, stage, preview, previewMany, stroking])
 
   // The whole-world map, opened from the minimap on phones.
   const [fullMap, setFullMap] = useState(false)
   const cancelPlacing = () => {
     setPlacing(null)
     setPreview(null)
+    setPreviewMany(null)
   }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && cancelPlacing()
@@ -560,9 +576,31 @@ function App({
     cancelPlacing()
   }
 
+  // A dragged row: only the spots that fit are kept and await confirmation.
+  strokeRef.current = (spots) => {
+    const current = kingdomRef.current
+    if (!view || !placingKind || !current) return
+    const size = BUILDINGS[placingKind].size
+    const fits = spots.filter((p) => canPlace(view.world, current, stage, { ...p, size }))
+    if (fits.length === 0) return setToast(BUILD_ERRORS.spot)
+    setPreviewMany(fits)
+  }
+  const confirmMany = () => {
+    const current = kingdomRef.current
+    if (!view || !placingKind || !current || !previewMany) return
+    const { kingdom: predicted, placed } = buildMany(view.world, current, stage, placingKind, previewMany, serverNow())
+    if (!placed) {
+      setToast(BUILD_ERRORS.cost)
+      return setPreviewMany(null)
+    }
+    command({ type: 'buildMany', kind: placingKind, spots: previewMany }, predicted)
+    cancelPlacing()
+  }
+
   const startPlacing = (kind: BuildingKind) => {
     const error = view && kingdom && buildError(view.world, kingdom, stage, kind, null, serverNow())
-    if (error) return setToast(BUILD_ERRORS[error])
+    // Rows of walls and houses wait for a free construction slot instead of needing one now.
+    if (error && !(error === 'queue' && STROKE_KINDS.includes(kind))) return setToast(BUILD_ERRORS[error])
     setPanel(null)
     // The dock has its own plot on the shore: no placing, it goes straight there.
     if (kind === 'dock' && view && kingdom?.dockPlot) {
@@ -573,7 +611,7 @@ function App({
     setPlacing(kind)
   }
 
-  const chooseGood = (good: Good) => kingdom && command({ type: 'tradeGood', good }, setTradeGood(kingdom, good, serverNow()))
+  const chooseGood = (good: Good | null) => kingdom && command({ type: 'tradeGood', good: good ?? 'none' }, setTradeGood(kingdom, good, serverNow()))
   const upgrade = (id: number) => {
     if (!kingdom) return
     const error = upgradeError(kingdom, id, serverNow())
@@ -761,6 +799,10 @@ function App({
             onUpgrade: upgrade,
             onWorkers: commandWorkers,
             onProduct: (id, product) => command({ type: 'product', id, product }, setProduct(kingdom, id, product)),
+            onDemolish: (id) => {
+              command({ type: 'demolish', id }, demolish(kingdom, id))
+              closeTab()
+            },
             onClose: closeTab,
           }}
         />
@@ -771,7 +813,11 @@ function App({
           <Icon name="build" size={24} />
           <span>
             <b>{needsPalace ? 'Sarayını yerleştir' : BUILDING_NAMES[placingKind]}</b> ·{' '}
-            {touchOnly ? 'Hudut içinde bir yere dokun' : 'Hudut içinde yeşil bir yere tıkla'}
+            {stroking
+              ? 'Basılı tutup sürükleyerek sıra hâlinde yerleştir'
+              : touchOnly
+                ? 'Hudut içinde bir yere dokun'
+                : 'Hudut içinde yeşil bir yere tıkla'}
           </span>
           {!needsPalace && (
             <button className="btn small" onClick={cancelPlacing}>
@@ -783,7 +829,10 @@ function App({
       {placingKind && preview && kingdom && (
         <ConfirmBuild kind={placingKind} kingdom={kingdom} onConfirm={confirmBuild} onCancel={() => setPreview(null)} />
       )}
-      {kingdom && !needsPalace && hasTradePost(kingdom) && kingdom.trade.good === null && <GoodPicker kingdom={kingdom} onGood={chooseGood} />}
+      {placingKind && previewMany && kingdom && (
+        <ConfirmBuild kind={placingKind} kingdom={kingdom} count={previewMany.length} onConfirm={confirmMany} onCancel={() => setPreviewMany(null)} />
+      )}
+      {kingdom && !needsPalace && hasTradePost(kingdom) && kingdom.trade.good === null && !kingdom.trade.idle && <GoodPicker kingdom={kingdom} onGood={chooseGood} market={layer.market} now={now} />}
       {toast && (
         <div className="toast frame" role="alert">
           <Icon name="warn" size={16} /> {toast}

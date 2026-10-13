@@ -117,6 +117,13 @@
           "buildSeconds": 14,
           "villagers": 8
         }
+      ],
+      "maxByPalaceLevel": [
+        4,
+        6,
+        8,
+        10,
+        12
       ]
     },
     "farm": {
@@ -352,7 +359,15 @@
         "gold": 5,
         "materials": 15
       },
-      "buildSeconds": 4
+      "buildSeconds": 4,
+      "outsideQueue": true
     }
-  }
+  },
+  "maxBatch": 64,
+  "freeFirst": [
+    "lumberCamp",
+    "house",
+    "farm"
+  ],
+  "demolishRefund": 0.5
 }

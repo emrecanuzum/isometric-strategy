@@ -49,6 +49,10 @@ export interface BuildingSpec extends LevelSpec {
   size: number
   // The palace level it waits for (CLAUDE.md §9.7).
   requiresPalace?: number
+  // Built without taking one of the construction slots (wall segments).
+  outsideQueue?: boolean
+  // How many may stand at each palace level (houses), so growing the town means raising them too.
+  maxByPalaceLevel?: number[]
   produces?: Good
   // Choices of what to make; the first is the default.
   products?: Record<string, Product>
@@ -96,6 +100,8 @@ export interface Building {
   product?: string
   // Walls only: knocked down in a siege, standing again once repaired.
   broken?: boolean
+  // Built free as the kingdom's first of its kind (its building cost is not refunded on demolition).
+  free?: boolean
 }
 
 // Gold that changes hands every production round under an accepted tribute (CLAUDE.md §9.7).
@@ -129,6 +135,8 @@ export interface Kingdom {
   trade: {
     // Chosen by the player once the trade post stands; the merchant waits until then.
     good: Good | null
+    // The player chose to sell nothing for now (the merchant stays home without asking again).
+    idle?: boolean
     level: number
     // The current trip started here and ends one trip length later.
     departedAt: number
@@ -154,6 +162,8 @@ export interface Kingdom {
   queenHeldBy?: { id: number; name: string } | null
   hostages?: { of: number; name: string }[]
   revoltUntil?: number
+  // Kinds whose free first building has been used (see balance.economy.freeFirst).
+  freeUsed?: BuildingKind[]
   // When this kingdom's spies last tried an operation (they pause between tries).
   lastOperationAt?: number
   // Spies at home (idle or on counter-espionage) and out on missions; the next one the spy house trains.
@@ -395,6 +405,9 @@ export const hasTradePost = (kingdom: Kingdom) => kingdom.buildings.some((b) => 
 
 export const constructing = (kingdom: Kingdom, at: number) => kingdom.buildings.filter((b) => !done(b, at))
 
+// The building sites that hold one of the construction slots.
+export const queued = (kingdom: Kingdom, at: number) => constructing(kingdom, at).filter((b) => !BUILDINGS[b.kind].outsideQueue)
+
 // ---- Commands -----------------------------------------------------------------------------------------------------
 
 export const affordable = (stock: Stock, cost: Cost = {}) =>
@@ -406,7 +419,48 @@ const pay = (stock: Stock, cost: Cost = {}): Stock => {
   return next
 }
 
-export type BuildError = 'palace' | 'unique' | 'cost' | 'queue' | 'spot' | 'top' | 'busy' | 'locked'
+// The first lumber camp, house and field cost nothing, so a kingdom that has spent all its goods can always start
+// over (balance.economy.freeFirst). Only once each: demolishing the free one does not make the next one free.
+export const isFree = (kingdom: Kingdom, kind: BuildingKind) =>
+  (balance.economy.freeFirst as string[]).includes(kind) && !(kingdom.freeUsed ?? []).includes(kind) && !kingdom.buildings.some((b) => b.kind === kind)
+
+export const buildCost = (kingdom: Kingdom, kind: BuildingKind): Cost => (isFree(kingdom, kind) ? {} : (BUILDINGS[kind].cost ?? {}))
+
+// What demolishing gives back: half of what was spent on building and raising it (nothing of a free first one's
+// building cost). The palace and the trade post stay.
+export function demolishRefund(b: Building): Cost {
+  const spec = BUILDINGS[b.kind]
+  const spent: Cost = {}
+  const add = (cost: Cost = {}) => {
+    for (const [r, v] of Object.entries(cost)) spent[r as Resource] = (spent[r as Resource] ?? 0) + (v ?? 0)
+  }
+  if (!b.free) add(spec.cost)
+  for (const up of (spec.levels ?? []).slice(0, (b.level ?? 1) - 1)) add(up.cost)
+  return Object.fromEntries(Object.entries(spent).map(([r, v]) => [r, Math.floor((v ?? 0) * balance.economy.demolishRefund)]).filter(([, v]) => (v as number) > 0))
+}
+
+export const canDemolish = (kingdom: Kingdom, id: number) => {
+  const b = kingdom.buildings.find((x) => x.id === id)
+  return !!b && b.kind !== 'palace' && b.kind !== 'tradePost'
+}
+
+export function demolish(kingdom: Kingdom, id: number): Kingdom {
+  if (!canDemolish(kingdom, id)) return kingdom
+  const b = kingdom.buildings.find((x) => x.id === id)!
+  const stock = { ...kingdom.stock }
+  for (const [r, v] of Object.entries(demolishRefund(b))) stock[r as Resource] += v ?? 0
+  return { ...kingdom, stock, buildings: kingdom.buildings.filter((x) => x.id !== id) }
+}
+
+export type BuildError = 'palace' | 'unique' | 'cost' | 'queue' | 'spot' | 'top' | 'busy' | 'locked' | 'limit'
+
+// How many of a kind may stand now, or Infinity without a limit.
+export function buildLimit(kingdom: Kingdom, kind: BuildingKind, at: number) {
+  const caps = BUILDINGS[kind].maxByPalaceLevel
+  if (!caps) return Infinity
+  return caps[Math.max(0, Math.min(caps.length - 1, palaceLevel(kingdom, at) - 1))]
+}
+export const buildingCount = (kingdom: Kingdom, kind: BuildingKind) => kingdom.buildings.filter((b) => b.kind === kind).length
 
 export function buildError(world: World, kingdom: Kingdom, stage: number, kind: BuildingKind, spot: Point | null, now: number): BuildError | null {
   const spec = BUILDINGS[kind]
@@ -414,9 +468,10 @@ export function buildError(world: World, kingdom: Kingdom, stage: number, kind: 
   if ((kind === 'palace') === hasPalace(kingdom)) return 'palace'
   if (kind === 'dock' && (!kingdom.dockPlot || kingdom.buildings.some((b) => b.kind === 'dock'))) return 'unique'
   if ((spec.requiresPalace ?? 0) > palaceLevel(kingdom, now)) return 'locked'
+  if (buildingCount(kingdom, kind) >= buildLimit(kingdom, kind, now)) return 'limit'
   if ((kind === 'market' || kind === 'barracks' || kind === 'spyHouse') && kingdom.buildings.some((b) => b.kind === kind)) return 'unique'
-  if (!affordable(kingdom.stock, spec.cost)) return 'cost'
-  if (kind !== 'palace' && constructing(kingdom, now).length >= balance.economy.maxConstructions) return 'queue'
+  if (!affordable(kingdom.stock, buildCost(kingdom, kind))) return 'cost'
+  if (kind !== 'palace' && !spec.outsideQueue && queued(kingdom, now).length >= balance.economy.maxConstructions) return 'queue'
   // The dock goes on its plot, which may lie outside the territory; everything else where the player puts it.
   if (spot && kind !== 'dock' && !canPlace(world, kingdom, stage, { ...spot, size: spec.size })) return 'spot'
   return null
@@ -426,8 +481,49 @@ export function build(world: World, kingdom: Kingdom, stage: number, kind: Build
   if (buildError(world, kingdom, stage, kind, spot, now)) return kingdom
   const spec = BUILDINGS[kind]
   if (kind === 'dock') spot = kingdom.dockPlot!
-  const building: Building = { id: kingdom.nextId, kind, x: spot.x, y: spot.y, size: spec.size, doneAt: now + (spec.buildSeconds ?? 0) * 1000 }
-  return { ...kingdom, stock: pay(kingdom.stock, spec.cost), buildings: [...kingdom.buildings, building], nextId: kingdom.nextId + 1 }
+  const free = isFree(kingdom, kind)
+  const building: Building = { id: kingdom.nextId, kind, x: spot.x, y: spot.y, size: spec.size, doneAt: now + (spec.buildSeconds ?? 0) * 1000, ...(free && { free }) }
+  return {
+    ...kingdom,
+    stock: pay(kingdom.stock, buildCost(kingdom, kind)),
+    buildings: [...kingdom.buildings, building],
+    nextId: kingdom.nextId + 1,
+    ...(free && { freeUsed: [...(kingdom.freeUsed ?? []), kind] }),
+  }
+}
+
+// A row of buildings laid by dragging (walls, houses): each one that fits and can be paid for is placed. They wait
+// their turn for a construction slot, so a long row of houses goes up one pair at a time; walls need no slot.
+export const STROKE_KINDS: BuildingKind[] = ['wall', 'house']
+
+export function buildMany(world: World, kingdom: Kingdom, stage: number, kind: BuildingKind, spots: Point[], now: number) {
+  const spec = BUILDINGS[kind]
+  let k = kingdom
+  let placed = 0
+  if (!STROKE_KINDS.includes(kind) || !hasPalace(kingdom)) return { kingdom: k, placed }
+  if ((spec.requiresPalace ?? 0) > palaceLevel(kingdom, now)) return { kingdom: k, placed }
+  for (const spot of spots.slice(0, balance.economy.maxBatch)) {
+    if (!affordable(k.stock, buildCost(k, kind)) || buildingCount(k, kind) >= buildLimit(k, kind, now)) break
+    if (!canPlace(world, k, stage, { ...spot, size: spec.size })) continue
+    const free = isFree(k, kind)
+    let start = now
+    if (!spec.outsideQueue) {
+      // The moment a slot frees up: once fewer than the slot count are still being built.
+      const ends = queued(k, now).map((b) => b.doneAt).sort((a, b) => b - a)
+      const slots = balance.economy.maxConstructions
+      if (ends.length >= slots) start = Math.max(now, ends[slots - 1])
+    }
+    const building: Building = { id: k.nextId, kind, x: spot.x, y: spot.y, size: spec.size, doneAt: start + (spec.buildSeconds ?? 0) * 1000, ...(free && { free }) }
+    k = {
+      ...k,
+      stock: pay(k.stock, buildCost(k, kind)),
+      buildings: [...k.buildings, building],
+      nextId: k.nextId + 1,
+      ...(free && { freeUsed: [...(k.freeUsed ?? []), kind] }),
+    }
+    placed++
+  }
+  return { kingdom: k, placed }
 }
 
 // Why a building cannot be raised a level now, if it cannot.
@@ -437,7 +533,7 @@ export function upgradeError(kingdom: Kingdom, id: number, now: number): BuildEr
   if (!b || !up) return 'top'
   if (!done(b, now)) return 'busy'
   if (!affordable(kingdom.stock, up.cost)) return 'cost'
-  if (constructing(kingdom, now).length >= balance.economy.maxConstructions) return 'queue'
+  if (queued(kingdom, now).length >= balance.economy.maxConstructions) return 'queue'
   return null
 }
 
@@ -462,9 +558,10 @@ export const setProduct = (kingdom: Kingdom, id: number, product: string): Kingd
   editBuilding(kingdom, id, (b) => (BUILDINGS[b.kind].products?.[product] ? { ...b, product } : b))
 
 // Choosing (or changing) the good sends the merchant off on a fresh trip.
-export function setTradeGood(kingdom: Kingdom, good: Good, now: number): Kingdom {
-  if (!hasTradePost(kingdom) || kingdom.trade.good === good) return kingdom
-  return { ...kingdom, trade: { ...kingdom.trade, good, departedAt: now } }
+// Choosing (or changing) the good sends the merchant off on a fresh trip; null keeps him home.
+export function setTradeGood(kingdom: Kingdom, good: Good | null, now: number): Kingdom {
+  if (!hasTradePost(kingdom) || (kingdom.trade.good === good && (good !== null || kingdom.trade.idle))) return kingdom
+  return { ...kingdom, trade: { ...kingdom.trade, good, idle: good === null, departedAt: now } }
 }
 
 export const tradeUpgradeCost = (kingdom: Kingdom): Cost | null =>

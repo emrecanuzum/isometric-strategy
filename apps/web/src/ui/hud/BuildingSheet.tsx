@@ -1,5 +1,6 @@
-import { BUILDINGS, buildingOutput, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
+import { BUILDINGS, buildingOutput, demolishRefund, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
 import type { Building, BuildingKind, Good, Product, Resource } from '@game/shared'
+import { useState } from 'react'
 import { looksOf } from '../../game/buildingSprites'
 import { Icon } from '../icons'
 import type { IconName } from '../icons'
@@ -15,6 +16,8 @@ export interface BuildingCommands {
   onUpgrade(id: number): void
   onWorkers(id: number, workers: number): void
   onProduct(id: number, product: string): void
+  // Tears it down for half of what it cost.
+  onDemolish(id: number): void
   onClose(): void
 }
 
@@ -76,6 +79,7 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
             {BUILDINGS[b.kind].products && <Products building={b} onProduct={commands.onProduct} />}
             {workerSlots(b) > 0 && <Workers building={b} data={data} onWorkers={commands.onWorkers} />}
             {top > 1 && <Levels building={b} data={data} onUpgrade={commands.onUpgrade} />}
+            <Demolish building={b} data={data} onDemolish={commands.onDemolish} />
           </>
         )}
       </div>
@@ -202,6 +206,25 @@ function Levels({ building: b, data, onUpgrade }: { building: Building; data: Hu
           {error && <small className="down">{UPGRADE_BLOCKED[error] ?? 'Şu an olmaz'}</small>}
         </>
       )}
+    </Section>
+  )
+}
+
+// Tearing a building down gives back half of what was spent on it; the button asks twice.
+function Demolish({ building: b, data, onDemolish }: { building: Building; data: HudData; onDemolish: (id: number) => void }) {
+  const [sure, setSure] = useState(false)
+  const refund = demolishRefund(b)
+  return (
+    <Section title="Yık" icon="warn">
+      <p className="hint">
+        Yıkılan yapının inşa ve yükseltme maliyetinin yarısı geri döner{b.free ? ' (ücretsiz kurulan ilk yapının inşa maliyeti dönmez)' : ''}.
+      </p>
+      <div className="row">
+        <CostList cost={refund} stock={data.kingdom.stock} />
+        <button className={sure ? 'btn small danger' : 'btn small'} onClick={() => (sure ? onDemolish(b.id) : setSure(true))} onBlur={() => setSure(false)}>
+          {sure ? 'Emin misin? Yık' : 'Yık'}
+        </button>
+      </div>
     </Section>
   )
 }

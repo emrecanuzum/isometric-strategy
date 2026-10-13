@@ -6,6 +6,9 @@ import {
   TAX_LEVELS,
   armoryOf,
   balance,
+  buildLimit,
+  buildingCount,
+  isFree,
   buyCost,
   buyError,
   happinessTarget,
@@ -49,7 +52,7 @@ export interface HudData {
   muted: boolean
   confirmReset: boolean
   onPlace(kind: BuildingKind): void
-  onGood(good: Good): void
+  onGood(good: Good | null): void
   onUpgrade(): void
   // Raises a building a level (the palace's level sets the territory's size).
   onUpgradeBuilding(id: number): void
@@ -95,6 +98,7 @@ const BLOCKED: Record<string, string> = {
   unique: 'Zaten var ya da arsa yok',
   spot: 'Yer yok',
   locked: '2. seviye saray',
+  limit: 'Sınır dolu: sarayı yükselt',
 }
 
 export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
@@ -128,8 +132,13 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
             const error = buildError(world, kingdom, stage, kind, null, now)
             const effect = spec.produces
               ? `+${(spec.amount! * kingdom.yields[spec.produces]).toFixed(1).replace('.', ',')} ${RESOURCE_NAMES[spec.produces].toLowerCase()} / tur`
-              : `+${spec.villagers} köylü`
+              : spec.villagers
+                ? `+${spec.villagers} köylü`
+                : spec.workers
+                  ? `${spec.workers} işçi çalıştırır`
+                  : null
             const why = error ? (BLOCKED[error] ?? 'Şu an olmaz') : null
+            const limit = buildLimit(kingdom, kind, now)
             return (
               <li key={kind}>
                 <button className="card" disabled={why !== null} onClick={() => onPlace(kind)} aria-describedby={`why-${kind}`}>
@@ -139,9 +148,14 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
                   <span className="card-body">
                     <b>{BUILDING_NAMES[kind] ?? kind}</b>
                     {BUILDING_NOTES[kind] && <small>{BUILDING_NOTES[kind]}</small>}
-                    <small className="up">{effect}</small>
+                    {effect && <small className="up">{effect}</small>}
+                    {Number.isFinite(limit) && (
+                      <small>
+                        {buildingCount(kingdom, kind)} / {limit} kurulu (saray seviyesiyle artar)
+                      </small>
+                    )}
                     <span className="card-meta">
-                      <CostList cost={spec.cost} stock={kingdom.stock} />
+                      {isFree(kingdom, kind) ? <span className="chip up">İlki ücretsiz</span> : <CostList cost={spec.cost} stock={kingdom.stock} />}
                       <span className="chip">
                         <Icon name="time" size={8} /> {spec.buildSeconds} sn
                       </span>
@@ -323,7 +337,7 @@ function TradePost({ kingdom, now, onGood, onUpgrade, onShow, online }: HudData)
         </div>
       </div>
       <Section title="Satılacak mal" icon="chest">
-        <GoodChoice kingdom={kingdom} selected={trade.good} onGood={onGood} />
+        <GoodChoice kingdom={kingdom} selected={trade.good} onGood={onGood} market={online?.market} now={now} />
       </Section>
       {trade.good && (
         <Section title="Tüccar yolda" icon="time" aside={`${Math.max(0, Math.ceil((tripMs - (now - trade.departedAt)) / 1000))} sn`}>

@@ -100,6 +100,10 @@ export interface Placement {
   valid(origin: Point): boolean
   // A spot already picked and awaiting confirmation: the footprint stays there whatever the pointer does.
   pinned?: Point
+  // Laid by dragging (walls, houses): press and drag draws a row of footprints, handed to onStroke on release.
+  stroke?: boolean
+  // A row already drawn and awaiting confirmation.
+  pinnedMany?: Point[]
 }
 
 export interface WorldHandlers {
@@ -108,6 +112,8 @@ export interface WorldHandlers {
   onLoading(loading: boolean): void
   // A tap or click that did not drag the map, and the player's building or the army drawn under it, if any.
   onTap(tile: Point, building?: number, army?: number): void
+  // A row of footprints drawn by dragging while placing a stroke kind (see Placement.stroke).
+  onStroke?(spots: Point[]): void
 }
 
 export interface RivalTerritory {
@@ -156,7 +162,7 @@ interface Job {
 export async function createWorld(
   host: HTMLElement,
   seed: number,
-  { onHover, onCamera, onLoading, onTap }: WorldHandlers,
+  { onHover, onCamera, onLoading, onTap, onStroke }: WorldHandlers,
   // The shared game clock (server time), so every player sees the same hour, caravans and animals.
   clock: () => number = Date.now,
 ): Promise<WorldView> {
@@ -208,7 +214,7 @@ export async function createWorld(
     resolution: window.devicePixelRatio * 2,
     anchor: { x: 0.5, y: 0.5 },
     style: {
-      fontFamily: "'Pixelify Sans', ui-monospace, monospace",
+      fontFamily: "'Digits', 'Pixelify Sans', ui-monospace, monospace",
       fontSize: 22,
       fontWeight: '600',
       fill,
@@ -574,12 +580,17 @@ export async function createWorld(
       return tile
     }
     if (placement) {
-      const origin = placement.pinned ?? footprintOrigin(tile, placement.size)
-      const color = placement.valid(origin) ? GHOST_OK : GHOST_BAD
-      cursor
-        .poly(square(origin.x, origin.y, placement.size))
-        .fill({ color, alpha: 0.3 })
-        .stroke({ width: 2 / camera.scale.x, color, alpha: 0.95 })
+      const p = placement
+      const ghost = (origin: Point) => {
+        const color = p.valid(origin) ? GHOST_OK : GHOST_BAD
+        cursor
+          .poly(square(origin.x, origin.y, p.size))
+          .fill({ color, alpha: 0.3 })
+          .stroke({ width: 2 / camera.scale.x, color, alpha: 0.95 })
+      }
+      const row = stroke?.spots ?? p.pinnedMany
+      if (row) row.forEach(ghost)
+      else ghost(p.pinned ?? footprintOrigin(tile, p.size))
     } else {
       // The tile grid is not drawn; only the tile under the pointer is outlined, lying on the slope.
       cursor
@@ -591,6 +602,26 @@ export async function createWorld(
     return tile
   }
   let placement: Placement | null = null
+  // A row being drawn by dragging: where it began and the footprints along it so far.
+  let stroke: { start: Point; spots: Point[] } | null = null
+  // The tile under a screen point (the ground drawn there, as pick takes it).
+  const tileAt = (at: Point) => {
+    const ground = screenToGround(world, { x: (at.x - camera.x) / camera.scale.x, y: (at.y - camera.y) / camera.scale.y })
+    return { x: Math.floor(ground.x), y: Math.floor(ground.y) }
+  }
+  // Footprints of `size` from one origin to another in a straight row, one footprint apart.
+  const rowOf = (from: Point, to: Point, size: number) => {
+    const dx = to.x - from.x
+    const dy = to.y - from.y
+    const n = Math.max(Math.abs(dx), Math.abs(dy))
+    if (n === 0) return [from]
+    const spots: Point[] = []
+    for (let d = 0; d <= n; d += size) {
+      const p = { x: from.x + Math.round((dx * d) / n), y: from.y + Math.round((dy * d) / n) }
+      if (!spots.some((q) => q.x === p.x && q.y === p.y)) spots.push(p)
+    }
+    return spots
+  }
   let pickedBuilding: number | undefined
   let lastPointer: Point | null = null
 
@@ -610,10 +641,23 @@ export async function createWorld(
       return
     }
     press = { start: { x: e.global.x, y: e.global.y }, camera: { x: camera.x, y: camera.y }, moved: false }
+    // Placing a stroke kind: the press starts a row instead of dragging the map.
+    if (placement?.stroke && !placement.pinnedMany) {
+      const origin = footprintOrigin(tileAt(press.start), placement.size)
+      stroke = { start: origin, spots: [origin] }
+      pick(press.start)
+    }
   })
   const release = (e: FederatedPointerEvent) => {
     touches.delete(e.pointerId)
     if (touches.size > 0) return
+    if (stroke) {
+      const spots = stroke.spots
+      stroke = null
+      press = null
+      if (e.type === 'pointerup') onStroke?.(spots)
+      return
+    }
     if (press && !press.moved && e.type === 'pointerup') {
       const tile = pick({ x: e.global.x, y: e.global.y })
       const army = placement ? undefined : armies.pick({ x: (e.global.x - camera.x) / camera.scale.x, y: (e.global.y - camera.y) / camera.scale.y })
@@ -626,6 +670,12 @@ export async function createWorld(
   app.stage.on('pointercancel', release)
   app.stage.on('pointermove', (e) => {
     if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.global.x, y: e.global.y })
+    if (stroke && placement) {
+      const end = footprintOrigin(tileAt({ x: e.global.x, y: e.global.y }), placement.size)
+      stroke.spots = rowOf(stroke.start, end, placement.size)
+      pick({ x: e.global.x, y: e.global.y })
+      return
+    }
     if (press && touches.size === 1) {
       const dx = e.global.x - press.start.x
       const dy = e.global.y - press.start.y

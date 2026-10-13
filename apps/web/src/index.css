@@ -35,7 +35,7 @@
   --parch-lo: #c4a46c;
   --parch-ink: #3a2619;
 
-  --font: 'Pixelify Sans', ui-monospace, monospace;
+  --font: 'Digits', 'Pixelify Sans', ui-monospace, monospace;
   --dock-h: calc(var(--px) * 32);
   --gap: 12px;
 
@@ -2671,4 +2671,23 @@ small {
   display: flex;
   flex-direction: column;
   gap: calc(var(--px) * 3);
+}
+
+/* "Sell nothing": a short strip under the goods, across the whole row. */
+.good.none {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  justify-content: center;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 3);
+}
+
+.good.none b,
+.good.none small {
+  white-space: nowrap;
+}
+
+.good.none small {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

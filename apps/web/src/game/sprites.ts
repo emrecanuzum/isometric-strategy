@@ -57,6 +57,8 @@ const BOAR = ramp(0x231a16, 0x3a2c24, 0x534034, 0x6c5646, 0x86705c)
 const BEAR = ramp(0x1e140e, 0x34241a, 0x4c3626, 0x664a34, 0x82623f)
 const HORSE = [ramp(0x3a1e12, 0x5c321c, 0x80472a, 0xa2603a, 0xbe7c4e), ramp(0x6a6660, 0x9a958c, 0xc4beb2, 0xe2ddd2, 0xf6f2ea)]
 const GAZELLE = ramp(0x5c3e22, 0x8a6236, 0xb58a50, 0xd4ac6e, 0xf0e2c8)
+const AUROCHS = ramp(0x1c120c, 0x2e1e14, 0x44301e, 0x5c422a, 0x7a5a3a)
+const SHEEP = ramp(0x6a6052, 0x9a8e7a, 0xc4b89e, 0xe2d8c2, 0xf4eee0)
 const SWAN = ramp(0x9aa4ae, 0xc8d0d6, 0xe8ecef, 0xffffff)
 const BILL = rgb(0xe0a030)
 const BIRD = rgb(0x262830)
@@ -525,6 +527,13 @@ const roundEars = (canvas: Canvas, x: number, y: number) => {
 const mane = (canvas: Canvas, x: number, y: number) => {
   for (const [dx, dy] of [[0, 1], [-1, 2], [-1, 3], [-2, 4], [-2, 5], [-3, 6]]) canvas.set(x + dx, y + dy, rgb(0x241610))
 }
+// Wide horns curving forward (aurochs) and horns curled round the ear (wild sheep).
+const bullHorns = (canvas: Canvas, x: number, y: number) => {
+  for (const [dx, dy] of [[0, 0], [1, -1], [2, -1], [3, -2], [-1, -1], [-2, -2]]) canvas.set(x + dx, y + dy, rgb(0xd8ccb0))
+}
+const curls = (canvas: Canvas, x: number, y: number) => {
+  for (const [dx, dy] of [[0, 0], [-1, 0], [-2, 1], [-2, 2], [-1, 3], [0, 2]]) canvas.set(x + dx, y + dy, rgb(0x8a7a5c))
+}
 const lyre = (canvas: Canvas, x: number, y: number) => {
   for (const [dx, dy] of [[0, 0], [-1, -1], [-1, -2], [0, -3]]) canvas.set(x + dx, y + dy, rgb(0x2a2018))
 }
@@ -841,6 +850,8 @@ export const SPRITES = {
     [0, 1, 2].map((f) => beast({ colors, size: 1.05, tail: 0, crown: mane, brush: { length: 8, color: rgb(0x241610) } }, f)),
   ),
   gazelle: [0, 1, 2].map((f) => beast({ colors: GAZELLE, size: 0.6, tail: 4, crown: lyre }, f)),
+  aurochs: [0, 1, 2].map((f) => beast({ colors: AUROCHS, size: 1.1, tail: 1, crown: bullHorns, legs: 0.85, brush: { length: 5, color: AUROCHS[0] } }, f)),
+  sheep: [0, 1, 2].map((f) => beast({ colors: SHEEP, size: 0.55, tail: 3, crown: curls, legs: 0.7 }, f)),
   swan: [0, 1, 0].map(swan),
   duck: [0, 1, 0].map(duck),
   heron: [0, 1, 2].map(heron),

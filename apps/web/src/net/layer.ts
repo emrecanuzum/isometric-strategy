@@ -1,6 +1,7 @@
 import type { Army, Claim, Envoy, Market, Pact, Relation, SpyMission } from '@game/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { loadArmies, loadBattles, loadDiplomacy, loadNotices } from './online'
+import { serverNow } from './clock'
+import { loadArmies, loadBattles, loadDiplomacy, loadNotices, settle } from './online'
 import type { ArmyOrder, Battle, Notice } from './online'
 
 // The layer between kingdoms as the client holds it: relations, pacts, envoys and spies, armies, battles, the
@@ -48,6 +49,7 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
     market: initialMarket,
   })
   const timers = useRef(new Map<Part, number>())
+  const lastNudge = useRef(0)
 
   const fetchPart = useCallback(
     async (part: Part) => {
@@ -100,6 +102,27 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
     },
     [refresh],
   )
+  // When anything this player can see comes due, nudge the server at that moment so its outcome (and the envoy's
+  // dialog) arrives within seconds rather than at the next minute's tick.
+  useEffect(() => {
+    const now = serverNow()
+    const due = [
+      ...layer.battles.filter((b) => !b.resolved).map((b) => Date.parse(b.ends_at)),
+      ...layer.envoys.filter((e) => e.status === 'traveling').map((e) => Date.parse(e.arrive_at)),
+      ...layer.envoys.filter((e) => e.status === 'pending' && e.expires_at).map((e) => Date.parse(e.expires_at!)),
+      ...layer.orders.map((o) => Date.parse(o.effective_at)),
+      ...layer.armies.filter((a) => a.status === 'moving' && a.goal.kind !== 'move').map((a) => Date.parse(a.arrive_at)),
+    ]
+    if (due.length === 0) return
+    // Something already past due is nudged again every few seconds until the server has settled it.
+    const next = Math.max(Math.min(...due) + 1000, lastNudge.current + 5000)
+    const id = window.setTimeout(() => {
+      lastNudge.current = serverNow()
+      settle(lobby).then(() => refreshAll())
+    }, Math.max(0, next - now))
+    return () => clearTimeout(id)
+  }, [lobby, layer.battles, layer.envoys, layer.orders, layer.armies, refreshAll])
+
   const onMarket = useCallback((market: Market) => setLayer((l) => ({ ...l, market })), [])
   const dropNotices = useCallback((ids: number[]) => setLayer((l) => ({ ...l, notices: l.notices.filter((n) => !ids.includes(n.id)) })), [])
 

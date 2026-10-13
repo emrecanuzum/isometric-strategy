@@ -132,7 +132,7 @@ function ResourceCard({ resource: r, kingdom, now, history }: { resource: Resour
 }
 
 function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
-  const { villagers, jobs, efficiency } = population(kingdom, now)
+  const { villagers, jobs, efficiency, cap, soldiers, housing } = population(kingdom, now)
   const homes = kingdom.buildings.filter((b) => b.doneAt <= now && (BUILDINGS[b.kind].villagers ?? 0) > 0).length
   const most = Math.max(villagers, jobs, 1)
   return (
@@ -152,8 +152,22 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
       </div>
       <ul className="pop-lines">
         <li>
+          <span>Nüfus / sınır</span>
+          <b className={villagers + soldiers >= cap ? 'down' : undefined}>
+            {villagers + soldiers} / {cap}
+          </b>
+        </li>
+        {soldiers > 0 && (
+          <li>
+            <span>Asker</span>
+            <b>{soldiers}</b>
+          </li>
+        )}
+        <li>
           <span>Barınak (ev, saray)</span>
-          <b>{homes}</b>
+          <b>
+            {homes} · {housing} kişilik
+          </b>
         </li>
         <li>
           <span>Üretim verimi</span>

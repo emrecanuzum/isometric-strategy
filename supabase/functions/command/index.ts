@@ -32,6 +32,7 @@ import {
   worldOf,
 } from '../_shared/server.ts'
 import type { Kingdom, Point, Row, World } from '../_shared/server.ts'
+import { tickLobby } from '../_shared/tick.ts'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -153,6 +154,16 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       next = changed(game.build(world, k, stage, cmd.kind, { x: cmd.x | 0, y: cmd.y | 0 }, now))
       break
     }
+    case 'buildMany': {
+      // A row laid by dragging (walls, houses).
+      const k = need()
+      if (!game.STROKE_KINDS.includes(cmd.kind) || !Array.isArray(cmd.spots) || cmd.spots.length > game.balance.economy.maxBatch) refuse('rejected')
+      const spots = cmd.spots.map((p: { x: unknown; y: unknown }) => (Number.isFinite(p?.x) && Number.isFinite(p?.y) ? { x: (p.x as number) | 0, y: (p.y as number) | 0 } : refuse('rejected')))
+      const { kingdom: built, placed } = game.buildMany(world, k, stage, cmd.kind, spots, now)
+      if (!placed) refuse('spot')
+      next = { state: built }
+      break
+    }
     case 'upgrade': {
       const k = need()
       if (!isId(cmd.id)) refuse('rejected')
@@ -161,12 +172,19 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       next = changed(game.upgradeBuilding(k, cmd.id, now))
       break
     }
+    case 'demolish': {
+      const k = need()
+      if (!isId(cmd.id) || !game.canDemolish(k, cmd.id)) refuse('rejected')
+      next = changed(game.demolish(k, cmd.id))
+      break
+    }
     case 'upgradeTrade':
       next = changed(game.upgradeTrade(need()))
       break
     case 'tradeGood':
-      if (!GOODS.includes(cmd.good)) refuse('rejected')
-      next = changed(game.setTradeGood(need(), cmd.good, now))
+      // 'none': the merchant stays home.
+      if (cmd.good !== 'none' && !GOODS.includes(cmd.good)) refuse('rejected')
+      next = changed(game.setTradeGood(need(), cmd.good === 'none' ? null : cmd.good, now))
       break
     case 'workers': {
       // setWorkers clamps to the building's slots at its level.
@@ -199,6 +217,15 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       const error = game.trainError(need(), count, now, unit)
       if (error) refuse(error)
       next = changed(game.trainSoldiers(need(), count, now, unit))
+      break
+    }
+    case 'disband': {
+      const units = Object.fromEntries(
+        Object.entries(cmd.units ?? {})
+          .filter(([u]) => game.UNITS.includes(u))
+          .map(([u, n]) => [u, whole(n, 0, 10000)]),
+      )
+      next = changed(game.disbandUnits(need(), units))
       break
     }
     case 'nightShift':
@@ -522,7 +549,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
   }
 }
 
-const OWN = new Set(['join', 'roll', 'found', 'build', 'upgrade', 'upgradeTrade', 'tradeGood', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'buy', 'repairWalls', 'reset'])
+const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'buy', 'repairWalls', 'reset'])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
@@ -546,6 +573,13 @@ Deno.serve(async (req) => {
     }
     if (cmd.type === 'createLobby') lobby = await openLobby(auth.user.id, cmd)
     if (typeof lobby !== 'string') return json({ error: 'lobby' }, 400)
+    // A member's nudge when something it can see has come due (a battle over, an envoy arrived): settle the lobby now
+    // instead of at the next minute's tick. At most one run every few seconds per lobby.
+    if (cmd.type === 'settle') {
+      const { count } = await admin.from('kingdoms').select('id', { count: 'exact', head: true }).eq('lobby_id', lobby).eq('user_id', auth.user.id)
+      if (!count) return json({ error: 'member' }, 403)
+      return json({ ran: await tickLobby(lobby, Date.now()) })
+    }
     if (cmd.type === 'createLobby') cmd.type = 'join'
     for (let attempt = 0; ; attempt++) {
       try {

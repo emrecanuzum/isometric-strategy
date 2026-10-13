@@ -154,6 +154,7 @@ function Garrison({ data, armies }: { data: HudData; armies: number }) {
   const garrison = garrisonOf(kingdom)
   const total = countOf(garrison)
   const [picked, setPicked] = useState<Units | null>(null)
+  const [sureDisband, setSureDisband] = useState(false)
   // Everyone at the palace unless the player picks otherwise.
   const units = picked ?? garrison
   const n = countOf(units)
@@ -181,14 +182,25 @@ function Garrison({ data, armies }: { data: HudData; armies: number }) {
               </button>
             </div>
           ))}
-          <button
-            className="btn small"
-            disabled={full || n < 1}
-            onClick={() => (online?.act({ type: 'raise', units }), setPicked(null))}
-            title={full ? 'Sahada en fazla 2 ordun olabilir' : undefined}
-          >
-            {n} askerle ordu çıkar
-          </button>
+          <div className="row">
+            <button
+              className="btn small"
+              disabled={full || n < 1}
+              onClick={() => (online?.act({ type: 'raise', units }), setPicked(null))}
+              title={full ? 'Sahada en fazla 2 ordun olabilir' : undefined}
+            >
+              {n} askerle ordu çıkar
+            </button>
+            <button
+              className={sureDisband ? 'btn small danger' : 'btn small'}
+              disabled={n < 1}
+              onClick={() => (sureDisband ? (online?.act({ type: 'disband', units }), setPicked(null), setSureDisband(false)) : setSureDisband(true))}
+              onBlur={() => setSureDisband(false)}
+              title="Askerler köylüye döner; eğitim maliyeti geri gelmez"
+            >
+              {sureDisband ? `Emin misin? ${n} askeri terhis et` : `${n} askeri terhis et`}
+            </button>
+          </div>
         </>
       )}
     </Section>

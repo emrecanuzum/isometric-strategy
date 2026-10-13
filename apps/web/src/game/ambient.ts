@@ -150,6 +150,24 @@ const KINDS: Record<string, Kind> = {
     water: false,
     allowed: (t) => t === Terrain.Grass,
   },
+  aurochs: {
+    frames: [SPRITES.aurochs],
+    period: 15,
+    move: 0.25,
+    range: 5,
+    strides: 3,
+    water: false,
+    allowed: (t) => t === Terrain.Grass,
+  },
+  sheep: {
+    frames: [SPRITES.sheep],
+    period: 10,
+    move: 0.3,
+    range: 3,
+    strides: 5,
+    water: false,
+    allowed: (t) => t === Terrain.Grass || t === Terrain.Mountain,
+  },
   gazelle: {
     frames: [SPRITES.gazelle],
     period: 9,
@@ -395,30 +413,41 @@ export function createAmbient(world: World, actors: Container): Ambient {
       const pack = 3 + Math.floor(roll(7) * 3)
       // A grazer herd sometimes has a second look in it (a stag, a grey horse).
       const lead = roll(4) < 0.5 ? 1 : 0
+      // Half the old density, and the open grassland shared by horses, aurochs, wild sheep, hares and foxes.
+      const nearMountain = near(Terrain.Mountain)
+      const small = 2 + Math.floor(roll(7) * 3)
       if (terrain === Terrain.Grass) {
-        if (nearForest && r < 0.12) spawn(KINDS.deer, x, y, herd, lead)
-        else if (!nearForest && r < 0.16) spawn(KINDS.horse, x, y, pack, lead)
-        else if (r < 0.22) spawn(KINDS.hare, x, y, 1 + Math.floor(roll(5) * 2), 0)
-        else if (r < 0.245) spawn(KINDS.fox, x, y, 1, 0)
+        if (nearForest) {
+          if (r < 0.05) spawn(KINDS.deer, x, y, herd, lead)
+          else if (r < 0.065) spawn(KINDS.boar, x, y, small, 0)
+          else if (r < 0.08) spawn(KINDS.fox, x, y, 1, 0)
+        } else if (nearMountain && r < 0.04) spawn(KINDS.sheep, x, y, pack, 0)
+        else if (r < 0.03) spawn(KINDS.horse, x, y, small, lead)
+        else if (r < 0.055) spawn(KINDS.aurochs, x, y, small, 0)
+        else if (r < 0.075) spawn(KINDS.sheep, x, y, small, 0)
+        else if (r < 0.1) spawn(KINDS.hare, x, y, 1 + Math.floor(roll(5) * 2), 0)
+        else if (r < 0.112) spawn(KINDS.fox, x, y, 1, 0)
       } else if (terrain === Terrain.Forest) {
-        if (r < 0.05) spawn(KINDS.deer, x, y, herd, lead)
-        else if (r < 0.09) spawn(KINDS.boar, x, y, herd, 0)
-        else if (r < 0.105) spawn(KINDS.wolf, x, y, pack, 0)
-        else if (r < 0.125) spawn(KINDS.fox, x, y, 1, 0)
-        else if (r < 0.135 && near(Terrain.Mountain)) spawn(KINDS.bear, x, y, 1, 0)
-        else if (r < 0.138) spawn(KINDS.bear, x, y, 1, 0)
+        if (r < 0.025) spawn(KINDS.deer, x, y, herd, lead)
+        else if (r < 0.045) spawn(KINDS.boar, x, y, herd, 0)
+        else if (r < 0.053) spawn(KINDS.wolf, x, y, pack, 0)
+        else if (r < 0.063) spawn(KINDS.fox, x, y, 1, 0)
+        else if (r < 0.068 && nearMountain) spawn(KINDS.bear, x, y, 1, 0)
+        else if (r < 0.07) spawn(KINDS.bear, x, y, 1, 0)
       } else if (terrain === Terrain.Desert) {
-        if (r < 0.06) spawn(KINDS.gazelle, x, y, pack, 0)
+        if (r < 0.03) spawn(KINDS.gazelle, x, y, pack, 0)
       } else if (terrain === Terrain.Mountain) {
-        if (r < 0.07 && heightAt(world, x, y) < balance.world.snowHeight * 0.8) spawn(KINDS.goat, x, y, herd, 0)
+        const below = heightAt(world, x, y) < balance.world.snowHeight * 0.8
+        if (r < 0.035 && below) spawn(KINDS.goat, x, y, herd, 0)
+        else if (r < 0.05 && below) spawn(KINDS.sheep, x, y, small, 0)
       } else if (terrain === Terrain.Lake) {
-        if (r < 0.2) spawn(KINDS.duck, x, y, herd, 0)
-        else if (r < 0.26) spawn(KINDS.swan, x, y, 2, 0)
+        if (r < 0.1) spawn(KINDS.duck, x, y, herd, 0)
+        else if (r < 0.13) spawn(KINDS.swan, x, y, 2, 0)
       } else if (terrain === Terrain.River) {
-        if (r < 0.12) spawn(KINDS.duck, x, y, 2 + Math.floor(roll(6) * 2), 0)
+        if (r < 0.06) spawn(KINDS.duck, x, y, 2 + Math.floor(roll(6) * 2), 0)
       } else if (terrain === Terrain.Swamp) {
-        if (r < 0.12) spawn(KINDS.heron, x, y, 1 + Math.floor(roll(6) * 2), 0)
-        else if (r < 0.16) spawn(KINDS.boar, x, y, herd, 0)
+        if (r < 0.06) spawn(KINDS.heron, x, y, 1 + Math.floor(roll(6) * 2), 0)
+        else if (r < 0.08) spawn(KINDS.boar, x, y, herd, 0)
       }
     }
   }

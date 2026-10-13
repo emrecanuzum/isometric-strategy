@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@fontsource/pixelify-sans": "^5.3.0",
+    "@fontsource/tiny5": "^5.3.0",
     "@game/shared": "workspace:*",
     "@supabase/supabase-js": "^2.45.0",
     "pixi.js": "^8.6.0",

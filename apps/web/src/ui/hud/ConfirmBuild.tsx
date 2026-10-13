@@ -1,4 +1,4 @@
-import { BUILDINGS } from '@game/shared'
+import { BUILDINGS, isFree } from '@game/shared'
 import type { BuildingKind, Kingdom } from '@game/shared'
 import { useEffect, useRef } from 'react'
 import { STRUCTURE_SPRITES, palaceIn } from '../../game/buildingSprites'
@@ -13,13 +13,19 @@ export function ConfirmBuild({
   kingdom,
   onConfirm,
   onCancel,
+  count = 1,
 }: {
   kind: BuildingKind
   kingdom: Kingdom
+  // A dragged row of this many.
+  count?: number
   onConfirm: () => void
   onCancel: () => void
 }) {
   const spec = BUILDINGS[kind]
+  // The first lumber camp, house and field are free; in a row only the first one is.
+  const paid = count - (isFree(kingdom, kind) ? 1 : 0)
+  const cost = Object.fromEntries(Object.entries(spec.cost ?? {}).map(([r, v]) => [r, (v ?? 0) * paid]))
   const yes = useRef<HTMLButtonElement>(null)
   useEffect(() => yes.current?.focus(), [])
   useEffect(() => {
@@ -37,12 +43,16 @@ export function ConfirmBuild({
         <SpriteView sprite={sprite} scale={spec.size > 1 ? 0.5 : 1} />
       </span>
       <div className="confirm-body">
-        <h2 id="confirm-title">{BUILDING_NAMES[kind]} buraya kurulsun mu?</h2>
+        <h2 id="confirm-title">{count > 1 ? `${count} ${BUILDING_NAMES[kind].toLowerCase()} kurulsun mu?` : `${BUILDING_NAMES[kind]} buraya kurulsun mu?`}</h2>
         <p id="confirm-text" className="hint">
-          {kind === 'palace' ? 'Sarayın yeri sonradan değiştirilemez.' : 'Kaynaklar harcanır ve inşaat başlar.'}
+          {kind === 'palace'
+            ? 'Sarayın yeri sonradan değiştirilemez.'
+            : count > 1
+              ? 'Kaynak yettiği kadarı kurulur; inşaat yeri boşaldıkça sırayla başlar.'
+              : 'Kaynaklar harcanır ve inşaat başlar.'}
         </p>
         <span className="card-meta">
-          <CostList cost={spec.cost} stock={kingdom.stock} />
+          <CostList cost={cost} stock={kingdom.stock} />
           {spec.buildSeconds ? (
             <span className="chip">
               <Icon name="time" size={8} /> {spec.buildSeconds} sn

@@ -206,10 +206,10 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
     yönünde süzülüp belirip sönen kısa parıltılar. Öndeki yüksek arazinin
     ya da köprünün arkasında kalanlar çizilmez.
   - **Hayvanlar** bölgeye göre yaşar: orman kenarındaki çayırda geyik
-    sürüleri (birinde boynuzlu erkek), açık çayırda yaban atı sürüleri
-    (doru ve kır), çayırda tavşan ve tilki; ormanda geyik, yaban domuzu,
+    sürüleri (birinde boynuzlu erkek), açık çayırda yaban atı, yaban sığırı
+    ve yaban koyunu sürüleri (atlar baskın değil), çayırda tavşan ve tilki; ormanda geyik, yaban domuzu,
     kurt sürüsü, tilki ve nadiren ayı; çölde ceylan sürüleri; kar sınırı
-    altındaki dağda keçi; göl ve nehirde ördek, gölde kuğu çiftleri;
+    altındaki dağda keçi ve yaban koyunu; göl ve nehirde ördek, gölde kuğu çiftleri;
     bataklıkta balıkçıl ve yaban domuzu. Evlerinin çevresinde dinlenip
     (otlayıp) yeni bir noktaya yürürler. Kara hayvanları **suyu geçmez**
     (su kuşları da karayı): durak noktası yuvadan düz bir çizgiyle
@@ -227,6 +227,9 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   ormanda ağaçlar bulunur.
 - Karo ızgarası çizilmez; yalnızca **imlecin altındaki karo** vurgulanır.
   Hudut içinde parsel çizgileri çok silik gösterilir.
+- Arayüz yazı tipi Pixelify Sans'tır; ondaki 2 ve 5 zor okunduğu için
+  **rakamlar Tiny5** ile çizilir (`apps/web/src/fonts.ts`). Büyük sayılar
+  1,2K / 3,4M diye kısaltılır.
 - Görseller şimdilik **kodla üretilir** (`apps/web/src/game/sprites.ts`);
   ileride aynı ölçüde çizilmiş sprite'larla değiştirilebilir.
 
@@ -421,6 +424,21 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   kaide üzerinde durur (tarlada toprak set); kaide aşağıdaki zemine iner.
 - **Patikalar:** Her yapının kapısından saraya, yapıların etrafından
   dolaşan toprak patikalar zemine işlenir.
+- **İnşa menüsü (devam):**
+  - **Sur ve ev** basılı tutup sürükleyerek sıra hâlinde yerleştirilir;
+    onay penceresi adedi ve toplam maliyeti gösterir. Sur parçaları inşaat
+    sırasına girmez (aynı anda kurulur); evler sıraya girer, yer boşaldıkça
+    başlar.
+  - **İlk oduncu kampı, ilk ev ve ilk tarla ücretsizdir** (bir kez), böylece
+    bütün malzemesini harcayan oyuncu kilitlenmez.
+  - **Ev sınırı** saray seviyesiyle artar: 4 / 6 / 8 / 10 / 12. Nüfusu
+    büyütmek için evleri yükseltmek de gerekir.
+  - Saray ve ticaret noktası dışındaki her yapı **yıkılabilir**: inşa ve
+    yükseltme maliyetinin yarısı geri döner (ücretsiz ilk yapının inşa
+    maliyeti dönmez).
+- **Ticaret noktası:** satılacak mal yerine **hiçbir şey satma** da
+  seçilebilir (tüccar evde bekler). Sefer başına kazanç lobinin anlık
+  fiyatından gösterilir.
 - **Duman:** Bacası olan her yapıdan (ev, atölye, oduncu, ticaret evi,
   iskele) hareketli duman yükselir.
 - **Bina seviyeleri:** Ev, tarla, oduncu kampı, silah atölyesi ve iskele
@@ -689,7 +707,7 @@ mertebesindedir.
 **Gece ve gece mesaisi**
 
 - Oyun saatinde **gece** (20:30–05:00, haritanın karardığı saatler) halk
-  dinlenir: binalar **%20** hızla üretir.
+  dinlenir: binalar **%50** hızla üretir.
 - Halk sekmesinden **gece mesaisi** açılabilir: gece de tam çalışılır ama
   mutluluk hedefi düşer ve her gece turunda **yorgunluk** birikir;
   yorgunluk gündüz dahil bütün üretimi azaltır (en fazla %60), mesai
@@ -779,6 +797,8 @@ mertebesindedir.
   - **Mancınık** (2. seviye kışla): sahada zayıf; kuşatmada her biri birkaç
     surun savunma bonusunu siler ve kazanılan kuşatmada daha çok sur yıkar.
   Askerler sarayda garnizon olur ve her tur altın ve yemek tüketir.
+  Garnizondaki askerler **terhis** edilebilir: köylüye döner ve asker
+  havuzuna geri sayılır (eğitim maliyeti geri gelmez).
   Birlik karışımları arasındaki üstünlük zara bonus olarak eklenir.
 - Garnizondan istenen birliklerle **ordu** çıkarılır; ordu haritada yürür (konumu yol ve
   zamanlardan hesaplanır). Hududu dışındaki orduya emirler elçiyle gider
@@ -871,9 +891,11 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
   doğrudan veritabanı tetikleyicilerinden gönderilir; kanal **özeldir**,
   yalnızca lobinin üyeleri dinleyebilir.
 - **Olaylar:** Krallıklar arası etkileşimler (muharebe, varış, yağma,
-  casus) `events` tablosuna `resolve_at` ile yazılır. **Dakikada bir
-  çalışan tek `pg_cron` işi** zamanı gelenleri sırayla işler; ilgili
-  krallıklar `now`'a değil olay anına ilerletilir.
+  casus) bitiş zamanlarıyla yazılır. **Dakikada bir çalışan tek `pg_cron`
+  işi** zamanı gelenleri işler. Ayrıca istemci, ekranındaki bir savaşın,
+  elçinin ya da emrin zamanı gelince sunucuyu `settle` ile dürter; sonuç
+  saniyeler içinde gelir. Lobi başına kilit (`lobbies.sim_at`) aynı lobinin
+  aynı anda iki kez işlenmesini önler.
 - **Tarih:** Gün tick'inde krallık başına küçük bir satır
   (`kingdom_daily`: nüfus, altın, ordu gücü, toprak, skor) — gelişim
   eğrisi ve sezon sıralaması buradan.

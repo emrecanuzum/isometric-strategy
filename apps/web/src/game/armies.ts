@@ -135,7 +135,7 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
           text: '',
           resolution: window.devicePixelRatio * 2,
           anchor: { x: 0.5, y: 1 },
-          style: { fontFamily: "'Pixelify Sans', ui-monospace, monospace", fontSize: 13, fill: 0xf3e6c8, stroke: { color: 0x120d0b, width: 3 } },
+          style: { fontFamily: "'Digits', 'Pixelify Sans', ui-monospace, monospace", fontSize: 13, fill: 0xf3e6c8, stroke: { color: 0x120d0b, width: 3 } },
         })
         labels.addChild(s.label)
       }

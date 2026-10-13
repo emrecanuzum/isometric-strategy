@@ -8,9 +8,9 @@ import type { IconName } from '../icons'
 // stepped frames, segmented meters, sprites shown at whole scales.
 
 export const fmt = (v: number) => Math.floor(v).toLocaleString('tr-TR')
-// Short form for tight spaces: 1.390 → 1,4B, 2.500.000 → 2,5Mn.
-const compact = new Intl.NumberFormat('tr-TR', { notation: 'compact', maximumFractionDigits: 1 })
-export const short = (v: number) => (v < 1000 ? fmt(v) : compact.format(Math.floor(v)).replace(/\s/g, ''))
+// Short form for tight spaces: 1.390 → 1,4K, 2.500.000 → 2,5M.
+const one = (v: number) => (Math.floor(v * 10) / 10).toLocaleString('tr-TR', { maximumFractionDigits: 1 })
+export const short = (v: number) => (v < 1000 ? fmt(v) : v < 1_000_000 ? `${one(v / 1000)}K` : `${one(v / 1_000_000)}M`)
 export const signed = (v: number) =>
   `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(Math.abs(v) < 10 ? 1 : 0).replace('.', ',')}`
 export const times = (v: number) => `×${v.toFixed(2).replace('.', ',')}`

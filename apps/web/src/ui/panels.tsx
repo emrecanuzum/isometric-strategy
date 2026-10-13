@@ -1,5 +1,5 @@
-import { BUILDINGS, GOODS, balance, constructing, tradeUnits } from '@game/shared'
-import type { Cost, Good, Kingdom, Resource, Survey } from '@game/shared'
+import { BUILDINGS, GOODS, balance, constructing, priceAt, tradeUnits } from '@game/shared'
+import type { Cost, Good, Kingdom, Market, Resource, Survey } from '@game/shared'
 import { useState } from 'react'
 import type React from 'react'
 import { KINGDOM_COLORS, palaceIn } from '../game/buildingSprites'
@@ -45,30 +45,52 @@ export function Constructions({ kingdom, now }: { kingdom: Kingdom; now: number 
   )
 }
 
-export function GoodChoice({ kingdom, selected, onGood }: { kingdom: Kingdom; selected: Good | null; onGood: (good: Good) => void }) {
+// The goods the merchant can sell, each at the lobby's price right now (CLAUDE.md §9.7).
+export function GoodChoice({
+  kingdom,
+  selected,
+  onGood,
+  market,
+  now,
+}: {
+  kingdom: Kingdom
+  selected: Good | null
+  onGood: (good: Good | null) => void
+  market?: Market | null
+  now: number
+}) {
   const units = tradeUnits(kingdom)
+  const idle = selected === null && !!kingdom.trade.idle
   return (
     <div className="goods" role="radiogroup" aria-label="Satılacak mal">
       {GOODS.map((good) => {
-        const price = balance.economy.trade.price[good]
+        const price = priceAt(market, good, now)
+        const base = balance.economy.trade.price[good]
         return (
           <button key={good} role="radio" aria-checked={good === selected} className={good === selected ? 'good active' : 'good'} onClick={() => onGood(good)}>
             <Icon name={RESOURCE_ICONS[good]} size={24} />
             <b>{RESOURCE_NAMES[good]}</b>
             <small>Stok {fmt(kingdom.stock[good])}</small>
-            <small>Birimi {price} altın</small>
+            <small className={price < base * 0.98 ? 'down' : price > base * 1.02 ? 'up' : undefined}>
+              Birimi {price.toFixed(2).replace('.', ',')} altın
+            </small>
             <small className="up">
-              +{units * price} <Icon name="gold" size={8} /> / sefer
+              +{Math.round(units * price)} <Icon name="gold" size={8} /> / sefer
             </small>
           </button>
         )
       })}
+      <button role="radio" aria-checked={idle} className={idle ? 'good none active' : 'good none'} onClick={() => onGood(null)}>
+        <Icon name="close" size={16} />
+        <b>Hiçbir şey satma</b>
+        <small>Tüccar evde bekler, stoklar korunur</small>
+      </button>
     </div>
   )
 }
 
 // Shown as soon as the trade post stands: the merchant waits until a good is chosen.
-export function GoodPicker({ kingdom, onGood }: { kingdom: Kingdom; onGood: (good: Good) => void }) {
+export function GoodPicker({ kingdom, onGood, market, now }: { kingdom: Kingdom; onGood: (good: Good | null) => void; market?: Market | null; now: number }) {
   return (
     <div className="modal">
       <div className="dialog frame" role="dialog" aria-modal="true" aria-labelledby="good-picker-title">
@@ -83,7 +105,7 @@ export function GoodPicker({ kingdom, onGood }: { kingdom: Kingdom; onGood: (goo
           Tüccarın hangi malı satsın? Her {balance.economy.trade.tripSeconds} saniyede bir seçtiğin maldan götürüp altın
           getirir. Sonradan Ticaret sekmesinden değiştirebilirsin.
         </p>
-        <GoodChoice kingdom={kingdom} selected={null} onGood={onGood} />
+        <GoodChoice kingdom={kingdom} selected={null} onGood={onGood} market={market} now={now} />
       </div>
     </div>
   )

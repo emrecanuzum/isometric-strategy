@@ -125,6 +125,9 @@ export type Command =
   | { type: 'roll' }
   | { type: 'found'; site: number; name: string; color: string }
   | { type: 'build'; kind: string; x: number; y: number }
+  | { type: 'buildMany'; kind: string; spots: Point[] }
+  | { type: 'demolish'; id: number }
+  | { type: 'disband'; units: Units }
   | { type: 'upgrade'; id: number }
   | { type: 'upgradeTrade' }
   | { type: 'tradeGood'; good: string }
@@ -170,6 +173,12 @@ export async function send(lobby: string, command: Command): Promise<Mine> {
 export async function sendFor<T>(lobby: string, command: Command): Promise<{ kingdom: Mine; result: T }> {
   const { kingdom, result } = (await invoke({ lobby, ...command })) as { kingdom: Mine; result: T }
   return { kingdom, result }
+}
+
+// Asks the server to settle what has come due in the lobby now (a battle over, an envoy arrived) instead of at the
+// next minute's tick. Quiet: a refusal only means someone else just did it.
+export async function settle(lobby: string) {
+  await supabase.functions.invoke('command', { body: { type: 'settle', lobby } }).catch(() => null)
 }
 
 // Deletes a lobby and everything in it (admins only).

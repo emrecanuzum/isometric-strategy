@@ -4,6 +4,7 @@ import '@fontsource/pixelify-sans/latin-400.css'
 import '@fontsource/pixelify-sans/latin-ext-400.css'
 import '@fontsource/pixelify-sans/latin-600.css'
 import '@fontsource/pixelify-sans/latin-ext-600.css'
+import './fonts'
 import './index.css'
 import Root from './Root.tsx'
 
