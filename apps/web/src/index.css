@@ -3149,3 +3149,21 @@ kbd {
 .army-stats .meter i {
   flex: 1;
 }
+
+/* Each kingdom's row ends in a pin that takes the camera there. */
+.chat-kingdoms li {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+}
+
+.chat-kingdoms li > button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-kingdoms .btn.locate {
+  flex: none;
+  width: 32px;
+  min-height: 32px;
+}

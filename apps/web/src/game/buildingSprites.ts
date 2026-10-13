@@ -942,6 +942,27 @@ function temple(level = 1): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
+// The warehouse: a long timber barn with wide doors, sacks and barrels stacked by it; bigger and stone-footed with
+// each level.
+function warehouse(level = 1): Sprite {
+  const { canvas, cx, base, h } = footprint(2, 80 + (level - 1) * 10)
+  yard(canvas, cx, base, h, SOIL, 53)
+  hall(canvas, cx - 4, base - 6, { w: 44 + (level - 1) * 3, wall: 22 + (level - 1) * 6, roof: 22, walls: level > 2 ? KEEP : WALL, roofs: level > 1 ? SLATE : THATCH, masonry: level > 2, bay: 0, door: true })
+  // Big double doors on the right wall.
+  for (let t = 14; t <= 30; t++) {
+    const x = cx - 4 + (44 + (level - 1) * 3 - t)
+    const ground = base - 6 - (44 + (level - 1) * 3) / 2 + t / 2
+    for (let z = 0; z < 16; z++) canvas.set(x, ground - z, t === 22 ? TIMBER[0] : t % 3 === 0 ? PLANK[1] : PLANK[2])
+  }
+  // Goods stacked by the front corner.
+  barrel(canvas, cx + 14, base - 6)
+  barrel(canvas, cx + 22, base - 10)
+  crate(canvas, cx + 6, base - 4, 8)
+  if (level > 1) crate(canvas, cx + 28, base - 14, 8)
+  shadeBlobs(canvas, [{ x: cx - 14, y: base - 6, r: 4 }, { x: cx - 8, y: base - 5, r: 3.5 }, { x: cx - 11, y: base - 10, r: 3 }], SACK, 3)
+  return canvas.sprite(cx, base, 0)
+}
+
 // A section of wall filling one tile: masonry on the two front faces, a walkway on top and battlements; a broken one
 // is a heap of rubble with a stump of wall.
 // `door`: a gate, with an arched wooden door through both front faces under a banner.
@@ -1016,6 +1037,7 @@ export const LEVEL_SPRITES: Partial<Record<BuildingKind, Sprite[][]>> = {
   university: [2, 3].map((level) => [university(level)]),
   hospital: [2, 3].map((level) => [hospital(level)]),
   temple: [2, 3].map((level) => [temple(level)]),
+  warehouse: [2, 3].map((level) => [warehouse(level)]),
 }
 
 // The palace in each kingdom colour, made when first seen.
@@ -1050,6 +1072,7 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   university: [university()],
   hospital: [hospital()],
   temple: [temple()],
+  warehouse: [warehouse()],
   brokenWall: [wall(true)],
   scaffold: [scaffold(1), scaffold(2), scaffold(3)],
 }

@@ -40,7 +40,7 @@ export interface Journal {
   unread: number
   nextId: number
   // What has come in during the current day.
-  tally: { rounds: number; produced: Partial<Stock>; tradeGold: number; trips: number; emptyTrip: boolean }
+  tally: { rounds: number; produced: Partial<Stock>; tradeGold: number; trips: number; emptyTrip: boolean; wasted?: Partial<Stock> }
   // Stores after each production round, oldest first, for the storehouse charts.
   history: Stock[]
   // The envoy's notices already written down.
@@ -103,6 +103,10 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
       } else j = { ...j, tally }
     } else if (event.kind === 'trained') {
       j = write(j, seasonStart, at, { tone: 'good', icon: 'people', title: `${event.count} savaşçı eğitimini bitirdi`, text: 'Askerler sarayda garnizonda bekliyor.' })
+    } else if (event.kind === 'wasted') {
+      const wasted = { ...(j.tally.wasted ?? {}) }
+      for (const [g, v] of Object.entries(event.lost)) wasted[g as Good] = (wasted[g as Good] ?? 0) + (v ?? 0)
+      j = { ...j, tally: { ...j.tally, wasted } }
     } else if (event.kind === 'researched') {
       const r = RESEARCH_NAMES[event.id]
       j = write(j, seasonStart, at, { tone: 'good', icon: r?.icon ?? 'book', title: `Üniversite: ${r?.name ?? event.id} öğrenildi`, text: r?.note })
@@ -155,6 +159,16 @@ function closeDay(j: Journal, kingdom: Kingdom, at: number, seasonStart: number)
       icon: 'warn',
       title: 'Ambar azalıyor',
       text: `Halk ürettiğinden fazla yiyor. Bu gidişle yemek yaklaşık ${rounds} tur sonra biter; tarla kur.`,
+    })
+  }
+  // Full stores: what was lost this day.
+  const wasted = Object.entries(j.tally.wasted ?? {}).filter(([, v]) => (v ?? 0) >= 1)
+  if (wasted.length > 0) {
+    j = write(j, seasonStart, at, {
+      tone: 'bad',
+      icon: 'chest',
+      title: 'Ambar dolu',
+      text: `Depoya sığmayan ${wasted.map(([g, v]) => `${fmt(v ?? 0)} ${RESOURCE_NAMES[g as Good].toLowerCase()}`).join(', ')} boşa gitti. Ambar kur ya da yükselt, fazlasını sat.`,
     })
   }
   return { ...j, day: j.day + 1, tally: { rounds: 0, produced: {}, tradeGold: 0, trips: 0, emptyTrip: false } }

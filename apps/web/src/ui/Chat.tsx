@@ -20,6 +20,7 @@ export function Chat({
   onSend,
   kingdoms,
   onKingdom,
+  onLocate,
 }: {
   messages: ChatMessage[]
   // The player's kingdom id, to set their own lines apart.
@@ -28,6 +29,8 @@ export function Chat({
   onSend: (body: string) => Promise<void>
   kingdoms: KingdomInfo[]
   onKingdom: (id: number) => void
+  // Moves the camera to a kingdom's palace.
+  onLocate: (site: { x: number; y: number }) => void
 }) {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'chat' | 'kingdoms'>('chat')
@@ -94,6 +97,9 @@ export function Chat({
                 {k.id !== mine && (
                   <span className={lastSeen(k.seenAt, Date.now()) === 'çevrimiçi' ? 'presence on' : 'presence'}>{lastSeen(k.seenAt, Date.now())}</span>
                 )}
+              </button>
+              <button className="btn icon-only locate" onClick={() => onLocate(k.site)} aria-label={`${k.name} haritada göster`} title="Haritada göster">
+                <Icon name="pin" size={16} />
               </button>
             </li>
           ))}

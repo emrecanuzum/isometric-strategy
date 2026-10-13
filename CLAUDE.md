@@ -404,6 +404,17 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 
 - **Kaynaklar:** Altın + 3 hammadde: **Yemek**, **Yapı malzemesi**,
   **Savaş malzemesi**. Başlangıçta her birinden bir miktar stok verilir.
+- **Tur:** Ekonomi **üretim turlarıyla** işler: her 10 gerçek saniyede
+  (oyunda 4 dakika) bir tur; binalar üretir, halk yer, vergi ve maaşlar
+  ödenir. Bir oyun saatinde 15 tur geçer. Saat kartı bunu ve sonraki tura
+  kalan süreyi yazar; saatteki şeridin her karesi bir oyun saatidir.
+- **Depo sınırı:** Her hammaddeden (yemek, yapı malzemesi, savaş
+  malzemesi) depoda tutulabilecek miktar saray seviyesiyle artar (400 /
+  800 / 1300 / 1900 / 2600) ve her **Ambar** ekler (seviye 1/2/3: +400 /
+  +800 / +1400; saray seviyesine göre 1–3 ambar). Sığmayan üretim boşa
+  gider; günlük raporunda "Ambar dolu" yazar. Altın sınırsızdır. Depo
+  doluluğu Depo sekmesinde ve üst çubuğun kartlarında "stok / sınır"
+  olarak görünür.
 - **Kuruluş:** Hazır şehir düzeni yoktur. Krallık kurulunca oyuncu önce
   **Sarayını** hudut içinde istediği yere yerleştirir (ücretsiz, anında);
   ev, tarla vb. her şeyi de kendisi yerleştirir. Ticaret arsasına
@@ -889,7 +900,8 @@ mertebesindedir.
   **gözcü kuleleri** (menziline giren düşmana hasar verir, yoldan
   geçenlere de) ve **surlar** (savunmayı güçlendirir, kuşatmada hasar alır,
   yıkılan sur onarılmalıdır) savunur. Kazanan saldıran depolardan yağma
-  alır. Düşen saray **15 dakika kuşatma kalkanı** kazanır: bu sürede kapıya
+  alır: her depodan %15, ama toplamda hayatta kalan asker başına en fazla
+  12 birim (askerlerin taşıyabildiği kadar). Düşen saray **15 dakika kuşatma kalkanı** kazanır: bu sürede kapıya
   varan ordu savaşmadan bekler, kalkan bitince kuşatma kendiliğinden
   başlar. Kalan süre Krallıklar sekmesinde, ordu kartında ve sayaçlarda
   görünür.
@@ -977,7 +989,8 @@ krallıkta birer tane olur ve 3 seviyelidir.
   isteği, yerine getirilemeyen emirler, ambar boşalıyor uyarıları. Önemli
   kayıtlar diğerlerinden daha uzun saklanır ve kırmızı kenarlıdır. Sekmedeki
   rozet okunmamış önemli kayıt sayısıdır; sekme açılınca sıfırlanır.
-- **Sohbet** penceresi daha uzundur; Krallıklar sekmesinde her oyuncunun
+- **Sohbet** penceresi daha uzundur; Krallıklar sekmesinde her satırın
+  sonundaki pin kamerayı o krallığa götürür; her oyuncunun
   son görülmesinden çevrimiçi olup olmadığı (yeşil nokta, son 6 dakika) ya
   da ne zaman görüldüğü yazar.
 - **Günlük:** Olaylar ayrı (mor) kâğıtta, elçinin diğer krallıklardan

@@ -490,6 +490,40 @@
           "buildSeconds": 50
         }
       ]
+    },
+    "warehouse": {
+      "size": 2,
+      "cost": {
+        "gold": 60,
+        "materials": 60
+      },
+      "buildSeconds": 15,
+      "storage": 400,
+      "maxByPalaceLevel": [
+        1,
+        2,
+        2,
+        3,
+        3
+      ],
+      "levels": [
+        {
+          "cost": {
+            "gold": 140,
+            "materials": 120
+          },
+          "buildSeconds": 25,
+          "storage": 800
+        },
+        {
+          "cost": {
+            "gold": 280,
+            "materials": 220
+          },
+          "buildSeconds": 40,
+          "storage": 1400
+        }
+      ]
     }
   },
   "maxBatch": 64,
@@ -503,5 +537,15 @@
     "graceHours": 1,
     "perHour": 0.1,
     "min": 0.2
+  },
+  "storage": {
+    "baseByPalaceLevel": [
+      400,
+      800,
+      1300,
+      1900,
+      2600
+    ],
+    "note": "per good (food, materials, arms); gold is not capped"
   }
 }

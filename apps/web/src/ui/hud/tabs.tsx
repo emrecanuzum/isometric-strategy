@@ -7,6 +7,7 @@ import {
   armoryOf,
   balance,
   capOf,
+  storageCap,
   plannedHousing,
   buildingCount,
   cutOff,
@@ -207,8 +208,10 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
   const l = ledger(kingdom, now)
   const trips = balance.economy.productionSeconds / balance.economy.trade.tripSeconds
   const tradeGold = kingdom.trade.good ? tradeUnits(kingdom) * trips * priceAt(online?.market, kingdom.trade.good, now) : 0
+  const cap = storageCap(kingdom, now)
   return (
     <>
+      <p className="hint">Her mal için depo yeri: {fmt(cap)} (saray seviyesi ve ambarlarla artar; altın sınırsız).</p>
       <Section title="Gelir ve gider" icon="gold" aside="altın / tur">
         <Stat label="Vergi" value={signed(l.tax)} tone="up" />
         {tradeGold > 0 && <Stat label="Ticaret" value={signed(tradeGold)} tone="up" />}
@@ -244,8 +247,17 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
                 <b>{RESOURCE_NAMES[r]}</b>
                 {r !== 'gold' && <small>Arazi çarpanı {times(kingdom.yields[r as Good])}</small>}
               </span>
-              <strong>{fmt(stock)}</strong>
+              <strong className={r !== 'gold' && stock >= cap ? 'down' : undefined}>
+                {fmt(stock)}
+                {r !== 'gold' && <small> / {fmt(cap)}</small>}
+              </strong>
             </header>
+            {r !== 'gold' && <Meter value={stock / cap} tone={stock >= cap ? 'down' : stock >= cap * 0.85 ? 'gold' : 'up'} label={`${RESOURCE_NAMES[r]} deposu`} segments={20} />}
+            {r !== 'gold' && stock >= cap && (
+              <p className="alert">
+                <Icon name="warn" size={16} /> Depo dolu: üretilen fazlası boşa gidiyor. Ambar kur ya da yükselt, fazlasını sat.
+              </p>
+            )}
             <div className="store-flow">
               <Stat label="Gelen" value={signed(made)} tone={made > 0 ? 'up' : undefined} />
               <Stat label="Giden" value={signed(-used)} tone={used > 0 ? 'down' : undefined} />

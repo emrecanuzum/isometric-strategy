@@ -1,4 +1,4 @@
-import { BUILDINGS, buildingOutput, cutOff, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
+import { BUILDINGS, buildingOutput, cutOff, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
 import type { Building, BuildingKind, Good, Product, Resource } from '@game/shared'
 import { useState } from 'react'
 import { looksOf } from '../../game/buildingSprites'
@@ -112,6 +112,16 @@ function Output({ building: b, data }: { building: Building; data: HudData }) {
     )
   }
   if (b.kind === 'university' || b.kind === 'hospital' || b.kind === 'temple') return <b>{BUILDING_NOTES[b.kind]}</b>
+  if (spec.storage) {
+    return (
+      <>
+        <b className="output">
+          <Icon name="chest" size={24} /> +{spec.storage} depo yeri
+        </b>
+        <small className="hint">Yemek, yapı malzemesi ve savaş malzemesinin her biri için. Toplam depo: {storageCap(kingdom, now)}.</small>
+      </>
+    )
+  }
   const out = buildingOutput(kingdom, b, now)
   if (!out) return <b>Üretim yok</b>
   return (
@@ -208,6 +218,7 @@ function Levels({ building: b, data, onUpgrade }: { building: Building; data: Hu
         next.amount !== now.amount && `Üretim ${now.amount} → ${next.amount}`,
         next.workers !== now.workers && `İşçi ${now.workers} → ${next.workers}`,
         next.villagers !== now.villagers && `Köylü ${now.villagers} → ${next.villagers}`,
+        next.storage !== now.storage && `Depo yeri ${now.storage} → ${next.storage}`,
       ].filter(Boolean)
     : []
   return (

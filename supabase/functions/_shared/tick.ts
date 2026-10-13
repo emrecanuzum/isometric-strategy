@@ -347,11 +347,18 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
   // A palace taken: its stores are looted and part of its walls knocked down.
   if (battle.kind === 'siege' && battle.besieged !== null && plan.winner === 'attackers') {
     const share = m.siege.lootShare
+    // The survivors carry away what they can: a share of each store, no more than their packs hold in all.
+    const survivors = battle.attackers.reduce((n, f, i) => n + Math.max(0, f.soldiers - (plan.attackerLosses[i] ?? 0)), 0)
+    const carry = survivors * m.siege.carryPerSoldier
     const loot: Record<string, number> = {}
     await mutateKingdom(battle.besieged, at, (k) => {
       const stock = { ...k.stock }
+      const want: Record<string, number> = {}
+      for (const r of ['gold', 'food', 'materials', 'arms']) want[r] = Math.floor(stock[r] * share)
+      const total = Object.values(want).reduce((a, b) => a + b, 0)
+      const fit = total > carry ? carry / total : 1
       for (const r of ['gold', 'food', 'materials', 'arms']) {
-        loot[r] = Math.floor(stock[r] * share)
+        loot[r] = Math.floor(want[r] * fit)
         stock[r] -= loot[r]
       }
       // Catapults bring down more of the walls.

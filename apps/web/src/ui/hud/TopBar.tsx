@@ -1,4 +1,4 @@
-import { BUILDINGS, balance, buildingOutput, gameTime, population, tradeUnits } from '@game/shared'
+import { BUILDINGS, balance, buildingOutput, gameTime, population, storageCap, tradeUnits } from '@game/shared'
 import type { BuildingKind, Kingdom, Resource, Stock } from '@game/shared'
 import type React from 'react'
 import { PHASE_NAMES, dayPhase, isNight } from '../../game/daylight'
@@ -49,7 +49,7 @@ export function TopBar({ kingdom, now, seasonStart, history, onOpen }: Props) {
           <small className={villagers < jobs ? 'down' : ''}>/{jobs}</small>
         </span>
       </Chip>
-      <Clock now={now} seasonStart={seasonStart} />
+      <Clock now={now} seasonStart={seasonStart} nextRound={kingdom.nextProductionAt} />
     </div>
   )
 }
@@ -97,7 +97,10 @@ function ResourceCard({ resource: r, kingdom, now, history }: { resource: Resour
       <header className="pop-head">
         <Icon name={RESOURCE_ICONS[r]} size={24} />
         <b>{RESOURCE_NAMES[r]}</b>
-        <strong>{fmt(kingdom.stock[r])}</strong>
+        <strong className={r !== 'gold' && kingdom.stock[r] >= storageCap(kingdom, now) ? 'down' : undefined}>
+          {fmt(kingdom.stock[r])}
+          {r !== 'gold' && <small> / {fmt(storageCap(kingdom, now))}</small>}
+        </strong>
       </header>
       <div className="flowbars" aria-label="Tur başına gelen ve giden">
         <span>Gelen</span>
@@ -189,7 +192,7 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
 }
 
 // Game date and time, with a card showing the day as a 24-hour strip.
-function Clock({ now, seasonStart }: { now: number; seasonStart: number }) {
+function Clock({ now, seasonStart, nextRound }: { now: number; seasonStart: number; nextRound?: number }) {
   const t = gameTime(now, seasonStart)
   const night = isNight(t.hour)
   const time = `${String(t.hh).padStart(2, '0')}:${String(t.mm).padStart(2, '0')}`
@@ -239,9 +242,19 @@ function Clock({ now, seasonStart }: { now: number; seasonStart: number }) {
             <span>Yeni gün</span>
             <b>{Math.ceil(t.untilNextDay / 60000)} dk sonra</b>
           </li>
+          {nextRound !== undefined && (
+            <li>
+              <span>Sonraki üretim turu</span>
+              <b>{Math.max(0, Math.ceil((nextRound - now) / 1000))} sn</b>
+            </li>
+          )}
         </ul>
         <Meter value={t.day / balance.time.seasonGameDays} label="Sezon ilerlemesi" segments={16} />
-        <p className="pop-foot">Oyunda 1 gün = gerçekte 1 saat.</p>
+        <p className="pop-foot">
+          Oyunda 1 gün = gerçekte 1 saat. Çubuktaki her kare 1 oyun saatidir (gerçekte {(balance.time.gameDayMs / 24 / 60000).toString().replace('.', ',')} dk).
+          <br />
+          <b>Tur</b>, her {balance.economy.productionSeconds} saniyede (oyunda {Math.round((balance.economy.productionSeconds * 1000 * 24 * 60) / balance.time.gameDayMs)} dk) bir işleyen üretim turudur: binalar üretir, halk yer, vergi ve maaşlar ödenir. Bir oyun saatinde {Math.round(balance.time.gameDayMs / 24 / (balance.economy.productionSeconds * 1000))} tur geçer.
+        </p>
       </div>
     </div>
   )

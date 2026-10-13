@@ -21,8 +21,9 @@
     "breakShare": 0.3
   },
   "siege": {
-    "lootShare": 0.3,
-    "shieldSeconds": 900
+    "lootShare": 0.15,
+    "shieldSeconds": 900,
+    "carryPerSoldier": 12
   },
   "morale": {
     "start": 100,

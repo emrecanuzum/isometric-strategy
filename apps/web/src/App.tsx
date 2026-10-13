@@ -1102,6 +1102,7 @@ function App({
           canPost={kingdom !== null}
           onSend={sendChat}
           kingdoms={kingdoms}
+          onLocate={(site) => view?.centerOn(site)}
           onKingdom={(id) => {
             if (id === mine.id) return
             setFocus(id)

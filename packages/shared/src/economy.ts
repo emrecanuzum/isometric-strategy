@@ -24,7 +24,7 @@ export type Resource = 'gold' | Good
 export type Stock = Record<Resource, number>
 export type Cost = Partial<Stock>
 
-export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple'] as const
+export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple', 'warehouse'] as const
 export type BuildingKind = 'palace' | 'tradePost' | (typeof BUILDABLE)[number]
 
 // Weapons are worked from raw goods in the forge and kept in the armory, apart from the tradeable stores.
@@ -48,6 +48,8 @@ export interface LevelSpec {
   villagers?: number
   workers?: number
   amount?: number
+  // Room it adds to the stores of each good (warehouses).
+  storage?: number
 }
 
 export interface BuildingSpec extends LevelSpec {
@@ -206,6 +208,7 @@ export type EconomyEvent =
   | { kind: 'produced'; delta: Partial<Stock>; weapons?: Partial<Armory> }
   | { kind: 'trained'; count: number }
   | { kind: 'spy' }
+  | { kind: 'wasted'; lost: Partial<Record<Good, number>> }
   | { kind: 'researched'; id: string }
   | { kind: 'fortune'; fortune: FortuneKind; scope: FortuneScope; until: number; lost?: Partial<Stock>; gold?: number }
 
@@ -351,6 +354,15 @@ export function territoryStage(kingdom: Kingdom, now: number) {
 const done = (b: Building, at: number) => b.doneAt <= at
 
 export const armoryOf = (kingdom: Kingdom): Armory => kingdom.armory ?? { sword: 0, shield: 0, bow: 0 }
+
+// How much of each good the stores hold (CLAUDE.md §6.1): a little more with each palace level, and as much again as
+// the warehouses give; whatever is made beyond it is lost. Gold is not capped.
+export function storageCap(kingdom: Kingdom, at: number) {
+  const base = balance.economy.storage.baseByPalaceLevel
+  let cap = base[Math.max(0, Math.min(base.length - 1, palaceLevel(kingdom, at) - 1))]
+  for (const b of kingdom.buildings) if (b.doneAt <= at) cap += levelSpec(b.kind, b.level).storage ?? 0
+  return cap
+}
 
 // The palace's finished level (0 without a palace); a palace being raised counts at the level below.
 export function palaceLevel(kingdom: Kingdom, at: number) {
@@ -772,6 +784,15 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       }
       const { delta, weapons } = roundOutcome(k, next)
       for (const [r, v] of Object.entries(delta)) k.stock[r as Resource] = Math.max(0, k.stock[r as Resource] + (v ?? 0))
+      // Full stores: what does not fit is lost.
+      const space = storageCap(k, next)
+      const lost: Partial<Record<Good, number>> = {}
+      for (const g of GOODS) {
+        if (k.stock[g] <= space) continue
+        lost[g] = k.stock[g] - space
+        k.stock[g] = space
+      }
+      if (Object.keys(lost).length > 0) events.push({ kind: 'wasted', lost })
       for (const [w, v] of Object.entries(weapons)) k.armory![w as Weapon] += v ?? 0
       k.sickness = sicknessStep(k, next)
       // The people's mood drifts toward what the taxes, the queen, the granary, the temple and the day make of it.
