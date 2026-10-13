@@ -172,6 +172,11 @@ export async function sendFor<T>(lobby: string, command: Command): Promise<{ kin
   return { kingdom, result }
 }
 
+// Deletes a lobby and everything in it (admins only).
+export async function deleteLobby(lobby: string) {
+  await invoke({ type: 'deleteLobby', lobby })
+}
+
 // Opens a lobby (the server makes its world) and joins it.
 export async function createLobby(name: string, maxPlayers: number, password: string) {
   return invoke({ type: 'createLobby', name, maxPlayers, password })

@@ -169,7 +169,7 @@ export default function Root() {
               </button>
             ))}
           </div>
-          {tab === 'lobbies' && <Lobbies busy={busy} error={error} onEnter={enter} onCreate={create} />}
+          {tab === 'lobbies' && <Lobbies busy={busy} error={error} onEnter={enter} onCreate={create} admin={profile.admin} />}
           {tab === 'tutorial' && <Tutorial />}
           {tab === 'settings' && <SettingsPanel profile={profile} settings={settings} onChange={updateSettings} onSignOut={signOut} />}
           <footer className="home-foot">

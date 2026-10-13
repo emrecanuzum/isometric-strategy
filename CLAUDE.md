@@ -522,8 +522,10 @@ fiyatı düşer, çok alınanın artar; zamanla dengeye döner.
 
 - Yoldaki orduya **anlık emir verilemez.** Yön değiştirme, geri çağırma,
   hedef değiştirme gibi emirler komutana **elçi** ile ulaştırılır.
-- Elçinin orduya ulaşması süre alır: **12 oyun saati = 30 gerçek dakika**
-  (`config/balance/time.json` → `messengerDelayGameDays`). Emir, elçi
+- Elçinin orduya ulaşması süre alır: canlı oyunda **12 oyun saati = 30
+  gerçek dakika**; test aşamasında **30 saniye**
+  (`config/balance/time.json` → `messengerDelayGameDays`; canlıya geçerken
+  0.5 yapılacak). Emir, elçi
   vardığında (`effective_at`) yürürlüğe girer; o ana kadar ordu mevcut
   emrini uygulamaya devam eder. Böylece ordu sistemi tam gerçek zamanlı
   değildir: her ordunun en az 30 dakikalık geleceği önceden bellidir.
@@ -780,7 +782,7 @@ mertebesindedir.
   Birlik karışımları arasındaki üstünlük zara bonus olarak eklenir.
 - Garnizondan istenen birliklerle **ordu** çıkarılır; ordu haritada yürür (konumu yol ve
   zamanlardan hesaplanır). Hududu dışındaki orduya emirler elçiyle gider
-  (§8.2.1, 30 dk). Bir krallığın sahada **en fazla 2 ordusu** olur: ordu
+  (§8.2.1; testte 30 sn, canlıda 30 dk). Bir krallığın sahada **en fazla 2 ordusu** olur: ordu
   ikiye bölünebilir (her tür orantılı ayrılır); aynı krallığın iki ordusu
   **5 karo** yakınlıktaysa birleşebilir.
 - Savaştaki iki krallığın orduları karşılaşınca **muharebe** olur

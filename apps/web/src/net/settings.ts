@@ -16,16 +16,19 @@ export const DEFAULT_SETTINGS: Settings = { music: true, musicVolume: 70 }
 export interface Profile {
   username: string
   email: string
+  // May delete any lobby.
+  admin: boolean
   settings: Settings
 }
 
 export async function loadProfile(): Promise<Profile | null> {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) return null
-  const { data } = await supabase.from('profiles').select('username, settings').eq('user_id', auth.user.id).maybeSingle()
+  const { data } = await supabase.from('profiles').select('username, settings, is_admin').eq('user_id', auth.user.id).maybeSingle()
   return {
     username: data?.username ?? auth.user.email?.split('@')[0] ?? '',
     email: auth.user.email ?? '',
+    admin: data?.is_admin === true,
     settings: { ...DEFAULT_SETTINGS, ...(data?.settings as Partial<Settings> | undefined) },
   }
 }

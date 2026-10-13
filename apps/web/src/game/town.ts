@@ -49,7 +49,10 @@ export function findPath(from: Point, to: Point, blocked: (x: number, y: number)
   const start = index(from)
   const goal = index(to)
   const free = (i: number) => i === start || i === goal || !blocked(x0 + (i % w), y0 + Math.floor(i / w))
-  const cost = new Float32Array(w * h).fill(Infinity)
+  // Float64: with 32-bit costs rounding can make two tiles each look cheaper by way of the other, which loops the
+  // walk back from the goal forever.
+  const cost = new Float64Array(w * h).fill(Infinity)
+  const closed = new Uint8Array(w * h)
   const came = new Int32Array(w * h).fill(-1)
   const open: number[] = [start]
   cost[start] = 0
@@ -59,6 +62,7 @@ export function findPath(from: Point, to: Point, blocked: (x: number, y: number)
     let best = 0
     for (let n = 1; n < open.length; n++) if (cost[open[n]] + guess(open[n]) < cost[open[best]] + guess(open[best])) best = n
     const i = open.splice(best, 1)[0]
+    closed[i] = 1
     if (i === goal) break
     const x = i % w
     const y = Math.floor(i / w)
@@ -68,7 +72,7 @@ export function findPath(from: Point, to: Point, blocked: (x: number, y: number)
         const ny = y + dy
         if ((dx === 0 && dy === 0) || nx < 0 || ny < 0 || nx >= w || ny >= h) continue
         const n = ny * w + nx
-        if (!free(n) || (dx !== 0 && dy !== 0 && (!free(y * w + nx) || !free(ny * w + x)))) continue
+        if (closed[n] || !free(n) || (dx !== 0 && dy !== 0 && (!free(y * w + nx) || !free(ny * w + x)))) continue
         const next = cost[i] + (dx !== 0 && dy !== 0 ? Math.SQRT2 : 1)
         if (next >= cost[n]) continue
         if (cost[n] === Infinity) open.push(n)
@@ -79,7 +83,11 @@ export function findPath(from: Point, to: Point, blocked: (x: number, y: number)
   }
   if (cost[goal] === Infinity) return null
   const cells: Point[] = []
-  for (let i = goal; i !== start; i = came[i]) cells.push({ x: x0 + (i % w) + 0.5, y: y0 + Math.floor(i / w) + 0.5 })
+  // No walk is longer than the box it was searched in; anything longer would be a loop.
+  for (let i = goal; i !== start; i = came[i]) {
+    if (i < 0 || cells.length > w * h) return null
+    cells.push({ x: x0 + (i % w) + 0.5, y: y0 + Math.floor(i / w) + 0.5 })
+  }
   const raw = [from, ...cells.reverse().slice(0, -1), to]
   // String pulling: skip corners while the straight line between stays on free tiles.
   const clear = (a: Point, b: Point) => {

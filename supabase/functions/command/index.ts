@@ -535,6 +535,15 @@ Deno.serve(async (req) => {
     const body = await req.json()
     const { ...cmd } = body
     let lobby = body.lobby
+    // Admins may delete any lobby; everything in it goes with it (cascade).
+    if (cmd.type === 'deleteLobby') {
+      const { data: profile } = await admin.from('profiles').select('is_admin').eq('user_id', auth.user.id).single()
+      if (!profile?.is_admin) return json({ error: 'admin' }, 403)
+      if (typeof lobby !== 'string') return json({ error: 'lobby' }, 400)
+      const { error } = await admin.from('lobbies').delete().eq('id', lobby)
+      if (error) throw error
+      return json({ deleted: lobby })
+    }
     if (cmd.type === 'createLobby') lobby = await openLobby(auth.user.id, cmd)
     if (typeof lobby !== 'string') return json({ error: 'lobby' }, 400)
     if (cmd.type === 'createLobby') cmd.type = 'join'

@@ -1,6 +1,6 @@
 import { LOBBY_SIZES } from '@game/shared'
 import { useCallback, useEffect, useState } from 'react'
-import { listLobbies } from '../../net/online'
+import { deleteLobby, listLobbies } from '../../net/online'
 import type { LobbyListing } from '../../net/online'
 import { Icon } from '../icons'
 
@@ -13,14 +13,28 @@ export function Lobbies({
   error,
   onEnter,
   onCreate,
+  admin = false,
 }: {
   // What is under way (entering or opening a lobby), and why the last attempt failed.
   busy: string | null
   error: string | null
   onEnter: (lobby: LobbyListing, password: string) => void
   onCreate: (name: string, maxPlayers: number, password: string) => void
+  // Admins see a delete button on every lobby.
+  admin?: boolean
 }) {
   const [lobbies, setLobbies] = useState<LobbyListing[] | null>(null)
+  // The lobby whose delete button was pressed once (a second press deletes it).
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const remove = async (id: string) => {
+    if (deleting !== id) return setDeleting(id)
+    setDeleting(null)
+    try {
+      await deleteLobby(id)
+    } finally {
+      refresh()
+    }
+  }
   const [loadError, setLoadError] = useState(false)
   const [asking, setAsking] = useState<string | null>(null)
   const [password, setPassword] = useState('')
@@ -72,6 +86,17 @@ export function Lobbies({
                 <span className="lobby-count" title="Krallık sayısı">
                   <Icon name="people" size={16} /> {lobby.players}/{lobby.max_players}
                 </span>
+                {admin && (
+                  <button
+                    className={deleting === lobby.id ? 'btn small danger' : 'btn small'}
+                    onClick={() => remove(lobby.id)}
+                    onBlur={() => setDeleting(null)}
+                    disabled={busy !== null}
+                    title="Lobiyi ve içindeki her şeyi sil"
+                  >
+                    {deleting === lobby.id ? 'Emin misin?' : 'Sil'}
+                  </button>
+                )}
                 {lobby.joined ? (
                   <button className="btn small" onClick={() => onEnter(lobby, '')} disabled={busy !== null}>
                     Devam et

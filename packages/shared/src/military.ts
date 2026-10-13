@@ -98,7 +98,7 @@ export function findRoute(world: Pick<World, 'size' | 'terrain' | 'feature'>, fr
         const ny = cy + dy
         if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue
         const next = ny * n + nx
-        if (next !== goal && !open(next)) continue
+        if (closed[next] || (next !== goal && !open(next))) continue
         // No cutting a corner between two closed cells.
         if (dx && dy && !open(cy * n + nx) && !open(ny * n + cx)) continue
         const g = cost[c] + (dx && dy ? Math.SQRT2 : 1)
@@ -111,7 +111,11 @@ export function findRoute(world: Pick<World, 'size' | 'terrain' | 'feature'>, fr
   }
   if (start !== goal && came[goal] === -1) return null
   const cells: number[] = []
-  for (let c = goal; c !== start && c !== -1; c = came[c]) cells.push(c)
+  for (let c = goal; c !== start && c !== -1; c = came[c]) {
+    // A loop in the trail back would never end.
+    if (cells.length > n * n) return null
+    cells.push(c)
+  }
   const points = cells.reverse().map((c) => ({ x: (c % n) * CELL + CELL / 2, y: Math.floor(c / n) * CELL + CELL / 2 }))
   // Straight runs of cells become one segment.
   const route = [from]
