@@ -1,4 +1,4 @@
-import { balance, castReadyAt, fishError } from '@game/shared'
+import { FISH_H, FISH_LIMIT, FISH_STEP, FISH_ZONE, balance, castReadyAt, fishError, fishGame } from '@game/shared'
 import type { FisherEntry, Resource } from '@game/shared'
 import { useEffect, useRef, useState } from 'react'
 import { KINGDOM_COLORS } from '../../game/buildingSprites'
@@ -28,13 +28,20 @@ const secs = (ms: number) => (ms >= 60_000 ? `${Math.floor(ms / 60_000)} dk ${Ma
 
 export function FisherPanel({ data }: { data: HudData }) {
   const { kingdom, now, online } = data
-  const [playing, setPlaying] = useState(false)
+  // The seed the server drew for this cast (the game is played from it), while the cast is on.
+  const [seed, setSeed] = useState<number | null>(null)
   const [result, setResult] = useState<FisherEntry | null>(null)
   const why = fishError(kingdom, now)
   const log = kingdom.fisherLog ?? []
-  const finish = async (caught: boolean) => {
-    const entry = await online?.act<FisherEntry>({ type: 'fish', caught })
-    setResult(entry ?? null)
+  const cast = async () => {
+    setResult(null)
+    const answer = await online?.act<{ seed: number }>({ type: 'cast' })
+    if (answer) setSeed(answer.seed)
+  }
+  // The presses go to the server, which plays the cast again to decide the catch.
+  const finish = async (toggles: number[]) => {
+    const entry = await online?.act<FisherEntry>({ type: 'fish', toggles })
+    setResult(entry ?? { at: Date.now(), kind: 'miss' })
   }
   return (
     <>
@@ -43,7 +50,7 @@ export function FisherPanel({ data }: { data: HudData }) {
           Kulübedeki tuhaf balıkçı oltasını sana veriyor. Basılı tut (fare, dokunma ya da boşluk tuşu) ve yeşil alanı kaçan balığın üstünde tut;
           çubuk dolarsa tutarsın. Bazen bir kese mal, bazen de bir şişe içinde başka bir krallık hakkında bir not çıkar.
         </p>
-        <button className="btn wide" disabled={why !== null} onClick={() => (setResult(null), setPlaying(true))}>
+        <button className="btn wide" disabled={why !== null} onClick={cast}>
           <span>
             <Icon name="food" size={16} /> Oltayı at
           </span>
@@ -65,7 +72,7 @@ export function FisherPanel({ data }: { data: HudData }) {
           </ul>
         )}
       </Section>
-      {playing && (
+      {seed !== null && (
         <div className="modal" role="dialog" aria-labelledby="fishing-title">
           <section className="dialog frame fishing">
             <header className="sheet-head">
@@ -78,12 +85,12 @@ export function FisherPanel({ data }: { data: HudData }) {
             {result ? (
               <div className="fishing-result">
                 <p className={result.kind === 'miss' ? 'down' : 'up'}>{describeCatch(result)}</p>
-                <button className="btn small" onClick={() => (setPlaying(false), setResult(null))}>
+                <button className="btn small" onClick={() => (setSeed(null), setResult(null))}>
                   Tamam
                 </button>
               </div>
             ) : (
-              <FishingGame onDone={finish} />
+              <FishingGame seed={seed} onDone={finish} />
             )}
           </section>
         </div>
@@ -92,13 +99,10 @@ export function FisherPanel({ data }: { data: HudData }) {
   )
 }
 
-// The game: a tall water column, a fish darting up and down, the green catch zone that rises while held and sinks
-// when let go, and a bar that fills while the fish is in the zone and drains while it is not.
-const H = 220
-const ZONE = 44
-const LIMIT_S = 25
-
-function FishingGame({ onDone }: { onDone: (caught: boolean) => void }) {
+// The game (shared with the server, see fishGame): a tall water column, a fish darting up and down, the green catch
+// zone that rises while held and sinks when let go, and a bar that fills while the fish is in the zone and drains
+// while it is not. Played in fixed steps; the steps at which the button went down or up are what is sent.
+function FishingGame({ seed, onDone }: { seed: number; onDone: (toggles: number[]) => void }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const held = useRef(false)
   const doneRef = useRef(onDone)
@@ -109,37 +113,23 @@ function FishingGame({ onDone }: { onDone: (caught: boolean) => void }) {
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     const ctx = canvas.current!.getContext('2d')!
-    const s = { fish: H / 2, fishV: 0, target: H / 2, retarget: 0, zone: H - ZONE, zoneV: 0, progress: 0.3, start: performance.now(), last: performance.now(), over: false }
+    const game = fishGame(seed)
+    const toggles: number[] = []
+    let pressed = false
+    let last = performance.now()
+    let carry = 0
     let frame = 0
-    const step = (now: number) => {
-      const dt = Math.min(0.05, (now - s.last) / 1000)
-      s.last = now
-      // The fish picks a new spot every so often, sometimes with a sudden dart.
-      s.retarget -= dt
-      if (s.retarget <= 0) {
-        s.target = 10 + Math.random() * (H - 20)
-        s.retarget = 0.4 + Math.random() * 0.9
-      }
-      const pull = (s.target - s.fish) * 9
-      s.fishV += (pull - s.fishV * 2.5) * dt * (Math.random() < 0.02 ? 6 : 1)
-      s.fish = Math.max(6, Math.min(H - 6, s.fish + s.fishV * dt))
-      // The zone: lifted while held, pulled down by its weight, bouncing off the ends.
-      s.zoneV += (held.current ? -560 : 420) * dt
-      s.zone += s.zoneV * dt
-      if (s.zone < 0) (s.zone = 0), (s.zoneV *= -0.3)
-      if (s.zone > H - ZONE) (s.zone = H - ZONE), (s.zoneV *= -0.3)
-      const inside = s.fish >= s.zone && s.fish <= s.zone + ZONE
-      s.progress = Math.max(0, Math.min(1, s.progress + (inside ? 0.32 : -0.26) * dt))
-      const elapsed = (now - s.start) / 1000
-      // Draw: water, zone, fish, and the bar beside.
+    const H = FISH_H
+    const draw = () => {
+      const s = game.state
       ctx.fillStyle = '#1c3550'
       ctx.fillRect(0, 0, 40, H)
       for (let y = 6; y < H; y += 14) {
         ctx.fillStyle = '#25466a'
         ctx.fillRect(4 + ((y * 7) % 20), y, 8, 1)
       }
-      ctx.fillStyle = inside ? '#7cd65a' : '#4f8c40'
-      ctx.fillRect(2, Math.round(s.zone), 36, ZONE)
+      ctx.fillStyle = s.inside ? '#7cd65a' : '#4f8c40'
+      ctx.fillRect(2, Math.round(s.zone), 36, FISH_ZONE)
       ctx.fillStyle = '#e2c48a'
       ctx.fillRect(14, Math.round(s.fish) - 4, 12, 8)
       ctx.fillRect(10, Math.round(s.fish) - 2, 4, 4)
@@ -153,22 +143,34 @@ function FishingGame({ onDone }: { onDone: (caught: boolean) => void }) {
       ctx.fillStyle = '#5a5450'
       ctx.fillRect(66, 0, 4, H)
       ctx.fillStyle = '#c8952e'
-      const left = Math.max(0, 1 - elapsed / LIMIT_S)
+      const left = Math.max(0, 1 - s.step / FISH_LIMIT)
       ctx.fillRect(66, H - Math.round(left * H), 4, Math.round(left * H))
-      if (!s.over && (s.progress >= 1 || s.progress <= 0 || elapsed >= LIMIT_S)) {
-        s.over = true
-        doneRef.current(s.progress >= 1)
+    }
+    const tick = (now: number) => {
+      carry += Math.min(0.25, (now - last) / 1000)
+      last = now
+      while (carry >= FISH_STEP && !game.state.over) {
+        if (held.current !== pressed) {
+          pressed = held.current
+          toggles.push(game.state.step)
+        }
+        game.advance(pressed)
+        carry -= FISH_STEP
+      }
+      draw()
+      if (game.state.over) {
+        doneRef.current(toggles)
         return
       }
-      frame = requestAnimationFrame(step)
+      frame = requestAnimationFrame(tick)
     }
-    frame = requestAnimationFrame(step)
+    frame = requestAnimationFrame(tick)
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
     }
-  }, [])
+  }, [seed])
   return (
     <div
       className="fishing-game"
@@ -176,7 +178,7 @@ function FishingGame({ onDone }: { onDone: (caught: boolean) => void }) {
       onPointerUp={() => (held.current = false)}
       onPointerCancel={() => (held.current = false)}
     >
-      <canvas ref={canvas} width={72} height={H} />
+      <canvas ref={canvas} width={72} height={FISH_H} />
       <small className="hint">Bar dolarsa tutarsın, boşalırsa ya da süre biterse balık kaçar. {balance.economy.fishing.cooldownSeconds} sn'de bir olta atılabilir.</small>
     </div>
   )

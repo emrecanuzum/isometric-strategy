@@ -455,8 +455,11 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   krallık hakkında yavan bir not vardır ("… krallığının 1000'den fazla
   altını var gibi görünüyor"; gerçeğin yaklaşık %70'inin yuvarlanmış hâli).
   Sonuçlar kulübenin **balıkçı günlüğüne** yazılır. Olta 150 saniyede bir
-  atılabilir; bekleme süresini ve ödülü sunucu belirler (oyunun kendisi
-  oyuncunun ekranında oynanır). Değerler `economy.json` → `fishing`,
+  atılabilir. Oyun belirlenimcidir: olta atılınca sunucu bir tohum verir,
+  oyun saniyede 60 sabit adımla oynanır, istemci yalnızca düğmeye basılıp
+  bırakılan adımları gönderir; sunucu oyunu aynı tohum ve basışlarla yeniden
+  oynayıp tutulup tutulmadığına kendisi karar verir (ve oyunun süresinden
+  kısa sürede biten bir atışı kabul etmez). Ödülü de sunucu çeker. Değerler `economy.json` → `fishing`,
   mantık `packages/shared/src/fishing.ts`.
 - **Patikalar:** Her yapının kapısından saraya, yapıların etrafından
   dolaşan toprak patikalar zemine işlenir.

@@ -152,7 +152,8 @@ export type Command =
   | { type: 'seen' }
   | { type: 'operation'; target: number; op: Operation }
   | { type: 'raid'; target: number }
-  | { type: 'fish'; caught: boolean }
+  | { type: 'cast' }
+  | { type: 'fish'; toggles: number[] }
   | { type: 'repairTrade' }
   | { type: 'ransom' }
   | { type: 'release'; target: number }

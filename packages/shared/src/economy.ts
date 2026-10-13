@@ -209,6 +209,8 @@ export interface Kingdom {
   fearUntil?: number
   // The mysterious fisher's last cast and what the fishing brought (newest first; kept by the server).
   lastFishAt?: number
+  // The cast under way: the seed the server drew for its game, and when the line went in.
+  fishCast?: { seed: number; at: number }
   fisherLog?: FisherEntry[]
   // Battles and sieges won (kept by the server, for the lobby's ranking).
   record?: { battlesWon?: number; siegesWon?: number }

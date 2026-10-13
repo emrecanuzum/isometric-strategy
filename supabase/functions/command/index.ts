@@ -588,25 +588,52 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       }
       return null
     }
-    case 'fish': {
-      // A cast at the fisher's hut. The little game is played on the player's screen; the server holds the pause
-      // between casts and draws what a catch brings up (a bag of goods, or word of another kingdom in a bottle).
+    case 'cast': {
+      // The line goes in: the server draws the seed of this cast's game and starts the pause before the next one.
       const settled = game.advance(me.state, now).kingdom
       const why = game.fishError(settled, now)
       if (why) refuse(why)
+      const seed = crypto.getRandomValues(new Uint32Array(1))[0] | 0
+      await mutateKingdom(me.id, now, (k) => {
+        if (game.castReadyAt(k) > now) refuse('busy')
+        return { ...k, lastFishAt: now, fishCast: { seed, at: now } }
+      })
+      return { seed }
+    }
+    case 'fish': {
+      // The cast played out: the server plays the same game again from its seed and the player's presses, and so
+      // decides the catch itself; then draws what a catch brings up.
+      const cast = me.state.fishCast as { seed: number; at: number } | undefined
+      if (!cast || now - cast.at > 90_000) refuse('none')
+      const toggles = cmd.toggles
+      if (
+        !Array.isArray(toggles) ||
+        toggles.length > game.FISH_MAX_TOGGLES ||
+        !toggles.every((t: unknown, n: number) => Number.isInteger(t) && (t as number) >= 0 && (n === 0 || (t as number) >= toggles[n - 1]))
+      )
+        refuse('rejected')
+      const played = game.replayCast(cast!.seed, toggles)
+      // A game cannot end sooner than it takes to play (a little slack for the network).
+      const caught = played.caught && now - cast!.at >= (played.steps / 60) * 1000 - 3000
       const rivals = rows
         .filter((r) => r.id !== me.id && r.state)
         .map((r) => ({ name: r.name ?? '?', color: r.color, kingdom: game.advance(r.state, now).kingdom }))
       const bytes = crypto.getRandomValues(new Uint32Array(32))
       let i = 0
       const random = () => bytes[i++ % bytes.length] / 4294967296
-      const entry = cmd.caught === true ? game.castReward(random, rivals, now) : { at: now, kind: 'miss' }
+      const entry = caught ? game.castReward(random, rivals, now) : { at: now, kind: 'miss' }
+      let fresh = true
       await mutateKingdom(me.id, now, (k) => {
-        if (game.castReadyAt(k) > now) refuse('busy')
+        // Settled once only, even if two answers for the same cast arrive together.
+        if (k.fishCast?.seed !== cast!.seed) {
+          fresh = false
+          return null
+        }
         const stock = { ...k.stock }
         if (entry.kind === 'bag') for (const [r, v] of Object.entries(entry.goods as Record<string, number>)) stock[r] += v
-        return { ...k, stock, lastFishAt: now, fisherLog: game.logCast(k, entry) }
+        return { ...k, stock, fishCast: null, fisherLog: game.logCast(k, entry) }
       })
+      if (!fresh) refuse('none')
       return entry
     }
     case 'recall': {
