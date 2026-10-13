@@ -2994,3 +2994,27 @@ kbd {
   color: var(--gold);
   font-size: 13px;
 }
+
+/* The journal's filter: everything, or only the bad news. */
+.journal-filter {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--px) * 3);
+  margin-bottom: calc(var(--px) * 5);
+}
+
+.journal-filter .btn[aria-pressed='true'] {
+  --face: var(--panel-2);
+  color: var(--gold);
+}
+
+.journal-filter .count {
+  margin-left: calc(var(--px) * 2);
+  padding: 0 calc(var(--px) * 2);
+  background: #b0302a;
+  color: #fff;
+}
+
+.letter.important {
+  box-shadow: inset calc(var(--px) * 3) 0 0 0 #b0302a, var(--bevel), var(--outline);
+}

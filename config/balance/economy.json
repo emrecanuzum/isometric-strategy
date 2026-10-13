@@ -164,6 +164,13 @@
           "workers": 4,
           "amount": 11
         }
+      ],
+      "maxByPalaceLevel": [
+        3,
+        4,
+        6,
+        8,
+        10
       ]
     },
     "lumberCamp": {
@@ -195,6 +202,13 @@
           "workers": 5,
           "amount": 8
         }
+      ],
+      "maxByPalaceLevel": [
+        2,
+        3,
+        4,
+        5,
+        6
       ]
     },
     "dock": {
@@ -285,6 +299,13 @@
           "workers": 5,
           "amount": 5
         }
+      ],
+      "maxByPalaceLevel": [
+        1,
+        2,
+        3,
+        3,
+        4
       ]
     },
     "market": {
@@ -353,7 +374,14 @@
         "materials": 60,
         "arms": 20
       },
-      "buildSeconds": 20
+      "buildSeconds": 20,
+      "maxByPalaceLevel": [
+        2,
+        2,
+        3,
+        4,
+        6
+      ]
     },
     "wall": {
       "size": 1,
@@ -373,7 +401,14 @@
         "materials": 60
       },
       "buildSeconds": 6,
-      "outsideQueue": true
+      "outsideQueue": true,
+      "maxByPalaceLevel": [
+        2,
+        2,
+        3,
+        4,
+        5
+      ]
     },
     "university": {
       "size": 3,

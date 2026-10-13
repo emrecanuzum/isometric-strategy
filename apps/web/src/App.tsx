@@ -45,7 +45,7 @@ import { KINGDOM_COLORS } from './game/buildingSprites'
 import type { KingdomColor } from './game/buildingSprites'
 import { serverNow } from './net/clock'
 import { CHAT_KEEP, CommandError, loadChat, loadMine, loadRivals, markSeen, postChat, send, sendFor, subscribe } from './net/online'
-import type { ChatMessage, Command, IntelReport, Lobby, Mine, Rival } from './net/online'
+import type { ChatMessage, Command, IntelReport, Lobby, Mine, Notice, Rival } from './net/online'
 import { useLayer } from './net/layer'
 import type { MapArmy } from './game/armies'
 import { play } from './audio/sfx'
@@ -180,6 +180,18 @@ const NOTICE_CUES: Record<string, Cue> = {
   raid_repelled: 'good',
 }
 
+// News that goes against the player: kept under the journal's "Önemli" tab.
+const HURTFUL = new Set(['war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
+function noticeHurts(n: Notice, me: string | undefined) {
+  if (HURTFUL.has(n.kind)) return true
+  const p = n.payload as { kind?: string; accepted?: boolean; report?: { losses?: Record<string, number> } }
+  // A battle that cost the player soldiers; a proposal of theirs turned down.
+  if (n.kind === 'battle_end') return !!me && (p.report?.losses?.[me] ?? 0) > 0
+  if (n.kind === 'envoy_answer') return p.accepted === false
+  if (n.kind === 'envoy_proposal') return p.kind === 'tribute'
+  return false
+}
+
 // Kingdom colours as numbers for the map.
 const hexOf = (color: string | null | undefined) => KINGDOM_COLORS[color as KingdomColor]?.swatch ?? '#f2d16b'
 const colorOf = (color: string | null | undefined) => parseInt((KINGDOM_COLORS[color as KingdomColor]?.swatch ?? '#f2d16b').slice(1), 16)
@@ -196,7 +208,7 @@ const BUILD_ERRORS: Record<BuildError, string> = {
   top: 'En yüksek seviyede',
   busy: 'Bina şu an inşaatta',
   locked: 'Önce sarayı 2. seviyeye yükselt',
-  limit: 'Evler nüfus sınırını dolduruyor; sarayı yükselt',
+  limit: 'Bu yapının sınırı dolu (evlerde nüfus sınırı); sarayı yükselt',
 }
 
 // Walkers keep to dry land below the mountains.
@@ -877,7 +889,7 @@ function App({
         play(NOTICE_CUES[n.kind] ?? 'envoy')
       }
       const { icon, title, text } = describeNotice(n, online)
-      noteJournal(n.id, at, { icon, title, text: text || undefined })
+      noteJournal(n.id, at, { icon, title, text: text || undefined, important: noticeHurts(n, kingdom?.name) })
     }
   })
   const closeNotice = () => {

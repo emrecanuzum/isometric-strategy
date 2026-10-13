@@ -561,6 +561,16 @@ export function buildLimit(kingdom: Kingdom, kind: BuildingKind, at: number) {
 }
 export const buildingCount = (kingdom: Kingdom, kind: BuildingKind) => kingdom.buildings.filter((b) => b.kind === kind).length
 
+// The most of a kind the kingdom may have at its palace level, for showing: 1 for the one-only kinds, the palace
+// level's cap for the capped ones (fields, camps, forges, towers, gates), null where only room limits it (houses
+// follow the population cap, see housingFull).
+export function capOf(kingdom: Kingdom, kind: BuildingKind, at: number): number | null {
+  const spec = BUILDINGS[kind]
+  if (kind === 'palace' || kind === 'tradePost' || kind === 'dock' || spec.unique) return 1
+  const caps = spec.maxByPalaceLevel
+  return caps ? caps[Math.max(0, Math.min(caps.length - 1, palaceLevel(kingdom, at) - 1))] : null
+}
+
 export function buildError(world: World, kingdom: Kingdom, stage: number, kind: BuildingKind, spot: Point | null, now: number, turned?: Along | null): BuildError | null {
   const spec = BUILDINGS[kind]
   // One palace, placed first; it stands at once and takes no construction slot.

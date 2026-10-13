@@ -24,7 +24,14 @@ export interface Entry {
   icon: IconName
   title: string
   text?: string
+  // Bad news that touches the kingdom (shown again under "Önemli"); entries from before the flag count when bad.
+  important?: boolean
 }
+
+export const isImportant = (e: Entry) => e.important ?? e.tone === 'bad'
+
+// Important entries are kept longer than the rest.
+const KEEP_IMPORTANT = 80
 
 export interface Journal {
   day: number
@@ -55,8 +62,13 @@ const signed = (v: number) => `${v >= 0 ? '+' : '−'}${fmt(Math.abs(v))}`
 // Entries are filed under the game day (1 day = 1 real hour, see gameTime) they were written on, counted from the
 // start of the lobby's season.
 function write(j: Journal, seasonStart: number, at: number, entry: Omit<Entry, 'id' | 'at' | 'day'>): Journal {
-  const next = { id: j.nextId, at, day: gameTime(at, seasonStart).day, ...entry }
-  return { ...j, nextId: j.nextId + 1, unread: j.unread + 1, entries: [next, ...j.entries].slice(0, KEEP_ENTRIES) }
+  const next: Entry = { id: j.nextId, at, day: gameTime(at, seasonStart).day, ...entry }
+  if (next.important === undefined && next.tone === 'bad') next.important = true
+  // The latest entries, and the important ones further back.
+  let plain = 0
+  let kept = 0
+  const entries = [next, ...j.entries].filter((e) => (isImportant(e) ? ++kept <= KEEP_IMPORTANT : ++plain <= KEEP_ENTRIES))
+  return { ...j, nextId: j.nextId + 1, unread: j.unread + 1, entries }
 }
 
 // Folds the events of one clock tick into the journal.
@@ -98,6 +110,7 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
       ]
       const minutes = Math.max(1, Math.round((event.until - at) / 60_000))
       j = write(j, seasonStart, at, {
+        important: f?.tone === 'bad',
         tone: 'fortune',
         icon: f?.icon ?? 'star',
         title: `${f?.title ?? 'Beklenmedik bir olay'} · ${SCOPE_NAMES[event.scope ?? 'kingdom']}`,

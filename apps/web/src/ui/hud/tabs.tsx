@@ -6,7 +6,7 @@ import {
   TAX_LEVELS,
   armoryOf,
   balance,
-  buildLimit,
+  capOf,
   plannedHousing,
   buildingCount,
   cutOff,
@@ -43,7 +43,7 @@ import { BUILDING_NAMES, BUILDING_NOTES, RESOURCE_ICONS, RESOURCE_NAMES, WEAPON_
 import { CostList, GoodChoice, Missing } from '../panels'
 import type { Journal } from './journal'
 import type { Online } from './online'
-import { REPORT_ROUNDS } from './journal'
+import { REPORT_ROUNDS, isImportant } from './journal'
 import { FortuneNote, Sickness } from './institutions'
 import { History, Meter, Placeholder, Section, SpriteView, Stat, fmt, signed, times } from './primitives'
 
@@ -109,7 +109,7 @@ const BLOCKED: Record<string, string> = {
   unique: 'Zaten var ya da arsa yok',
   spot: 'Yer yok',
   locked: '2. seviye saray',
-  limit: 'Nüfus sınırı dolu: sarayı yükselt',
+  limit: 'Sınır dolu: sarayı yükselt',
 }
 
 export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
@@ -149,7 +149,6 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
                   ? `${spec.workers} işçi çalıştırır`
                   : null
             const why = error ? (BLOCKED[error] ?? 'Şu an olmaz') : null
-            const limit = buildLimit(kingdom, kind, now)
             return (
               <li key={kind}>
                 <button className="card" disabled={why !== null} onClick={() => onPlace(kind)} aria-describedby={`why-${kind}`}>
@@ -165,9 +164,10 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
                         Barınak {plannedHousing(kingdom)} / {population(kingdom, now).cap} (nüfus sınırı saray seviyesiyle artar)
                       </small>
                     ) : (
-                      Number.isFinite(limit) && (
-                        <small>
-                          {buildingCount(kingdom, kind)} / {limit} kurulu (saray seviyesiyle artar)
+                      capOf(kingdom, kind, now) !== null && (
+                        <small className={buildingCount(kingdom, kind) >= capOf(kingdom, kind, now)! ? 'down' : undefined}>
+                          {buildingCount(kingdom, kind)} / {capOf(kingdom, kind, now)} kurulu
+                          {BUILDINGS[kind].maxByPalaceLevel ? ' (sınır saray seviyesiyle artar)' : ''}
                         </small>
                       )
                     )}
@@ -436,7 +436,10 @@ export function KingdomTab(data: HudData) {
             <li key={kind}>
               <SpriteView sprite={thumb(kind, kingdom.color)} scale={kind === 'house' ? 0.5 : 0.25} label={BUILDING_NAMES[kind]} />
               <span>{BUILDING_NAMES[kind]}</span>
-              <b>×{n}</b>
+              <b className={capOf(kingdom, kind, now) !== null && n >= capOf(kingdom, kind, now)! ? 'down' : undefined}>
+                {n}
+                {capOf(kingdom, kind, now) !== null ? ` / ${capOf(kingdom, kind, now)}` : kind === 'house' ? ` · ${plannedHousing(kingdom)} / ${population(kingdom, now).cap} barınak` : ''}
+              </b>
             </li>
           ))}
         </ul>
@@ -693,32 +696,51 @@ const ago = (ms: number) => {
 }
 
 export function JournalTab({ journal, now }: HudData) {
-  if (journal.entries.length === 0) {
-    return (
-      <Placeholder icon="scroll" title="Elçiden haber yok">
-        Her {REPORT_ROUNDS} üretim turunda bir gün kapanır ve elçin raporunu yazar.
-      </Placeholder>
-    )
-  }
+  // Everything, or only the bad news that touched the kingdom.
+  const [only, setOnly] = useState(false)
+  const important = journal.entries.filter(isImportant)
+  const shown = only ? important : journal.entries
   const days = new Map<number, typeof journal.entries>()
-  for (const e of journal.entries) days.set(e.day, [...(days.get(e.day) ?? []), e])
+  for (const e of shown) days.set(e.day, [...(days.get(e.day) ?? []), e])
   return (
-    <div className="letters">
-      {[...days].map(([day, entries]) => (
-        <section key={day} aria-label={`${day}. gün`}>
-          <h3 className="day-head">{day}. gün</h3>
-          {entries.map((e) => (
-            <article key={e.id} className={`letter tone-${e.tone}`}>
-              <Icon name={e.icon} size={16} />
-              <div>
-                <b>{e.title}</b>
-                {e.text && <p>{e.text}</p>}
-                <small>{ago(now - e.at)}</small>
-              </div>
-            </article>
+    <>
+      <div className="segmented journal-filter" role="tablist" aria-label="Günlük">
+        <button className="btn small" role="tab" aria-selected={!only} aria-pressed={!only} onClick={() => setOnly(false)}>
+          <Icon name="scroll" size={16} /> Tümü
+        </button>
+        <button className="btn small" role="tab" aria-selected={only} aria-pressed={only} onClick={() => setOnly(true)}>
+          <Icon name="warn" size={16} /> Önemli {important.length > 0 && <span className="count">{important.length}</span>}
+        </button>
+      </div>
+      {shown.length === 0 ? (
+        only ? (
+          <Placeholder icon="happy" title="Kötü bir haber yok">
+            Krallığını etkileyen olumsuz olaylar (yağma, savaş ilanı, kayıplar, sabotaj, kötü olaylar) burada toplanır.
+          </Placeholder>
+        ) : (
+          <Placeholder icon="scroll" title="Elçiden haber yok">
+            Her {REPORT_ROUNDS} üretim turunda bir gün kapanır ve elçin raporunu yazar.
+          </Placeholder>
+        )
+      ) : (
+        <div className="letters">
+          {[...days].map(([day, entries]) => (
+            <section key={day} aria-label={`${day}. gün`}>
+              <h3 className="day-head">{day}. gün</h3>
+              {entries.map((e) => (
+                <article key={e.id} className={`letter tone-${e.tone}${isImportant(e) ? ' important' : ''}`}>
+                  <Icon name={e.icon} size={16} />
+                  <div>
+                    <b>{e.title}</b>
+                    {e.text && <p>{e.text}</p>}
+                    <small>{ago(now - e.at)}</small>
+                  </div>
+                </article>
+              ))}
+            </section>
           ))}
-        </section>
-      ))}
-    </div>
+        </div>
+      )}
+    </>
   )
 }

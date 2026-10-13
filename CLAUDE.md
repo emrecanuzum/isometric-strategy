@@ -452,6 +452,12 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     barınak (inşaattakiler ve yükseltilenler hedef seviyesiyle sayılır)
     sınıra ulaşınca yeni ev kurulmaz, ev yükseltilmez; sarayı yükseltmek
     gerekir.
+  - **Yapı sınırları** saray seviyesiyle artar (saray 1→5): tarla 3 / 4 /
+    6 / 8 / 10, oduncu kampı 2 / 3 / 4 / 5 / 6, silah atölyesi 1 / 2 / 3 /
+    3 / 4, gözcü kulesi 2 / 2 / 3 / 4 / 6, sur kapısı 2 / 2 / 3 / 4 / 5;
+    pazar, kışla, casus evi, üniversite, hastane, tapınak ve iskele birer
+    tane. Sınır İnşa sekmesinde ve Krallık sekmesindeki yapılar listesinde
+    "kurulu / sınır" olarak yazar; sınırı aşan eski yapılar yerinde kalır.
   - **Saray 4. ve 5. seviye** çok pahalı ve uzundur (savaş malzemesi de
     ister; `economy.json`).
   - Saray ve ticaret noktası dışındaki her yapı **yıkılabilir**: inşa ve
@@ -945,6 +951,12 @@ krallıkta birer tane olur ve 3 seviyelidir.
   zamandan ve tohumdan hesaplanır (lobi tohumu sunucunun krallığa yazdığı
   `lobbyKey`), anlık etkileri (kayıp, define, salgın) başladığı üretim
   turunda bir kez uygulanır.
+- **Günlük sekmeleri:** "Tümü" ve "Önemli". Önemli'de krallığı etkileyen
+  olumsuz olaylar toplanır: kötü olaylar, yağma ve yağma girişimi, savaş
+  ilanı, dayatılan barış, hakaret, sabotaj ve kaçırma, yakalanan casuslar,
+  kule kayıpları, asker kaybedilen muharebeler, reddedilen teklifler, haraç
+  isteği, yerine getirilemeyen emirler, ambar boşalıyor uyarıları. Önemli
+  kayıtlar diğerlerinden daha uzun saklanır ve kırmızı kenarlıdır.
 - **Günlük:** Olaylar ayrı (mor) kâğıtta, elçinin diğer krallıklardan
   getirdiği haberler (savaş, teklif, casus…) ayrı (mühürlü) kâğıtta yazılır.
 
