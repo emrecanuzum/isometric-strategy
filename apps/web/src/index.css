@@ -3434,3 +3434,12 @@ kbd {
   image-rendering: pixelated;
   box-shadow: var(--outline);
 }
+
+/* The pin beside a kingdom's name keeps its icon centred (the other buttons here are full-width and left-aligned). */
+.war-targets .war-target > b .btn.icon-only {
+  flex: none;
+  justify-content: center;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+}
