@@ -3,7 +3,7 @@ import type { Army, Kingdom, Point, Unit, Units, World } from '@game/shared'
 import { useState } from 'react'
 import type { Battle } from '../../net/online'
 import { Icon } from '../icons'
-import { RESOURCE_NAMES, UNIT_ICONS, UNIT_NAMES, UNIT_NOTES } from '../names'
+import { RESOURCE_NAMES, UNIT_ICONS, UNIT_NAMES, UNIT_NOTES, WEAPON_NAMES } from '../names'
 import { Dot } from './diplomacy'
 import type { HudData } from './tabs'
 import type { Online } from './online'
@@ -81,6 +81,7 @@ const WHY: Record<string, string> = {
   locked: '2. seviye kışla gerekir',
   people: 'Gönüllü yok',
   cost: 'Kaynak ya da silah yetmiyor',
+  research: 'Üniversitede araştırılmalı',
 }
 
 function Training({ data, has }: { data: HudData; has: boolean }) {
@@ -118,7 +119,7 @@ function Training({ data, has }: { data: HudData; has: boolean }) {
         label="Birim başı"
         value={[
           ...Object.entries(cost).map(([r, v]) => `${v} ${RESOURCE_NAMES[r as keyof typeof RESOURCE_NAMES].toLowerCase()}`),
-          ...Object.entries(weapons).map(([w, v]) => `${v} yay (${armory[w as keyof typeof armory]} var)`),
+          ...Object.entries(weapons).map(([w, v]) => `${v} ${WEAPON_NAMES[w as keyof typeof WEAPON_NAMES].toLowerCase()} (${Math.floor(armory[w as keyof typeof armory])} var)`),
         ].join(' · ')}
         note={`${unitSpec(unit).trainSeconds} sn`}
       />

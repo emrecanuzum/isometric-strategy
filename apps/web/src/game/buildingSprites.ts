@@ -901,9 +901,11 @@ function temple(level = 1): Sprite {
 // A section of wall filling one tile: masonry on the two front faces, a walkway on top and battlements; a broken one
 // is a heap of rubble with a stump of wall.
 // `door`: a gate, with an arched wooden door through both front faces under a banner.
-function wall(broken = false, door = false): Sprite {
-  const { canvas, cx, base, w, h } = footprint(1, 50)
-  const tall = broken ? 8 : 26
+// `door`: the face the gate's door is on (-1 the left face, for a gate in a wall along x; 1 the right face, along y),
+// 0 for none. `towerWall`: the taller tower beside a gate, with an arrow slit and wider battlements.
+function wall(broken = false, door: -1 | 0 | 1 = 0, towerWall = false): Sprite {
+  const { canvas, cx, base, w, h } = footprint(1, towerWall ? 84 : 50)
+  const tall = broken ? 8 : towerWall ? 56 : door ? 30 : 26
   for (const side of [-1, 1]) {
     const lit = side < 0
     for (let t = 0; t <= w; t++) {
@@ -916,11 +918,13 @@ function wall(broken = false, door = false): Sprite {
         canvas.set(x, ground - z, pick(KEEP, (lit ? 3 : 1.3) - (mortar ? 0.8 : 0) + (hash(t >> 2, course, 17 + side) > 0.85 ? 0.6 : 0)))
         // The arch: planks with iron bands, rounded at the top.
         const mid = Math.abs(t - w / 2)
-        if (door && mid < 9 && z < 16 + Math.sqrt(Math.max(0, 81 - mid * mid)) * 0.5) {
-          canvas.set(x, ground - z, mid > 7.5 ? TIMBER[0] : z % 6 === 3 ? STONE[1] : PLANK[lit ? (Math.floor(t / 3) % 2 ? 3 : 2) : 1])
+        if (door === side && mid < 10 && z < 18 + Math.sqrt(Math.max(0, 100 - mid * mid)) * 0.5) {
+          canvas.set(x, ground - z, mid > 8.5 ? TIMBER[0] : z % 6 === 3 ? STONE[1] : PLANK[lit ? (Math.floor(t / 3) % 2 ? 3 : 2) : 1])
         }
+        // An arrow slit in each face of a tower.
+        if (towerWall && mid < 1.5 && z > tall * 0.45 && z < tall * 0.75) canvas.set(x, ground - z, TIMBER[0])
       }
-      if (!broken && t % 8 < 4) for (let z = height + 1; z <= height + 5; z++) canvas.set(x, ground - z, pick(KEEP, lit ? 3.4 : 1.8))
+      if (!broken && t % (towerWall ? 6 : 8) < (towerWall ? 3 : 4)) for (let z = height + 1; z <= height + (towerWall ? 7 : 5); z++) canvas.set(x, ground - z, pick(KEEP, lit ? 3.4 : 1.8))
     }
   }
   // The walkway on top.
@@ -932,13 +936,13 @@ function wall(broken = false, door = false): Sprite {
     }
   }
   if (broken) shadeBlobs(canvas, [{ x: cx - 18, y: base - 6, r: 5 }, { x: cx + 14, y: base - 4, r: 4 }, { x: cx + 2, y: base - 2, r: 3.5 }], STONE, 4)
-  if (door) banner(canvas, cx, base - h * 2 - tall + 2, 8)
+  if (door) banner(canvas, cx, base - h - tall + 2, 8)
   return canvas.sprite(cx, base, 0)
 }
 
 const variants = <T>(count: number, make: (i: number) => T) => Array.from({ length: count }, (_, i) => make(i))
 
-export type StructureLook = BuildingKind | 'scaffold' | 'brokenWall'
+export type StructureLook = BuildingKind | 'scaffold' | 'brokenWall' | 'gateY' | 'towerWall'
 
 // A building as the map draws it; docks carry their jetty (tile rectangle over the water).
 export interface Structure {
@@ -980,7 +984,7 @@ export const palaceIn = (color: string | undefined): Sprite => {
 
 // The variants a building shows at its level.
 export const looksOf = (look: StructureLook, level = 1): Sprite[] =>
-  look !== 'scaffold' && look !== 'brokenWall' && level > 1 ? (LEVEL_SPRITES[look]?.[level - 2] ?? STRUCTURE_SPRITES[look]) : STRUCTURE_SPRITES[look]
+  look !== 'scaffold' && look !== 'brokenWall' && look !== 'gateY' && look !== 'towerWall' && level > 1 ? (LEVEL_SPRITES[look]?.[level - 2] ?? STRUCTURE_SPRITES[look]) : STRUCTURE_SPRITES[look]
 
 export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   palace: [palace()],
@@ -995,7 +999,9 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   spyHouse: [spyHouse()],
   watchtower: [watchtower()],
   wall: [wall()],
-  gate: [wall(false, true)],
+  gate: [wall(false, -1)],
+  gateY: [wall(false, 1)],
+  towerWall: [wall(false, 0, true)],
   university: [university()],
   hospital: [hospital()],
   temple: [temple()],
@@ -1037,8 +1043,8 @@ export function structureParts(world: World, s: Structure): Part[] {
   const fy = s.y + s.size
   const looks =
     s.look === 'scaffold' ? [STRUCTURE_SPRITES.scaffold[s.size - 1]] : s.look === 'palace' ? [palaceIn(s.color)] : looksOf(s.look, s.level)
-  // Fields and gates are walked over (through).
-  const flat = s.look === 'farm' || s.look === 'gate'
+  // Fields are walked over; gates are walked through but stand tall like the wall around them.
+  const flat = s.look === 'farm'
   const parts: Part[] = []
   let z = at(s.x + s.size / 2, s.y + s.size / 2)
   if (high - low >= LEVEL_TOLERANCE) {

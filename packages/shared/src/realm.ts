@@ -3,7 +3,7 @@ import { affordable, armoryOf, palaceLevel, population, recruitment } from './ec
 import type { Cost, Good, Kingdom, Resource, Stock } from './economy'
 import { buyPrice } from './market'
 import type { Market } from './market'
-import { RESEARCH, levelOf, researching, sermonReadyAt } from './institutions'
+import { RESEARCH, hasResearch, levelOf, researching, sermonReadyAt } from './institutions'
 import { TAX_LEVELS } from './society'
 import type { TaxLevel } from './society'
 import { countOf, garrisonOf, hasUnits, subtractUnits, unitSpec } from './units'
@@ -22,7 +22,7 @@ const standing = (kingdom: Kingdom, kind: string, at: number) => kingdom.buildin
 
 export const setTax = (kingdom: Kingdom, tax: TaxLevel): Kingdom => (TAX_LEVELS.includes(tax) ? { ...kingdom, tax } : kingdom)
 
-export type RealmError = 'locked' | 'cost' | 'people' | 'have' | 'building' | 'none' | 'busy'
+export type RealmError = 'locked' | 'cost' | 'people' | 'have' | 'building' | 'none' | 'busy' | 'research'
 
 export function queenError(kingdom: Kingdom, at: number): RealmError | null {
   const q = balance.society.queen
@@ -41,6 +41,7 @@ export function trainError(kingdom: Kingdom, count: number, at: number, unit: Un
   const barracks = kingdom.buildings.find((b) => b.kind === 'barracks' && b.doneAt <= at)
   if (!barracks) return 'building'
   if ((barracks.level ?? 1) < (unitSpec(unit).barracksLevel ?? 1)) return 'locked'
+  if (unitSpec(unit).research && !hasResearch(kingdom, unitSpec(unit).research!, at)) return 'research'
   const { willing, cost, weapons } = recruitment(kingdom, at, unit)
   if (count < 1 || count > willing) return 'people'
   if (!affordable(kingdom.stock, times(cost, count))) return 'cost'

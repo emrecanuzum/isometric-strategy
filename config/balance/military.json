@@ -85,13 +85,30 @@
       },
       "trainSeconds": 45,
       "might": 0.4,
-      "barracksLevel": 2
+      "barracksLevel": 2,
+      "research": "siegecraft"
+    },
+    "shield": {
+      "cost": {
+        "gold": 14
+      },
+      "weapons": {
+        "shield": 1,
+        "sword": 1
+      },
+      "trainSeconds": 22,
+      "might": 1.2,
+      "research": "shieldwall"
     }
   },
   "counters": {
     "spear": "cavalry",
-    "cavalry": "archer",
-    "archer": "spear"
+    "cavalry": [
+      "archer",
+      "shield"
+    ],
+    "archer": "spear",
+    "shield": "archer"
   },
   "counterBonus": 1.5,
   "catapult": {

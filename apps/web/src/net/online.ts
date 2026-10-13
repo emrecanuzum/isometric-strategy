@@ -30,7 +30,7 @@ export interface Rival {
   color: string
   username: string | null
   site: Point
-  buildings: Pick<Building, 'id' | 'kind' | 'x' | 'y' | 'size' | 'doneAt' | 'level' | 'broken'>[]
+  buildings: Pick<Building, 'id' | 'kind' | 'x' | 'y' | 'size' | 'doneAt' | 'level' | 'broken' | 'tower' | 'along'>[]
   queen: boolean
   version: number
   // When its player was last seen (ms).

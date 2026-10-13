@@ -429,6 +429,12 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     onay penceresi adedi ve toplam maliyeti gösterir. Sur parçaları inşaat
     sırasına girmez (aynı anda kurulur); evler sıraya girer, yer boşaldıkça
     başlar.
+  - **Sur kapısı** üç karodur: ortada kapı, iki yanında daha uzun **kule
+    surları**. Surun yönüne göre döner (kapı yüzü surun içinden geçer) ve
+    var olan sur parçalarının üstüne kurulabilir (onların yerini alır).
+  - **Boşluk:** Sur ve kapılar diğer binalarla arasında en az 1 karo boşluk
+    bırakır (surlar birbirine bitişik olabilir), böylece uzun sur bir binanın
+    avlusunu ya da duvarını ekranda kesmez.
   - **Surlar insanları da tutar:** köylüler ve tüccar saraydan yürüyerek
     çıkar; ayakta duran sur parçasından geçemez, yalnızca **sur kapısından**
     (saray 2. seviye, 1 karo) ya da yıkık bir sur kesiminden geçer. Saraydan
@@ -465,6 +471,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   inşaat kuyruğundan bir yer tutar; sürerken bina iskeleye döner ve
   üretmez. Her seviye daha çok üretir / daha çok köylü barındırır ve daha
   çok işçi alabilir; her seviyenin **kendi görseli** vardır.
+- **Sayaçlar:** Süren her iş (inşaat ve yükseltme, araştırma, asker
+  eğitimi, vaaz, yoldaki elçi ve ordular) sol altta menünün üstünde kalan
+  süre ve ilerleme çubuğuyla listelenir; biten iş birkaç saniye yeşil yanıp
+  söner. Bir sekme ya da bina menüsü açıkken gizlenir.
 - **Bina menüsü:** Haritada bir binanın üstüne gelince bina dış hatla
   vurgulanır ve adı/seviyesi küçük bir etikette görünür; tıklayınca o
   binanın menüsü açılır. Menüde:
@@ -831,7 +841,10 @@ mertebesindedir.
   - **Okçu** (cephanelikten yay): mızrakçıyı yener, süvariye yenilir.
   - **Süvari** (2. seviye kışla; yemek + savaş malzemesi): okçuyu yener,
     mızrakçıya yenilir, daha sert vurur.
-  - **Mancınık** (2. seviye kışla): sahada zayıf; kuşatmada her biri birkaç
+  - **Kalkanlı piyade** (üniversite: Kalkan duvarı; cephanelikten kalkan +
+    kılıç): okçuyu yener, süvariye yenilir. Süvari hem okçuyu hem kalkanlıyı
+    yener.
+  - **Mancınık** (2. seviye kışla ve üniversite: Kuşatma sanatı): sahada zayıf; kuşatmada her biri birkaç
     surun savunma bonusunu siler ve kazanılan kuşatmada daha çok sur yıkar.
   Askerler sarayda garnizon olur ve her tur altın ve yemek tüketir.
   Garnizondaki askerler **terhis** edilebilir: köylüye döner ve asker
@@ -887,7 +900,8 @@ krallıkta birer tane olur ve 3 seviyelidir.
     ekebilir; öncesinde yalnızca buğday), **Sulama** (tarla +%20),
     **Balıkçılık** (iskele +%25).
   - 2: **Ormancılık** (oduncu +%20), **Metalurji** (atölye +%20), **Tıp**
-    (hastalık yarıya, iyileşme ×1,5), **Muhasebe** (vergi +%15).
+    (hastalık yarıya, iyileşme ×1,5), **Muhasebe** (vergi +%15), **Kalkan
+    duvarı** (kalkanlı piyade), **Kuşatma sanatı** (mancınık).
   - 3: **Savaş taktikleri** (zar +0,5), **Ticaret hukuku** (tüccar +%25).
 - **Hastalık ve hastane:** Köylülerin bir payı hastadır; hasta köylü
   çalışmaz, vergi vermez ve mutluluğu düşürür. Her tur birkaç kişi
@@ -897,8 +911,10 @@ krallıkta birer tane olur ve 3 seviyelidir.
 - **Tapınak:** Mutluluk hedefini yükseltir; askerler **iman gücüyle** zara
   bonus ekler (seviyeyle artar). **Vaaz:** altınla, bekleme süresiyle;
   bir süre verginin mutluluğa olumsuz etkisi azalır ("vergiler iyidir").
-- **Günün olayları:** Her krallığın başına ara sıra (5 dakikalık
-  pencerelerde, ~%60 şansla) birkaç dakika süren bir olay gelir: kavurucu
+- **Günün olayları:** Her krallığın başına ara sıra (15 dakikalık
+  pencerelerde, ~%60 şansla) 8–14 dakika süren bir olay gelir. Olay
+  başlayınca ekranda bir pencere açılır (iyi olaylar yeşil, kötüler kırmızı
+  kenarlı): kavurucu
   güneş (yemek −%30), bereketli yağmur, salgın (bir anda hastalık), halk
   şenliği, orman yangını, maden damarı, gezgin tüccarlar, ambar yangını,
   define, soğuk dalgası, hacılar. Olay krallıktan ve zamandan

@@ -63,6 +63,23 @@
         "forge": 0.2
       }
     },
+    "shieldwall": {
+      "level": 2,
+      "cost": {
+        "gold": 200,
+        "arms": 60
+      },
+      "seconds": 60
+    },
+    "siegecraft": {
+      "level": 2,
+      "cost": {
+        "gold": 240,
+        "materials": 120,
+        "arms": 40
+      },
+      "seconds": 70
+    },
     "medicine": {
       "level": 2,
       "cost": {
@@ -138,10 +155,10 @@
     }
   },
   "events": {
-    "windowSeconds": 300,
+    "windowSeconds": 900,
     "chance": 0.6,
-    "minSeconds": 120,
-    "maxSeconds": 240,
+    "minSeconds": 480,
+    "maxSeconds": 840,
     "kinds": {
       "drought": {
         "weight": 3,

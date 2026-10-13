@@ -8,6 +8,7 @@ import {
   build,
   buildError,
   canPlace,
+  fits,
   dockPier,
   findPlot,
   hasPalace,
@@ -27,7 +28,7 @@ import {
   upgradeSpec,
   upgradeTrade,
 } from '@game/shared'
-import type { BuildError, Building, BuildingKind, Good, Kingdom, Point, World } from '@game/shared'
+import type { BuildError, Building, EconomyEvent, BuildingKind, Good, Kingdom, Point, World } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { WorldMap } from './game/WorldMap'
@@ -35,6 +36,7 @@ import { ConfirmBuild } from './ui/hud/ConfirmBuild'
 import { Minimap } from './game/Minimap'
 import type { MinimapFlag } from './game/Minimap'
 import type { Structure } from './game/chunkPainter'
+import type { StructureLook } from './game/buildingSprites'
 import { createWorld, footprintOrigin } from './game/createWorld'
 import type { Hover, RivalTerritory, WorldView } from './game/createWorld'
 import { KINGDOM_COLORS } from './game/buildingSprites'
@@ -62,7 +64,8 @@ import { useJournal } from './ui/hud/journal'
 import { BuildingSheet } from './ui/hud/BuildingSheet'
 import { MapTip } from './ui/hud/MapTip'
 import type { HudData } from './ui/hud/tabs'
-import { Constructions, GoodPicker, SitePicker, missingText } from './ui/panels'
+import { GoodPicker, SitePicker, missingText } from './ui/panels'
+import { Timers } from './ui/hud/Timers'
 
 const TERRAIN_NAMES: Record<number, string> = {
   [Terrain.Grass]: 'Çayır',
@@ -114,6 +117,42 @@ const REFUSALS: Record<string, string> = {
 const refusal = (e: unknown) => {
   const code = e instanceof CommandError ? e.message : 'server'
   return REFUSALS[code] ?? BUILD_ERRORS[code as BuildError] ?? 'Komut reddedildi'
+}
+
+type FortuneEvent = Extract<EconomyEvent, { kind: 'fortune' }>
+
+// A random event as it begins: a window of its own, green-edged for good fortune and red for bad.
+function FortuneDialog({ event, now, onClose }: { event: FortuneEvent; now: number; onClose: () => void }) {
+  const f = FORTUNE_TEXTS[event.fortune]
+  const tone = f?.tone ?? 'good'
+  const extra = [
+    ...Object.entries(event.lost ?? {})
+      .filter(([, v]) => (v ?? 0) > 0)
+      .map(([g, v]) => `${Math.round(v ?? 0)} ${RESOURCE_NAMES[g as Good].toLowerCase()} kayboldu`),
+    ...(event.gold ? [`+${event.gold} altın`] : []),
+  ]
+  return (
+    <div className="modal" role="dialog" aria-labelledby="fortune-title" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <section className={`dialog frame fortune-dialog ${tone}`}>
+        <header className="sheet-head">
+          <Icon name={f?.icon ?? 'star'} size={32} />
+          <div>
+            <small>{tone === 'good' ? 'Hayırlı bir haber' : 'Kötü bir haber'}</small>
+            <h2 id="fortune-title">{f?.title ?? 'Beklenmedik bir olay'}</h2>
+          </div>
+        </header>
+        <p>{f?.text}</p>
+        {extra.length > 0 && <p className={tone === 'good' ? 'up' : 'down'}>{extra.join(' · ')}</p>}
+        <p className="hint">Yaklaşık {Math.max(1, Math.round((event.until - now) / 60_000))} dakika sürecek.</p>
+        <div className="row spread">
+          <span />
+          <button className="btn small" onClick={onClose}>
+            Tamam
+          </button>
+        </div>
+      </section>
+    </div>
+  )
 }
 
 // The sound each kind of news comes with (the envoy's fanfare otherwise).
@@ -418,6 +457,8 @@ function App({
   }, [view, site, stage, plots, kingdom])
 
   // The envoy's journal of what happened, kept in this browser per lobby.
+  // The day's events waiting to be shown in their window, oldest first.
+  const [fortunes, setFortunes] = useState<FortuneEvent[]>([])
   const { journal, record: recordJournal, markRead, reset: resetJournal, notice: noteJournal } = useJournal(`journal-v2:${lobby.id}`, seasonStart)
 
   // The clock: settle whatever came due and show it on the map.
@@ -444,6 +485,8 @@ function App({
             ? 'build'
             : null
       if (cue) play(cue)
+      const begun = events.filter((e): e is FortuneEvent => e.kind === 'fortune' && e.until > time)
+      if (begun.length > 0) setFortunes((list) => [...list, ...begun])
       const palace = next.buildings.find((b) => b.kind === 'palace')
       for (const event of events) {
         if (event.kind === 'trade' && palace) {
@@ -471,7 +514,18 @@ function App({
       const done = b.doneAt <= time
       const pier = done && b.kind === 'dock' ? dockPier(view.world, b) : null
       // Only the player's own buildings answer to the pointer.
-      return { x: b.x, y: b.y, size: b.size, look: done ? b.kind : 'scaffold', variant, level: b.level ?? 1, ...(own && { id: b.id }), color, ...(pier && { pier }) }
+      const look: StructureLook = !done
+        ? 'scaffold'
+        : b.kind === 'wall'
+          ? b.broken
+            ? 'brokenWall'
+            : b.tower
+              ? 'towerWall'
+              : 'wall'
+          : b.kind === 'gate' && b.along === 'y'
+            ? 'gateY'
+            : b.kind
+      return { x: b.x, y: b.y, size: b.size, look, variant, level: b.level ?? 1, ...(own && { id: b.id }), color, ...(pier && { pier }) }
     }
     const structures: Structure[] = [
       ...buildings.map((b) => structure(b, kingdom?.color, true, b.id)),
@@ -561,7 +615,7 @@ function App({
     const size = BUILDINGS[placingKind].size
     view.setPlacement({
       size,
-      valid: (origin) => canPlace(view.world, kingdom, stage, { ...origin, size }),
+      valid: (origin) => fits(view.world, kingdom, stage, placingKind, origin),
       pinned: preview ?? undefined,
       stroke: stroking,
       pinnedMany: previewMany ?? undefined,
@@ -642,9 +696,9 @@ function App({
     const current = kingdomRef.current
     if (!view || !placingKind || !current) return
     const size = BUILDINGS[placingKind].size
-    const fits = spots.filter((p) => canPlace(view.world, current, stage, { ...p, size }))
-    if (fits.length === 0) return setToast(BUILD_ERRORS.spot)
-    setPreviewMany(fits)
+    const placeable = spots.filter((p) => canPlace(view.world, current, stage, { ...p, size }, 0, placingKind))
+    if (placeable.length === 0) return setToast(BUILD_ERRORS.spot)
+    setPreviewMany(placeable)
   }
   const confirmMany = () => {
     const current = kingdomRef.current
@@ -840,7 +894,6 @@ function App({
       <div ref={host} style={{ width: '100%', height: '100%' }} />
       <div className="top">
         {kingdom && <TopBar kingdom={kingdom} now={now} seasonStart={seasonStart} history={journal.history} onOpen={setPanel} />}
-        {kingdom && <Constructions kingdom={kingdom} now={now} />}
       </div>
       <button className="btn icon-only music frame" onClick={() => setSettingsOpen(true)} title="Ayarlar" aria-label="Ayarlar">
         <Icon name="gear" size={16} />
@@ -886,6 +939,7 @@ function App({
         />
       )}
       {view && kingdom && !placingKind && <Dock open={panel} unread={journal.unread} onToggle={toggleTab} />}
+      {view && kingdom && !placingKind && !panel && !selectedBuilding && <Timers kingdom={kingdom} online={online} now={now} />}
       {view && kingdom && !placingKind && hover?.building && hover.building.id !== selected && (
         <MapTip building={kingdom.buildings.find((b) => b.id === hover.building!.id)} at={hover.building.screen} now={now} />
       )}
@@ -997,6 +1051,7 @@ function App({
         </div>
       )}
       {notice && kingdom && <EnvoyDialog notice={notice} online={online} onClose={closeNotice} />}
+      {!notice && kingdom && fortunes[0] && <FortuneDialog event={fortunes[0]} now={now} onClose={() => setFortunes((list) => list.slice(1))} />}
       {watchedBattle && <BattleView battle={watchedBattle} online={online} now={now} onClose={() => setWatching(null)} />}
     </>
   )

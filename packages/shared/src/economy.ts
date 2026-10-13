@@ -107,6 +107,10 @@ export interface Building {
   product?: string
   // Walls only: knocked down in a siege, standing again once repaired.
   broken?: boolean
+  // Walls only: a tower beside a gate (taller).
+  tower?: boolean
+  // Gates only: the direction of the wall it stands in.
+  along?: 'x' | 'y'
   // Built free as the kingdom's first of its kind (its building cost is not refunded on demolition).
   free?: boolean
 }
@@ -256,15 +260,48 @@ export function surveySite(world: World, site: Point): Survey {
 const overlaps = (a: Rect, b: Rect, gap: number) =>
   a.x < b.x + b.size + gap && b.x < a.x + a.size + gap && a.y < b.y + b.size + gap && b.y < a.y + a.size + gap
 
-// Inside the territory, on free land, clear of other buildings by `gap` tiles.
-export function canPlace(world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'>, stage: number, spot: Rect, gap = 0) {
+// Walls and gates keep a tile's clearance from every other building (and other buildings from them), so a tall wall
+// never stands against a house or cuts through a yard on screen.
+const wallish = (kind: BuildingKind) => kind === 'wall' || kind === 'gate'
+
+// Inside the territory, on free land, clear of other buildings by `gap` tiles (one tile between a wall or gate and
+// anything else when `kind` is given).
+export function canPlace(world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'>, stage: number, spot: Rect, gap = 0, kind?: BuildingKind) {
   const t = territoryRect(kingdom.site, stage)
   if (spot.x < t.x || spot.y < t.y || spot.x + spot.size > t.x + t.size || spot.y + spot.size > t.y + t.size) return false
   for (let y = spot.y; y < spot.y + spot.size; y++) {
     for (let x = spot.x; x < spot.x + spot.size; x++) if (tileRule(world, x, y) !== TileRule.Free) return false
   }
-  return !kingdom.buildings.some((b) => overlaps(b, spot, gap))
+  return !kingdom.buildings.some((b) => overlaps(b, spot, kind && wallish(kind) !== wallish(b.kind) ? Math.max(1, gap) : gap))
 }
+
+// ---- Gates --------------------------------------------------------------------------------------------------------
+
+// A gate is three tiles in a row: the gate itself between two wall towers. It runs along the wall it is set into
+// (the walls beside the chosen tile), and may be built over standing wall, which it replaces.
+export function gateAlong(kingdom: Pick<Kingdom, 'buildings'>, spot: Point): 'x' | 'y' {
+  const wallAt = (x: number, y: number) => kingdom.buildings.some((b) => b.kind === 'wall' && b.x === x && b.y === y)
+  if (wallAt(spot.x - 1, spot.y) || wallAt(spot.x + 1, spot.y)) return 'x'
+  if (wallAt(spot.x, spot.y - 1) || wallAt(spot.x, spot.y + 1)) return 'y'
+  return 'x'
+}
+
+export const gateTiles = (spot: Point, along: 'x' | 'y'): Point[] =>
+  along === 'x'
+    ? [{ x: spot.x - 1, y: spot.y }, spot, { x: spot.x + 1, y: spot.y }]
+    : [{ x: spot.x, y: spot.y - 1 }, spot, { x: spot.x, y: spot.y + 1 }]
+
+const onTiles = (b: Building, tiles: Point[]) => b.size === 1 && tiles.some((t) => t.x === b.x && t.y === b.y)
+
+export function canPlaceGate(world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'>, stage: number, spot: Point) {
+  const tiles = gateTiles(spot, gateAlong(kingdom, spot))
+  const rest = { ...kingdom, buildings: kingdom.buildings.filter((b) => !(b.kind === 'wall' && onTiles(b, tiles))) }
+  return tiles.every((t) => canPlace(world, rest, stage, { ...t, size: 1 }, 0, 'wall'))
+}
+
+// Whether a building of `kind` fits at `spot` (gates by their three tiles).
+export const fits = (world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'>, stage: number, kind: BuildingKind, spot: Point) =>
+  kind === 'gate' ? canPlaceGate(world, kingdom, stage, spot) : canPlace(world, kingdom, stage, { ...spot, size: BUILDINGS[kind].size }, 0, kind)
 
 // ---- Founding -----------------------------------------------------------------------------------------------------
 
@@ -527,7 +564,7 @@ export function buildError(world: World, kingdom: Kingdom, stage: number, kind: 
   if (!affordable(kingdom.stock, buildCost(kingdom, kind))) return 'cost'
   if (kind !== 'palace' && !spec.outsideQueue && queued(kingdom, now).length >= maxConstructions(kingdom, now)) return 'queue'
   // The dock goes on its plot, which may lie outside the territory; everything else where the player puts it.
-  if (spot && kind !== 'dock' && !canPlace(world, kingdom, stage, { ...spot, size: spec.size })) return 'spot'
+  if (spot && kind !== 'dock' && !fits(world, kingdom, stage, kind, spot)) return 'spot'
   return null
 }
 
@@ -536,7 +573,26 @@ export function build(world: World, kingdom: Kingdom, stage: number, kind: Build
   const spec = BUILDINGS[kind]
   if (kind === 'dock') spot = kingdom.dockPlot!
   const free = isFree(kingdom, kind)
-  const building: Building = { id: kingdom.nextId, kind, x: spot.x, y: spot.y, size: spec.size, doneAt: now + (spec.buildSeconds ?? 0) * 1000, ...(free && { free }) }
+  const doneAt = now + (spec.buildSeconds ?? 0) * 1000
+  if (kind === 'gate') {
+    // The gate and its two towers, in place of any wall on those tiles.
+    const along = gateAlong(kingdom, spot)
+    const tiles = gateTiles(spot, along)
+    const kept = kingdom.buildings.filter((b) => !(b.kind === 'wall' && onTiles(b, tiles)))
+    const id = kingdom.nextId
+    return {
+      ...kingdom,
+      stock: pay(kingdom.stock, buildCost(kingdom, kind)),
+      buildings: [
+        ...kept,
+        { id, kind: 'gate', x: spot.x, y: spot.y, size: 1, doneAt, along },
+        { id: id + 1, kind: 'wall', ...tiles[0], size: 1, doneAt, tower: true, free: true },
+        { id: id + 2, kind: 'wall', ...tiles[2], size: 1, doneAt, tower: true, free: true },
+      ],
+      nextId: id + 3,
+    }
+  }
+  const building: Building = { id: kingdom.nextId, kind, x: spot.x, y: spot.y, size: spec.size, doneAt, ...(free && { free }) }
   return {
     ...kingdom,
     stock: pay(kingdom.stock, buildCost(kingdom, kind)),
@@ -558,7 +614,7 @@ export function buildMany(world: World, kingdom: Kingdom, stage: number, kind: B
   if ((spec.requiresPalace ?? 0) > palaceLevel(kingdom, now)) return { kingdom: k, placed }
   for (const spot of spots.slice(0, balance.economy.maxBatch)) {
     if (!affordable(k.stock, buildCost(k, kind)) || buildingCount(k, kind) >= buildLimit(k, kind, now)) break
-    if (!canPlace(world, k, stage, { ...spot, size: spec.size })) continue
+    if (!canPlace(world, k, stage, { ...spot, size: spec.size }, 0, kind)) continue
     const free = isFree(k, kind)
     let start = now
     if (!spec.outsideQueue) {

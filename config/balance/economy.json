@@ -369,8 +369,8 @@
       "size": 1,
       "requiresPalace": 2,
       "cost": {
-        "gold": 20,
-        "materials": 25
+        "gold": 40,
+        "materials": 60
       },
       "buildSeconds": 6,
       "outsideQueue": true

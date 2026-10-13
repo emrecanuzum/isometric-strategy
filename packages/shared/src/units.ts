@@ -1,9 +1,10 @@
 import { balance } from './balance'
 
-// Kinds of soldier (CLAUDE.md §9.7, AoE-like): spearmen beat cavalry, cavalry beats archers, archers beat spearmen;
-// catapults are poor in the field but take walls apart. Every unit is one person of the population.
+// Kinds of soldier (CLAUDE.md §9.7, AoE-like): spearmen beat cavalry, cavalry beats archers and shieldmen, archers beat
+// spearmen, shieldmen beat archers; catapults are poor in the field but take walls apart. Every unit is one person of
+// the population. Shieldmen and catapults are learnt at the university first.
 
-export const UNITS = ['spear', 'archer', 'cavalry', 'catapult'] as const
+export const UNITS = ['spear', 'archer', 'shield', 'cavalry', 'catapult'] as const
 export type Unit = (typeof UNITS)[number]
 export type Units = Partial<Record<Unit, number>>
 
@@ -13,8 +14,9 @@ export interface UnitSpec {
   weapons?: Partial<Record<'sword' | 'shield' | 'bow', number>>
   trainSeconds: number
   might: number
-  // The barracks level it needs (1 when absent).
+  // The barracks level it needs (1 when absent), and the university research.
   barracksLevel?: number
+  research?: string
 }
 
 export const unitSpec = (unit: Unit) => balance.military.units[unit] as UnitSpec
@@ -57,7 +59,10 @@ export const hasUnits = (have: Units | null | undefined, want: Units) => UNITS.e
 export const subtractUnits = (a: Units | null | undefined, b: Units): Units =>
   Object.fromEntries(UNITS.map((u) => [u, Math.max(0, (a?.[u] ?? 0) - (b[u] ?? 0))]).filter(([, n]) => (n as number) > 0))
 
-const beats = (a: Unit, b: Unit) => (balance.military.counters as Record<string, string>)[a] === b
+const beats = (a: Unit, b: Unit) => {
+  const c = (balance.military.counters as Record<string, string | string[]>)[a]
+  return Array.isArray(c) ? c.includes(b) : c === b
+}
 
 // The roll bonus one side's mix of soldiers gives it against the other's (negative when outmatched).
 export function counterBonus(mine: Units | null | undefined, theirs: Units | null | undefined) {

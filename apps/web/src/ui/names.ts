@@ -45,7 +45,7 @@ export const BUILDING_NOTES: Partial<Record<BuildingKind, string>> = {
   spyHouse: 'Casus yetiştirir',
   watchtower: 'Yaklaşan düşmana ok atar',
   wall: 'Köylüleri ve tüccarı da durdurur; kapı bırak',
-  gate: 'Köylüler ve tüccar geçer; kuşatmada sur sayılır',
+  gate: '3 karo: kule, kapı, kule; sur üstüne de kurulur. Köylüler ve tüccar geçer',
   university: 'Araştırma yapar: inşaat kuyruğu, keten, verim',
   hospital: 'Hasta köylüleri iyileştirir',
   temple: 'Mutluluk, askerlere iman; vergi vaazı',
@@ -54,6 +54,7 @@ export const BUILDING_NOTES: Partial<Record<BuildingKind, string>> = {
 export const UNIT_NAMES: Record<Unit, string> = {
   spear: 'Mızrakçı',
   archer: 'Okçu',
+  shield: 'Kalkanlı piyade',
   cavalry: 'Süvari',
   catapult: 'Mancınık',
 }
@@ -61,6 +62,7 @@ export const UNIT_NAMES: Record<Unit, string> = {
 export const UNIT_ICONS: Record<Unit, IconName> = {
   spear: 'arms',
   archer: 'bow',
+  shield: 'shield',
   cavalry: 'horse',
   catapult: 'catapult',
 }
@@ -68,9 +70,10 @@ export const UNIT_ICONS: Record<Unit, IconName> = {
 // What each kind is good for, in a few words.
 export const UNIT_NOTES: Record<Unit, string> = {
   spear: 'Süvariyi yener, okçuya yenilir',
-  archer: 'Mızrakçıyı yener, süvariye yenilir',
-  cavalry: 'Okçuyu yener, mızrakçıya yenilir; sert vurur',
-  catapult: 'Sahada zayıf; kuşatmada surları etkisiz kılar ve yıkar',
+  archer: 'Mızrakçıyı yener, süvariye ve kalkanlıya yenilir',
+  shield: 'Okçuyu yener, süvariye yenilir; kalkan ve kılıç ister (üniversite: Kalkan duvarı)',
+  cavalry: 'Okçuyu ve kalkanlıyı yener, mızrakçıya yenilir; sert vurur',
+  catapult: 'Sahada zayıf; kuşatmada surları etkisiz kılar ve yıkar (üniversite: Kuşatma sanatı)',
 }
 
 export const WEAPON_NAMES: Record<Weapon, string> = {
@@ -103,6 +106,8 @@ export const RESEARCH_NAMES: Record<string, { name: string; note: string; icon: 
   fishing: { name: 'Balıkçılık', note: 'İskele %25 daha çok balık tutar', icon: 'food' },
   forestry: { name: 'Ormancılık', note: 'Oduncu kampları %20 daha çok üretir', icon: 'materials' },
   metallurgy: { name: 'Metalurji', note: 'Silah atölyesi %20 daha çok üretir', icon: 'arms' },
+  shieldwall: { name: 'Kalkan duvarı', note: 'Kışlada kalkanlı piyade yetiştirilir', icon: 'shield' },
+  siegecraft: { name: 'Kuşatma sanatı', note: 'Kışlada mancınık yapılır', icon: 'catapult' },
   medicine: { name: 'Tıp', note: 'Hastalık yarı yarıya azalır, iyileşme hızlanır', icon: 'heal' },
   bookkeeping: { name: 'Muhasebe', note: 'Vergiler %15 daha çok altın getirir', icon: 'gold' },
   tactics: { name: 'Savaş taktikleri', note: 'Askerler zara +0,5 ekler', icon: 'swords' },
