@@ -267,7 +267,7 @@ export async function createWorld(
   const carried = new Container()
   carried.alpha = 0.6
   const clearCursor = () => {
-    clearCursor()
+    cursor.clear()
     for (const child of carried.removeChildren()) child.destroy()
   }
   camera.addChild(ground, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, marks, ambient.sky, cursor, carried, highlight)
