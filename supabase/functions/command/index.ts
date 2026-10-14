@@ -35,6 +35,8 @@ import {
 import type { Kingdom, Point, Row, World } from '../_shared/server.ts'
 import { tickLobby } from '../_shared/tick.ts'
 import { ensureTowns, townsOf } from '../_shared/towns.ts'
+import { refuseDemand } from '../_shared/patrols.ts'
+import type { VisitRow } from '../_shared/patrols.ts'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -599,6 +601,28 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       await grantClaim(lobby, target.id, me.id, 'raid', now)
       await notify(lobby, [target.id], success ? 'trade_raided' : 'raid_repelled', { by: me.name, ...(loot ?? {}) }, now)
       return { success, lost, loot }
+    }
+    case 'patrolAnswer': {
+      // A rival crown's patrol at the gates demanding tribute (CLAUDE.md §7.8): paid, or refused. Claimed while still
+      // pending, so it is answered once.
+      const { data } = await admin.from('patrol_visits').select('*').eq('id', Number(cmd.visit)).eq('kingdom_id', me.id).maybeSingle()
+      const visit = data as VisitRow | null
+      if (!visit || visit.status !== 'pending' || ms(visit.expires_at) <= now) refuse('none')
+      const pay = cmd.pay === true
+      if (pay) {
+        await mutateKingdom(me.id, now, (k) => {
+          if (k.stock.gold < visit!.amount) refuse('cost')
+          return { ...k, stock: { ...k.stock, gold: k.stock.gold - visit!.amount } }
+        })
+      }
+      const { data: claimed } = await admin.from('patrol_visits').update({ status: pay ? 'paid' : 'refused' }).eq('id', visit!.id).eq('status', 'pending').select('id').maybeSingle()
+      if (!claimed) {
+        // Answered meanwhile (or run out): the gold goes back.
+        if (pay) await mutateKingdom(me.id, now, (k) => ({ ...k, stock: { ...k.stock, gold: k.stock.gold + visit!.amount } }))
+        refuse('none')
+      }
+      if (!pay) await refuseDemand(visit!, rows, now)
+      return { paid: pay }
     }
     case 'ransom': {
       // Paying for the queen's return; checked and paid in one write, so two requests cannot both pay.

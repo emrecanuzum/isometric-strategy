@@ -2260,6 +2260,70 @@ function prison(variant = 0, full = false): Sprite {
   return smoky(canvas.sprite(cx, base, 0), [top])
 }
 
+// The house of entertainment (CLAUDE.md §7.8): a tall half-timbered hall with a red roof and lit windows, a little
+// stage under a striped canopy at its side, strings of flags across a paved yard with tables, barrels and lanterns,
+// where the crown's patrols stop to drink and leave a tip.
+const BUNTING = [ramp(0xa82430), ramp(0xe2c058), ramp(0x3758a4), ramp(0x2a7a48), ramp(0xf6f2e2)]
+function tavern(variant = 0): Sprite {
+  const v = variant % 2
+  const { canvas, cx, base, h } = footprint(2, 112)
+  // Flagstones over the yard.
+  for (let y = base - h * 2; y <= base; y++) {
+    for (let x = cx - (h * 2 - 2); x <= cx + (h * 2 - 2); x++) {
+      const a = (x - cx) / (h * 2 - 4)
+      const b = (y - (base - h)) / (h - 2)
+      if (Math.abs(a) + Math.abs(b) > 1) continue
+      const seam = (x + y * 2) % 6 === 0 || (x - y * 2) % 8 === 0
+      canvas.set(x, y, seam ? PLASTER[0] : pick(PLASTER, 1 + hash(x >> 2, y >> 1, 233) * 1.6))
+    }
+  }
+  const hb = base - h + 2
+  const top = hall(canvas, cx - 6, hb, { w: 34, wall: 34, roof: 26, walls: WALL, roofs: v ? ROOF : SLATE, bay: 9, door: true, glow: true, chimney: 0.45 })
+  // The stage: an open stall under a striped canopy, front right.
+  const stage = hall(canvas, cx + 30, base - 10, { w: 12, wall: 14, roof: 9, walls: WALL, roofs: ROOF, open: true, cloth: v ? CRIMSON : ramp(0x23347a, 0x3758a4, 0x7a96ea) })
+  // Strings of little flags sagging from the hall's front corner out to poles at the yard's edge.
+  const flags = (x0: number, y0: number, x1: number, y1: number, seed: number) => {
+    for (let t = 0; t <= 1; t += 1 / 60) {
+      const x = x0 + (x1 - x0) * t
+      const y = y0 + (y1 - y0) * t + Math.sin(t * Math.PI) * 6
+      canvas.set(x, y, TIMBER[0])
+      const k = Math.floor(t * 60)
+      if (k % 4 !== 0) continue
+      const c = BUNTING[(k / 4 + seed) % BUNTING.length]
+      for (let d = 1; d <= 3; d++) for (let e = -(3 - d) / 2; e <= (3 - d) / 2; e++) canvas.set(x + e, y + d, c[0])
+    }
+  }
+  const pole = (x: number, y: number, tall: number) => {
+    for (let z = 0; z < tall; z++) canvas.set(x, y - z, TIMBER[z === tall - 1 ? 2 : 1])
+    // A lantern hung at its top.
+    canvas.set(x + 1, y - tall + 2, EMBER[2])
+    canvas.set(x + 1, y - tall + 3, EMBER[1])
+  }
+  pole(cx - 52, base - h + 4, 30)
+  pole(cx, base - 2, 30)
+  pole(cx + 52, base - h + 2, 30)
+  flags(cx - 30, hb - 34, cx - 52, base - h + 4 - 28, 0)
+  flags(cx - 30, hb - 34, cx, base - 2 - 28, 2)
+  flags(cx + 6, hb - 30, cx + 52, base - h + 2 - 28, 4)
+  // Tables with benches in the yard, a barrel by each.
+  for (const [tx, ty] of [[cx - 30, base - 12], [cx - 12, base - 6]]) {
+    for (let t = 0; t < 10; t++) for (let d = 0; d < 3; d++) canvas.set(tx + t, ty - 4 + t / 2 - d / 2, d === 0 ? PLANK[3] : PLANK[2])
+    for (const leg of [1, 8]) for (let z = 0; z < 3; z++) canvas.set(tx + leg, ty - 1 + leg / 2 - z, PLANK[0])
+    for (let t = 0; t < 10; t++) canvas.set(tx + t + 2, ty + 1 + t / 2, PLANK[1])
+    canvas.set(tx + 3, ty - 6, BRASS[2])
+    canvas.set(tx + 6, ty - 5, BRASS[3])
+  }
+  barrel(canvas, cx - 44, base - h + 10)
+  barrel(canvas, cx + 18, base - 4)
+  barrel(canvas, cx + 22, base - 6)
+  // A musician on the stage: a figure with a lute.
+  const mx = stage.x
+  const my = base - 16
+  for (let z = 0; z < 9; z++) for (let d = -1; d <= 1; d++) canvas.set(mx + d, my - z, z < 7 ? (v ? BUNTING[1][0] : CRIMSON[2 + (d < 0 ? 1 : 0)]) : FLESH[2])
+  for (let d = 0; d < 4; d++) canvas.set(mx + 2 + d, my - 4 - d / 2, TIMBER[2])
+  return smoky(canvas.sprite(cx, base, 0), [top])
+}
+
 // The mysterious fisher's hut: a crooked shack on stilts with a mossy thatch, a net drying on poles, and an odd
 // violet lantern burning by the door.
 const MOSS = ramp(0x2a3a1c, 0x3a4e24, 0x51662e, 0x6a7e3a, 0x86984a, 0xa4b060)
@@ -2430,6 +2494,7 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   fisherHut: variants(4, (v) => fisherHut(v)),
   prison: variants(2, (v) => prison(v)),
   prisonFull: variants(2, (v) => prison(v, true)),
+  tavern: variants(2, (v) => tavern(v)),
   brokenWall: [wallLook('brokenWall', 3, 0)],
   scaffold: [scaffold(1), scaffold(2), scaffold(3)],
   jetty: [new Canvas(1, 1).sprite(0, 0, 0)],

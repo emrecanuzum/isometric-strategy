@@ -28,7 +28,7 @@ export type Resource = 'gold' | Good
 export type Stock = Record<Resource, number>
 export type Cost = Partial<Stock>
 
-export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple', 'warehouse', 'treasury', 'fisherHut', 'prison'] as const
+export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple', 'warehouse', 'treasury', 'fisherHut', 'prison', 'tavern'] as const
 export type BuildingKind = 'palace' | 'tradePost' | (typeof BUILDABLE)[number]
 
 // Weapons are worked from raw goods in the forge and kept in the armory, apart from the tradeable stores.

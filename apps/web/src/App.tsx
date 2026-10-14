@@ -7,6 +7,13 @@ import {
   balance,
   townCenter,
   inTown,
+  patrolTimes,
+  patrolSlotAt,
+  patrolSlotMs,
+  patrolTarget,
+  visitKind,
+  capitalGate,
+  findRoute,
   lobbyTripMs,
   tradeTripMs,
   build,
@@ -40,7 +47,7 @@ import {
   upgradeSpec,
   upgradeTrade,
 } from '@game/shared'
-import type { Along, BuildError, EconomyEvent, BuildingKind, Good, Kingdom, PlanStep, Point, World } from '@game/shared'
+import type { Along, Lord, BuildError, EconomyEvent, BuildingKind, Good, Kingdom, PlanStep, Point, World } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { WorldMap } from './game/WorldMap'
@@ -207,10 +214,13 @@ const NOTICE_CUES: Record<string, Cue> = {
   town_siege: 'war',
   town_taken: 'coin',
   town_held: 'bad',
+  patrol_tribute: 'war',
+  patrol_tip: 'coin',
+  patrol_ignored: 'bad',
 }
 
 // News that goes against the player: kept under the journal's "Önemli" tab.
-const HURTFUL = new Set(['army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
+const HURTFUL = new Set(['patrol_tribute', 'patrol_ignored', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
 function noticeHurts(n: Notice, me: string | undefined) {
   if (HURTFUL.has(n.kind)) return true
   const p = n.payload as { kind?: string; accepted?: boolean; report?: { losses?: Record<string, number> } }
@@ -1199,6 +1209,7 @@ function App({
     watch: setWatching,
     following,
     follow: setFollowing,
+    crowns: view ? view.world.cities.map((_, i) => cityInfo(view.world, i).name) : [],
   }
 
   // The camera locked onto an army: it glides along with it until let go, dragged away, or the army is gone.
@@ -1219,12 +1230,59 @@ function App({
     if (following !== null && !layer.armies.some((a) => a.id === following)) setFollowing(null)
   }, [following, layer.armies])
 
+  // The crown kingdoms' patrols (CLAUDE.md §7.8): worked out from the seed and the clock like the server does, and
+  // drawn as small mounted squads in the crown's colour. Redrawn at each turn of their errand.
+  const lordsKey = JSON.stringify([[mine.id, shown?.liege ?? null], ...rivals.map((r) => [r.id, r.liege ?? null])])
+  const [patrolStep, setPatrolStep] = useState(0)
+  useEffect(() => {
+    const t = serverNow()
+    const times = patrolTimes(patrolSlotAt(t))
+    const next = [times.arrive, times.leave, times.home, times.start + patrolSlotMs()].find((x) => x > t) ?? t + 1000
+    const id = window.setTimeout(() => setPatrolStep((n) => n + 1), next - t + 50)
+    return () => clearTimeout(id)
+  }, [patrolStep])
+  const patrolRoutes = useRef(new Map<string, Point[] | null>())
+  const patrols = useMemo((): MapArmy[] => {
+    if (!view || view.world.cities.length === 0) return []
+    const t = serverNow()
+    const slot = patrolSlotAt(t)
+    const times = patrolTimes(slot)
+    if (t >= times.home) return []
+    const lords: Lord[] = JSON.parse(lordsKey).map(([id, liege]: [number, number | null]) => ({ id, liege }))
+    const towns = new Map<number, TownBuilding[]>([[mine.id, (shown?.buildings ?? []) as TownBuilding[]], ...rivals.map((r) => [r.id, r.buildings] as [number, TownBuilding[]])])
+    const out: MapArmy[] = []
+    view.world.cities.forEach((city, crown) => {
+      for (let p = 0; p < balance.cities.crown.patrol.perCrown; p++) {
+        const target = patrolTarget(view.world.seed, crown, p, slot, lords)
+        if (target === null) continue
+        const liege = lords.find((l) => l.id === target)?.liege
+        const done = (towns.get(target) ?? []).filter((b) => b.doneAt <= times.arrive)
+        // Its own crown's patrol stops at the house of entertainment, if there is one; otherwise at the palace.
+        const stop = (visitKind(crown, liege) === 'tip' && done.find((b) => b.kind === 'tavern')) || done.find((b) => b.kind === 'palace')
+        if (!stop) continue
+        const key = `${crown}:${p}:${slot}`
+        if (!patrolRoutes.current.has(key)) {
+          const door = { x: stop.x + stop.size + 0.8, y: stop.y + stop.size + 0.8 }
+          patrolRoutes.current.set(key, findRoute(view.world, capitalGate(city), door))
+        }
+        const route = patrolRoutes.current.get(key)
+        if (!route || route.length === 0) continue
+        const [path, departAt, arriveAt] =
+          t < times.arrive ? [route, times.start, times.arrive] : t < times.leave ? [[route[route.length - 1]], times.leave, times.leave] : [[...route].reverse(), times.leave, times.home]
+        out.push({ id: -(crown * 16 + p + 1), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 5, catapult: false })
+      }
+    })
+    if (patrolRoutes.current.size > 64) patrolRoutes.current.clear()
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, lordsKey, patrolStep, mapBuildings, rivals])
+
   // Armies and battles on the map.
   useEffect(() => {
     if (!view) return
     const colors = new Map(kingdoms.map((k) => [k.id, k.color]))
     view.setArmies(
-      layer.armies.map((a): MapArmy => ({
+      [...patrols, ...layer.armies.map((a): MapArmy => ({
         id: a.id,
         color: colors.get(a.kingdom_id) ?? null,
         own: a.kingdom_id === mine.id,
@@ -1237,12 +1295,12 @@ function App({
         // Own armies by their exact size; others by what everyone can see of them.
         figures: a.soldiers !== null ? Math.min(20, Math.max(2, Math.ceil(a.soldiers / 2))) : (a.figures ?? 3),
         catapult: a.units ? (a.units.catapult ?? 0) > 0 : !!a.catapults,
-      })),
+      }))],
       layer.battles
         .filter((b) => !b.resolved || Date.parse(b.ends_at) > serverNow())
         .map((b) => ({ id: b.id, at: { x: b.x, y: b.y }, startedAt: Date.parse(b.started_at), endsAt: Date.parse(b.ends_at) })),
     )
-  }, [view, layer.armies, layer.battles, kingdoms, mine.id, armyFocus])
+  }, [view, layer.armies, layer.battles, kingdoms, mine.id, armyFocus, patrols])
 
   // The envoy's dialogs, one at a time, once their moment has come.
   const notice = layer.notices.find((n) => Date.parse(n.show_at) <= now) ?? null

@@ -950,7 +950,26 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   ilişkiye "ilişki geliştir" elçisi gönderilemez. Aynı taca bağlı ya da
   henüz biat etmemiş lordlar arasında eski kural geçerlidir (0'dan başlar,
   en fazla +100). Krallık ayrıntısı bu sınırı yazar.
-- Başka etkileri (bonus, vergi, taç savaşları) sonra eklenecek.
+- **Devriyeler** (`cities.json` → `crown.patrol`; mantık
+  `packages/shared/src/patrols.ts`, sunucu `supabase/functions/_shared/patrols.ts`,
+  `patrol_visits` tablosu): her taç krallığı başkentinden **2 atlı devriye**
+  çıkarır. Her 15 dakikalık turda her devriye, tohumdan seçilen bir **biat
+  etmiş lordun** sarayına gider (turun %40'ı), orada biraz kalır (%15) ve
+  geri döner. Bir tacın iki devriyesi aynı turda aynı lordu seçmez.
+  Devriyeler haritada tacın renginde (kızıl / lacivert) küçük bir bölük
+  olarak herkese görünür; konumları saatten hesaplanır.
+  - **Kendi tacının devriyesi** lordun **eğlence merkezine** uğrar, içer,
+    eğlenir ve **120 altın bahşiş** bırakır. Eğlence merkezi yoksa sarayın
+    önüne gelip geçer, bahşiş bırakmaz.
+  - **Rakip tacın devriyesi** sarayın kapısına gelip **haraç ister**:
+    hazinenin %8'i (en az 40, en fazla 400 altın). Elçi diyaloğunda **"Öde"**
+    ya da **"Reddet"**. Reddedilirse ya da 5 dakika içinde cevap verilmezse
+    o tacın bütün lordlarıyla ilişki **−8** düşer.
+  - Biat etmemiş lordlara devriye gelmez.
+- **Eğlence merkezi** (4. seviye saray, krallıkta bir tane; 1200 altın, 700
+  yapı malzemesi, 120 sn): bayraklı, fenerli, küçük sahneli iki katlı bir
+  salon. Bağlı olunan tacın devriyeleri buraya gelip bahşiş bırakır.
+- Başka etkileri (taç savaşları) sonra eklenecek.
 
 ## 8. Askeri Sistem
 

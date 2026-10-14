@@ -567,6 +567,16 @@
         }
       ]
     },
+    "tavern": {
+      "size": 2,
+      "requiresPalace": 4,
+      "cost": {
+        "gold": 1200,
+        "materials": 700
+      },
+      "buildSeconds": 120,
+      "unique": true
+    },
     "prison": {
       "size": 2,
       "requiresPalace": 2,

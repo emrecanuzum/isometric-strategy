@@ -29,6 +29,7 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
   const p = n.payload as Record<string, never>
   const kind = (k: unknown) => ENVOY_NAMES[k as EnvoyRow['kind']] ?? String(k)
   const me = online.kingdoms.find((k) => k.id === online.me)?.name
+  const crown = (i: unknown) => online.crowns[Number(i)] ?? 'Taç krallığı'
   switch (n.kind) {
     case 'envoy_proposal':
       return {
@@ -140,6 +141,16 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         ? { icon: 'crown', title: `${p.name} artık senin!`, text: `${p.name} kasabası kapılarını açtı${Number(p.lost) > 0 ? `; ${fmt(Number(p.lost))} asker kaybettin` : ''}. Bundan sonra sana katkı gönderecek.` }
         : { icon: 'warn', title: `${p.name} elden çıktı`, text: `${p.by} ${p.name} kasabanı aldı. Kasabanın katkısı artık onlara gidiyor.` }
     }
+    case 'patrol_tribute':
+      return {
+        icon: 'banner',
+        title: `${crown(p.crown)} devriyesi kapında`,
+        text: `Rakip taç ${crown(p.crown)} atlıları sarayına geldi ve ${fmt(Number(p.amount))} altın haraç istiyor. Ödersen yollarına giderler. Reddedersen ya da ${Math.round(balance.cities.crown.patrol.answerSeconds / 60)} dakika içinde cevap vermezsen o tacın lordlarıyla ilişkin ${-balance.cities.crown.patrol.refuseRelation} düşer.`,
+      }
+    case 'patrol_tip':
+      return { icon: 'gold', title: 'Devriye eğlenip gitti', text: `${crown(p.crown)} devriyesi eğlence merkezinde soluklandı, içti, şarkı söyledi ve ${fmt(Number(p.amount))} altın bahşiş bıraktı.` }
+    case 'patrol_ignored':
+      return { icon: 'warn', title: 'Haraç cevapsız kaldı', text: `${crown(p.crown)} devriyesi ${fmt(Number(p.amount))} altınını alamadan döndü. O tacın lordları bunu unutmayacak: ilişkin ${-balance.cities.crown.patrol.refuseRelation} düştü.` }
     case 'town_held':
       return { icon: 'warn', title: `${p.name} dayandı`, text: `${p.name} garnizonu kuşatmayı püskürttü; ordundan ${fmt(Number(p.lost))} asker düştü, kimse kalmadı.` }
     default:
@@ -151,6 +162,8 @@ export function EnvoyDialog({ notice, online, onClose }: { notice: Notice; onlin
   const { icon, title, text } = describe(notice, online)
   const p = notice.payload as Record<string, unknown>
   const pending = notice.kind === 'envoy_proposal' && online.envoys.some((e) => e.id === p.envoy && e.status === 'pending')
+  // A rival crown's demand, answerable until it runs out.
+  const demand = notice.kind === 'patrol_tribute' && Number(p.expiresAt) > Date.now()
   const battle = notice.kind.startsWith('battle') ? (p.battle as number) : null
   return (
     <div className="modal" role="dialog" aria-labelledby="envoy-title">
@@ -164,7 +177,16 @@ export function EnvoyDialog({ notice, online, onClose }: { notice: Notice; onlin
         </header>
         {text && <p>{text}</p>}
         <div className="row spread">
-          {pending ? (
+          {demand ? (
+            <>
+              <button className="btn small danger" onClick={() => (online.act({ type: 'patrolAnswer', visit: p.visit as number, pay: false }), onClose())}>
+                Reddet
+              </button>
+              <button className="btn small" onClick={() => (online.act({ type: 'patrolAnswer', visit: p.visit as number, pay: true }), onClose())}>
+                <Icon name="gold" size={16} /> {fmt(Number(p.amount))} altın öde
+              </button>
+            </>
+          ) : pending ? (
             <>
               <button className="btn small danger" onClick={() => (online.act({ type: 'respond', envoy: p.envoy as number, accept: false }), onClose())}>
                 Reddet

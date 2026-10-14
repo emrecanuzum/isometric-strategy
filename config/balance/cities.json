@@ -2,7 +2,17 @@
   "count": [1, 2],
   "lakesideCount": 2,
   "crown": {
-    "requiredForPalaceLevel": 2
+    "requiredForPalaceLevel": 2,
+    "patrol": {
+      "perCrown": 2,
+      "slotSeconds": 900,
+      "out": 0.4,
+      "stay": 0.15,
+      "answerSeconds": 300,
+      "tribute": { "share": 0.08, "min": 40, "max": 400 },
+      "refuseRelation": -8,
+      "tip": 120
+    }
   },
   "size": 16,
   "minSpacing": 380,

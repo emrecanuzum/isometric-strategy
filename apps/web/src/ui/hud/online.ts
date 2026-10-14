@@ -66,6 +66,8 @@ export interface Online extends Layer {
   // The army the camera is locked onto, if any.
   following: number | null
   follow(army: number | null): void
+  // The crown kingdoms' names, by their capital's index (CLAUDE.md §7.8).
+  crowns: string[]
 }
 
 export const kingdomName = (online: Online, id: number) => online.kingdoms.find((k) => k.id === id)?.name ?? '?'

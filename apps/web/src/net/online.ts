@@ -163,6 +163,7 @@ export type Command =
   | { type: 'fish'; toggles: number[] }
   | { type: 'repairTrade' }
   | { type: 'ransom' }
+  | { type: 'patrolAnswer'; visit: number; pay: boolean }
   | { type: 'release'; target: number }
   | { type: 'buy'; good: string; units: number }
   | { type: 'plan'; steps: PlanStep[] }
