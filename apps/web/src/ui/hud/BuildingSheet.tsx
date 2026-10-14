@@ -1,6 +1,5 @@
-import { BUILDINGS, buildingOutput, cutOff, goldCap, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
+import { BUILDINGS, movable, moveCost, moveSeconds, buildingOutput, cutOff, goldCap, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
 import type { Building, BuildingKind, Good, Product, Resource } from '@game/shared'
-import { useState } from 'react'
 import { looksOf } from '../../game/buildingSprites'
 import { Icon } from '../icons'
 import type { IconName } from '../icons'
@@ -18,8 +17,10 @@ export interface BuildingCommands {
   onUpgrade(id: number): void
   onWorkers(id: number, workers: number): void
   onProduct(id: number, product: string): void
-  // Tears it down for half of what it cost.
+  // Adds tearing it down (for half of what it cost) to the plan.
   onDemolish(id: number): void
+  // Picks it up to be set down elsewhere; the move joins the plan.
+  onMove(id: number): void
   onClose(): void
 }
 
@@ -86,6 +87,7 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
             {BUILDINGS[b.kind].products && <Products building={b} data={data} onProduct={commands.onProduct} />}
             {workerSlots(b) > 0 && <Workers building={b} data={data} onWorkers={commands.onWorkers} />}
             {top > 1 && <Levels building={b} data={data} onUpgrade={commands.onUpgrade} />}
+            {movable(b) && <Move building={b} data={data} onMove={commands.onMove} />}
             <Demolish building={b} data={data} onDemolish={commands.onDemolish} />
           </>
         )}
@@ -260,9 +262,28 @@ function Levels({ building: b, data, onUpgrade }: { building: Building; data: Hu
   )
 }
 
-// Tearing a building down gives back half of what was spent on it; the button asks twice.
+// Moving keeps the building's level and hands, for a share of what was spent on it and a little longer than building it
+// anew; it joins the plan.
+function Move({ building: b, data, onMove }: { building: Building; data: HudData; onMove: (id: number) => void }) {
+  const done = b.doneAt <= data.now
+  return (
+    <Section title="Taşı" icon="build">
+      <p className="hint">Yapı seviyesini ve işçilerini korur; taşınırken iskeleye döner ve üretmez. Yıkıp yeniden yapmaktan biraz ucuz, ama daha uzun sürer.</p>
+      <div className="row">
+        <CostList cost={moveCost(b)} stock={data.kingdom.stock} />
+        <span className="chip">
+          <Icon name="time" size={8} /> {moveSeconds(b)} sn
+        </span>
+        <button className="btn small" disabled={!done} onClick={() => onMove(b.id)}>
+          {done ? 'Taşı' : 'İnşaat sürüyor'}
+        </button>
+      </div>
+    </Section>
+  )
+}
+
+// Tearing a building down gives back half of what was spent on it; it joins the plan, which asks before it is done.
 function Demolish({ building: b, data, onDemolish }: { building: Building; data: HudData; onDemolish: (id: number) => void }) {
-  const [sure, setSure] = useState(false)
   const refund = demolishRefund(b)
   return (
     <Section title="Yık" icon="warn">
@@ -271,8 +292,8 @@ function Demolish({ building: b, data, onDemolish }: { building: Building; data:
       </p>
       <div className="row">
         <CostList cost={refund} stock={data.kingdom.stock} />
-        <button className={sure ? 'btn small danger' : 'btn small'} onClick={() => (sure ? onDemolish(b.id) : setSure(true))} onBlur={() => setSure(false)}>
-          {sure ? 'Emin misin? Yık' : 'Yık'}
+        <button className="btn small danger" onClick={() => onDemolish(b.id)}>
+          Yık
         </button>
       </div>
     </Section>

@@ -11,9 +11,19 @@ import { territoryRect } from './territory'
 const blocks = (b: Building, at: number) => b.kind === 'wall' && !b.broken && b.doneAt <= at
 
 const memo = new WeakMap<Building[], Map<string, Set<number>>>()
+// The last answer for each list of buildings: a production round asks the same question for every building.
+const last = new WeakMap<Building[], { at: number; out: Set<number> }>()
 
 // The ids of the buildings that cannot be reached from the palace at `at`.
 export function cutOff(buildings: Building[], site: Point, at: number): Set<number> {
+  const recent = last.get(buildings)
+  if (recent && recent.at === at) return recent.out
+  const out = cutOffAt(buildings, site, at)
+  last.set(buildings, { at, out })
+  return out
+}
+
+function cutOffAt(buildings: Building[], site: Point, at: number): Set<number> {
   const walls = buildings.filter((b) => blocks(b, at))
   if (walls.length === 0) return new Set()
   const key = walls.map((w) => w.id).join(',')

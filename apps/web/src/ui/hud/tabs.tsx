@@ -39,7 +39,7 @@ import {
   upgradeSpec,
 } from '@game/shared'
 import type { BuildingKind, Good, Kingdom, Market, Plot, Point, Resource, TaxLevel, World } from '@game/shared'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { STRUCTURE_SPRITES, palaceIn } from '../../game/buildingSprites'
 import { Icon } from '../icons'
 import { BUILDING_NAMES, BUILDING_NOTES, RESOURCE_ICONS, RESOURCE_NAMES, WEAPON_ICONS, WEAPON_NAMES } from '../names'
@@ -319,15 +319,51 @@ export function TradeTab(data: HudData) {
 
 const MARKET_GOODS: Good[] = ['food', 'materials', 'arms']
 
-// The lobby's prices and, with a market building, buying with gold.
+// The lobby's prices and, with a market building, buying with gold. Clicks on "buy" gather in a basket (up to
+// balance.market.maxBuy units) that goes to the server as one purchase once the clicks stop or the basket is full.
+const BASKET_WAIT_MS = 900
+
 function MarketSection({ kingdom, now, online }: HudData) {
   const [good, setGood] = useState<Good>('food')
   const [units, setUnits] = useState(10)
+  const [basket, setBasket] = useState<{ good: Good; units: number } | null>(null)
+  const [sending, setSending] = useState(false)
+  const basketRef = useRef(basket)
+  basketRef.current = basket
+  const timer = useRef(0)
+  const actRef = useRef(online?.act)
+  actRef.current = online?.act
+  const send = async () => {
+    clearTimeout(timer.current)
+    const order = basketRef.current
+    if (!order) return
+    basketRef.current = null
+    setBasket(null)
+    setSending(true)
+    await actRef.current?.({ type: 'buy', good: order.good, units: order.units })
+    setSending(false)
+  }
+  // Leaving the tab sends what is in the basket.
+  useEffect(() => () => void send(), [])
   if (!online) return null
   const market = online.market
   const has = kingdom.buildings.some((b) => b.kind === 'market' && b.doneAt <= now)
-  const cost = buyCost(market, good, units, now)
-  const why = buyError(kingdom, market, good, units, now)
+  const { maxBuy, buyPerClick } = balance.market
+  const inBasket = basket?.good === good ? basket.units : 0
+  const adding = Math.min(units, maxBuy - inBasket)
+  const cost = buyCost(market, good, inBasket + adding, now) - (inBasket > 0 ? buyCost(market, good, inBasket, now) : 0)
+  const why = sending || adding <= 0 ? 'busy' : buyError(kingdom, market, good, inBasket + adding, now)
+  const add = () => {
+    if (why) return
+    // Another good in the basket goes first.
+    if (basketRef.current && basketRef.current.good !== good) void send()
+    const next = { good, units: inBasket + adding }
+    basketRef.current = next
+    setBasket(next)
+    clearTimeout(timer.current)
+    if (next.units >= maxBuy) void send()
+    else timer.current = window.setTimeout(() => void send(), BASKET_WAIT_MS)
+  }
   return (
     <Section title="Lobi fiyatları" icon="gold" aside="satış düşürür, alış artırır">
       <div className="price-row">
@@ -359,13 +395,21 @@ function MarketSection({ kingdom, now, online }: HudData) {
             <span className="stepper-value">
               <b>{units}</b> birim
             </span>
-            <button className="btn icon-only" disabled={units >= balance.market.maxBuy} onClick={() => setUnits(units + 10)} aria-label="Artır">
+            <button className="btn icon-only" disabled={units >= buyPerClick} onClick={() => setUnits(units + 10)} aria-label="Artır">
               <Icon name="plus" size={16} />
             </button>
-            <button className="btn small" disabled={!!why} onClick={() => online.act({ type: 'buy', good, units })}>
+            <button className="btn small" disabled={!!why} onClick={add}>
               {cost} altına al
             </button>
           </div>
+          {(basket || sending) && (
+            <p className="hint">
+              {basket
+                ? `Sepette ${basket.units} ${RESOURCE_NAMES[basket.good].toLocaleLowerCase('tr')} (${buyCost(market, basket.good, basket.units, now)} altın, en fazla ${maxBuy}). `
+                : ''}
+              Fiyat güncelleniyor, lütfen bekle…
+            </p>
+          )}
         </>
       ) : (
         <p className="hint">Pazar binası kurarsan (2. seviye saray) altınla hammadde alabilirsin.</p>

@@ -249,6 +249,17 @@ small {
   --on: var(--water);
 }
 
+/* A meter on its own in a section runs the section's whole width. */
+.section > .meter {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.section > .meter i {
+  flex: 1;
+}
+
 .history {
   display: flex;
   align-items: flex-end;
@@ -2062,6 +2073,43 @@ small {
   color: var(--gold);
 }
 
+/* The plan of builds, moves and demolitions waiting to be confirmed; above the placing bar and the menu. */
+.plan-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--gap) + 64px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--px) * 4);
+  width: max-content;
+  max-width: calc(100vw - var(--gap) * 2);
+  box-sizing: border-box;
+  padding: calc(var(--px) * 4) calc(var(--px) * 6);
+  font-size: 14px;
+  z-index: 7;
+}
+
+.plan-bar b {
+  color: var(--gold);
+}
+
+.plan-text {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+  min-width: 0;
+}
+
+.plan-back {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  color: var(--up);
+}
+
 .toast {
   position: fixed;
   left: 50%;
@@ -2227,13 +2275,15 @@ small {
   }
 
   .res .icon {
-    width: 16px;
-    height: 16px;
+    flex: none;
+    width: 10px;
+    height: 10px;
   }
 
   .res-value b {
     min-width: 0;
-    font-size: 15px;
+    font-size: 13px;
+    letter-spacing: -0.02em;
   }
 
   .res-value small,
@@ -2304,15 +2354,15 @@ small {
     height: min(62vh, calc(100vh - 140px));
   }
 
+  /* The map buttons on the right, the minimap on the left with the chat button and the timers above it. */
   .zoom {
-    left: var(--gap);
-    right: auto;
+    left: auto;
+    right: var(--gap);
     bottom: calc(var(--dock-h) + 20px + env(safe-area-inset-bottom));
   }
 
-  /* Above the zoom buttons. */
   .chat-toggle {
-    bottom: calc(var(--dock-h) + 170px + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + 110px + env(safe-area-inset-bottom));
   }
 
   .chat {
@@ -2324,7 +2374,8 @@ small {
   }
 
   .minimap {
-    right: 34px;
+    left: 34px;
+    right: auto;
     bottom: calc(var(--dock-h) + 2px + env(safe-area-inset-bottom));
   }
 
@@ -3604,4 +3655,22 @@ kbd {
 
 .fisher-log small {
   color: #6b5034;
+}
+
+/* Phones: the timers sit above the chat button (or the open chat), clear of the zoom buttons on the right. */
+@media (max-width: 719px) {
+  .timers {
+    bottom: calc(var(--dock-h) + 110px + 44px + var(--px) * 4 + env(safe-area-inset-bottom));
+    width: calc(100vw - var(--gap) * 2 - 56px);
+    max-height: 30vh;
+  }
+
+  body:has(section.chat) .timers {
+    bottom: calc(var(--dock-h) + var(--px) * 4 + 50vh + var(--px) * 4 + env(safe-area-inset-bottom));
+  }
+
+  .chat-pop {
+    bottom: calc(var(--dock-h) + 110px + 44px + var(--px) * 4 + env(safe-area-inset-bottom));
+    max-width: calc(100vw - var(--gap) * 2 - 56px);
+  }
 }

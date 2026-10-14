@@ -380,11 +380,15 @@ function farm(variant: number, level = 1): Sprite {
       canvas.set(x, ground - 3, TIMBER[side < 0 ? 2 : 1])
     }
   }
-  // Haystacks and a scarecrow from level 2, and a small granary in the back corner at level 3.
-  if (level >= 2) {
-    for (const [dx, dy] of [[-30, -6], [-20, -11]]) haystack(canvas, cx + dx, base - h + dy)
-    scarecrow(canvas, cx + 14, base - h + 6)
-  }
+  return canvas.sprite(cx, base, 0)
+}
+
+// What stands on a field from level 2: haystacks and a scarecrow, and a small granary in the back corner at level 3.
+// Drawn apart from the flat field so it sorts with the buildings around it (see structureParts).
+function farmProps(level: number): Sprite {
+  const { canvas, cx, base, h } = footprint(2, level === 3 ? 44 : 22)
+  for (const [dx, dy] of [[-30, -6], [-20, -11]]) haystack(canvas, cx + dx, base - h + dy)
+  scarecrow(canvas, cx + 14, base - h + 6)
   if (level === 3) hall(canvas, cx + 28, base - h - 6, { w: 16, wall: 10, roof: 12, walls: ramp(0x3a2616, 0x4e3420, 0x6a4a2c, 0x8a6440, 0xa07a50), roofs: THATCH, door: true })
   return canvas.sprite(cx, base, 0)
 }
@@ -1142,6 +1146,8 @@ export interface Part {
   z: number
   // Whether walkers are hidden behind it (fields and jetties are flat).
   solid: boolean
+  // Drawn in depth order with the buildings like a solid part, but walked over (what stands on a field).
+  stands?: boolean
 }
 
 const made = new Map<string, Sprite>()
@@ -1172,6 +1178,7 @@ export function structureParts(world: World, s: Structure): Part[] {
     parts.push({ sprite: base, fx, fy, z: front, solid: !flat })
   }
   parts.push({ sprite: looks[s.variant % looks.length], fx, fy, z, solid: !flat })
+  if (s.look === 'farm' && (s.level ?? 1) >= 2) parts.push({ sprite: once(`farmProps:${s.level}`, () => farmProps(s.level!)), fx, fy, z, solid: false, stands: true })
   if (s.pier) {
     const p = s.pier
     // The deck starts level with the bank it leaves from.

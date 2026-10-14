@@ -1,4 +1,4 @@
-import type { Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units } from '@game/shared'
+import type { PlanStep, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units } from '@game/shared'
 import { supabase } from '../lib/supabase'
 
 // The lobby as the client sees it: the player's own kingdom in full, the others only as they show on the map, and the
@@ -158,6 +158,7 @@ export type Command =
   | { type: 'ransom' }
   | { type: 'release'; target: number }
   | { type: 'buy'; good: string; units: number }
+  | { type: 'plan'; steps: PlanStep[] }
   | { type: 'repairWalls' }
   | { type: 'envoy'; to: number; kind: Envoy['kind']; gold?: number; terms?: PeaceTerms }
   | { type: 'respond'; envoy: number; accept: boolean }

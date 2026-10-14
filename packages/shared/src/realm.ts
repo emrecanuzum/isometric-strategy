@@ -1,7 +1,7 @@
 import { balance } from './balance'
 import { affordable, armoryOf, palaceLevel, population, recruitment } from './economy'
 import type { Cost, Good, Kingdom, Resource, Stock } from './economy'
-import { buyPrice } from './market'
+import { buyTotal } from './market'
 import type { Market } from './market'
 import { RESEARCH, hasResearch, levelOf, researchEffects, researching, rivalOf, sermonReadyAt, taken, tierOpen } from './institutions'
 import { TAX_LEVELS } from './society'
@@ -82,7 +82,7 @@ export function disbandUnits(kingdom: Kingdom, units: Units): Kingdom {
 }
 
 export const buyCost = (market: Market | null | undefined, good: Good, units: number, at: number) =>
-  Math.ceil(buyPrice(market, good, at) * units)
+  Math.ceil(buyTotal(market, good, units, at))
 
 export function buyError(kingdom: Kingdom, market: Market | null | undefined, good: Good, units: number, at: number): RealmError | null {
   if (!standing(kingdom, 'market', at)) return 'building'

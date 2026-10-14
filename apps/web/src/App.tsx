@@ -20,8 +20,10 @@ import {
   lobbyColors,
   setTradeGood,
   STROKE_KINDS,
-  buildMany,
-  demolish,
+  applyPlan,
+  canDemolish,
+  movable,
+  moveError,
   surveySite,
   territoryRect,
   territoryStage,
@@ -32,16 +34,18 @@ import {
   upgradeSpec,
   upgradeTrade,
 } from '@game/shared'
-import type { Along, BuildError, Building, EconomyEvent, BuildingKind, Good, Kingdom, Point, World } from '@game/shared'
+import type { Along, BuildError, Building, EconomyEvent, BuildingKind, Good, Kingdom, PlanStep, Point, World } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { WorldMap } from './game/WorldMap'
 import { ConfirmBuild } from './ui/hud/ConfirmBuild'
+import { PlanBar } from './ui/hud/PlanBar'
 import { Minimap } from './game/Minimap'
 import type { MinimapFlag } from './game/Minimap'
 import type { Structure } from './game/chunkPainter'
 import type { StructureLook } from './game/buildingSprites'
 import { createWorld, footprintOrigin } from './game/createWorld'
+import type { MapTool } from './game/createWorld'
 import type { Hover, RivalTerritory, WorldView } from './game/createWorld'
 import { KINGDOM_COLORS } from './game/buildingSprites'
 import type { KingdomColor } from './game/buildingSprites'
@@ -327,6 +331,14 @@ function App({
   }, [])
   // The territory's stage follows the palace's level (re-read every clock tick, so it grows when an upgrade ends).
   const stage = kingdom ? territoryStage(kingdom, serverNow()) : 0
+  // Builds, moves and demolitions laid out on the map, sent together once the player confirms them (CLAUDE.md §6.4).
+  // The map shows the kingdom as it would be with them carried out.
+  const [plan, setPlan] = useState<PlanStep[]>([])
+  const planned = useMemo(
+    () => (view && kingdom && plan.length > 0 ? applyPlan(view.world, kingdom, stage, plan, serverNow()) : null),
+    [view, kingdom, stage, plan],
+  )
+  const shown = planned?.kingdom ?? kingdom
   const [selectedSite, setSelectedSite] = useState(0)
 
   // A row from the server replaces what is shown, unless an older answer arrives late.
@@ -546,7 +558,7 @@ function App({
   useEffect(() => {
     if (!view) return
     const time = serverNow()
-    const buildings = kingdom?.buildings ?? []
+    const buildings = shown?.buildings ?? []
     const structure = (b: Rival['buildings'][number], color: string | undefined, own: boolean, variant: number, ruined = false): Structure => {
       const done = b.doneAt <= time
       const pier = done && b.kind === 'dock' ? dockPier(view.world, b) : null
@@ -567,7 +579,7 @@ function App({
       return { x: b.x, y: b.y, size: b.size, look, variant, level: b.level ?? 1, ...(own && { id: b.id }), color, ...(pier && { pier }) }
     }
     const structures: Structure[] = [
-      ...buildings.map((b) => structure(b, kingdom?.color, true, b.id, !!kingdom?.trade.damaged)),
+      ...buildings.map((b) => structure(b, shown?.color, true, b.id, !!shown?.trade.damaged)),
       ...rivals.flatMap((r) => r.buildings.map((b) => structure(b, r.color, false, r.id * 1000 + b.id, !!r.trade_damaged))),
     ]
     // Footpaths worn from every building's door to the palace gate, around the buildings in between.
@@ -590,7 +602,7 @@ function App({
       return path ? [path.points] : []
     })
     view.setStructures(structures, trails)
-  }, [view, kingdom, rivals])
+  }, [view, shown, rivals])
 
   // Villagers walk from their houses to the fields and workshops; the merchant walks to the trade post.
   const buildings = kingdom?.buildings
@@ -637,6 +649,13 @@ function App({
   // A new kingdom first places its palace, wherever the player likes inside the territory.
   const needsPalace = kingdom !== null && !hasPalace(kingdom)
   const placingKind: BuildingKind | null = needsPalace ? 'palace' : placing
+  // A building picked up to be moved, waiting for its new spot.
+  const [moving, setMoving] = useState<number | null>(null)
+  const movingBuilding = moving !== null ? shown?.buildings.find((b) => b.id === moving) : undefined
+  // Tearing down or moving several buildings: a tool in hand until the player is done (see MapTool).
+  const [tool, setTool] = useState<MapTool>(null)
+  const holding = placingKind !== null || moving !== null || tool !== null
+  useEffect(() => view?.setTool(placingKind ? null : tool), [view, tool, placingKind])
   const [preview, setPreview] = useState<Point | null>(null)
   // A row drawn by dragging (walls, houses), awaiting confirmation.
   const [previewMany, setPreviewMany] = useState<Point[] | null>(null)
@@ -649,25 +668,38 @@ function App({
 
   useEffect(() => {
     if (!view) return
-    if (!placingKind || !kingdom) {
+    if (movingBuilding && shown) {
+      view.setPlacement({
+        size: movingBuilding.size,
+        valid: (origin) => {
+          const error = moveError(view.world, shown, stage, movingBuilding.id, origin, serverNow())
+          return !error || error === 'queue'
+        },
+      })
+      return
+    }
+    if (!placingKind || !shown) {
       view.setPlacement(null)
       return
     }
     const size = BUILDINGS[placingKind].size
     view.setPlacement({
       size,
-      valid: (origin) => fits(view.world, kingdom, stage, placingKind, origin, turned),
+      // Checked against the kingdom with the plan carried out, so planned buildings take their ground.
+      valid: (origin) => fits(view.world, shown, stage, placingKind, origin, turned),
       // A gate shows its two towers beside it.
-      ...(placingKind === 'gate' && { extra: (origin: Point) => gateTiles(origin, gateAlong(kingdom, origin, turned)).filter((t) => t.x !== origin.x || t.y !== origin.y) }),
+      ...(placingKind === 'gate' && { extra: (origin: Point) => gateTiles(origin, gateAlong(shown, origin, turned)).filter((t) => t.x !== origin.x || t.y !== origin.y) }),
       pinned: preview ?? undefined,
       stroke: stroking,
       pinnedMany: previewMany ?? undefined,
     })
-  }, [view, placingKind, kingdom, stage, preview, previewMany, stroking, turned])
+  }, [view, placingKind, movingBuilding, shown, stage, preview, previewMany, stroking, turned])
 
   // The whole-world map, opened from the minimap on phones.
   const [fullMap, setFullMap] = useState(false)
   const cancelPlacing = () => {
+    setTool(null)
+    setMoving(null)
     setTurned(null)
     setPlacing(null)
     setPreview(null)
@@ -712,6 +744,26 @@ function App({
       sendArmy(aiming, tile)
       return
     }
+    // Tearing down: every building clicked joins the plan.
+    if (tool === 'demolish') {
+      if (building === undefined || !current) return
+      if (!current.buildings.some((b) => b.id === building)) return setToast('Planlanan yapıyı plan çubuğundaki Geri al ile kaldır')
+      if (!canDemolish(current, building)) return setToast('Saray ve ticaret noktası yıkılamaz')
+      play('click')
+      planDemolish(building)
+      return
+    }
+    // Moving: a click on a building picks it up (instead of the one in hand), a click on the ground sets it down there.
+    if (tool === 'move') {
+      if (building !== undefined) return pickUp(building)
+      if (!movingBuilding || !shown || !view) return
+      const origin = footprintOrigin(tile, movingBuilding.size)
+      const error = moveError(view.world, shown, stage, movingBuilding.id, origin, serverNow())
+      if (error && error !== 'queue') return setToast(BUILD_ERRORS[error])
+      setPlan((steps) => [...steps, { type: 'move', id: movingBuilding.id, ...origin }])
+      setMoving(null)
+      return
+    }
     if (army !== undefined && !placingKind) {
       const owner = layer.armies.find((a) => a.id === army)?.kingdom_id
       if (owner === mine.id) {
@@ -732,15 +784,23 @@ function App({
       return
     }
     if (!view || !placingKind || !current) return
-    // A picked spot waits for confirmation (see ConfirmBuild); picking again moves it.
     const origin = footprintOrigin(tile, BUILDINGS[placingKind].size)
-    const error = buildError(view.world, current, stage, placingKind, origin, serverNow(), turned)
-    if (error) {
-      setToast(BUILD_ERRORS[error])
-      setPreview(null)
-      return
+    if (placingKind === 'palace') {
+      // The palace's spot waits for confirmation (see ConfirmBuild); picking again moves it.
+      const error = buildError(view.world, current, stage, placingKind, origin, serverNow(), turned)
+      if (error) {
+        setToast(BUILD_ERRORS[error])
+        setPreview(null)
+        return
+      }
+      return setPreview(origin)
     }
-    setPreview(origin)
+    // Everything else joins the plan; the player keeps placing until done, then confirms the plan.
+    const base = shown ?? current
+    const error = buildError(view.world, base, stage, placingKind, origin, serverNow(), turned)
+    if (error && error !== 'queue') return setToast(error === 'cost' ? (missingText(BUILDINGS[placingKind].cost, base.stock) ?? BUILD_ERRORS.cost) : BUILD_ERRORS[error])
+    const along = placingKind === 'gate' ? gateAlong(base, origin, turned) : undefined
+    setPlan((steps) => [...steps, { type: 'build', kind: placingKind, ...origin, ...(along && { along }) }])
   }
   const confirmBuild = () => {
     const current = kingdomRef.current
@@ -758,37 +818,64 @@ function App({
     cancelPlacing()
   }
 
-  // A dragged row: only the spots that fit are kept and await confirmation.
+  // A dragged row: the spots that fit join the plan.
   strokeRef.current = (spots) => {
-    const current = kingdomRef.current
+    const current = shown ?? kingdomRef.current
     if (!view || !placingKind || !current) return
     const size = BUILDINGS[placingKind].size
     const placeable = spots.filter((p) => canPlace(view.world, current, stage, { ...p, size }, 0, placingKind))
     if (placeable.length === 0) return setToast(BUILD_ERRORS.spot)
-    setPreviewMany(placeable)
+    const kind = placingKind
+    setPlan((steps) => [...steps, ...placeable.map((p): PlanStep => ({ type: 'build', kind, ...p }))])
   }
-  const confirmMany = () => {
+  // The plan, confirmed: every step goes to the server in one command.
+  const confirmPlan = () => {
     const current = kingdomRef.current
-    if (!view || !placingKind || !current || !previewMany) return
-    const { kingdom: predicted, placed } = buildMany(view.world, current, stage, placingKind, previewMany, serverNow())
-    if (!placed) {
-      setToast(BUILD_ERRORS.cost)
-      return setPreviewMany(null)
-    }
-    play('start')
-    command({ type: 'buildMany', kind: placingKind, spots: previewMany }, predicted)
+    if (!view || !current || plan.length === 0) return
+    const { kingdom: predicted, done, skipped } = applyPlan(view.world, current, stage, plan, serverNow())
+    setPlan([])
     cancelPlacing()
+    if (!done) return setToast('Plandaki hiçbir adım şu an yapılamıyor')
+    play('start')
+    command({ type: 'plan', steps: plan }, predicted)
+    if (skipped > 0) setToast(`${skipped} adım yapılamadı (kaynak, sınır ya da yer)`)
+  }
+  // Picks a building up to be moved; moving it again replaces the move already planned.
+  const pickUp = (id: number) => {
+    const current = kingdomRef.current
+    const b = current?.buildings.find((x) => x.id === id)
+    if (!b) return setToast('Planlanan yapıyı plan çubuğundaki Geri al ile kaldır')
+    if (!movable(b)) return setToast('Saray, ticaret noktası, iskele, sur ve kapı taşınamaz')
+    if (b.doneAt > serverNow()) return setToast(BUILD_ERRORS.busy)
+    setPlan((steps) => steps.filter((s) => !(s.type === 'move' && s.id === id)))
+    setMoving(id)
+  }
+  const startTool = (next: 'demolish' | 'move') => {
+    setPlacing(null)
+    setPreview(null)
+    setPanel(null)
+    setSelected(null)
+    setMoving(null)
+    setTool(next)
+  }
+  const startMoving = (id: number) => {
+    startTool('move')
+    pickUp(id)
+  }
+  const planDemolish = (id: number) => {
+    setPlan((steps) => [...steps.filter((s) => !((s.type === 'move' || s.type === 'demolish') && s.id === id)), { type: 'demolish', id }])
   }
 
   const startPlacing = (kind: BuildingKind) => {
-    const error = view && kingdom && buildError(view.world, kingdom, stage, kind, null, serverNow())
-    // Rows of walls and houses wait for a free construction slot instead of needing one now.
-    if (error && !(error === 'queue' && STROKE_KINDS.includes(kind))) return setToast(BUILD_ERRORS[error])
+    const base = shown ?? kingdom
+    const error = view && base && buildError(view.world, base, stage, kind, null, serverNow())
+    // Planned buildings wait for a free construction slot instead of needing one now.
+    if (error && error !== 'queue') return setToast(error === 'cost' && base ? (missingText(BUILDINGS[kind].cost, base.stock) ?? BUILD_ERRORS.cost) : BUILD_ERRORS[error])
     setPanel(null)
-    // The dock has its own plot on the shore: no placing, it goes straight there.
+    setMoving(null)
+    // The dock has its own plot on the shore: no placing, it joins the plan there.
     if (kind === 'dock' && view && kingdom?.dockPlot) {
-      play('start')
-      command({ type: 'build', kind: 'dock', x: kingdom.dockPlot.x, y: kingdom.dockPlot.y }, build(view.world, kingdom, stage, 'dock', kingdom.dockPlot, serverNow()))
+      setPlan((steps) => [...steps, { type: 'build', kind: 'dock', x: kingdom.dockPlot!.x, y: kingdom.dockPlot!.y }])
       view.centerOn({ x: kingdom.dockPlot.x + 1, y: kingdom.dockPlot.y + 1 })
       return
     }
@@ -1033,12 +1120,12 @@ function App({
           onFound={found}
         />
       )}
-      {view && kingdom && !placingKind && <Dock open={panel} unread={journal.unread} onToggle={toggleTab} />}
-      {view && kingdom && !placingKind && !panel && !selectedBuilding && <Timers kingdom={kingdom} online={online} now={now} />}
-      {view && kingdom && !placingKind && hover?.building && hover.building.id !== selected && (
+      {view && kingdom && !holding && <Dock open={panel} unread={journal.unread} onToggle={toggleTab} />}
+      {view && kingdom && !holding && !panel && !selectedBuilding && <Timers kingdom={kingdom} online={online} now={now} />}
+      {view && kingdom && !holding && hover?.building && hover.building.id !== selected && (
         <MapTip building={kingdom.buildings.find((b) => b.id === hover.building!.id)} at={hover.building.screen} now={now} />
       )}
-      {view && kingdom && !placingKind && hudData && selectedBuilding && (
+      {view && kingdom && !holding && hudData && selectedBuilding && (
         <BuildingSheet
           building={selectedBuilding}
           data={hudData}
@@ -1047,14 +1134,15 @@ function App({
             onWorkers: commandWorkers,
             onProduct: (id, product) => command({ type: 'product', id, product }, setProduct(kingdom, id, product, now)),
             onDemolish: (id) => {
-              command({ type: 'demolish', id }, demolish(kingdom, id))
-              closeTab()
+              planDemolish(id)
+              startTool('demolish')
             },
+            onMove: startMoving,
             onClose: closeTab,
           }}
         />
       )}
-      {view && kingdom && !placingKind && panel && hudData && <Sheet tab={panel} onClose={closeTab} data={hudData} />}
+      {view && kingdom && !holding && panel && hudData && <Sheet tab={panel} onClose={closeTab} data={hudData} />}
       {placingKind && (
         <div className="placing frame" role="status">
           <Icon name="build" size={24} />
@@ -1083,8 +1171,39 @@ function App({
       {placingKind && preview && kingdom && (
         <ConfirmBuild kind={placingKind} kingdom={kingdom} onConfirm={confirmBuild} onCancel={() => setPreview(null)} />
       )}
-      {placingKind && previewMany && kingdom && (
-        <ConfirmBuild kind={placingKind} kingdom={kingdom} count={previewMany.length} onConfirm={confirmMany} onCancel={() => setPreviewMany(null)} />
+      {tool && !placingKind && (
+        <div className="placing frame" role="status">
+          <Icon name={tool === 'demolish' ? 'warn' : 'build'} size={24} />
+          <span>
+            {tool === 'demolish' ? (
+              <>
+                <b>Yıkım</b> · Yıkılacak binalara tıkla
+              </>
+            ) : movingBuilding ? (
+              <>
+                <b>{BUILDING_NAMES[movingBuilding.kind]} taşınıyor</b> · Yeni yerine tıkla ya da başka bir bina seç
+              </>
+            ) : (
+              <>
+                <b>Taşıma</b> · Taşınacak binaya tıkla
+              </>
+            )}
+          </span>
+          <button className="btn small" onClick={cancelPlacing}>
+            Bitti
+          </button>
+        </div>
+      )}
+      {kingdom && planned && plan.length > 0 && (
+        <PlanBar
+          steps={plan}
+          kingdom={kingdom}
+          planned={planned.kingdom}
+          skipped={planned.skipped}
+          onUndo={() => setPlan((steps) => steps.slice(0, -1))}
+          onClear={() => setPlan([])}
+          onConfirm={confirmPlan}
+        />
       )}
       {kingdom && !needsPalace && hasTradePost(kingdom) && kingdom.trade.good === null && !kingdom.trade.idle && <GoodPicker kingdom={kingdom} onGood={chooseGood} market={layer.market} now={now} />}
       {toast && (
@@ -1131,7 +1250,7 @@ function App({
           onClose={() => setFullMap(false)}
         />
       )}
-      {view && !placingKind && aiming === null && (
+      {view && !holding && aiming === null && (
         <Chat
           storeKey={`chat-seen:${lobby.id}`}
           username={username}
@@ -1149,7 +1268,7 @@ function App({
           }}
         />
       )}
-      {following !== null && aiming === null && !placingKind && (
+      {following !== null && aiming === null && !holding && (
         <div className="placing frame" role="status">
           <Icon name="eye" size={24} />
           <span>

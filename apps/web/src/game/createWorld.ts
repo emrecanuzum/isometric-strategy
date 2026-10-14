@@ -71,6 +71,16 @@ const FLOAT_SECONDS = 1.6
 const GHOST_OK = 0x7dff8a
 const GHOST_BAD = 0xff5a4a
 const HIGHLIGHT = 0xf2d16b
+// The outline under a tool: red for tearing down, blue for picking up to move.
+const DEMOLISH_HIGHLIGHT = 0xff4a3a
+const MOVE_HIGHLIGHT = 0x7ad0ff
+// A pixel hammer for the pointer while tearing down, its head's corner on the spot.
+const HAMMER_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' shape-rendering='crispEdges'><g transform='rotate(-45 16 16)'><rect x='14.5' y='11.5' width='4' height='19' fill='#8a6440' stroke='#1a0f08'/><rect x='15.5' y='12' width='1' height='18' fill='#b08a5a'/><rect x='7.5' y='4.5' width='18' height='8' fill='#8a949c' stroke='#1a0f08'/><rect x='8' y='5' width='17' height='2' fill='#d8dee2'/><rect x='8' y='10' width='17' height='2' fill='#5a646c'/></g></svg>",
+)}") 6 6, crosshair`
+
+// A tool in the player's hand on the map (see WorldView.setTool).
+export type MapTool = 'demolish' | 'move' | null
 // Territory border dashes and gaps, in screen pixels; the kingdom's name shows at this zoom and below.
 const DASH = 12
 const GAP = 8
@@ -142,6 +152,8 @@ export interface WorldView {
   setStructures(structures: Structure[], trails: Point[][]): void
   // While set, the pointer shows the footprint of the building being placed, green where it fits.
   setPlacement(placement: Placement | null): void
+  // The pointer and outline for tearing down (a hammer, red) or moving (blue); buildings stay pickable while moving.
+  setTool(tool: MapTool): void
   setTown(errands: Errand[], merchant: MerchantTrip | null): void
   // Tiles walkers go around: building footprints, except flat ones such as fields.
   blocksWalkers(x: number, y: number): boolean
@@ -654,7 +666,7 @@ export async function createWorld(
     // A building is picked by the pixels it covers on screen, nearest first, not by the ground behind its roof.
     const wx = (at.x - camera.x) / camera.scale.x
     const wy = (at.y - camera.y) / camera.scale.y
-    const hit = placement
+    const hit = placement && tool !== 'move'
       ? undefined
       : hits.find(({ sprite, sx, sy }) => {
           const px = Math.floor(wx - sx + sprite.anchorX)
@@ -697,6 +709,7 @@ export async function createWorld(
     return tile
   }
   let placement: Placement | null = null
+  let tool: MapTool = null
   // A row being drawn by dragging: where it began and the footprints along it so far.
   let stroke: { start: Point; spots: Point[] } | null = null
   // The tile under a screen point (the ground drawn there, as pick takes it).
@@ -832,6 +845,8 @@ export async function createWorld(
     // Its pixels, and the order it is drawn in (later ones cover earlier ones).
     look: Sprite_
     depth: number
+    // Walked over (what stands on a field): walkers on it are not hidden.
+    walked: boolean
   }
   let occluders: Occluder[] = []
   // Window lights cut to what the buildings in front leave visible, made anew with the buildings.
@@ -851,9 +866,10 @@ export async function createWorld(
     const chimneys: { x: number; y: number; depth: number }[] = []
     occluders = structures.flatMap((s) => {
       const parts = structureParts(world, s)
-      const solidParts = parts.filter((p) => p.solid)
+      const solidParts = parts.filter((p) => p.solid || p.stands)
       if (solidParts.length === 0) return []
-      for (let y = s.y; y < s.y + s.size; y++) for (let x = s.x; x < s.x + s.size; x++) solid.add(y * world.size + x)
+      const blocking = parts.some((p) => p.solid)
+      if (blocking) for (let y = s.y; y < s.y + s.size; y++) for (let x = s.x; x < s.x + s.size; x++) solid.add(y * world.size + x)
       // The building itself is the last solid part; a base below it comes first.
       const main = solidParts[solidParts.length - 1]
       return solidParts.map((part) => {
@@ -873,7 +889,7 @@ export async function createWorld(
         const lit = part === main ? lightsOf(look) : null
         if (lit) lights.push({ lit, sx, sy, depth })
         const left = sx - look.anchorX
-        return { x: s.x, y: s.y, size: s.size, sx, sy: ground, left, right: left + look.width, top: sy - look.anchorY, lift: main.z, sprite, look, depth }
+        return { x: s.x, y: s.y, size: s.size, sx, sy: ground, left, right: left + look.width, top: sy - look.anchorY, lift: main.z, sprite, look, depth, walked: !blocking }
       })
     })
     // Lit windows shine in the glow layer above everything, so the buildings in front of a house would not hide them:
@@ -917,7 +933,7 @@ export async function createWorld(
       if (!child.visible || child.label === 'occluder' || child.label === 'army-ring') continue
       const { x: px, y: py } = child.position
       for (const o of occluders) {
-        if (px < o.left || px > o.right || py < o.top || py > o.sy + 2) continue
+        if (o.walked || px < o.left || px > o.right || py < o.top || py > o.sy + 2) continue
         // The ground point under the walker's feet, taking the building's own ground height.
         const a = px / (TILE_WIDTH / 2)
         const b = (py + o.lift) / (TILE_HEIGHT / 2)
@@ -1049,6 +1065,12 @@ export async function createWorld(
     setPlacement(next) {
       placement = next
       cursor.clear()
+      if (lastPointer) pick(lastPointer)
+    },
+    setTool(next) {
+      tool = next
+      highlight.tint = tool === 'demolish' ? DEMOLISH_HIGHLIGHT : tool === 'move' ? MOVE_HIGHLIGHT : HIGHLIGHT
+      app.canvas.style.cursor = tool === 'demolish' ? HAMMER_CURSOR : tool === 'move' ? 'grab' : ''
       if (lastPointer) pick(lastPointer)
     },
     setTown: (errands, merchant) =>

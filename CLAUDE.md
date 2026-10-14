@@ -467,10 +467,37 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   - **İnşa listesi** saray seviyesine göre 5 sekmedir (1. sv. … 5. sv.): her
     sekmede o seviyede açılan yapılar ve sınırı artan yapılar yazar; henüz
     ulaşılmamış seviyeler kilitli görünür.
-  - **Sur ve ev** basılı tutup sürükleyerek sıra hâlinde yerleştirilir;
-    onay penceresi adedi ve toplam maliyeti gösterir. Sur parçaları inşaat
-    sırasına girmez (aynı anda kurulur); evler sıraya girer, yer boşaldıkça
-    başlar.
+  - **Plan (toplu inşa/taşıma/yıkım):** Saray dışındaki her inşa, taşıma ve
+    yıkım hemen gönderilmez, bir **plana** eklenir. Oyuncu aynı yapıdan
+    istediği kadar yerleştirir, başka yapılara geçer, başka binaları yıkar
+    ya da taşır; harita planın uygulanmış hâlini (iskeleler, kalkan
+    binalar) gösterir. Alttaki plan çubuğu adımları, harcanacak ve iade
+    edilecek malları gösterir (Geri al / Temizle / Onayla); "Onayla"
+    **"Emin misin?"** diye sorar ve bütün plan tek komutla gider
+    (`plan`, en fazla `economy.json` → `maxPlan` adım). Önce yıkımlar,
+    sonra taşımalar, sonra inşalar uygulanır; inşaat yeri doluysa adım yer
+    boşalınca başlar; yapılamayan adımlar atlanır
+    (`packages/shared/src/economy.ts` → `applyPlan`).
+  - **Sur ve ev** basılı tutup sürükleyerek sıra hâlinde plana eklenir. Sur
+    parçaları inşaat sırasına girmez (aynı anda kurulur); evler sıraya
+    girer, yer boşaldıkça başlar.
+  - **Yıkım modu:** Bina menüsündeki "Yık" o binayı plana ekler ve yıkım
+    modunu açar: imleç **çekiç** olur, üstüne gelinen bina **kırmızı** dış
+    hatla vurgulanır, tıklanan her bina plana yıkım olarak eklenir (haritada
+    kaybolur). "Bitti" ya da Esc moddan çıkar; plan onaya kadar bekler.
+  - **Taşıma editörü:** Bina menüsündeki "Taşı" o binayı eline alır ve
+    taşıma modunu açar (imleç el, vurgu mavi). Yeni yerine tıklayınca
+    taşıma plana eklenir; sonra başka bir binaya tıklayıp onu da alıp
+    yerine koyarsın. Eldeyken başka binaya tıklamak eldekini değiştirir;
+    planda taşınmış bir binayı yeniden almak eski taşımayı siler. Bütün
+    taşımalar plan onayında birlikte gider.
+  - **Taşı:** Saray, ticaret noktası, iskele, sur ve kapı dışındaki bitmiş
+    her yapı taşınabilir.
+    Seviyesi, işçileri ve ürünü korunur; taşınırken iskeleye döner, üretmez
+    ve bir inşaat yeri tutar. Maliyeti yapıya harcanan her şeyin (inşa +
+    yükseltmeler) **%40'ı** (yıkıp yeniden yapmanın net maliyeti %50);
+    süresi o seviyeye yeniden inşa süresinin **1,25 katı**
+    (`economy.json` → `move`).
   - **Sur kapısı** üç karodur: ortada kapı, iki yanında daha uzun **kule
     surları**. Surun yönüne göre kendiliğinden döner (kapı yüzü surun
     içinden geçer; iki yanında daha çok sur olan yön), **R** tuşu ya da
@@ -492,8 +519,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   - **Ev ve nüfus sınırı:** Evler (ve sarayın kendi odaları) nüfus
     sınırından (saray seviyesi × 16) fazla barınak sağlayamaz. Planlanan
     barınak (inşaattakiler ve yükseltilenler hedef seviyesiyle sayılır)
-    sınıra ulaşınca yeni ev kurulmaz, ev yükseltilmez; sarayı yükseltmek
-    gerekir.
+    sınırı aşacaksa yeni ev kurulmaz, ev yükseltilmez (ör. 15/16'da 3
+    köylülük ev kurulamaz); sarayı yükseltmek gerekir.
   - **Yapı sınırları** saray seviyesiyle artar (saray 1→5): tarla 3 / 4 /
     6 / 8 / 10, oduncu kampı 2 / 3 / 4 / 5 / 6, silah atölyesi 1 / 2 / 3 /
     3 / 4, gözcü kulesi 2 / 2 / 3 / 4 / 6, sur kapısı 2 / 2 / 3 / 4 / 5;
@@ -502,9 +529,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     "kurulu / sınır" olarak yazar; sınırı aşan eski yapılar yerinde kalır.
   - **Saray 4. ve 5. seviye** çok pahalı ve uzundur (savaş malzemesi de
     ister; `economy.json`).
-  - Saray ve ticaret noktası dışındaki her yapı **yıkılabilir**: inşa ve
-    yükseltme maliyetinin yarısı geri döner (ücretsiz ilk yapının inşa
-    maliyeti dönmez).
+  - Saray ve ticaret noktası dışındaki her yapı **yıkılabilir** (plana
+    eklenir): inşa ve yükseltme maliyetinin yarısı geri döner (ücretsiz ilk
+    yapının inşa maliyeti dönmez).
 - **Ticaret noktası:** satılacak mal yerine **hiçbir şey satma** da
   seçilebilir (tüccar evde bekler). Sefer başına kazanç lobinin anlık
   fiyatından gösterilir. Ticaret menüsünde satış seçimi en üsttedir;
@@ -547,6 +574,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     kullanılacaktır. Hammadde yetmezse yetebildiği kadar işlenir.
   - Ticaret noktası menüsü ticaret ayarlarını, saray menüsü krallık
     özetini açar.
+- Tarlanın 2. seviyede saman yığınları ve korkuluğu, 3. seviyede küçük
+  ambarı vardır; bunlar düz tarladan ayrı, binalarla aynı derinlik
+  sırasında çizilir (arkadaki bina onları örtmez), üstlerinden yine
+  yürünür.
 - Köylüler, tüccar ve hayvanlar yapıların **içinden geçmez**: köylüler
   yapıların etrafından yol bulur, hayvanlar yapı karolarında durmaz; bir
   yapının arkasında kalan yürüyen yapının arkasında çizilir. Tarlalar düz
@@ -822,7 +853,11 @@ mertebesindedir.
   sattıkça o malın fiyatı lobi genelinde düşer; pazardan alındıkça artar.
   Fiyatlar zamanla taban değerlerine geri döner.
 - **Pazar** binası (2. seviye saray) altınla hammadde satın almaya yarar;
-  alış fiyatı lobi fiyatının biraz üstündedir.
+  alış fiyatı lobi fiyatının biraz üstündedir. Her alınan birim bir
+  sonrakinin fiyatını yükseltir; büyük bir alım, aynı malı parça parça almakla
+  aynı tutar. "Al" tıklamaları bir **sepette** toplanır (tık başına en fazla
+  100, sepette en fazla 400 birim); tıklama durunca ya da sepet dolunca tek
+  komut olarak gider, bu sırada "Fiyat güncelleniyor, lütfen bekle" yazar.
 
 **İlişkiler ve diplomasi**
 
@@ -1120,6 +1155,9 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   içinden Krallık sekmesindeki "Ana menü" ile dönülür. Lobi silinirse
   içindeki oyuncular kendiliğinden ana menüye döner (yayın + dakikalık
   yoklama).
+- Telefonda yakınlaştırma (+/−) ve üsse dön düğmeleri sağ altta, küçük
+  harita sol alttadır; sohbet düğmesi küçük haritanın, sayaçlar sohbet
+  düğmesinin üstünde durur. Üst çubukta ikonlar ve sayılar küçülür.
 - Harita ekranının sağ üstünde, ayarların altında **ana menüye dön**
   düğmesi (ev ikonu) vardır. Yakınlaştırma düğmelerinin üstündeki **üsse
   dön** düğmesi (konum pini) kamerayı krallığa götürür.

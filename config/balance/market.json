@@ -4,5 +4,6 @@
   "maxFactor": 3,
   "halfLifeSeconds": 1800,
   "buyMarkup": 1.25,
-  "maxBuy": 100
+  "maxBuy": 400,
+  "buyPerClick": 100
 }

@@ -178,6 +178,23 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       next = { state: built }
       break
     }
+    case 'plan': {
+      // Builds, moves and demolitions laid out on the map and confirmed together (CLAUDE.md §6.4).
+      const k = need()
+      if (!Array.isArray(cmd.steps) || cmd.steps.length === 0 || cmd.steps.length > game.balance.economy.maxPlan) refuse('rejected')
+      const spot = (p: { x: unknown; y: unknown }) => (Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: (p.x as number) | 0, y: (p.y as number) | 0 } : refuse('rejected'))
+      // deno-lint-ignore no-explicit-any
+      const steps = cmd.steps.map((s: any) => {
+        if (s?.type === 'demolish' && isId(s.id)) return { type: 'demolish', id: s.id }
+        if (s?.type === 'move' && isId(s.id)) return { type: 'move', id: s.id, ...spot(s) }
+        if (s?.type === 'build' && game.BUILDABLE.includes(s.kind)) return { type: 'build', kind: s.kind, ...spot(s), ...((s.along === 'x' || s.along === 'y') && { along: s.along }) }
+        return refuse('rejected')
+      })
+      const { kingdom: planned, done } = game.applyPlan(world, k, stage, steps, now)
+      if (!done) refuse('spot')
+      next = { state: planned }
+      break
+    }
     case 'upgrade': {
       const k = need()
       if (!isId(cmd.id)) refuse('rejected')
@@ -699,7 +716,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
   }
 }
 
-const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'seen', 'reset'])
+const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'seen', 'reset'])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

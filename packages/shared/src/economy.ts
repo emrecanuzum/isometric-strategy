@@ -78,10 +78,17 @@ export const BUILDINGS = balance.economy.buildings as Record<BuildingKind, Build
 
 export const maxLevel = (kind: BuildingKind) => 1 + (BUILDINGS[kind].levels?.length ?? 0)
 
-// The spec of a building at `level`, with every level up to it applied.
+// The spec of a building at `level`, with every level up to it applied. Worked out once per kind and level: it is
+// read for every building in every production round.
+const specs = new Map<BuildingKind, BuildingSpec[]>()
 export function levelSpec(kind: BuildingKind, level = 1): BuildingSpec {
-  let spec = BUILDINGS[kind]
+  let byLevel = specs.get(kind)
+  if (!byLevel) specs.set(kind, (byLevel = []))
+  let spec = byLevel[level]
+  if (spec) return spec
+  spec = BUILDINGS[kind]
   for (const up of (BUILDINGS[kind].levels ?? []).slice(0, level - 1)) spec = { ...spec, ...up }
+  byLevel[level] = spec
   return spec
 }
 
@@ -475,12 +482,24 @@ export function ledger(kingdom: Kingdom, at: number) {
 
 const isGood = (v: string): v is Good => (GOODS as readonly string[]).includes(v)
 
+// What holds for every building of a kingdom in a round at `at`; worked out once per round, not once per building.
+export function roundContext(kingdom: Kingdom, at: number) {
+  return {
+    cut: cutOff(kingdom.buildings, kingdom.site, at),
+    output: fortuneEffects(kingdom, at).output,
+    learnt: researchEffects(kingdom, at).output,
+    // The share of the work done: hands to spare, the hour of the day, the ruler's absence.
+    pace: population(kingdom, at).efficiency * workRate(kingdom, at) * idleFactor(kingdom, at),
+  }
+}
+
 // What one building makes in a round, before raw goods run short: the product, how many units, and what they use.
-export function buildingOutput(kingdom: Kingdom, b: Building, at: number) {
+export function buildingOutput(kingdom: Kingdom, b: Building, at: number, round?: ReturnType<typeof roundContext>) {
   const spec = levelSpec(b.kind, b.level)
   if (!done(b, at) || !spec.amount) return null
+  const r = round ?? roundContext(kingdom, at)
   // Behind a wall with no gate the workers cannot get there.
-  if (cutOff(kingdom.buildings, kingdom.site, at).has(b.id)) return null
+  if (r.cut.has(b.id)) return null
   const slots = workerSlots(b)
   const crew = slots === 0 ? 1 : staffOf(b) / slots
   let choice = productOf(b)
@@ -490,11 +509,11 @@ export function buildingOutput(kingdom: Kingdom, b: Building, at: number) {
   // The land's yield and the fortunes of the day only touch raw goods; worked goods depend on the hands alone.
   const raw = isGood(product.makes) && !product.uses
   const land = raw ? kingdom.yields[product.makes as Good] : 1
-  const fortune = raw ? Math.max(0, 1 + (fortuneEffects(kingdom, at).output[product.makes as Good] ?? 0)) : 1
-  const learnt = 1 + (researchEffects(kingdom, at).output[b.kind] ?? 0)
+  const fortune = raw ? Math.max(0, 1 + (r.output[product.makes as Good] ?? 0)) : 1
+  const learnt = 1 + (r.learnt[b.kind] ?? 0)
   return {
     makes: product.makes,
-    units: spec.amount * product.rate * land * fortune * learnt * crew * population(kingdom, at).efficiency * workRate(kingdom, at) * idleFactor(kingdom, at),
+    units: spec.amount * product.rate * land * fortune * learnt * crew * r.pace,
     uses: product.uses,
   }
 }
@@ -506,8 +525,9 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
   const delta: Partial<Stock> = {}
   const weapons: Partial<Armory> = {}
   const left = { ...stock }
+  const round = roundContext(kingdom, at)
   for (const b of kingdom.buildings) {
-    const out = buildingOutput(kingdom, b, at)
+    const out = buildingOutput(kingdom, b, at, round)
     if (!out) continue
     let units = out.units
     for (const [r, per] of Object.entries(out.uses ?? {})) units = Math.min(units, left[r as Resource] / (per ?? 1))
@@ -524,7 +544,7 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
   // Gold some buildings bring in on their own (the fisher's river finds).
   for (const b of kingdom.buildings) {
     const per = BUILDINGS[b.kind].goldPerRound
-    if (per && done(b, at) && !cutOff(kingdom.buildings, kingdom.site, at).has(b.id)) delta.gold = (delta.gold ?? 0) + per * idleFactor(kingdom, at)
+    if (per && done(b, at) && !round.cut.has(b.id)) delta.gold = (delta.gold ?? 0) + per * idleFactor(kingdom, at)
   }
   delta.gold = (delta.gold ?? 0) + l.tax - l.soldiersGold + l.tributes.reduce((sum, t) => sum + t.gold, 0)
   return { delta, weapons }
@@ -576,6 +596,49 @@ export function demolishRefund(b: Building): Cost {
   return Object.fromEntries(Object.entries(spent).map(([r, v]) => [r, Math.floor((v ?? 0) * balance.economy.demolishRefund)]).filter(([, v]) => (v as number) > 0))
 }
 
+// ---- Moving -------------------------------------------------------------------------------------------------------
+
+// Everything but the palace, the trade post and the dock (each on its own spot) and walls and gates may be moved. The
+// building keeps its level, hands and product; it stands as a building site (making nothing) until it is up again.
+// Moving costs a share of all that was spent on it, a little less than tearing it down and building it again
+// (balance.economy.move), and takes longer than building it to its level anew.
+const FIXED: BuildingKind[] = ['palace', 'tradePost', 'dock', 'wall', 'gate']
+export const movable = (b: Building) => !FIXED.includes(b.kind)
+
+export function moveCost(b: Building): Cost {
+  const spec = BUILDINGS[b.kind]
+  const spent: Cost = {}
+  for (const cost of [spec.cost, ...(spec.levels ?? []).slice(0, (b.level ?? 1) - 1).map((up) => up.cost)]) {
+    for (const [r, v] of Object.entries(cost ?? {})) spent[r as Resource] = (spent[r as Resource] ?? 0) + (v ?? 0)
+  }
+  return Object.fromEntries(Object.entries(spent).map(([r, v]) => [r, Math.ceil((v ?? 0) * balance.economy.move.costShare)]).filter(([, v]) => (v as number) > 0))
+}
+
+export function moveSeconds(b: Building) {
+  const spec = BUILDINGS[b.kind]
+  const rebuild = (spec.buildSeconds ?? 0) + (spec.levels ?? []).slice(0, (b.level ?? 1) - 1).reduce((n, up) => n + (up.buildSeconds ?? 0), 0)
+  return Math.ceil(rebuild * balance.economy.move.timeFactor)
+}
+
+// Why building `id` cannot be moved to `spot` now, if it cannot.
+export function moveError(world: World, kingdom: Kingdom, stage: number, id: number, spot: Point, now: number): BuildError | null {
+  const b = kingdom.buildings.find((x) => x.id === id)
+  if (!b || !movable(b)) return 'unique'
+  if (!done(b, now)) return 'busy'
+  if (!affordable(kingdom.stock, moveCost(b))) return 'cost'
+  if (queued(kingdom, now).length >= maxConstructions(kingdom, now)) return 'queue'
+  const rest = { site: kingdom.site, buildings: kingdom.buildings.filter((x) => x.id !== id) }
+  if (!canPlace(world, rest, stage, { ...spot, size: b.size }, 0, b.kind)) return 'spot'
+  return null
+}
+
+export function moveBuilding(world: World, kingdom: Kingdom, stage: number, id: number, spot: Point, now: number): Kingdom {
+  if (moveError(world, kingdom, stage, id, spot, now)) return kingdom
+  const b = kingdom.buildings.find((x) => x.id === id)!
+  const moved: Building = { ...b, x: spot.x, y: spot.y, doneAt: now + moveSeconds(b) * 1000 }
+  return { ...kingdom, stock: pay(kingdom.stock, moveCost(b)), buildings: kingdom.buildings.map((x) => (x.id === id ? moved : x)) }
+}
+
 export const canDemolish = (kingdom: Kingdom, id: number) => {
   const b = kingdom.buildings.find((x) => x.id === id)
   return !!b && b.kind !== 'palace' && b.kind !== 'tradePost'
@@ -594,13 +657,15 @@ export type BuildError = 'palace' | 'unique' | 'cost' | 'queue' | 'spot' | 'top'
 // The homes of every building at the level it is (or is being raised to): what the town will house once built.
 export const plannedHousing = (kingdom: Kingdom) => kingdom.buildings.reduce((n, b) => n + (levelSpec(b.kind, b.level).villagers ?? 0), 0)
 
-// Homes beyond the palace's population cap would stand empty, so none is built (nor raised) once the planned homes
-// reach it; raising the palace makes room.
-export const housingFull = (kingdom: Kingdom, at: number) => plannedHousing(kingdom) >= popCapFor(palaceLevel(kingdom, at))
+// Homes beyond the palace's population cap would stand empty, so none is built (nor raised) when the homes it adds
+// would take the planned homes past the cap; raising the palace makes room.
+export const housingRoom = (kingdom: Kingdom, at: number) => popCapFor(palaceLevel(kingdom, at)) - plannedHousing(kingdom)
+export const housingFull = (kingdom: Kingdom, at: number, adding = 1) => adding > 0 && housingRoom(kingdom, at) < adding
 
 // How many of a kind may stand now, or Infinity without a limit.
 export function buildLimit(kingdom: Kingdom, kind: BuildingKind, at: number) {
-  if ((BUILDINGS[kind].villagers ?? 0) > 0 && kind !== 'palace' && housingFull(kingdom, at)) return buildingCount(kingdom, kind)
+  const homes = BUILDINGS[kind].villagers ?? 0
+  if (homes > 0 && kind !== 'palace' && housingFull(kingdom, at, homes)) return buildingCount(kingdom, kind)
   const caps = BUILDINGS[kind].maxByPalaceLevel
   if (!caps) return Infinity
   return caps[Math.max(0, Math.min(caps.length - 1, palaceLevel(kingdom, at) - 1))]
@@ -680,13 +745,7 @@ export function buildMany(world: World, kingdom: Kingdom, stage: number, kind: B
     if (!affordable(k.stock, buildCost(k, kind)) || buildingCount(k, kind) >= buildLimit(k, kind, now)) break
     if (!canPlace(world, k, stage, { ...spot, size: spec.size }, 0, kind)) continue
     const free = isFree(k, kind)
-    let start = now
-    if (!spec.outsideQueue) {
-      // The moment a slot frees up: once fewer than the slot count are still being built.
-      const ends = queued(k, now).map((b) => b.doneAt).sort((a, b) => b - a)
-      const slots = maxConstructions(k, now)
-      if (ends.length >= slots) start = Math.max(now, ends[slots - 1])
-    }
+    const start = spec.outsideQueue ? now : slotFreeAt(k, now)
     const building: Building = { id: k.nextId, kind, x: spot.x, y: spot.y, size: spec.size, doneAt: start + (spec.buildSeconds ?? 0) * 1000, ...(free && { free }) }
     k = {
       ...k,
@@ -700,13 +759,49 @@ export function buildMany(world: World, kingdom: Kingdom, stage: number, kind: B
   return { kingdom: k, placed }
 }
 
+// The moment a construction slot frees up: once fewer than the slot count are still being built.
+export function slotFreeAt(kingdom: Kingdom, now: number) {
+  const ends = queued(kingdom, now).map((b) => b.doneAt).sort((a, b) => b - a)
+  const slots = maxConstructions(kingdom, now)
+  return ends.length >= slots ? Math.max(now, ends[slots - 1]) : now
+}
+
+// Builds, moves and demolitions laid out together on the map and sent at once (CLAUDE.md §6.4). Demolitions go
+// first, so their ground and refunds are there for the rest, then moves, then builds. A move or build with no free
+// construction slot waits for one, as a dragged row does; steps that cannot be done are skipped.
+export type PlanStep =
+  | { type: 'build'; kind: BuildingKind; x: number; y: number; along?: Along }
+  | { type: 'move'; id: number; x: number; y: number }
+  | { type: 'demolish'; id: number }
+
+export function applyPlan(world: World, kingdom: Kingdom, stage: number, steps: PlanStep[], now: number) {
+  let k = kingdom
+  let done = 0
+  const step = (next: Kingdom) => {
+    if (next !== k) done++
+    k = next
+  }
+  for (const s of steps) if (s.type === 'demolish') step(demolish(k, s.id))
+  for (const s of steps) {
+    if (s.type !== 'move') continue
+    const error = moveError(world, k, stage, s.id, s, now)
+    if (!error || error === 'queue') step(moveBuilding(world, k, stage, s.id, s, error ? slotFreeAt(k, now) : now))
+  }
+  for (const s of steps) {
+    if (s.type !== 'build' || s.kind === 'palace') continue
+    const error = buildError(world, k, stage, s.kind, s, now, s.along)
+    if (!error || error === 'queue') step(build(world, k, stage, s.kind, { x: s.x, y: s.y }, error ? slotFreeAt(k, now) : now, s.along))
+  }
+  return { kingdom: k, done, skipped: steps.length - done }
+}
+
 // Why a building cannot be raised a level now, if it cannot.
 export function upgradeError(kingdom: Kingdom, id: number, now: number): BuildError | null {
   const b = kingdom.buildings.find((x) => x.id === id)
   const up = b && upgradeSpec(b)
   if (!b || !up) return 'top'
   if (!done(b, now)) return 'busy'
-  if (b.kind !== 'palace' && (up.villagers ?? 0) > 0 && housingFull(kingdom, now)) return 'limit'
+  if (b.kind !== 'palace' && housingFull(kingdom, now, (up.villagers ?? 0) - (levelSpec(b.kind, b.level).villagers ?? 0))) return 'limit'
   if (!affordable(kingdom.stock, up.cost)) return 'cost'
   if (queued(kingdom, now).length >= maxConstructions(kingdom, now)) return 'queue'
   return null

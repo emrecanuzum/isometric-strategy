@@ -35,3 +35,17 @@ export function afterTrade(market: Market | null | undefined, good: MarketGood, 
 // What a market building asks for one unit.
 export const buyPrice = (market: Market | null | undefined, good: MarketGood, at: number) =>
   priceAt(market, good, at) * balance.market.buyMarkup
+
+// What a market building asks for `units` bought at once: every unit raises the price of the next, as afterTrade does,
+// so one large purchase costs the same as the same units bought a few at a time.
+export function buyTotal(market: Market | null | undefined, good: MarketGood, units: number, at: number) {
+  const { impactPerUnit, maxFactor, buyMarkup } = balance.market
+  const top = basePrice(good) * maxFactor
+  let price = priceAt(market, good, at)
+  let total = 0
+  for (let i = 0; i < units; i++) {
+    total += Math.min(top, price) * buyMarkup
+    price /= 1 - impactPerUnit
+  }
+  return total
+}

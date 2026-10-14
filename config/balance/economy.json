@@ -580,6 +580,8 @@
     }
   },
   "maxBatch": 64,
+  "maxPlan": 64,
+  "move": { "costShare": 0.4, "timeFactor": 1.25 },
   "freeFirst": [
     "lumberCamp",
     "house",
