@@ -1,5 +1,5 @@
-import { BUILDINGS, balance, buildingOutput, gameTime, goldCap, population, storageCap, tradeLoad, tradeTripsPerRound } from '@game/shared'
-import type { BuildingKind, Kingdom, Resource, Stock } from '@game/shared'
+import { BUILDINGS, balance, buildingOutput, gameTime, goldCap, population, storageCap } from '@game/shared'
+import type { BuildingKind, Kingdom, Market, Resource, Stock } from '@game/shared'
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { PHASE_NAMES, dayPhase, isNight } from '../../game/daylight'
@@ -23,12 +23,14 @@ interface Props {
   seasonStart: number
   history: Stock[]
   onOpen: (tab: TabId) => void
+  // The lobby's prices, so the merchant's takings are counted as he is paid.
+  market?: Market | null
   // The last chip of the bar on phones: the menu with the settings and the way back to the main menu.
   menu?: React.ReactNode
 }
 
-export function TopBar({ kingdom, now, seasonStart, history, onOpen, menu }: Props) {
-  const flow = flows(kingdom, now)
+export function TopBar({ kingdom, now, seasonStart, history, onOpen, market, menu }: Props) {
+  const flow = flows(kingdom, now, market)
   const { villagers, jobs } = population(kingdom, now)
   const [open, setOpen] = useState<string | null>(null)
   const bar = useRef<HTMLDivElement>(null)
@@ -56,7 +58,7 @@ export function TopBar({ kingdom, now, seasonStart, history, onOpen, menu }: Pro
             label={`${RESOURCE_NAMES[r]} ${fmt(kingdom.stock[r])}, tur başına ${signed(net)}`}
             open={open === r}
             onClick={tap(r, 'store')}
-            card={<ResourceCard resource={r} kingdom={kingdom} now={now} history={history} />}
+            card={<ResourceCard resource={r} kingdom={kingdom} now={now} history={history} market={market} />}
             go={{ label: 'Depoya git', onClick: go('store') }}
           >
             <Icon name={RESOURCE_ICONS[r]} size={24} />
@@ -122,8 +124,9 @@ function Chip({
 const num = (v: number) => v.toFixed(Math.abs(v) < 10 ? 1 : 0).replace('.', ',')
 
 // Each building kind's share of what comes in, and what goes out where.
-function ResourceCard({ resource: r, kingdom, now, history }: { resource: Resource; kingdom: Kingdom; now: number; history: Stock[] }) {
-  const { made, used, net } = flows(kingdom, now)[r]
+function ResourceCard({ resource: r, kingdom, now, history, market }: { resource: Resource; kingdom: Kingdom; now: number; history: Stock[]; market?: Market | null }) {
+  const flow = flows(kingdom, now, market)
+  const { made, used, net, wasted } = flow[r]
   const sources = new Map<BuildingKind, { count: number; units: number }>()
   for (const b of kingdom.buildings) {
     const out = buildingOutput(kingdom, b, now)
@@ -133,12 +136,12 @@ function ResourceCard({ resource: r, kingdom, now, history }: { resource: Resour
   }
   const lines: { name: string; value: number }[] = [...sources].map(([kind, s]) => ({ name: `${BUILDING_NAMES[kind]} ×${s.count}`, value: s.units }))
   const { villagers } = population(kingdom, now)
-  const trips = tradeTripsPerRound(kingdom)
-  if (r === 'gold' && kingdom.trade.good) lines.push({ name: 'Tüccar', value: made })
+  if (r === 'gold') lines.push({ name: 'Vergi', value: flow.tax })
+  if (r === 'gold' && kingdom.trade.good) lines.push({ name: 'Tüccar', value: flow.tradeGold })
   if (r === 'food' && villagers > 0) lines.push({ name: `Köylüler (${villagers})`, value: -villagers * balance.economy.foodPerVillager })
-  if (r === kingdom.trade.good) lines.push({ name: 'Tüccar satıyor', value: -tradeLoad(kingdom) * trips })
+  if (r === kingdom.trade.good) lines.push({ name: 'Tüccar satıyor', value: -flow.sold })
   // Raw goods worked into weapons in the forges.
-  const worked = used - (r === 'food' ? villagers * balance.economy.foodPerVillager : 0) - (r === kingdom.trade.good ? tradeLoad(kingdom) * trips : 0)
+  const worked = used - (r === 'food' ? villagers * balance.economy.foodPerVillager : 0) - (r === kingdom.trade.good ? flow.sold : 0)
   if (worked > 0.05) lines.push({ name: 'Atölyede işleniyor', value: -worked })
   const scale = Math.max(made, used, 0.01)
   const runsOut = net < -0.01 ? Math.floor(kingdom.stock[r] / -net) : null
@@ -176,6 +179,10 @@ function ResourceCard({ resource: r, kingdom, now, history }: { resource: Resour
         {runsOut !== null ? (
           <span className="down">
             <Icon name="warn" size={8} /> ~{runsOut} tur sonra tükenir
+          </span>
+        ) : wasted > 0.05 ? (
+          <span className="down">
+            <Icon name="warn" size={8} /> {r === 'gold' ? 'Hazine' : 'Depo'} dolu: tur başına ~{num(wasted)} boşa gidiyor
           </span>
         ) : (
           <span>Net {signed(net)} / tur ({balance.economy.productionSeconds} sn)</span>

@@ -1205,6 +1205,7 @@ function App({
             seasonStart={seasonStart}
             history={journal.history}
             onOpen={setPanel}
+            market={online.market}
             menu={
               <>
                 {/* On phones the settings and the way back to the main menu fold into one menu, the store bar's last chip. */}

@@ -9,6 +9,7 @@ import {
   capOf,
   storageCap,
   goldCap,
+  idleFactor,
   plannedHousing,
   palaceLevel,
   buildingCount,
@@ -101,17 +102,27 @@ export function flows(kingdom: Kingdom, now: number, market?: Market | null) {
   const trips = tradeTripsPerRound(kingdom)
   const post = kingdom.buildings.find((b) => b.kind === 'tradePost')
   const walledIn = !!post && cutOff(kingdom.buildings, kingdom.site, now).has(post.id)
-  const sold = kingdom.trade.good && !walledIn && !kingdom.trade.damaged ? tradeLoad(kingdom) * trips : 0
+  // The merchant sells what the stores hold: a full load each trip, or less when the good runs short (then about what
+  // is made of it each round).
+  const good = kingdom.trade.good
+  const sold = good && !walledIn && !kingdom.trade.damaged ? Math.min(tradeLoad(kingdom) * trips, Math.floor(kingdom.stock[good]) + Math.max(0, round[good] ?? 0)) : 0
   const bonus = 1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade
-  const tradeGold = kingdom.trade.good ? sold * tradePrice(kingdom, kingdom.trade.good, market, now) * bonus : 0
+  // At the lobby's price as it stands (or the free city's), and less for a ruler long away, as the merchant is paid.
+  const tradeGold = good ? sold * tradePrice(kingdom, good, market, now) * bonus * idleFactor(kingdom, now) : 0
   const tributesIn = l.tributes.filter((t) => t.gold > 0).reduce((a, t) => a + t.gold, 0)
   const tributesOut = -l.tributes.filter((t) => t.gold < 0).reduce((a, t) => a + t.gold, 0)
-  const result = {} as Record<Resource, { made: number; used: number; net: number }>
+  const result = {} as Record<Resource, { made: number; used: number; net: number; wasted: number }> & { tradeGold: number; sold: number; tax: number }
   for (const r of RESOURCES) {
     const made = r === 'gold' ? tradeGold + l.tax + tributesIn : (round[r] ?? 0) + (r === 'food' ? eaten : 0)
     const used = (r === 'food' ? eaten : 0) + (r === kingdom.trade.good ? sold : 0) + (r === 'gold' ? l.soldiersGold + tributesOut : 0)
-    result[r] = { made, used, net: made - used }
+    // What does not fit in the stores (or the treasury) is lost, so a full store gains nothing.
+    const room = Math.max(0, (r === 'gold' ? goldCap(kingdom, now) : storageCap(kingdom, now)) - kingdom.stock[r])
+    const net = made - used
+    result[r] = { made, used, net: Math.min(net, room), wasted: Math.max(0, net - room) }
   }
+  result.tradeGold = tradeGold
+  result.sold = sold
+  result.tax = l.tax
   return result
 }
 
@@ -240,8 +251,7 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
   const armory = armoryOf(kingdom)
   const { weapons } = roundOutcome(kingdom, now)
   const l = ledger(kingdom, now)
-  const trips = tradeTripsPerRound(kingdom)
-  const tradeGold = kingdom.trade.good ? tradeLoad(kingdom) * trips * tradePrice(kingdom, kingdom.trade.good, online?.market, now) : 0
+  const tradeGold = flow.tradeGold
   const cap = storageCap(kingdom, now)
   const room = (r: Resource) => (r === 'gold' ? goldCap(kingdom, now) : cap)
   return (
