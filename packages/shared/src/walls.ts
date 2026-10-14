@@ -1,6 +1,7 @@
 import { balance } from './balance'
 import type { Building } from './economy'
 import type { Point } from './iso'
+import { perSpan } from './span'
 import { territoryRect } from './territory'
 
 // Walls keep people in as well as out (CLAUDE.md §6.4): villagers and the merchant walk out of the palace and cannot
@@ -18,16 +19,11 @@ interface Flood {
 
 const OPEN: Flood = { out: new Set(), enclosed: false }
 const memo = new WeakMap<Building[], Map<string, Flood>>()
-// The last answer for each list of buildings: a production round asks the same question for every building.
-const last = new WeakMap<Building[], { at: number; flood: Flood }>()
+// The answer for each list of buildings, until one of them is completed (see perSpan): settling a kingdom asks the
+// same question every round.
+const last = new WeakMap<Building[], { from: number; until: number; value: Flood }>()
 
-function flood(buildings: Building[], site: Point, at: number): Flood {
-  const recent = last.get(buildings)
-  if (recent && recent.at === at) return recent.flood
-  const result = floodAt(buildings, site, at)
-  last.set(buildings, { at, flood: result })
-  return result
-}
+const flood = (buildings: Building[], site: Point, at: number): Flood => perSpan(last, buildings, at, () => floodAt(buildings, site, at))
 
 // The ids of the buildings that cannot be reached from the palace at `at`.
 export const cutOff = (buildings: Building[], site: Point, at: number): Set<number> => flood(buildings, site, at).out

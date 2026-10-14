@@ -4,6 +4,8 @@ import { priceAt } from './market'
 import type { Market } from './market'
 import { happinessStep, happinessTarget, isNightAt, popCapFor, recruitTerms, taxSpec } from './society'
 import { addUnits, countOf, garrisonOf, unitSpec } from './units'
+import { perSpan } from './span'
+import type { SpanCache } from './span'
 import { cutOff, imprisoned } from './walls'
 import { fortuneEffects, fortunesBegun, hasResearch, hospitalHeal, levelOf, researchEffects, sermonTaxFactor, templeHappiness } from './institutions'
 import type { FortuneKind, FortuneScope } from './institutions'
@@ -413,20 +415,28 @@ export const armoryOf = (kingdom: Kingdom): Armory => kingdom.armory ?? { sword:
 
 // How much of each good the stores hold (CLAUDE.md §6.1): a little more with each palace level, and as much again as
 // the warehouses give; whatever is made beyond it is lost. Gold is not capped.
+const stores: SpanCache<{ goods: number; gold: number }> = new WeakMap()
+// The stores' and the treasury's room from the palace level and the finished buildings (see perSpan).
+const storesOf = (kingdom: Kingdom, at: number) =>
+  perSpan(stores, kingdom.buildings, at, () => {
+    const level = palaceLevel(kingdom, at)
+    const { baseByPalaceLevel: base, goldByPalaceLevel: gold } = balance.economy.storage
+    const room = { goods: base[Math.max(0, Math.min(base.length - 1, level - 1))], gold: gold[Math.max(0, Math.min(gold.length - 1, level - 1))] }
+    for (const b of kingdom.buildings) {
+      if (b.doneAt > at) continue
+      const spec = levelSpec(b.kind, b.level)
+      room.goods += spec.storage ?? 0
+      room.gold += spec.gold ?? 0
+    }
+    return room
+  })
+
 export function storageCap(kingdom: Kingdom, at: number) {
-  const base = balance.economy.storage.baseByPalaceLevel
-  let cap = base[Math.max(0, Math.min(base.length - 1, palaceLevel(kingdom, at) - 1))]
-  for (const b of kingdom.buildings) if (b.doneAt <= at) cap += levelSpec(b.kind, b.level).storage ?? 0
-  return Math.round(cap * (1 + researchEffects(kingdom, at).storage))
+  return Math.round(storesOf(kingdom, at).goods * (1 + researchEffects(kingdom, at).storage))
 }
 
 // How much gold the treasury holds: a palace-level amount and what treasuries add. Gold beyond it is lost.
-export function goldCap(kingdom: Kingdom, at: number) {
-  const base = balance.economy.storage.goldByPalaceLevel
-  let cap = base[Math.max(0, Math.min(base.length - 1, palaceLevel(kingdom, at) - 1))]
-  for (const b of kingdom.buildings) if (b.doneAt <= at) cap += levelSpec(b.kind, b.level).gold ?? 0
-  return cap
-}
+export const goldCap = (kingdom: Kingdom, at: number) => storesOf(kingdom, at).gold
 
 // The palace's finished level (0 without a palace); a palace being raised counts at the level below.
 export function palaceLevel(kingdom: Kingdom, at: number) {
@@ -439,16 +449,21 @@ export function palaceLevel(kingdom: Kingdom, at: number) {
 export const soldiersOf = (kingdom: Kingdom) =>
   (kingdom.soldiers ?? 0) + (kingdom.fielded ?? 0) + (kingdom.training ?? []).reduce((n, t) => n + t.count, 0)
 
+// What the finished buildings give the people: homes, places of work and the palace's cap (see perSpan).
+const housed: SpanCache<{ housing: number; jobs: number; cap: number }> = new WeakMap()
+
 // Homes hold villagers up to the palace's population cap; soldiers come out of that number.
 export function population(kingdom: Kingdom, at: number) {
-  let housing = 0
-  let jobs = 0
-  for (const b of kingdom.buildings) {
-    if (!done(b, at)) continue
-    housing += levelSpec(b.kind, b.level).villagers ?? 0
-    jobs += staffOf(b)
-  }
-  const cap = popCapFor(palaceLevel(kingdom, at))
+  const { housing, jobs, cap } = perSpan(housed, kingdom.buildings, at, () => {
+    let housing = 0
+    let jobs = 0
+    for (const b of kingdom.buildings) {
+      if (!done(b, at)) continue
+      housing += levelSpec(b.kind, b.level).villagers ?? 0
+      jobs += staffOf(b)
+    }
+    return { housing, jobs, cap: popCapFor(palaceLevel(kingdom, at)) }
+  })
   const soldiers = soldiersOf(kingdom)
   const villagers = Math.max(0, Math.min(housing, cap) - soldiers)
   // The sick neither work nor pay taxes.

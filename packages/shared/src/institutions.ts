@@ -1,6 +1,8 @@
 import { balance } from './balance'
 import type { Cost, Good, Kingdom } from './economy'
 import { isNightAt, phaseEndsAt } from './society'
+import { perSpan } from './span'
+import type { SpanCache } from './span'
 
 // The university, the hospital and the temple, and the fortunes that come and go (CLAUDE.md §9.8). Pure helpers on a
 // kingdom's state; `advance` (economy.ts) applies them every production round.
@@ -58,8 +60,13 @@ export const researching = (k: Kingdom, at: number) => (k.researches ?? []).find
 
 const finished = (k: Kingdom, at: number) => (k.researches ?? []).filter((r) => r.doneAt <= at).map((r) => RESEARCH[r.id]).filter(Boolean)
 
-// What all finished research adds up to.
-export function researchEffects(k: Kingdom, at: number) {
+// What all finished research adds up to, worked out once for each stretch between two studies' completion (see
+// perSpan); read it, never change it.
+const NONE: NonNullable<Kingdom['researches']> = []
+const effects: SpanCache<ReturnType<typeof sumEffects>> = new WeakMap()
+export const researchEffects = (k: Kingdom, at: number) => perSpan(effects, k.researches ?? NONE, at, () => sumEffects(k, at))
+
+function sumEffects(k: Kingdom, at: number) {
   const out = {
     queue: 0,
     output: {} as Record<string, number>,
