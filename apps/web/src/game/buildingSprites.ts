@@ -1106,11 +1106,14 @@ function dock(variant = 0, level = 1): Sprite {
 
 // Plank jetty `w`×`h` tiles over the water, its planks across direction `along`; the deck stands `lift` pixels above
 // the water. Anchored at its front corner on the water surface.
+const ROPE = rgb(0xc8b07a)
 function pier(w: number, h: number, along: 'x' | 'y', lift: number): Sprite {
-  const width = Math.ceil((w + h) * (TILE_WIDTH / 2)) + 8
-  const height = Math.ceil((w + h) * (TILE_HEIGHT / 2)) + lift + 8
+  // Room round the deck for what stands on a big jetty (its crane reaches out past the end).
+  const room = w * h >= 6 ? 72 : 0
+  const width = Math.ceil((w + h) * (TILE_WIDTH / 2)) + 8 + room * 2
+  const height = Math.ceil((w + h) * (TILE_HEIGHT / 2)) + lift + 8 + room
   const canvas = new Canvas(width, height)
-  const ax = Math.round(w * (TILE_WIDTH / 2)) + 4
+  const ax = Math.round(w * (TILE_WIDTH / 2)) + 4 + room
   const ay = height - 3
   const at = (u: number, v: number, z: number) => ({
     x: ax + (u - v - (w - h)) * (TILE_WIDTH / 2),
@@ -1155,11 +1158,101 @@ function pier(w: number, h: number, along: 'x' | 'y', lift: number): Sprite {
     canvas.set(p.x, p.y + 1, PLANK[0])
     canvas.set(p.x, p.y + 2, PLANK[0])
   }
-  // Bollards at the far end.
-  for (const c of [0.12, across - 0.12]) {
-    const [u, v] = uv(long - 0.12, c)
+  // Mooring bollards along both edges and at the far end.
+  const bollard = (a: number, c: number) => {
+    const [u, v] = uv(a, c)
     const p = at(u, v, lift)
     for (let z = 0; z < 4; z++) for (const dx of [0, 1]) canvas.set(p.x + dx, p.y - z, z === 3 ? LOGS[3] : LOGS[dx === 0 ? 2 : 1])
+  }
+  for (const c of [0.12, across - 0.12]) {
+    bollard(long - 0.12, c)
+    for (let a = 1.2; a < long - 0.6; a += 1.6) bollard(a, c)
+  }
+  // A big jetty (a city's harbour) is a working quay: worn planks, a rope rail along one side, stacks of crates and
+  // barrels, lamp posts and a cargo crane at its end.
+  if (long * across >= 6) {
+    // Darker, worn planks here and there.
+    for (let a = 0; a <= long; a += 1 / 48) {
+      const plank = Math.floor(a * 5)
+      if (hash(plank, 3, 83) > 0.08) continue
+      for (let c = 0.1; c <= across - 0.1; c += 1 / 48) {
+        if (hash(plank, Math.floor(c * 3), 85) > 0.5) continue
+        const [u, v] = uv(a, c)
+        const p = at(u, v, lift)
+        canvas.set(p.x, p.y, PLANK[2])
+      }
+    }
+    // The rope rail on posts along the far side.
+    const rail = across - 0.06
+    for (let a = 0.3; a < long - 0.3; a += 0.8) {
+      const [u, v] = uv(a, rail)
+      const p = at(u, v, lift)
+      for (let z = 0; z < 10; z++) for (const dx of [0, 1]) canvas.set(p.x + dx, p.y - z, LOGS[z === 9 ? 3 : dx ? 1 : 2])
+    }
+    for (let a = 0.3; a < long - 0.3; a += 1 / 32) {
+      const [u, v] = uv(a, rail)
+      const p = at(u, v, lift)
+      const sag = Math.round(Math.sin((((a - 0.3) % 0.8) / 0.8) * Math.PI) * 1.5)
+      canvas.set(p.x, p.y - 8 + sag, ROPE)
+      canvas.set(p.x, p.y - 7 + sag, ROPE)
+    }
+    // Stacks of crates and barrels.
+    const box = (a: number, c: number, size: number, tall: number) => {
+      for (let z = 0; z < tall; z++) {
+        for (let da = -size; da <= size; da += 1 / 40) {
+          for (let dc = -size; dc <= size; dc += 1 / 40) {
+            const [u, v] = uv(a + da, c + dc)
+            const p = at(u, v, lift + z)
+            const edge = Math.abs(da) > size - 0.03 || Math.abs(dc) > size - 0.03 || z === tall - 1
+            canvas.set(p.x, p.y, z === tall - 1 ? PLANK[edge ? 2 : 4] : edge ? PLANK[0] : (along === 'x') === (dc > 0) ? PLANK[3] : PLANK[2])
+          }
+        }
+      }
+    }
+    for (let k = 0; k < Math.floor(long / 2.5); k++) {
+      const a = 1 + k * 2.5 + hash(k, 1, 91) * 0.6
+      const c = across * (0.25 + hash(k, 2, 91) * 0.25)
+      box(a, c, 0.28, 12)
+      if (hash(k, 3, 91) < 0.7) box(a + 0.62, c + 0.05, 0.24, 10)
+      if (hash(k, 4, 91) < 0.5) box(a + 0.2, c, 0.2, 22)
+      // A barrel or two beside the stack.
+      const [bu, bv] = uv(a - 0.45, c + 0.2)
+      const bp = at(bu, bv, lift)
+      for (let z = 0; z < 9; z++) for (let dx = -3; dx <= 3; dx++) canvas.set(bp.x + dx, bp.y - z, z === 8 ? PLANK[4] : z % 3 === 1 ? LOGS[0] : PLANK[dx < 0 ? 3 : 1])
+    }
+    // Lamp posts at the corners near the bank.
+    for (const c of [0.2, across - 0.2]) {
+      const [u, v] = uv(0.4, c)
+      const p = at(u, v, lift)
+      for (let z = 0; z < 14; z++) canvas.set(p.x, p.y - z, STONE[1])
+      canvas.set(p.x - 1, p.y - 15, EMBER[1])
+      canvas.set(p.x, p.y - 15, EMBER[2])
+      canvas.set(p.x + 1, p.y - 15, EMBER[1])
+      canvas.set(p.x, p.y - 16, EMBER[0])
+    }
+    // A timber crane at the far end, its jib out over the water and a rope with a hook.
+    {
+      const [u, v] = uv(long - 0.5, across / 2)
+      const p = at(u, v, lift)
+      for (let z = 0; z < 46; z++) for (const dx of [-2, -1, 0, 1, 2]) canvas.set(p.x + dx, p.y - z, LOGS[dx < 0 ? 3 : dx === 0 ? 2 : 1])
+      // Its foot: a heavy timber frame on the deck.
+      for (let dz = 0; dz < 8; dz++) for (let dx = -6; dx <= 6; dx++) if (Math.abs(dx) > 4 - dz / 2) canvas.set(p.x + dx, p.y - dz, LOGS[1])
+      const [u2, v2] = uv(long + 1, across / 2)
+      const q = at(u2, v2, lift + 44)
+      const steps = 40
+      for (let k = 0; k <= steps; k++) {
+        const x = p.x + ((q.x - p.x) * k) / steps
+        const y = p.y - 44 + ((q.y - (p.y - 44)) * k) / steps
+        canvas.set(x, y, LOGS[2])
+        canvas.set(x, y + 1, LOGS[0])
+      }
+      for (let z = 0; z < 24; z++) canvas.set(q.x, q.y + 1 + z, ROPE)
+      // A net of goods hanging from the hook.
+      for (let y = 0; y < 7; y++) for (let x = -4; x <= 4; x++) if (Math.abs(x) + y * 0.4 < 5) canvas.set(q.x + x, q.y + 26 + y, (x + y) % 2 ? SACK[1] : SACK[2])
+      canvas.set(q.x - 1, q.y + 17, STONE[1])
+      canvas.set(q.x, q.y + 18, STONE[1])
+      canvas.set(q.x + 1, q.y + 17, STONE[1])
+    }
   }
   return canvas.sprite(ax, ay, 0)
 }
@@ -2508,6 +2601,8 @@ export interface Structure {
   level?: number
   // The kingdom's colour (see KINGDOM_COLORS), for the palace roofs.
   color?: string
+  // Drawn as this sprite instead of its look (a crown's war camp; see campSprites.ts).
+  sprite?: Sprite
   // The building it shows, for picking it on the map.
   id?: number
   // Another kingdom's building: whose it is and its colour, for the outline drawn round it under the pointer.
@@ -2637,6 +2732,11 @@ const once = (key: string, make: () => Sprite) => made.get(key) ?? (made.set(key
 export function structureParts(world: World, s: Structure): Part[] {
   const at = (x: number, y: number) => Math.round(heightAt(world, x, y))
   if (s.look === 'jetty') return s.pier ? [pierPart(s, s.pier, at)] : []
+  // A sprite of its own (a camp's tent or squad) stands on its lowest corner, without a base.
+  if (s.sprite) {
+    const z = Math.min(at(s.x, s.y), at(s.x, s.y + s.size), at(s.x + s.size, s.y + s.size), at(s.x + s.size, s.y)) + 1
+    return [{ sprite: s.sprite, fx: s.x + s.size, fy: s.y + s.size, z, solid: true }]
+  }
   const back = at(s.x, s.y)
   const left = at(s.x, s.y + s.size)
   const front = at(s.x + s.size, s.y + s.size)

@@ -1,6 +1,9 @@
 import { Feature, Terrain, balance, cityCenter, cityHarbour, hash } from '@game/shared'
 import type { CitySide, Point, World } from '@game/shared'
-import type { Structure, StructureLook } from './buildingSprites'
+import type { KingdomColor, Structure, StructureLook } from './buildingSprites'
+import { squad } from './armies'
+import { palisade, pavilion, rack, tent } from './campSprites'
+import type { Sprite } from './sprites'
 import { SHIP_LENGTH } from './shipSprites'
 
 // The free cities (CLAUDE.md §4.2, §7.7): walled towns that belong to no player. Each is the capital of a crown
@@ -315,39 +318,55 @@ function outskirts(world: World, index: number): Structure[] {
     return t !== Terrain.Lake && t !== Terrain.River && t !== Terrain.Mountain
   }
   const road = (x: number, y: number) => inMap(x, y) && (feature[at(x, y)] === Feature.Road || feature[at(x, y)] === Feature.Bridge)
-  // Toward the harbour: nothing is built past the inner wall on that side.
-  const seaward = (x: number, y: number) => {
-    if (!harbour) return false
-    const side = harbour.gate.side
-    return side === 's' ? y >= c.y + S : side === 'n' ? y < c.y : side === 'e' ? x >= c.x + S : x < c.x
-  }
-  // Tiles the harbour's buildings and lane hold, with a tile round them.
+  // Tiles the harbour's buildings and lane hold, with a tile round them; the lane itself goes through the outer wall
+  // by a gate.
   const kept = new Set<number>()
   for (const st of harbour?.structures ?? []) {
     const rect = st.pier ?? { x: st.x, y: st.y, w: st.size, h: st.size }
     for (let y = rect.y - 1; y <= rect.y + rect.h; y++) for (let x = rect.x - 1; x <= rect.x + rect.w; x++) kept.add(at(x, y))
   }
-  const free = (x: number, y: number) => inMap(x, y) && land(x, y) && feature[at(x, y)] === 0 && !kept.has(at(x, y)) && !seaward(x, y)
-
-  // The outer wall.
-  const side = (x: number, y: number) => (y === y0 ? 'n' : y === y0 + N - 1 ? 's' : x === x0 ? 'w' : 'e')
-  const ring: { x: number; y: number; t: number }[] = []
-  for (let t = 0; t < N; t++) ring.push({ x: x0 + t, y: y0, t }, { x: x0 + t, y: y0 + N - 1, t }, { x: x0, y: y0 + t, t }, { x: x0 + N - 1, y: y0 + t, t })
-  const placed = new Set<number>()
-  for (const p of ring) {
-    if (placed.has(at(p.x, p.y)) || seaward(p.x, p.y) || kept.has(at(p.x, p.y))) continue
-    placed.add(at(p.x, p.y))
-    const corner = (p.x === x0 || p.x === x0 + N - 1) && (p.y === y0 || p.y === y0 + N - 1)
-    if (road(p.x, p.y)) {
-      const s = side(p.x, p.y)
-      out.push({ x: p.x, y: p.y, size: 1, look: s === 'n' || s === 's' ? 'gate' : 'gateY', variant: 0, city: index })
-      continue
-    }
-    if (!land(p.x, p.y) || feature[at(p.x, p.y)] !== 0) continue
-    // Towers at the corners, beside the gates and every so often along the wall.
-    const byGate = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => road(p.x + dx, p.y + dy))
-    out.push({ x: p.x, y: p.y, size: 1, look: corner || byGate || p.t % 9 === 4 ? 'towerWall' : 'wall', variant: 0, city: index })
+  const lane = new Set<number>()
+  if (harbour) {
+    const [a, b] = harbour.lane
+    const steps = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 4)
+    for (let k = 0; k <= steps; k++) lane.add(at(Math.floor(a.x + ((b.x - a.x) * k) / steps), Math.floor(a.y + ((b.y - a.y) * k) / steps)))
   }
+  const free = (x: number, y: number) => inMap(x, y) && land(x, y) && feature[at(x, y)] === 0 && !kept.has(at(x, y)) && !lane.has(at(x, y))
+
+  // The outer wall, side by side: a gate where a road or the harbour lane crosses it (one per crossing, however
+  // long the road runs along the wall), towers at the corners, beside the gates and every so often; no wall on water.
+  const sides: { x: number; y: number; along: 'x' | 'y' }[][] = [
+    Array.from({ length: N }, (_, t) => ({ x: x0 + t, y: y0, along: 'x' as const })),
+    Array.from({ length: N }, (_, t) => ({ x: x0 + t, y: y0 + N - 1, along: 'x' as const })),
+    Array.from({ length: N }, (_, t) => ({ x: x0, y: y0 + t, along: 'y' as const })),
+    Array.from({ length: N }, (_, t) => ({ x: x0 + N - 1, y: y0 + t, along: 'y' as const })),
+  ]
+  const crossing = (x: number, y: number) => road(x, y) || lane.has(at(x, y))
+  const pieces = new Map<number, Structure>()
+  for (const line of sides) {
+    const gates = new Set<number>()
+    for (let t = 0; t < line.length; t++) {
+      if (!crossing(line[t].x, line[t].y)) continue
+      let end = t
+      while (end + 1 < line.length && crossing(line[end + 1].x, line[end + 1].y)) end++
+      gates.add(Math.floor((t + end) / 2))
+      t = end
+    }
+    for (let t = 0; t < line.length; t++) {
+      const p = line[t]
+      const i = at(p.x, p.y)
+      if (pieces.has(i) || kept.has(i)) continue
+      if (gates.has(t)) {
+        pieces.set(i, { x: p.x, y: p.y, size: 1, look: p.along === 'x' ? 'gate' : 'gateY', variant: 0, city: index })
+        continue
+      }
+      if (!land(p.x, p.y) || (feature[i] !== 0 && !crossing(p.x, p.y))) continue
+      const corner = t === 0 || t === line.length - 1
+      const byGate = gates.has(t - 1) || gates.has(t + 1)
+      pieces.set(i, { x: p.x, y: p.y, size: 1, look: corner || byGate || t % 9 === 4 ? 'towerWall' : 'wall', variant: 0, city: index })
+    }
+  }
+  out.push(...pieces.values())
 
   // The town between the walls: buildings keep two tiles off both walls and off the roads.
   const taken = new Set<number>()
@@ -381,12 +400,92 @@ function outskirts(world: World, index: number): Structure[] {
   return out
 }
 
+// The crown's war camp outside the capital's outer wall, on the side away from the harbour: the commander's striped
+// pavilion, rows of tents in the crown's colour, squads at drill, racks of spears under tall banners.
+const CAMP_W = 14
+const CAMP_H = 12
+const camps = new Map<string, { tents: Sprite[]; pavilion: Sprite; rack: Sprite; squads: Sprite[]; fence: Record<'x' | 'y', Sprite> }>()
+function campLooks(color: KingdomColor) {
+  let looks = camps.get(color)
+  if (!looks) {
+    looks = {
+      tents: [tent(color, 0), tent(color, 1)],
+      pavilion: pavilion(color),
+      rack: rack(color),
+      squads: [squad(color, 0, 20), squad(color, 2, 18), squad(color, 1, 20)],
+      fence: { x: palisade('x'), y: palisade('y') },
+    }
+    camps.set(color, looks)
+  }
+  return looks
+}
+function warCamp(world: World, index: number): Structure[] {
+  const S = balance.cities.size
+  const c = world.cities[index]
+  const { size, terrain, feature } = world
+  const harbour = harbourOf(world, index)
+  const roadNear = (x: number, y: number) => {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const i = (y + dy) * size + x + dx
+        if (feature[i] === Feature.Road || feature[i] === Feature.Bridge) return true
+      }
+    }
+    return false
+  }
+  const free = (x0: number, y0: number) => {
+    for (let y = y0; y < y0 + CAMP_H; y++) {
+      for (let x = x0; x < x0 + CAMP_W; x++) {
+        if (x < 2 || y < 2 || x >= size - 2 || y >= size - 2) return false
+        const t = terrain[y * size + x]
+        if (t === Terrain.Lake || t === Terrain.River || t === Terrain.Mountain || feature[y * size + x] !== Feature.None || roadNear(x, y)) return false
+      }
+    }
+    return true
+  }
+  // Just outside the outer wall, along each side in turn, the side facing away from the harbour first.
+  const out = RING + 3
+  const opposite: Record<string, string> = { n: 's', s: 'n', e: 'w', w: 'e' }
+  const order = ['s', 'e', 'w', 'n'].sort((a, b) => Number(b === opposite[harbour?.gate.side ?? '']) - Number(a === opposite[harbour?.gate.side ?? '']))
+  let spot: Point | null = null
+  for (const side of order) {
+    if (side === harbour?.gate.side) continue
+    for (let t = 0; t <= S + RING * 2 - CAMP_W && !spot; t += 2) {
+      const p =
+        side === 's' ? { x: c.x - RING + t, y: c.y + S + out }
+        : side === 'n' ? { x: c.x - RING + t, y: c.y - out - CAMP_H }
+        : side === 'e' ? { x: c.x + S + out, y: c.y - RING + t }
+        : { x: c.x - out - CAMP_W, y: c.y - RING + t }
+      if (free(p.x, p.y)) spot = p
+    }
+    if (spot) break
+  }
+  if (!spot) return []
+  const looks = campLooks(CROWN_ROOFS[index % CROWN_ROOFS.length] as KingdomColor)
+  const at = (dx: number, dy: number, sprite: Sprite, n = 1): Structure => ({ x: spot!.x + dx, y: spot!.y + dy, size: n, look: 'house', variant: 0, city: index, sprite })
+  const parts: Structure[] = []
+  // A palisade round it, open at the middle of the front.
+  for (let t = 0; t < CAMP_W; t++) {
+    parts.push(at(t, 0, looks.fence.x))
+    if (Math.abs(t - CAMP_W / 2) > 1) parts.push(at(t, CAMP_H - 1, looks.fence.x))
+  }
+  for (let t = 1; t < CAMP_H - 1; t++) parts.push(at(0, t, looks.fence.y), at(CAMP_W - 1, t, looks.fence.y))
+  // The commander's pavilion at the back, rows of tents to either side.
+  parts.push(at(6, 2, looks.pavilion, 2))
+  for (const dx of [2, 3, 4, 9, 10, 11]) parts.push(at(dx, 2, looks.tents[dx % 2]))
+  for (const dx of [2, 4, 9, 11]) parts.push(at(dx, 4, looks.tents[(dx + 1) % 2]))
+  // The parade ground in front: squads at drill in three ranks of four.
+  for (let r = 0; r < 3; r++) for (let k = 0; k < 4; k++) parts.push(at(3 + k * 2 + (r % 2), 6 + r * 1.5 > 9 ? 9 : 6 + Math.round(r * 1.5), looks.squads[(r + k) % 3]))
+  parts.push(at(1, 1, looks.rack), at(CAMP_W - 2, 1, looks.rack), at(1, CAMP_H - 2, looks.rack), at(CAMP_W - 2, CAMP_H - 2, looks.rack))
+  return parts
+}
+
 // Every free city's buildings, made once per world.
 const made = new WeakMap<World, Structure[]>()
 export function cityStructures(world: World): Structure[] {
   let found = made.get(world)
   if (!found) {
-    found = world.cities.flatMap((_, index) => [...layout(world, index), ...outskirts(world, index), ...(harbourOf(world, index)?.structures ?? [])])
+    found = world.cities.flatMap((_, index) => [...layout(world, index), ...outskirts(world, index), ...warCamp(world, index), ...(harbourOf(world, index)?.structures ?? [])])
     made.set(world, found)
   }
   return found

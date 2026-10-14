@@ -688,9 +688,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   - **İlk oduncu kampı, ilk ev ve ilk tarla ücretsizdir** (bir kez), böylece
     bütün malzemesini harcayan oyuncu kilitlenmez.
   - **Ev ve nüfus sınırı:** Evler (ve sarayın kendi odaları) nüfus
-    sınırından (saray seviyesi × 16) fazla barınak sağlayamaz. Planlanan
+    sınırından (saray seviyesi × 24) fazla barınak sağlayamaz. Planlanan
     barınak (inşaattakiler ve yükseltilenler hedef seviyesiyle sayılır)
-    sınırı aşacaksa yeni ev kurulmaz, ev yükseltilmez (ör. 15/16'da 3
+    sınırı aşacaksa yeni ev kurulmaz, ev yükseltilmez (ör. 23/24'te 3
     köylülük ev kurulamaz); sarayı yükseltmek gerekir.
   - **Yapı sınırları** saray seviyesiyle artar (saray 1→5): tarla 3 / 4 /
     6 / 8 / 10, oduncu kampı 2 / 3 / 4 / 5 / 6, silah atölyesi 1 / 2 / 3 /
@@ -889,8 +889,19 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   kapılarının yanında ve aralıklarla kuleleri, yolların kestiği yerlerde
   kapıları vardır. İki sur arasında yüksek evler, pazarlar, ambarlar,
   tapınaklar dolu bir dış şehir uzanır (yollardan ve surlardan uzak,
-  arazinin izin verdiği yerde). Limana bakan taraf suya açık kalır
+  arazinin izin verdiği yerde). Sur her yerde kesintisizdir; yalnızca suya
+  düştüğü yerde açıktır. Bir yol (ya da liman yolu) suru kestiği her yerde
+  tek bir kapı açılır, yol sur boyunca uzansa bile; kuleler köşelerde,
+  kapıların iki yanında ve 9 karoda bir durur
   (`apps/web/src/game/cities.ts` → `outskirts`).
+- **Ordu karargâhı:** Dış surun 3 karo dışında, limanın karşı tarafında
+  14×12 karoluk bir ordu kampı: kazık çitle çevrili (önü açık), arkada
+  tacın renginde çizgili büyük komuta çadırı, iki yanında sıra sıra çadırlar,
+  önündeki talim alanında üç sıra halinde 12 bölük asker, köşelerde mızrak
+  sehpaları ve sancaklar (`warCamp`, görseller `campSprites.ts`).
+- **Büyük iskele** bir rıhtımdır: kenarlarda babalar, bir yanında halat
+  korkuluk, sandık ve fıçı yığınları, kıyı ucunda fenerler, öbür ucunda
+  suya uzanan ahşap yük vinci ve kancasında bir yük ağı.
   Adı (ör. "Altınkapı Serbest Şehri") 1× ve altında şehrin üstünde, dünya
   haritasında altın renkte yazar. Üstüne gelince adı, tıklanınca paneli
   açılır: yöneten (lonca meclisi, kadı…), şehrin ödediği fiyatlar ve
@@ -1201,8 +1212,8 @@ mertebesindedir.
 
 **Saray seviyesi ve nüfus**
 
-- Sarayın her seviyesi bir **nüfus sınırı** verir: 16 / 32 / 48 / 64 / 80
-  (seviye × 16). Köylü + asker bu sınırı aşamaz; evler sınırın üstünde
+- Sarayın her seviyesi bir **nüfus sınırı** verir: 24 / 48 / 72 / 96 / 120
+  (seviye × 24; `society.json` → `popCapPerPalaceLevel`). Köylü + asker bu sınırı aşamaz; evler sınırın üstünde
   köylü vermez.
 - **2. seviye saray** şunları açar: kışla, casus evi, gözcü kulesi, sur,
   pazar ve kraliçe.
