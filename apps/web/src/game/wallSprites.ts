@@ -341,13 +341,6 @@ function wallPiece(links: number, variant: number): Sprite {
   return render({ boxes, decal, moss: hash(variant, 3, 5) * 0.8, seed }, 50)
 }
 
-// A stretch of wall standing right in front of a building (older towns raised them closer than walls keep now): drawn
-// waist high, a low battlemented wall, so it does not rise over the building's yard and front on screen.
-const LOW = 6
-function lowPiece(links: number, variant: number): Sprite {
-  return render({ boxes: curtain(links, LOW), moss: hash(variant, 3, 5) * 0.8, seed: 101 + variant * 7 }, 30)
-}
-
 function brokenPiece(links: number, variant: number): Sprite {
   const seed = 131 + variant * 7
   const boxes = curtain(links, H, A, B, true, seed)
@@ -470,8 +463,8 @@ function gatePiece(along: 'u' | 'v', links: number, variant: number, open = fals
   return render({ boxes, decal, moss: hash(variant, 6, 5) * 0.5, seed }, 60)
 }
 
-export type WallKind = 'wall' | 'lowWall' | 'brokenWall' | 'towerWall' | 'gate' | 'gateY'
-export const WALL_KINDS = new Set<string>(['wall', 'lowWall', 'brokenWall', 'towerWall', 'gate', 'gateY'])
+export type WallKind = 'wall' | 'brokenWall' | 'towerWall' | 'gate' | 'gateY'
+export const WALL_KINDS = new Set<string>(['wall', 'brokenWall', 'towerWall', 'gate', 'gateY'])
 
 // Wall pieces are made when first seen: one per kind, links and look (variant).
 const VARIANTS = 4
@@ -493,9 +486,7 @@ export function wallLook(kind: WallKind, links: number, variant: number): Sprite
     sprite =
       kind === 'wall'
         ? wallPiece(links, v)
-        : kind === 'lowWall'
-          ? lowPiece(links, v)
-          : kind === 'brokenWall'
+        : kind === 'brokenWall'
           ? brokenPiece(links, v)
           : kind === 'towerWall'
             ? gateTower(links, v)
