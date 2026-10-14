@@ -615,10 +615,10 @@ function App({
     if (!view) return
     const time = serverNow()
     const buildings = mapBuildings
-    const structure = (b: Rival['buildings'][number], color: string | undefined, own: boolean, variant: number, ruined = false): Structure => {
+    const structure = (b: Rival['buildings'][number], color: string | undefined, owner: Rival | null, variant: number, ruined = false): Structure => {
+      const own = owner === null
       const done = b.doneAt <= time
       const pier = done && b.kind === 'dock' ? dockPier(view.world, b) : null
-      // Only the player's own buildings answer to the pointer.
       const look: StructureLook = !done
         ? 'scaffold'
         : b.kind === 'wall'
@@ -634,11 +634,12 @@ function App({
               : b.kind
       // The player's own trade post grows with the trade level (older saves keep no level on the building).
       const level = own && b.kind === 'tradePost' && shown ? shown.trade.level + 1 : (b.level ?? 1)
-      return { x: b.x, y: b.y, size: b.size, look, variant, level, ...(own && { id: b.id }), color, ...(pier && { pier }) }
+      // Every building answers to the pointer; another kingdom's is outlined in its colour and only says what it is.
+      return { x: b.x, y: b.y, size: b.size, look, variant, level, id: b.id, ...(owner && { owner: { kingdom: owner.id, tint: colorOf(owner.color) } }), color, ...(pier && { pier }) }
     }
     const structures: Structure[] = [
-      ...buildings.map((b) => structure(b, shown?.color, true, b.id, !!shown?.trade.damaged)),
-      ...rivals.flatMap((r) => r.buildings.map((b) => structure(b, r.color, false, r.id * 1000 + b.id, !!r.trade_damaged))),
+      ...buildings.map((b) => structure(b, shown?.color, null, b.id, !!shown?.trade.damaged)),
+      ...rivals.flatMap((r) => r.buildings.map((b) => structure(b, r.color, r, r.id * 1000 + b.id, !!r.trade_damaged))),
     ]
     // Footpaths (nothing grows in front of them to stand over the walkers; see paintChunk).
     const trails = [buildings, ...rivals.map((r) => r.buildings)].flatMap((town) => footpaths(view.world, town, time))
@@ -1218,9 +1219,22 @@ function App({
       )}
       {view && kingdom && !holding && <Dock open={panel} unread={journal.unread} onToggle={toggleTab} />}
       {view && kingdom && !holding && !panel && !selectedBuilding && <Timers kingdom={kingdom} online={online} now={now} />}
-      {view && kingdom && !holding && hover?.building && hover.building.id !== selected && (
+      {view && kingdom && !holding && hover?.building && hover.building.owner === undefined && hover.building.id !== selected && (
         <MapTip building={kingdom.buildings.find((b) => b.id === hover.building!.id)} at={hover.building.screen} now={now} />
       )}
+      {view && kingdom && !holding && hover?.building?.owner !== undefined && (() => {
+        const owner = rivals.find((r) => r.id === hover.building!.owner)
+        return (
+          owner && (
+            <MapTip
+              building={owner.buildings.find((b) => b.id === hover.building!.id)}
+              owner={{ name: owner.name, color: hexOf(owner.color) }}
+              at={hover.building.screen}
+              now={now}
+            />
+          )
+        )
+      })()}
       {view && kingdom && !holding && hudData && selectedBuilding && (
         <BuildingSheet
           building={selectedBuilding}

@@ -29,6 +29,16 @@ export const LEAF = [
   ramp(0x2b3f20, 0x425a27, 0x5f7a2e, 0x82993a, 0xa9b54c, 0xcbcd68),
 ]
 const PINE = ramp(0x0f2b2a, 0x163d31, 0x1f5239, 0x2c6941, 0x41824c, 0x5c9a58)
+// Spruce and fir: darker and bluer than the pines.
+const FIR = ramp(0x0b2026, 0x113430, 0x18473d, 0x22594a, 0x317058, 0x468668)
+const BIRCH_LEAF = ramp(0x2f4a22, 0x46682b, 0x678e38, 0x8cae48, 0xb2cb62, 0xd6e286)
+const BIRCH_BARK = ramp(0x3a3632, 0xa8a296, 0xd2ccbe, 0xeeebe2)
+// Trees turning early: rust and gold, a patch here and there in the woods.
+const AUTUMN = [
+  ramp(0x48200f, 0x6e3014, 0x984a1c, 0xbe6a26, 0xd98e36, 0xecb658),
+  ramp(0x4a3812, 0x6e5618, 0x957a22, 0xb89a30, 0xd4ba46, 0xeada74),
+]
+const BLOSSOM = ramp(0xb0506e, 0xd77a96, 0xf2a8bc, 0xffd8e2)
 export const BARK = ramp(0x2e2119, 0x4a3424, 0x6b4c31, 0x8a6841)
 const DEAD = ramp(0x2b2823, 0x464037, 0x655c4d, 0x857a65)
 export const STONE = ramp(0x2e2c3d, 0x474454, 0x64606c, 0x858088, 0xa7a2a1, 0xc6c1b6)
@@ -327,6 +337,223 @@ function leafTree(seed: number, colors: Uint32Array): Sprite {
   leaves.rim(colors[0])
   for (let i = 0; i < leaves.pixels.length; i++) if (leaves.pixels[i]) canvas.pixels[i] = leaves.pixels[i]
   return canvas.sprite(cx, base, r * 0.95)
+}
+
+// A slender tree with a white, black-marked trunk and a small, airy crown in loose clumps.
+function birch(seed: number): Sprite {
+  const random = mulberry32(seed)
+  const r = 6 + Math.floor(random() * 3)
+  const tall = 30 + Math.floor(random() * 10)
+  const canvas = new Canvas(r * 2 + 12, tall + 6)
+  const cx = canvas.width >> 1
+  const base = canvas.height - 1
+  const lean = (random() - 0.5) * 3
+  for (let y = base - tall + r; y <= base; y++) {
+    const f = (base - y) / tall
+    const x = cx + lean * f
+    const mark = hash(Math.round(y / 2), 0, seed) < 0.22
+    canvas.set(x - 1, y, mark ? BIRCH_BARK[0] : BIRCH_BARK[3])
+    canvas.set(x, y, mark && hash(y, 1, seed) < 0.6 ? BIRCH_BARK[0] : BIRCH_BARK[2])
+    if (y >= base - 1) canvas.set(x + 1, y, BIRCH_BARK[1])
+  }
+  const blobs: Blob[] = []
+  const clumps = 7 + Math.floor(random() * 3)
+  for (let i = 0; i < clumps; i++) {
+    const f = 0.5 + (i / clumps) * 0.42
+    // Wider in the middle of the crown, narrow at its top.
+    const spread = Math.sin(((i + 0.5) / clumps) * Math.PI) * r * 0.9 + 1
+    blobs.push({
+      x: cx + lean * f + (random() - 0.5) * spread * 2,
+      y: base - tall * f - r * 0.1,
+      r: r * (0.42 + random() * 0.25),
+    })
+  }
+  // Thin twigs from the trunk out to the clumps.
+  for (const b of blobs) if (Math.abs(b.x - cx) > 2) limb(canvas, cx + lean * 0.6, b.y + 4, b.x, b.y, 0, BIRCH_BARK)
+  const leaves = new Canvas(canvas.width, canvas.height)
+  shadeBlobs(leaves, blobs, BIRCH_LEAF, seed)
+  leaves.rim(BIRCH_LEAF[0])
+  // Gaps in the crown let the trunk show through.
+  for (let i = 0; i < leaves.pixels.length; i++) {
+    if (leaves.pixels[i] && valueNoise((i % canvas.width) * 0.6, Math.floor(i / canvas.width) * 0.6, seed) > 0.12) canvas.pixels[i] = leaves.pixels[i]
+  }
+  return canvas.sprite(cx, base, r * 0.8)
+}
+
+// A tall, narrow column of leaves (a poplar), standing alone or in rows along open ground.
+function poplar(seed: number): Sprite {
+  const random = mulberry32(seed)
+  const tall = 40 + Math.floor(random() * 12)
+  const half = 5 + Math.floor(random() * 2)
+  const canvas = new Canvas(half * 2 + 8, tall + 4)
+  const cx = canvas.width >> 1
+  const base = canvas.height - 1
+  trunk(canvas, cx, base, base - 8, BARK)
+  const blobs: Blob[] = []
+  for (let y = base - 8; y > base - tall + half; y -= 3) {
+    const f = (base - y) / tall
+    const w = half * Math.sin(Math.min(1, f * 1.15) * Math.PI) ** 0.6 + 1.5
+    blobs.push({ x: cx + (random() - 0.5) * 2, y, r: w })
+  }
+  const leaves = new Canvas(canvas.width, canvas.height)
+  shadeBlobs(leaves, blobs, LEAF[1], seed, 1)
+  leaves.rim(LEAF[1][0])
+  for (let i = 0; i < leaves.pixels.length; i++) if (leaves.pixels[i]) canvas.pixels[i] = leaves.pixels[i]
+  return canvas.sprite(cx, base, half * 0.9)
+}
+
+// A broadleaf tree in flower: the leafy crown dusted with blossom.
+function blossomTree(seed: number): Sprite {
+  const tree = leafTree(seed, LEAF[0])
+  const pixels = tree.pixels.slice()
+  const { width } = tree
+  for (let i = 0; i < pixels.length; i++) {
+    const x = i % width
+    const y = Math.floor(i / width)
+    // Only on the crown (the leaf colours), more on its lit side.
+    if (!LEAF[0].includes(pixels[i]) || pixels[i] === LEAF[0][0]) continue
+    const lit = LEAF[0].indexOf(pixels[i])
+    if (hash(x, y, seed + 3) < 0.18 + lit * 0.07) pixels[i] = BLOSSOM[Math.min(3, Math.max(0, lit - 2 + (hash(x, y, seed + 5) < 0.5 ? 0 : 1)))]
+  }
+  return { ...tree, pixels }
+}
+
+// A trunk several pixels thick, lit from the left, with roots spreading over the ground at its foot.
+function thickTrunk(canvas: Canvas, cx: number, base: number, top: number, half: number, colors: Uint32Array, seed: number) {
+  for (let y = top; y <= base; y++) {
+    const f = (y - top) / (base - top)
+    const w = half + (f > 0.8 ? (f - 0.8) * 5 * half * 0.9 : 0)
+    for (let x = Math.round(cx - w); x <= Math.round(cx + w); x++) {
+      const side = (x - cx) / (w + 0.01)
+      const groove = hash(x, y >> 2, seed) < 0.18 ? -1 : 0
+      canvas.set(x, y, pick(colors, 2.2 - side * 1.6 + groove))
+    }
+  }
+  // Roots: short runs out from the foot.
+  for (const dir of [-1, 1]) {
+    for (let s = 0; s < half + 3; s++) canvas.set(cx + dir * (half + 1 + s), base - (s < 2 ? 1 : 0), colors[dir < 0 ? 2 : 0])
+  }
+}
+
+// A branch from (x0, y0) to (x1, y1), thinning toward its end.
+function limb(canvas: Canvas, x0: number, y0: number, x1: number, y1: number, width: number, colors: Uint32Array) {
+  const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0))
+  for (let s = 0; s <= steps; s++) {
+    const t = s / steps
+    const x = x0 + (x1 - x0) * t
+    const y = y0 + (y1 - y0) * t
+    const w = Math.max(0, Math.round(width * (1 - t * 0.7)))
+    for (let d = -w; d <= w; d++) canvas.set(x + d, y, colors[d < 0 ? 2 : d === 0 ? 1 : 0])
+  }
+}
+
+// A great old oak, rare: a broad, thick trunk forking into limbs that hold up several heavy clumps of leaves.
+function oak(seed: number, colors: Uint32Array): Sprite {
+  const random = mulberry32(seed)
+  const r = 17 + Math.floor(random() * 4)
+  const canvas = new Canvas(r * 3 + 16, Math.round(r * 2.6) + 30)
+  const cx = canvas.width >> 1
+  const base = canvas.height - 1
+  const fork = base - 16 - Math.floor(random() * 4)
+  thickTrunk(canvas, cx, base, fork, 3, BARK, seed)
+  const clusters = 3 + Math.floor(random() * 2)
+  const blobs: Blob[] = []
+  for (let c = 0; c < clusters; c++) {
+    const angle = Math.PI * (0.15 + (0.7 * (c + 0.5)) / clusters) + (random() - 0.5) * 0.3
+    const hx = cx - Math.cos(angle) * r * 0.95
+    const hy = fork - Math.sin(angle) * r * 0.9 - 4
+    limb(canvas, cx + (hx > cx ? 1 : -1), fork + 2, hx, hy + 4, 2, BARK)
+    const lumps = 3 + Math.floor(random() * 3)
+    blobs.push({ x: hx, y: hy, r: r * 0.55 })
+    for (let i = 0; i < lumps; i++) {
+      const a = random() * Math.PI * 2
+      blobs.push({ x: hx + Math.cos(a) * r * 0.42, y: hy + Math.sin(a) * r * 0.3, r: r * (0.3 + random() * 0.18) })
+    }
+  }
+  blobs.push({ x: cx, y: fork - r * 1.05, r: r * 0.62 })
+  const leaves = new Canvas(canvas.width, canvas.height)
+  shadeBlobs(leaves, blobs, colors, seed)
+  leaves.rim(colors[0])
+  // The underside of the crown, between the clumps, opens onto the limbs.
+  for (let i = 0; i < leaves.pixels.length; i++) {
+    if (!leaves.pixels[i]) continue
+    const x = i % canvas.width
+    const y = Math.floor(i / canvas.width)
+    if (y > fork - 6 && valueNoise(x * 0.3, y * 0.3, seed) < 0.38) continue
+    canvas.pixels[i] = leaves.pixels[i]
+  }
+  return canvas.sprite(cx, base, r * 1.1)
+}
+
+// A towering old pine, rare: twice the height of the others, bare low down, its crown in ragged layers.
+function giantPine(seed: number): Sprite {
+  const random = mulberry32(seed)
+  const tall = 72 + Math.floor(random() * 14)
+  const half = 13 + Math.floor(random() * 3)
+  const canvas = new Canvas(half * 2 + 8, tall + 4)
+  const cx = canvas.width >> 1
+  const base = canvas.height - 1
+  thickTrunk(canvas, cx, base, base - tall + 10, 1.6, BARK, seed)
+  // Dead stubs of lower branches on the bare trunk.
+  for (let y = base - 10; y > base - tall * 0.42; y -= 5 + Math.floor(random() * 3)) {
+    const dir = random() < 0.5 ? -1 : 1
+    for (let s = 2; s < 5; s++) canvas.set(cx + dir * s, y - s * 0.4, BARK[dir < 0 ? 2 : 0])
+  }
+  const crown = new Canvas(canvas.width, canvas.height)
+  const tiers = 6
+  for (let t = 0; t < tiers; t++) {
+    const top = base - tall + (t / tiers) * tall * 0.62
+    const bottom = top + tall * 0.17 + 3
+    const w = half * (0.35 + (0.65 * (t + 1)) / tiers) * (0.85 + random() * 0.3)
+    const off = (random() - 0.5) * 3
+    for (let y = Math.floor(top); y <= bottom; y++) {
+      const f = (y - top) / (bottom - top)
+      const reach = w * f + 0.6
+      for (let x = Math.ceil(cx + off - reach); x <= cx + off + reach; x++) {
+        if (f > 0.7 && hash(x, t, seed) < (f - 0.7) * 3) continue
+        const side = (x - cx - off) / (reach + 0.01)
+        const tone = 3.1 - side * 2 - (f > 0.75 ? 1.3 : 0) + (f < 0.3 ? 0.7 : 0) + (hash(x, y, seed + 1) - 0.5) * 1.4
+        crown.set(x, y, pick(FIR, tone))
+      }
+    }
+  }
+  crown.rim(FIR[0])
+  for (let i = 0; i < crown.pixels.length; i++) if (crown.pixels[i]) canvas.pixels[i] = crown.pixels[i]
+  return canvas.sprite(cx, base, half * 0.9)
+}
+
+// A spruce: a narrow, dense cone of many short tiers, darker than the pines.
+function fir(seed: number): Sprite {
+  const random = mulberry32(seed)
+  const tall = 38 + Math.floor(random() * 12)
+  const half = 7 + Math.floor(random() * 2)
+  const canvas = new Canvas(half * 2 + 5, tall + 4)
+  const cx = canvas.width >> 1
+  const base = canvas.height - 1
+  trunk(canvas, cx, base, base - 5, BARK)
+  const crown = new Canvas(canvas.width, canvas.height)
+  const tiers = 7
+  for (let t = 0; t < tiers; t++) {
+    const top = base - 4 - ((tiers - t) / tiers) * (tall - 4)
+    const bottom = top + (tall - 4) / tiers + 3
+    const w = half * ((t + 1) / tiers) ** 0.8
+    for (let y = Math.floor(top); y <= bottom; y++) {
+      const f = (y - top) / (bottom - top)
+      const reach = w * (0.15 + f * 0.85) + 0.5
+      for (let x = Math.ceil(cx - reach); x <= cx + reach; x++) {
+        // Drooping, toothed tips at the bottom of each tier.
+        if (f > 0.6 && Math.abs(x - cx) > reach - 2.5 && hash(x, t, seed + 2) < (f - 0.6) * 2.5) continue
+        const side = (x - cx) / (reach + 0.01)
+        const tone = 3.2 - side * 2.1 - (f > 0.65 ? 1.6 : 0) + (f < 0.3 ? 0.8 : 0) + (hash(x, y, seed + 1) - 0.5) * 1.2
+        crown.set(x, y, pick(FIR, tone))
+      }
+    }
+  }
+  // A light tip.
+  crown.set(cx, base - tall, FIR[4])
+  crown.rim(FIR[0])
+  for (let i = 0; i < crown.pixels.length; i++) if (crown.pixels[i]) canvas.pixels[i] = crown.pixels[i]
+  return canvas.sprite(cx, base, half * 0.85)
 }
 
 function pine(seed: number): Sprite {
@@ -836,6 +1063,7 @@ function crag(seed: number, snow: boolean): Sprite {
     snow,
     seed,
   )
+  if (!snow) weather(canvas, seed, 0.5)
   shadow(canvas, canvas.width >> 1, canvas.height - 2, width >> 1)
   return canvas.sprite(canvas.width >> 1, canvas.height - 2, 1)
 }
@@ -904,6 +1132,126 @@ function tuft(seed: number): Sprite {
   return canvas.sprite(7, base, 0)
 }
 
+// Lichen and moss caught on a rock's lit faces and in the cracks at its foot.
+function weather(canvas: Canvas, seed: number, amount: number) {
+  const base = canvas.height - 2
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      const p = canvas.get(x, y)
+      if (!STONE.includes(p) || p === STONE[0]) continue
+      const low = y >= base - 2 && hash(x, y, seed + 9) < 0.45 * amount
+      if (low) canvas.set(x, y, MOSS[1 + (hash(x, y, seed + 10) < 0.5 ? 0 : 1)])
+      else if (p >= STONE[3] && valueNoise(x * 0.5, y * 0.5, seed + 11) > 1 - amount * 0.32) canvas.set(x, y, hash(x, y, seed) < 0.5 ? LICHEN : MOSS[3])
+    }
+  }
+}
+
+// A broad outcrop: a cluster of rock heads of different heights, some pointed, some flat-topped, all banded.
+function outcrop(seed: number): Sprite {
+  const random = mulberry32(seed)
+  const width = 40 + Math.floor(random() * 18)
+  const tall = 20 + Math.floor(random() * 14)
+  const canvas = new Canvas(width + 2, tall + 6)
+  const heads = Array.from({ length: 4 + Math.floor(random() * 3) }, () => ({
+    at: 0.12 + random() * 0.76,
+    height: tall * (0.35 + random() * 0.65),
+    steep: 2 + random() * 3,
+    flat: random() < 0.4 ? 0.05 + random() * 0.06 : 0,
+  }))
+  facets(
+    canvas,
+    (x) => {
+      const u = (x - 1) / width
+      if (u < 0 || u > 1) return -1
+      let top = 2 + Math.min(u, 1 - u) * 14
+      for (const h of heads) top = Math.max(top, h.height * (1 - Math.max(0, Math.abs(u - h.at) - h.flat) * h.steep))
+      return Math.max(0, Math.round(top + (hash(x >> 1, 2, seed) - 0.5) * 2.5))
+    },
+    false,
+    seed,
+  )
+  weather(canvas, seed, 0.8)
+  return canvas.sprite(canvas.width >> 1, canvas.height - 2, 1)
+}
+
+// A rock step: a low cliff band whose face shows the strata, its top edge broken in places.
+function ledge(seed: number): Sprite {
+  const random = mulberry32(seed)
+  const width = 34 + Math.floor(random() * 16)
+  const canvas = new Canvas(width + 2, 22)
+  const step = 7 + random() * 4
+  const lean = (random() - 0.5) * 0.25
+  facets(
+    canvas,
+    (x) => {
+      const u = (x - 1) / width
+      if (u < 0 || u > 1) return -1
+      const fall = Math.min(1, Math.min(u, 1 - u) * 7)
+      const broken = hash(x >> 2, 4, seed) < 0.2 ? -3 : 0
+      return Math.max(0, Math.round((step + lean * x + broken) * fall + 1))
+    },
+    false,
+    seed,
+  )
+  weather(canvas, seed, 0.6)
+  return canvas.sprite(canvas.width >> 1, canvas.height - 2, 1)
+}
+
+// A weathered stone pillar (a hoodoo): a knobbly neck worn thin, with a heavier boulder balanced on top.
+function pillar(seed: number): Sprite {
+  const random = mulberry32(seed)
+  const tall = 22 + Math.floor(random() * 10)
+  const canvas = new Canvas(18, tall + 10)
+  const base = canvas.height - 2
+  const blobs: Blob[] = []
+  let x = 9
+  for (let z = 2; z < tall; z += 2.5) {
+    const f = z / tall
+    x += (random() - 0.5) * 1.2
+    blobs.push({ x, y: base - z, r: 4.8 - f * 2.2 + Math.sin(z * 0.7 + seed) * 0.6 })
+  }
+  blobs.push({ x: x + (random() - 0.5) * 2, y: base - tall - 2, r: 5.5 + random() })
+  shadeBlobs(canvas, blobs, STONE, seed, 0.75)
+  canvas.rim(STONE[0])
+  weather(canvas, seed, 0.7)
+  shadow(canvas, 9, base, 6)
+  return canvas.sprite(9, base, 1)
+}
+
+// A scatter of small stones and gravel.
+function pebbles(seed: number): Sprite {
+  const random = mulberry32(seed)
+  const canvas = new Canvas(20, 9)
+  const base = canvas.height - 2
+  for (let i = 0; i < 6 + Math.floor(random() * 5); i++) {
+    const x = 2 + random() * 15
+    const y = base - random() * 5
+    const big = random() < 0.35
+    canvas.set(x, y, STONE[3])
+    canvas.set(x + 1, y, STONE[1])
+    if (big) {
+      canvas.set(x, y - 1, STONE[4])
+      canvas.set(x + 1, y - 1, STONE[2])
+      canvas.set(x + 2, y, STONE[0])
+    }
+  }
+  return canvas.sprite(10, base, 0)
+}
+
+// A dwarf mountain shrub, twisted and low, clinging between the rocks.
+function scrub(seed: number): Sprite {
+  const random = mulberry32(seed)
+  const canvas = new Canvas(18, 11)
+  const base = canvas.height - 1
+  const blobs: Blob[] = []
+  for (let i = 0; i < 4; i++) blobs.push({ x: 4 + random() * 10, y: base - 2 - random() * 3, r: 2.2 + random() * 1.8 })
+  shadeBlobs(canvas, blobs, FIR, seed, 0.7)
+  canvas.rim(FIR[0])
+  canvas.set(9, base, BARK[1])
+  canvas.set(8, base, BARK[2])
+  return canvas.sprite(9, base, 3)
+}
+
 // A glint carried by the current.
 function ripple(length: number): Sprite {
   const canvas = new Canvas(length, 1)
@@ -926,6 +1274,14 @@ export const SPRITES = {
     ...variants(2, (s) => leafTree(s + 2, LEAF[2])),
   ],
   pine: variants(6, pine),
+  fir: variants(5, fir),
+  birch: variants(5, birch),
+  poplar: variants(3, poplar),
+  autumn: [...variants(3, (s) => leafTree(s + 3, AUTUMN[0])), ...variants(3, (s) => leafTree(s + 4, AUTUMN[1]))],
+  blossom: variants(3, (s) => blossomTree(s + 5)),
+  // Rare, much bigger trees.
+  oak: [...variants(3, (s) => oak(s, LEAF[0])), oak(9001, LEAF[1])],
+  giantPine: variants(3, giantPine),
   dead: variants(4, deadTree),
   bush: [...variants(3, (s) => bush(s, LEAF[0])), ...variants(2, (s) => bush(s + 1, LEAF[2]))],
   boulder: variants(6, boulder),
@@ -964,5 +1320,10 @@ export const SPRITES = {
   tor: variants(3, tor),
   scree: variants(4, scree),
   tuft: variants(4, tuft),
+  outcrop: variants(5, outcrop),
+  ledge: variants(4, ledge),
+  pillar: variants(3, pillar),
+  pebbles: variants(4, pebbles),
+  scrub: variants(4, scrub),
   ripple: [ripple(3), ripple(5)],
 }

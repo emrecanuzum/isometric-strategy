@@ -98,8 +98,8 @@ export interface Hover {
   terrain: number
   feature: number
   rule: number
-  // The player's building under the pointer, and the screen point above its top.
-  building?: { id: number; screen: Point }
+  // The building under the pointer, and the screen point above its top; `owner` is set for another kingdom's.
+  building?: { id: number; screen: Point; owner?: number }
 }
 
 export interface Plots {
@@ -709,7 +709,9 @@ export async function createWorld(
     const wy = (at.y - camera.y) / camera.scale.y
     const hit = placement && tool !== 'move'
       ? undefined
-      : hits.find(({ sprite, sx, sy }) => {
+      : hits.find(({ sprite, sx, sy, owner }) => {
+          // Other kingdoms' buildings only show what they are, never while tearing down or moving.
+          if (owner && tool) return false
           const px = Math.floor(wx - sx + sprite.anchorX)
           const py = Math.floor(wy - sy + sprite.anchorY)
           return px >= 0 && py >= 0 && px < sprite.width && py < sprite.height && sprite.pixels[py * sprite.width + px] >>> 24 === 0xff
@@ -719,10 +721,12 @@ export async function createWorld(
       highlight.texture = textureOf(ring)
       highlight.anchor.set(ring.anchorX / ring.width, ring.anchorY / ring.height)
       highlight.position.set(hit.sx, hit.sy)
+      highlight.tint = hit.owner?.tint ?? toolTint()
       highlight.visible = true
-      pickedBuilding = hit.id
+      if (!hit.owner) pickedBuilding = hit.id
       const top = { x: camera.x + hit.sx * camera.scale.x, y: camera.y + (hit.sy - hit.sprite.anchorY + contentTop(hit.sprite)) * camera.scale.y }
-      onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y), building: { id: hit.id, screen: top } })
+      const building = { id: hit.id, screen: top, ...(hit.owner && { owner: hit.owner.kingdom }) }
+      onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y), building })
       return tile
     }
     if (placement) {
@@ -759,6 +763,7 @@ export async function createWorld(
   }
   let placement: Placement | null = null
   let tool: MapTool = null
+  const toolTint = () => (tool === 'demolish' ? DEMOLISH_HIGHLIGHT : tool === 'move' ? MOVE_HIGHLIGHT : HIGHLIGHT)
   // A row being drawn by dragging: where it began and the footprints along it so far.
   let stroke: { start: Point; spots: Point[] } | null = null
   // The tile under a screen point (the ground drawn there, as pick takes it).
@@ -1031,14 +1036,15 @@ export async function createWorld(
     }
     return top
   }
-  // The player's buildings as drawn (main sprite and its anchor in world pixels), nearest to the viewer first.
-  let hits: { id: number; sprite: Sprite_; sx: number; sy: number }[] = []
+  // The buildings as drawn (main sprite and its anchor in world pixels), nearest to the viewer first; other kingdoms'
+  // carry their owner.
+  let hits: { id: number; sprite: Sprite_; sx: number; sy: number; owner?: Structure['owner'] }[] = []
   let structureKeys = new Set<string>()
   let marked = new Map<number, 'demolish' | 'move'>()
   function placeMarks() {
     for (const child of marks.removeChildren()) child.destroy()
     for (const hit of hits) {
-      const tone = marked.get(hit.id)
+      const tone = hit.owner ? undefined : marked.get(hit.id)
       if (!tone) continue
       // The one picked up to be moved is washed out more: it is leaving.
       for (const [look, alpha] of [[silhouetteOf(hit.sprite), tone === 'move' ? 0.6 : 0.45], [outlineOf(hit.sprite), 0.95]] as const) {
@@ -1062,7 +1068,7 @@ export async function createWorld(
       .map((s) => {
         const parts = structureParts(world, s)
         const main = parts.filter((p) => p.solid).at(-1) ?? parts[0]
-        return { id: s.id!, sprite: main.sprite, sx: (main.fx - main.fy) * (TILE_WIDTH / 2), sy: (main.fx + main.fy) * (TILE_HEIGHT / 2) - main.z, depth: main.fx + main.fy }
+        return { id: s.id!, sprite: main.sprite, sx: (main.fx - main.fy) * (TILE_WIDTH / 2), sy: (main.fx + main.fy) * (TILE_HEIGHT / 2) - main.z, depth: main.fx + main.fy, owner: s.owner }
       })
       .sort((a, b) => b.depth - a.depth)
     placeMarks()
@@ -1165,7 +1171,7 @@ export async function createWorld(
     },
     setTool(next) {
       tool = next
-      highlight.tint = tool === 'demolish' ? DEMOLISH_HIGHLIGHT : tool === 'move' ? MOVE_HIGHLIGHT : HIGHLIGHT
+      highlight.tint = toolTint()
       app.canvas.style.cursor = tool === 'demolish' ? HAMMER_CURSOR : tool === 'move' ? 'grab' : ''
       if (lastPointer) pick(lastPointer)
     },

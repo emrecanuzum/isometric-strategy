@@ -165,8 +165,20 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   Orman ağaçları kenarda seyrelerek biter, bataklığa birkaç ağaç sızar.
 - **Çıplak kayada ağaç olmaz**; onun yerine kaya oluşumları bulunur:
   sivri kayalıklar (zirvede karlı), katmanlı kaya tabakaları, üst üste
-  yuvarlak kayalar, döküntü yığınları, iri kayalar ve eteklerde yosun /
-  dağ çimi öbekleri. Ağaç yerleşimi zeminle aynı sınırı kullanır.
+  yuvarlak kayalar, geniş **kaya çıkıntıları** (farklı boylarda sivri ve
+  düz başlı kaya kümeleri), alçak **kaya basamakları**, başında iri bir
+  kaya taşıyan aşınmış **peri bacaları**, döküntü yığınları, iri kayalar,
+  çakıl serpintisi, eteklerde yosun / dağ çimi öbekleri ve bodur **dağ
+  çalıları**. Kayaların aydınlık yüzlerinde liken, diplerinde yosun vardır.
+  Yoğunluk bölgeden bölgeye değişir (taşlık kesimler ve sakin kesimler).
+  Ağaç yerleşimi zeminle aynı sınırı kullanır.
+- **Ağaçlar türlerine göre öbeklenir:** yapraklı ağaçlar, çamlar, daha koyu
+  ve sık katlı **ladinler**, beyaz gövdeli **huş** koruları, erken sararan
+  (pas ve altın renkli) küçük ağaç kümeleri; açık arazide tek tük **kavak**
+  ve **çiçek açmış ağaçlar**. Çok nadiren **ulu ağaçlar** çıkar: ormanda
+  dallı, geniş taçlı ulu meşe ya da öbürlerinin iki katı boyunda yaşlı
+  çam, nadiren çayırda tek başına bir meşe. Ulu ağacın çevresindeki ağaçlar
+  ona yer açar (`chunkPainter.ts` → `giantAt`).
 - **Zemin gerçekten eğimlidir.** Her karonun bir **yüksekliği** vardır
   (`World.height`, sunucu ve istemci aynı değeri üretir); zemin ekranda bu
   kadar yukarı kaydırılarak çizilir, öndeki arazi arkadakini örter.
@@ -653,7 +665,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   yerelde uygular, reddedilirse sunucunun durumuna döner.
 - **Başka krallıklar:** Lobideki diğer krallıkların hududu kendi
   renginde kesikli çizgiyle, binaları haritada görünür (tıklanamaz);
-  depoları gizlidir. Yeni bir krallığın yeri, son aşamadaki hududu başka
+  depoları gizlidir. Başka bir krallığın binasının üstüne gelince bina o
+  krallığın renginde dış hatla vurgulanır, etikette krallığın adı (kendi
+  renginde), binanın adı ve seviyesi yazar. Yıkım/taşıma modunda
+  vurgulanmaz. Yeni bir krallığın yeri, son aşamadaki hududu başka
   hudutlara `kingdomGapTiles` karodan yakın olmayacak şekilde seçilir.
 
 ---

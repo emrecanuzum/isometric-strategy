@@ -1479,6 +1479,10 @@ small {
   color: var(--muted);
 }
 
+.map-tip-owner {
+  font-size: 13px;
+}
+
 .map-tip em {
   font-style: normal;
   font-size: 13px;

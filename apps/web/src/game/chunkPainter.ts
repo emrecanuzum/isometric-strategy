@@ -23,8 +23,10 @@ export interface ChunkImage {
   trees?: LiftedTree[]
 }
 
+export type TreeSet = 'pine' | 'leaf' | 'fir' | 'birch' | 'poplar' | 'autumn' | 'blossom' | 'oak' | 'giantPine'
+
 export interface LiftedTree {
-  set: 'pine' | 'leaf'
+  set: TreeSet
   index: number
   tx: number
   ty: number
@@ -594,6 +596,18 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
     return false
   }
   const choose = <T>(list: T[], r: number) => list[Math.floor(r * list.length)]
+  // Rare great trees: a few in the woods, now and then one alone in a meadow.
+  const giantAt = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= size || y >= size) return false
+    const t = world.terrain[y * size + x]
+    const r = hash(x, y, seed + 57)
+    return (t === Terrain.Forest ? r < 0.0035 : t === Terrain.Grass && r < 0.0006) && clear(x, y)
+  }
+  const nearGiant = (x: number, y: number) => {
+    // Trees behind it and beside it, and the ones just in front that would hide its trunk.
+    for (let dy = -1; dy <= 2; dy++) for (let dx = -1; dx <= 2; dx++) if ((dx || dy) && giantAt(x - dx, y - dy)) return true
+    return false
+  }
   const lifted: LiftedTree[] = []
   const xEnd = Math.min(size, x0 + S + SPRITE_MARGIN)
   const yEnd = Math.min(size, y0 + S + SPRITE_MARGIN)
@@ -612,17 +626,31 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       // Woods thin out over a band of moisture with ragged edges, so the forest has no hard border.
       const edge = (valueNoise(x * 0.15, y * 0.15, seed + 49) - 0.5) * 0.04
       const woods = smoothstep(levels.forest - 0.05, levels.forest + 0.03, moisture[i] + edge)
-      const tree = (n: number) => {
-        const conifer = hash(x, y, seed + 45 + n) < upland * 1.3 - 0.25
-        const list = conifer ? SPRITES.pine : SPRITES.leaf
+      const grove = valueNoise(x * 0.06, y * 0.06, seed + 51)
+      const turning = valueNoise(x * 0.09, y * 0.09, seed + 55) > 0.8
+      const conifers = (n: number) => hash(x, y, seed + 45 + n) < upland * 1.3 - 0.25
+      const grow = (set: TreeSet, n: number, at: readonly [number, number]) => {
+        const list = SPRITES[set]
         const index = Math.floor(hash(x, y, seed + 47 + n) * list.length)
-        const [tx, ty] = spot(n)
         if (lift) {
           // Each tree once, by the chunk it stands in.
-          if (own) lifted.push({ set: conifer ? 'pine' : 'leaf', index, tx, ty })
+          if (own) lifted.push({ set, index, tx: at[0], ty: at[1] })
           return
         }
-        place(list[index], tx, ty, own)
+        place(list[index], at[0], at[1], own)
+      }
+      // Woods grow in stands: birch groves, spruce among the pines, a patch turning early; poplars and trees in
+      // flower stand out on open ground.
+      const tree = (n: number) => {
+        const h = hash(x, y, seed + 53 + n)
+        let set: TreeSet
+        if (conifers(n)) set = h < smoothstep(0.35, 0.65, grove) * 0.8 ? 'fir' : 'pine'
+        else if (turning && h < 0.6) set = 'autumn'
+        else if (h < smoothstep(0.55, 0.75, grove) * 0.75) set = 'birch'
+        else if (woods < 0.35 && h > 0.93) set = 'poplar'
+        else if (woods < 0.35 && h > 0.88) set = 'blossom'
+        else set = 'leaf'
+        grow(set, n, spot(n))
       }
       // Bare rock, wherever the painted ground shows it, carries rock formations and no trees.
       const climb = (elevation[i] - levels.mountain) / (levels.snow - levels.mountain)
@@ -633,21 +661,41 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
         const r = roll(0)
         const high = heightAt(world, x + 0.5, y + 0.5) > balance.world.snowHeight - 20
         const foot = Math.max(0, 1 - Math.max(0, climb) / 0.35)
+        const up = Math.max(0, climb) * 0.04
         if (high) {
           if (r < 0.035) place(choose(SPRITES.snowCrag, variant), ...spot(0), own)
-        } else if (r < 0.04) place(choose(SPRITES.boulder, variant), ...spot(0), own)
-        else if (r < 0.07) place(choose(SPRITES.scree, variant), ...spot(0), own)
-        else if (r < 0.085) place(choose(SPRITES.slab, variant), ...spot(0), own)
-        else if (r < 0.095 + Math.max(0, climb) * 0.04) place(choose(SPRITES.crag, variant), ...spot(0), own)
-        else if (r < 0.105 + Math.max(0, climb) * 0.04) place(choose(SPRITES.tor, variant), ...spot(0), own)
-        // Moss and alpine grass hold on low down.
-        else if (r < 0.105 + Math.max(0, climb) * 0.04 + foot * 0.14) place(choose(SPRITES.tuft, kind), ...spot(1), own)
+          continue
+        }
+        // Big outcrops and rock steps break up the bare slopes; boulders, scree and slabs fill in between. Some
+        // stretches are strewn with rock, others calmer.
+        const m = 0.45 + valueNoise(x * 0.08, y * 0.08, seed + 59) * 1.3
+        const at = r / m
+        if (at < 0.03) place(choose(SPRITES.outcrop, variant), ...spot(0), own)
+        else if (at < 0.05) place(choose(SPRITES.ledge, variant), ...spot(0), own)
+        else if (at < 0.058) place(choose(SPRITES.pillar, variant), ...spot(0), own)
+        else if (at < 0.11) place(choose(SPRITES.boulder, variant), ...spot(0), own)
+        else if (at < 0.16) place(choose(SPRITES.scree, variant), ...spot(0), own)
+        else if (at < 0.18) place(choose(SPRITES.slab, variant), ...spot(0), own)
+        else if (at < 0.195 + up) place(choose(SPRITES.crag, variant), ...spot(0), own)
+        else if (at < 0.21 + up) place(choose(SPRITES.tor, variant), ...spot(0), own)
+        // Moss, alpine grass and dwarf shrubs hold on low down.
+        else if (at < 0.21 + up + foot * 0.2) place(choose(SPRITES.tuft, kind), ...spot(1), own)
+        else if (at < 0.24 + up + foot * 0.25) place(choose(SPRITES.scrub, kind), ...spot(1), own)
+        // Gravel and a second, smaller stone between the rest.
+        if (roll(3) < 0.3) place(choose(SPRITES.pebbles, kind), ...spot(3), own)
+        else if (roll(3) < 0.4) place(choose(SPRITES.boulder, kind), ...spot(3), own)
         continue
       }
       // Fewer trees toward bare rock and dry ground.
       const dry = 1 - smoothstep(levels.desert - 0.025, levels.desert + 0.02, moisture[i] + edge)
       const thin = (1 - rockW) ** 2 * (1 - dry)
       if (terrain === Terrain.Forest || terrain === Terrain.Grass) {
+        // A great old tree stands in a clearing of its own; the trees around it give it room.
+        if (giantAt(x, y)) {
+          grow(conifers(0) ? 'giantPine' : 'oak', 0, [x + 0.5, y + 0.5])
+          continue
+        }
+        if (nearGiant(x, y)) continue
         let trees = 0
         for (let n = 0; n < 2; n++) {
           if (roll(n) < ((n === 0 ? 0.02 : 0) + woods * 0.8) * thin) {

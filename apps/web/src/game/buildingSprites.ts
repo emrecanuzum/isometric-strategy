@@ -2255,6 +2255,8 @@ export interface Structure {
   color?: string
   // The building it shows, for picking it on the map.
   id?: number
+  // Another kingdom's building: whose it is and its colour, for the outline drawn round it under the pointer.
+  owner?: { kingdom: number; tint: number }
   pier?: { x: number; y: number; w: number; h: number; along: 'x' | 'y' }
   // Wall pieces: which neighbouring tiles hold wall too (see linkWalls).
   links?: number
