@@ -29,6 +29,8 @@ export interface LobbyWorld {
   world: World
   // Tiles of the inns (armies recover their morale near them).
   inns: Point[]
+  // The free cities (no battles near them; armies rest there as at an inn), in the order world.cities has them.
+  cities: Point[]
 }
 
 const worlds = new Map<string, Promise<LobbyWorld>>()
@@ -56,7 +58,7 @@ export function makeWorld(size: number, terrain: Uint8Array, feature: Uint8Array
   const inns: Point[] = []
   for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) if (feature[y * size + x] === game.Feature.Inn) inns.push({ x, y })
   // Placement, plot and route rules read only terrain and features.
-  return { world: { size, terrain, feature }, inns }
+  return { world: { size, terrain, feature }, inns, cities: game.citiesOf({ size, feature }) }
 }
 
 export const rememberWorld = (lobby: string, world: LobbyWorld) => worlds.set(lobby, Promise.resolve(world))

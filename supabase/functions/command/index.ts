@@ -217,6 +217,15 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       if (cmd.good !== 'none' && !GOODS.includes(cmd.good)) refuse('rejected')
       next = changed(game.setTradeGood(need(), cmd.good === 'none' ? null : cmd.good, now))
       break
+    case 'tradeCity': {
+      // A free city by its index in the world's cities, or null for the lobby's market (see game.setTradeCity).
+      const k = need()
+      const { cities } = await worldOf(lobby)
+      const index = cmd.city === null ? null : Number.isInteger(cmd.city) && cmd.city >= 0 && cmd.city < cities.length ? cmd.city : refuse('rejected')
+      if (now < game.tradeCityReadyAt(k)) refuse('tradeWait')
+      next = changed(game.setTradeCity(k, cities, index, now))
+      break
+    }
     case 'tradeAmount': {
       // Units per trip, in steps and once in a while (see game.tradeAmountError).
       const k = need()
@@ -725,7 +734,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
   }
 }
 
-const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'seen', 'reset'])
+const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'seen', 'reset'])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

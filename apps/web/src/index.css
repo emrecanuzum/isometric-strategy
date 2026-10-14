@@ -1331,6 +1331,12 @@ small {
   box-shadow: var(--outline);
 }
 
+/* A free city: its name in gold, with a crown-coloured rim. */
+.worldmap-name.city {
+  color: #f6e3a1;
+  box-shadow: 0 0 0 1px #c8952e;
+}
+
 .worldmap-here {
   width: 10px;
   height: 10px;
@@ -3843,4 +3849,87 @@ kbd {
     bottom: calc(var(--dock-h) + 110px + 44px + var(--px) * 4 + env(safe-area-inset-bottom));
     max-width: calc(100vw - var(--gap) * 2 - 56px);
   }
+}
+
+/* ---- Hanlar ve ticaret payları ---- */
+
+.measure-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: calc(var(--px) * 2);
+  margin-bottom: calc(var(--px) * 4);
+}
+
+.measure-row .btn {
+  justify-content: center;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shares {
+  display: grid;
+  grid-template-columns: minmax(96px, 140px) minmax(0, 1fr);
+  gap: calc(var(--px) * 5);
+  align-items: center;
+}
+
+.shares .pie {
+  width: 100%;
+  height: auto;
+}
+
+.legend {
+  display: grid;
+  gap: calc(var(--px) * 2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legend li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: calc(var(--px) * 3);
+  align-items: baseline;
+}
+
+.legend i {
+  width: calc(var(--px) * 4);
+  height: calc(var(--px) * 4);
+  box-shadow: var(--outline);
+}
+
+.legend span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legend small {
+  grid-column: 2 / -1;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.rumours {
+  display: grid;
+  gap: calc(var(--px) * 3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rumours li {
+  padding: calc(var(--px) * 3);
+  background: var(--panel-2);
+  box-shadow: var(--bevel), var(--outline);
+  line-height: 1.35;
+}
+
+.rumours small {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
 }

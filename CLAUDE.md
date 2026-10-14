@@ -138,8 +138,9 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   - Köprü veya geçit noktaları stratejik önemdedir.
 - **Kervan ticaret yolları:** Haritada önceden tanımlı ana yollar
   (bkz. §7). Yola yakınlık ekonomik avantajdır.
-- **Tarafsız yerleşimler / ticaret merkezleri (NPC):** Pazar yerleri,
-  kervansaraylar. Hammadde alınıp satılabilir.
+- **Serbest şehirler (NPC):** Haritada çok nadir, **1–2 tane** surlu
+  şehir; hiçbir krallığa ait değildir, **güvenli bölgedir** (savaş için
+  değil, tüccarların gidip ticaret yaptığı yer). Ayrıntı §7.7.
 - **Kaynak noktaları:** Maden ocakları, taş ocakları, zengin ormanlar —
   sahiplenilmesi için rekabet doğar.
 - **Haydut kampları (opsiyonel PvE):** Ticaret yollarını tehdit eder.
@@ -248,7 +249,16 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   **kervansaray**; dağ yakınında arduvaz damlı **taş han**; ormanda saman
   damlı (bazen yosunlu) **kütük han**; diğer yerlerde kiremit ya da arduvaz
   damlı **yarı ahşap (bağdadi)** han. Bacalarından **duman** tüter (½× ve
-  üstü; yükselir, büyür, rüzgârla sürüklenip söner).
+  üstü; yükselir, büyür, rüzgârla sürüklenip söner). Her hanın ayrıca bir
+  **işi** vardır (tohumdan, `apps/web/src/game/innInfo.ts`) ve duvar
+  dibindeki eşyalar bunu gösterir: **yol hanı** (fıçılar, asma tabela),
+  **pazar hanı** (çizgili tente, sandık ve çuvallar), **menzilhane** (su
+  yalağı, saman, at bağlama direği), **gümrük hanı** (kırmızı-beyaz bariyer,
+  bayrak direği). Kapı yanındaki fenerler gece yanar. Her hanın bir adı
+  ("Akçay Hanı", "Gökdere Kervansarayı"…) ve hancısı vardır. Han
+  zemine boyanır, ama sallanan ağaçlar yürüyenler katmanında olduğu için
+  hanın bir kopyası da o katmanda durur; arkadaki ağaçlar hanın üstüne
+  çıkmaz. Hanlar tıklanır (bkz. §7.6).
 - **Kervanlar:** Ticaret yollarında hanlar arasında sürekli gidip gelen
   deve kervanları dolaşır (önde tüccar, 2–4 yüklü deve, bazen mızraklı
   muhafız). Şimdilik yalnızca görseldir; konumları saatten hesaplanır,
@@ -731,6 +741,71 @@ Ticaret yoluna uzak şehirler hammaddeyi **tüccar göndererek** alır:
 Pazar fiyatları **arz-talep** ile dinamik (basit model): çok satılan malın
 fiyatı düşer, çok alınanın artar; zamanla dengeye döner.
 
+### 7.6 Prototip: hanlar ve ticaret payları (şu an uygulanan)
+
+- **Satış defteri:** Her krallığın tüccarının sezon boyunca sattığı mal
+  (yemek / yapı / savaş malzemesi, birim) ve getirdiği altın krallığın
+  durumunda tutulur (`trade.ledger`, `economy.ts`). Sunucu bunu diğer
+  oyunculara **yuvarlanmış** verir (mallar 25'e, altın 50'ye; kişinin
+  kendisine tam), ayrıca tüccarın şu an sattığı malı da
+  (`lobby_kingdoms` → `trade_good`, `trade_ledger`).
+- **Ticaretin hâkimleri:** Ticaret sekmesinde ve han panelinde pasta
+  grafik: kazanca (altın) ya da tek bir malın birimine göre her krallığın
+  payı, krallık renginde; altında yüzde ve yaklaşık miktar.
+- **Han paneli:** Hanın üstüne gelince adı ve işi yazar; tıklanınca
+  panel açılır: hancı, hanın işi, uzaklık, **ticaret söylentileri** ve
+  ticaret payları. Söylentiler herkesin bilebileceği gerçek bilgilerden
+  kurulur (lobi fiyatları, yuvarlanmış satış payları, kim şu an ne
+  satıyor, yağmalanmış ticaret noktaları, savaşlar, yoldaki ordular, hana
+  en yakın saray) ve her oyun saati değişir. Hanın işi neyi duyduğunu
+  belirler: pazar hanı fiyatları ve en çok satanları, gümrük hanı kimin ne
+  taşıdığını, menzilhane savaşları ve yoldaki orduları, yol hanı biraz
+  her şeyi (`apps/web/src/ui/hud/inns.tsx`).
+
+### 7.7 Prototip: serbest şehirler (şu an uygulanan)
+
+Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
+`economy.ts`, çizim `apps/web/src/game/cities.ts`, panel
+`apps/web/src/ui/hud/cities.tsx`.
+
+- **Yer:** Lobi tohumundan 1 ya da 2 şehir (`count`), kendi rastgele
+  çekilişiyle (dünyanın geri kalanı şehirsiz hâliyle aynı çıkar). 16×16
+  karo (`size`), dağ halkasının epey içinde, hanlardan uzak, şehirler
+  birbirinden en az `minSpacing` karo uzakta; düz, kuru kara (çayır, orman
+  ya da çöl; bataklık, su, dağ değil) ve az eğimli bir yere kurulur.
+  Şehrin altı düzlenir, çevresi yumuşakça ona iner. Şehir karoları inşa
+  edilemez; krallıklar yerleşirken son hudutları şehre `kingdomGapTiles`
+  karodan yaklaşmaz.
+- **Yollar:** Şehirler ticaret yolu ağının düğümleridir (hanlar gibi).
+  Şehre giden yol **surda biter**, orada kapı vardır; şehre gitmeyen yollar
+  şehrin çevresinden dolanır. Kervanlar şehir kapısına kadar gelir.
+- **Görünüm:** Krallık yapılarıyla aynı çizimden: çevresinde köşe kuleli
+  sur, her yolun girdiği yerde kuleli kapı; ortada saray (belediye), ardı
+  sıra pazarlar, tapınak, ambarlar, hazine, hastane, atölye ve sıkışık
+  evler; surun iç dibinden dolanan ve kapılardan meydana inen sokaklar.
+  Adı (ör. "Altınkapı Serbest Şehri") 1× ve altında şehrin üstünde, dünya
+  haritasında altın renkte yazar. Üstüne gelince adı, tıklanınca paneli
+  açılır: yöneten (lonca meclisi, kadı…), şehrin ödediği fiyatlar ve
+  tüccarı oraya gönderme.
+- **Güvenli bölge:** Şehrin ortasından `safeTiles` (26) karo içinde
+  **meydan muharebesi olmaz**; savaştaki iki ordu orada karşılaşsa da
+  çarpışmaz. Ordular şehrin `restTiles` karo yakınında handaki gibi moral
+  toplar.
+- **Ticaret:** Ticaret sekmesinde "Tüccar nereye gitsin": lobi pazarı ya
+  da bir serbest şehir. Şehre giden tüccar sefer başına **3 kat yük**
+  (`loadFactor`) götürür ve şehrin **sabit fiyatından** (taban fiyat ×
+  1,1) satar; bu satış **lobi fiyatlarını düşürmez**. Ama sefer uzundur:
+  10 sn + ticaret noktası ile şehir arasındaki her karo için 0,12 sn
+  (ör. 200 karo ≈ 34 sn). Lobi fiyatları çok satılmaktan düşmüşken ya da
+  şehir yakınken kârlıdır. Hedef değiştirilince tüccar yeni sefere
+  başlar; 2 dakika yeniden değiştirilemez (`trade.city`, `setTradeCity`;
+  sunucuda `tradeCity` komutu, sefer süresini sunucu hesaplar).
+- **Eski lobiler:** Lobi, dünyasının hangi kuralla üretildiğini saklar
+  (`lobbies.world_rev`, `WORLD_REV`); serbest şehirlerden önce açılmış
+  lobiler (1) şehirsiz kalır, yeniler (2) şehirli açılır.
+- **İleride:** paralı asker kiralama, barış görüşmelerinde arabuluculuk,
+  rehine/fidye takası, kara borsa, şehirden mal satın alma.
+
 ---
 
 ## 8. Askeri Sistem
@@ -798,6 +873,7 @@ fiyatı düşer, çok alınanın artar; zamanla dengeye döner.
 - Bir rota değişirse o orduya ait bekleyen karşılaşmalar silinir ve
   yeniden hesaplanır. Taraflar çevrimdışı olsa da savaş zamanında olur
   (bkz. §11.1 olay işleyici).
+- **Serbest şehirlerin** çevresinde muharebe olmaz (güvenli bölge, §7.7).
 - **Takviye:** Aynı muharebe noktasına bir pencere içinde (ayar) varan dost
   ordular aynı savaşa katılır; muharebe anlık değil, süreli bir olaydır.
 - Muharebe otomatik çözülür (canlı yönetim yok), sonucu olay kimliğinden
@@ -1327,7 +1403,7 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
 
 | Tablo | İçerik |
 | --- | --- |
-| `lobbies` | tohum, `season_start`, ayarlar |
+| `lobbies` | tohum, `world_rev` (dünya üretim sürümü), `season_start`, ayarlar |
 | `kingdoms` | `state jsonb`, `version`, `updated_at`, ad, renk |
 | `armies` | sahibi, birlikler, `path`, `depart_at`, `arrive_at` |
 | `orders` | elçi emirleri: `issued_at`, `effective_at`, içerik |

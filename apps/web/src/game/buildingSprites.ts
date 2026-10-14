@@ -2275,6 +2275,8 @@ export interface Structure {
   pier?: { x: number; y: number; w: number; h: number; along: 'x' | 'y' }
   // Wall pieces: which neighbouring tiles hold wall too (see linkWalls).
   links?: number
+  // A building of a free city: the city's index in world.cities.
+  city?: number
 }
 
 // Wall pieces joined to the wall pieces beside them, so a run of wall reads as one wall with corners and ends. A

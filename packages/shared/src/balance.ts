@@ -1,3 +1,4 @@
+import cities from '../../../config/balance/cities.json'
 import diplomacy from '../../../config/balance/diplomacy.json'
 import economy from '../../../config/balance/economy.json'
 import institutions from '../../../config/balance/institutions.json'
@@ -10,4 +11,4 @@ import territory from '../../../config/balance/territory.json'
 import time from '../../../config/balance/time.json'
 import world from '../../../config/balance/world.json'
 
-export const balance = { diplomacy, economy, espionage, institutions, map, market, military, society, territory, time, world } as const
+export const balance = { cities, diplomacy, economy, espionage, institutions, map, market, military, society, territory, time, world } as const

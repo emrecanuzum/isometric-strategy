@@ -1,4 +1,4 @@
-import type { Point, Score } from '@game/shared'
+import type { Good, Point, Score, TradeLedger } from '@game/shared'
 import type { Layer } from '../../net/layer'
 import type { Command, IntelReport, Lobby } from '../../net/online'
 
@@ -20,6 +20,11 @@ export interface KingdomInfo {
   shieldUntil?: number | null
   // Its place in the lobby's ranking (the player's own worked out live).
   score?: Score | null
+  // What its merchant sells now (null: nothing), all it has sold this season (others' rounded; see the trade shares)
+  // and whether raiders wrecked its trade post.
+  tradeGood?: Good | null
+  tradeLedger?: TradeLedger | null
+  tradeDamaged?: boolean
   // Its buildings as seen on the map.
   buildings?: { kind: string; x: number; y: number; size: number; doneAt: number; broken?: boolean }[]
 }

@@ -46,9 +46,9 @@ export const territoryOf = (state: Kingdom, at: number) => game.territoryRect(st
 
 export const inTerritory = (state: Kingdom, p: Point, at: number) => !!state && inside(territoryOf(state, at), p)
 
-// Where an army rests for its morale: in its own lands, by an inn, or out in the field.
+// Where an army rests for its morale: in its own lands, by an inn or a free city, or out in the field.
 export const restFor = (world: LobbyWorld, owner: Kingdom, at: number) => (p: Point) =>
-  inTerritory(owner, p, at) ? 'home' : game.nearInn(world.inns, p) ? 'inn' : 'field'
+  inTerritory(owner, p, at) ? 'home' : game.nearInn(world.inns, p) || game.nearCity(world.cities, p) ? 'inn' : 'field'
 
 // The army as it stands at `at`: where, how its spirits are and how well it knows the ground.
 export function armyNow(army: ArmyRow, world: LobbyWorld, owner: Kingdom, at: number) {

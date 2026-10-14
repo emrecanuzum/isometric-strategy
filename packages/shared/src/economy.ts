@@ -11,7 +11,7 @@ import type { Unit, Units } from './units'
 import type { TaxLevel } from './society'
 import { TileRule, findPlot, territoryRect, tileRule } from './territory'
 import type { Rect } from './territory'
-import { Terrain } from './worldgen'
+import { Terrain, cityCenter } from './worldgen'
 import type { World } from './worldgen'
 
 // A kingdom's economy: gold plus three goods, produced by buildings and sold by the merchant of its trade post.
@@ -172,6 +172,13 @@ export interface Kingdom {
     amountAt?: number
     // The current trip started here and ends one trip length later.
     departedAt: number
+    // Everything the merchant has sold this season, per good, and the gold it brought (absent in older saves). Others
+    // see it rounded (the lobby's trade shares).
+    ledger?: TradeLedger
+    // Sent to a free city instead of the lobby's market (CLAUDE.md §7.6): which one (its index in world.cities) and how
+    // long a trip there and back takes; when the destination was last changed.
+    city?: { index: number; tripMs: number }
+    cityAt?: number
   }
   nextProductionAt: number
   // Everything up to here has been settled by `advance`.
@@ -235,7 +242,7 @@ export type FisherEntry =
   | { at: number; kind: 'miss' }
 
 export type EconomyEvent =
-  | { kind: 'trade'; good: Good; sold: number; gold: number; walledIn?: boolean; damaged?: boolean }
+  | { kind: 'trade'; good: Good; sold: number; gold: number; walledIn?: boolean; damaged?: boolean; city?: number }
   | { kind: 'built'; building: Building }
   | { kind: 'produced'; delta: Partial<Stock>; weapons?: Partial<Armory> }
   | { kind: 'trained'; count: number }
@@ -575,6 +582,8 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
 export const productionRound = (kingdom: Kingdom, at: number): Partial<Stock> => roundOutcome(kingdom, at).delta
 
 // What the merchant can carry at the post's level, and what he takes on each trip: as much as the player set, up to that.
+export type TradeLedger = Record<Good, number> & { gold: number }
+
 export const tradeCapacity = (kingdom: Kingdom) => balance.economy.trade.levels[kingdom.trade.level].units
 export const tradeUnits = (kingdom: Kingdom) => Math.min(tradeCapacity(kingdom), kingdom.trade.amount ?? tradeCapacity(kingdom))
 
@@ -877,6 +886,49 @@ export function setTradeGood(kingdom: Kingdom, good: Good | null, now: number): 
   return { ...kingdom, trade: { ...kingdom.trade, good, idle: good === null, departedAt: now } }
 }
 
+// ---- Free cities (CLAUDE.md §7.6) ----------------------------------------------------------------------------------
+
+// What a free city pays for one unit: its own price, steady and untouched by the lobby's trade.
+export const cityPrice = (good: Good) => balance.economy.trade.price[good] * balance.cities.trade.priceFactor
+
+// How long the merchant's trip takes: to the lobby's market from the trade post, or to a free city and back.
+export const tradeTripMs = (kingdom: Kingdom) => kingdom.trade.city?.tripMs ?? tripMs()
+
+// What the merchant takes on one trip, and what a unit fetches before bonuses: a free city takes a bigger load at its
+// own steady price.
+export const tradeLoad = (kingdom: Kingdom) => tradeUnits(kingdom) * (kingdom.trade.city ? balance.cities.trade.loadFactor : 1)
+export const tradePrice = (kingdom: Kingdom, good: Good, market: Market | null | undefined, at: number) =>
+  kingdom.trade.city ? cityPrice(good) : priceAt(market, good, at)
+
+// Trips the merchant makes in one production round.
+export const tradeTripsPerRound = (kingdom: Kingdom) => (balance.economy.productionSeconds * 1000) / tradeTripMs(kingdom)
+
+// The trip from the trade post to a free city and back, longer the farther the city is.
+export function cityTripMs(kingdom: Kingdom, city: Point) {
+  const post = kingdom.buildings.find((b) => b.kind === 'tradePost')
+  if (!post) return null
+  const m = cityCenter(city)
+  const tiles = Math.hypot(post.x + post.size / 2 - m.x, post.y + post.size / 2 - m.y)
+  const { baseSeconds, secondsPerTile } = balance.cities.trade
+  return Math.round((baseSeconds + tiles * secondsPerTile) * 1000)
+}
+
+export const tradeCityReadyAt = (kingdom: Kingdom) => (kingdom.trade.cityAt ?? -Infinity) + balance.cities.trade.changeCooldownSeconds * 1000
+
+// Sends the merchant to a free city (its index in world.cities), or back to the lobby's market with null. A changed
+// destination starts a fresh trip.
+export function setTradeCity(kingdom: Kingdom, cities: Point[], index: number | null, now: number): Kingdom {
+  if (!hasTradePost(kingdom) || now < tradeCityReadyAt(kingdom) || (kingdom.trade.city?.index ?? null) === index) return kingdom
+  if (index === null) {
+    const { city: _, ...trade } = kingdom.trade
+    return { ...kingdom, trade: { ...trade, cityAt: now, departedAt: now } }
+  }
+  const city = cities[index]
+  const tripMs = city && cityTripMs(kingdom, city)
+  if (!tripMs) return kingdom
+  return { ...kingdom, trade: { ...kingdom.trade, city: { index, tripMs }, cityAt: now, departedAt: now } }
+}
+
 // A trade post wrecked by raiders stands again for this.
 export const tradeRepairCost = () => balance.economy.trade.repairCost as Cost
 
@@ -935,7 +987,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
   // A building counts from the moment it is done, so production rounds after that use it.
   const finishing = kingdom.buildings.filter((b) => b.doneAt > kingdom.settledAt && b.doneAt <= now)
   for (;;) {
-    const tripEnd = k.trade.good ? k.trade.departedAt + tripMs() : Infinity
+    const tripEnd = k.trade.good ? k.trade.departedAt + tradeTripMs(k) : Infinity
     const next = Math.min(tripEnd, k.nextProductionAt)
     if (next > now) break
     edit()
@@ -998,14 +1050,21 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       const post = k.buildings.find((b) => b.kind === 'tradePost')
       const walledIn = !!post && cutOff(k.buildings, k.site, next).has(post.id)
       const damaged = !!k.trade.damaged
-      const sold = walledIn || damaged ? 0 : Math.min(tradeUnits(k), Math.floor(k.stock[good]))
+      // A free city takes a bigger load at its own steady price, and its trade leaves the lobby's prices alone.
+      const city = k.trade.city
+      const sold = walledIn || damaged ? 0 : Math.min(tradeLoad(k), Math.floor(k.stock[good]))
       const fortune = fortuneEffects(k, next).trade
-      const gold = Math.round(sold * priceAt(market, good, next) * (1 + researchEffects(k, next).trade + fortune) * idleFactor(k, next))
-      soldTotal[good] = (soldTotal[good] ?? 0) + sold
+      const price = tradePrice(k, good, market, next)
+      const gold = Math.round(sold * price * (1 + researchEffects(k, next).trade + fortune) * idleFactor(k, next))
+      if (!city) soldTotal[good] = (soldTotal[good] ?? 0) + sold
       k.stock[good] -= sold
       k.stock.gold += gold
       k.trade.departedAt = next
-      events.push({ kind: 'trade', good, sold, gold, ...(walledIn && { walledIn }), ...(damaged && { damaged }) })
+      if (sold > 0) {
+        const ledger = k.trade.ledger ?? { food: 0, materials: 0, arms: 0, gold: 0 }
+        k.trade.ledger = { ...ledger, [good]: ledger[good] + sold, gold: ledger.gold + gold }
+      }
+      events.push({ kind: 'trade', good, sold, gold, ...(walledIn && { walledIn }), ...(damaged && { damaged }), ...(city && { city: city.index }) })
     }
   }
   for (const building of finishing) events.push({ kind: 'built', building })

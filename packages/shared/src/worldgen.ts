@@ -16,7 +16,12 @@ export const Feature = {
   Road: 1,
   Bridge: 2,
   Inn: 3,
+  City: 4,
 } as const
+
+// Worlds are made the same way from the same seed for as long as a lobby lives; a lobby keeps the revision its world
+// was made with. 1: before the free cities.
+export const WORLD_REV = 2
 
 export interface Polyline {
   points: Point[]
@@ -29,6 +34,8 @@ export interface World {
   terrain: Uint8Array
   feature: Uint8Array
   inns: Point[]
+  // The free cities (CLAUDE.md §4.2): the back corner of each one's square of balance.cities.size tiles.
+  cities: Point[]
   // Continuous fields and thresholds the terrain was classified from; the client shades the ground with them.
   // River beds are cut into the elevation, so rivers are the same water as lakes.
   elevation: Float32Array
@@ -225,7 +232,7 @@ function pickSpaced(
   return picked
 }
 
-export function generateWorld(seed: number): World {
+export function generateWorld(seed: number, rev = WORLD_REV): World {
   const cfg = balance.world
   const size = balance.map.chunkSize * balance.map.worldChunks
   const random = mulberry32(seed)
@@ -490,6 +497,63 @@ export function generateWorld(seed: number): World {
 
   for (const inn of inns) pinned.add(toCell(inn))
 
+  // One or two free cities on wide, level, dry land well inside the mountain ring and away from the inns. They have a
+  // random draw of their own, so the rest of the world comes out as it did before them.
+  const cities: Point[] = []
+  if (rev >= 2) {
+    const town = balance.cities
+    const S = town.size
+    const draw = mulberry32(seed ^ 0x51c17e5)
+    const wanted = town.count[0] + Math.floor(draw() * (town.count[1] - town.count[0] + 1))
+    const fits = (p: Point) => {
+      let low = Infinity
+      let high = -Infinity
+      for (let y = p.y; y < p.y + S; y++) {
+        for (let x = p.x; x < p.x + S; x++) {
+          const i = y * size + x
+          const t = terrain[i]
+          if (t !== Terrain.Grass && t !== Terrain.Forest && t !== Terrain.Desert) return false
+          low = Math.min(low, height[i])
+          high = Math.max(high, height[i])
+        }
+      }
+      if (high - low > town.maxSlope) return false
+      const cx = p.x + S / 2
+      const cy = p.y + S / 2
+      return inns.every((inn) => Math.hypot(inn.x + 1 - cx, inn.y + 1 - cy) >= S / 2 + town.innGap)
+    }
+    for (let attempt = 0; attempt < wanted * 600 && cities.length < wanted; attempt++) {
+      const p = {
+        x: town.edgeMargin + Math.floor(draw() * (size - town.edgeMargin * 2 - S)),
+        y: town.edgeMargin + Math.floor(draw() * (size - town.edgeMargin * 2 - S)),
+      }
+      if (cities.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < town.minSpacing) || !fits(p)) continue
+      cities.push(p)
+    }
+    // In the order the server finds them in the tiles (citiesOf), so both name a city by the same index.
+    cities.sort((a, b) => a.y - b.y || a.x - b.x)
+    // The ground under a city is levelled, and the land around it slopes gently up or down to meet it.
+    for (const c of cities) {
+      let sum = 0
+      for (let y = c.y; y < c.y + S; y++) for (let x = c.x; x < c.x + S; x++) sum += height[y * size + x]
+      const level = sum / (S * S)
+      const reach = town.flatBlend
+      for (let y = Math.max(0, c.y - reach); y < Math.min(size, c.y + S + reach); y++) {
+        for (let x = Math.max(0, c.x - reach); x < Math.min(size, c.x + S + reach); x++) {
+          const d = Math.hypot(Math.max(c.x - 1 - x, 0, x - (c.x + S)), Math.max(c.y - 1 - y, 0, y - (c.y + S)))
+          const t = Math.min(1, d / reach)
+          const w = 1 - t * t * (3 - 2 * t)
+          const i = y * size + x
+          if (terrain[i] === Terrain.River || terrain[i] === Terrain.Lake) continue
+          height[i] += (level - height[i]) * w
+        }
+      }
+    }
+  }
+  // The roads meet at the inns and run into the middle of each city.
+  const hubs: Point[] = [...inns, ...cities.map((c) => ({ x: c.x + balance.cities.size / 2, y: c.y + balance.cities.size / 2 }))]
+  for (const hub of hubs) pinned.add(toCell(hub))
+
   // Trade routes: a spanning tree over the inns plus a few extra links so the network has loops.
   const links: [number, number][] = []
   const linked = new Set<string>()
@@ -500,20 +564,20 @@ export function generateWorld(seed: number): World {
       links.push([a, b])
     }
   }
-  const gap = (a: number, b: number) => Math.hypot(inns[a].x - inns[b].x, inns[a].y - inns[b].y)
-  const inTree = new Set(inns.length > 0 ? [0] : [])
-  while (inTree.size < inns.length) {
+  const gap = (a: number, b: number) => Math.hypot(hubs[a].x - hubs[b].x, hubs[a].y - hubs[b].y)
+  const inTree = new Set(hubs.length > 0 ? [0] : [])
+  while (inTree.size < hubs.length) {
     let best: [number, number] | null = null
     for (const a of inTree) {
-      for (let b = 0; b < inns.length; b++) {
+      for (let b = 0; b < hubs.length; b++) {
         if (!inTree.has(b) && (!best || gap(a, b) < gap(best[0], best[1]))) best = [a, b]
       }
     }
     addLink(best![0], best![1])
     inTree.add(best![1])
   }
-  for (let a = 0; a < inns.length; a++) {
-    const nearest = inns
+  for (let a = 0; a < hubs.length; a++) {
+    const nearest = hubs
       .map((_, b) => b)
       .filter((b) => b !== a)
       .sort((p, q) => gap(a, p) - gap(a, q))
@@ -522,9 +586,18 @@ export function generateWorld(seed: number): World {
 
   const roadCells = new Uint8Array(side * side)
   const roadCost = [1, 1.6, 9, 3, 1.2, 25, 6]
+  // Roads go round a free city unless they lead into it.
+  const cityCells = new Int16Array(side * side).fill(-1)
+  cities.forEach((c, k) => {
+    for (let y = Math.floor(c.y / COARSE) - 1; y <= Math.floor((c.y + balance.cities.size) / COARSE); y++) {
+      for (let x = Math.floor(c.x / COARSE) - 1; x <= Math.floor((c.x + balance.cities.size) / COARSE); x++) cityCells[y * side + x] = k
+    }
+  })
   for (const [a, b] of links) {
-    const goal = toCell(inns[b])
-    const path = findPath(side, toCell(inns[a]), (cell) => cell === goal, (cell) => {
+    const goal = toCell(hubs[b])
+    const ends = [a - inns.length, b - inns.length]
+    const path = findPath(side, toCell(hubs[a]), (cell) => cell === goal, (cell) => {
+      if (cityCells[cell] >= 0 && !ends.includes(cityCells[cell])) return 60
       if (roadCells[cell]) return 0.3
       const base = riverCells[cell] ? roadCost[Terrain.River] : roadCost[terrain[tileIndex(cell)]]
       return base * meander(cell) * (0.7 + hash(cell, 3, seed + 71) * 0.6)
@@ -536,6 +609,30 @@ export function generateWorld(seed: number): World {
       const wet = terrain[i] === Terrain.River || terrain[i] === Terrain.Lake
       feature[i] = wet ? Feature.Bridge : Feature.Road
     })
+  }
+
+  // A road into a free city ends at its wall, where the city's gate stands; inside are the city's own streets.
+  const S = balance.cities.size
+  const within = (c: Point, p: Point) => p.x >= c.x && p.y >= c.y && p.x <= c.x + S && p.y <= c.y + S
+  for (const road of roads) {
+    for (const end of [0, 1]) {
+      const line = end === 0 ? road.points : road.points.slice().reverse()
+      const c = cities.find((city) => within(city, line[0]))
+      if (!c) continue
+      const out = line.findIndex((p) => !within(c, p))
+      if (out <= 0) continue
+      // Where the last stretch inside crosses the wall.
+      const p = line[out - 1]
+      const q = line[out]
+      let t = 1
+      for (const [from, to, lo, hi] of [[p.x, q.x, c.x, c.x + S], [p.y, q.y, c.y, c.y + S]]) {
+        if (to < lo) t = Math.min(t, (lo - from) / (to - from))
+        if (to > hi) t = Math.min(t, (hi - from) / (to - from))
+      }
+      const gate = { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t }
+      const kept = [gate, ...line.slice(out)]
+      road.points = end === 0 ? kept : kept.reverse()
+    }
   }
 
   // Stone bridges cross the rivers here and there away from the trade routes, so both banks can be walked to.
@@ -608,12 +705,19 @@ export function generateWorld(seed: number): World {
     }
   }
 
+  for (const c of cities) {
+    for (let y = c.y; y < c.y + balance.cities.size; y++) {
+      for (let x = c.x; x < c.x + balance.cities.size; x++) feature[y * size + x] = Feature.City
+    }
+  }
+
   return {
     seed,
     size,
     terrain,
     feature,
     inns,
+    cities,
     elevation,
     moisture,
     height,
@@ -631,3 +735,35 @@ export function generateWorld(seed: number): World {
     crossings,
   }
 }
+
+// The free cities of a world known only by its tiles (the server's): the back corner of every square of city tiles.
+export function citiesOf(world: Pick<World, 'size' | 'feature'>): Point[] {
+  const { size, feature } = world
+  const found: Point[] = []
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x
+      if (feature[i] !== Feature.City) continue
+      if ((x > 0 && feature[i - 1] === Feature.City) || (y > 0 && feature[i - size] === Feature.City)) continue
+      found.push({ x, y })
+    }
+  }
+  return found
+}
+
+// The middle of a free city, in tile coordinates.
+export const cityCenter = (city: Point): Point => ({ x: city.x + balance.cities.size / 2, y: city.y + balance.cities.size / 2 })
+
+// Within the peace of a free city: no battle is fought this close to it.
+export const inCityPeace = (cities: Point[], p: Point) =>
+  cities.some((c) => {
+    const m = cityCenter(c)
+    return Math.hypot(m.x - p.x, m.y - p.y) <= balance.cities.safeTiles
+  })
+
+// Close enough to a free city for an army to rest there as at an inn.
+export const nearCity = (cities: Point[], p: Point) =>
+  cities.some((c) => {
+    const m = cityCenter(c)
+    return Math.hypot(m.x - p.x, m.y - p.y) <= balance.cities.restTiles
+  })

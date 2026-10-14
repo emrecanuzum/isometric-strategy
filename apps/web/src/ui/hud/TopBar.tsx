@@ -1,4 +1,4 @@
-import { BUILDINGS, balance, buildingOutput, gameTime, goldCap, population, storageCap, tradeUnits } from '@game/shared'
+import { BUILDINGS, balance, buildingOutput, gameTime, goldCap, population, storageCap, tradeLoad, tradeTripsPerRound } from '@game/shared'
 import type { BuildingKind, Kingdom, Resource, Stock } from '@game/shared'
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
@@ -133,12 +133,12 @@ function ResourceCard({ resource: r, kingdom, now, history }: { resource: Resour
   }
   const lines: { name: string; value: number }[] = [...sources].map(([kind, s]) => ({ name: `${BUILDING_NAMES[kind]} ×${s.count}`, value: s.units }))
   const { villagers } = population(kingdom, now)
-  const trips = balance.economy.productionSeconds / balance.economy.trade.tripSeconds
+  const trips = tradeTripsPerRound(kingdom)
   if (r === 'gold' && kingdom.trade.good) lines.push({ name: 'Tüccar', value: made })
   if (r === 'food' && villagers > 0) lines.push({ name: `Köylüler (${villagers})`, value: -villagers * balance.economy.foodPerVillager })
-  if (r === kingdom.trade.good) lines.push({ name: 'Tüccar satıyor', value: -tradeUnits(kingdom) * trips })
+  if (r === kingdom.trade.good) lines.push({ name: 'Tüccar satıyor', value: -tradeLoad(kingdom) * trips })
   // Raw goods worked into weapons in the forges.
-  const worked = used - (r === 'food' ? villagers * balance.economy.foodPerVillager : 0) - (r === kingdom.trade.good ? tradeUnits(kingdom) * trips : 0)
+  const worked = used - (r === 'food' ? villagers * balance.economy.foodPerVillager : 0) - (r === kingdom.trade.good ? tradeLoad(kingdom) * trips : 0)
   if (worked > 0.05) lines.push({ name: 'Atölyede işleniyor', value: -worked })
   const scale = Math.max(made, used, 0.01)
   const runsOut = net < -0.01 ? Math.floor(kingdom.stock[r] / -net) : null

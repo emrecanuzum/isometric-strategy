@@ -73,7 +73,9 @@ import type { TabId } from './ui/hud/Hud'
 import { useJournal } from './ui/hud/journal'
 import { BuildingSheet } from './ui/hud/BuildingSheet'
 import { MapAlerts } from './ui/hud/MapAlerts'
-import { MapTip } from './ui/hud/MapTip'
+import { InnTip, MapTip } from './ui/hud/MapTip'
+import { InnSheet } from './ui/hud/inns'
+import { CitySheet, CityTip } from './ui/hud/cities'
 import type { HudData } from './ui/hud/tabs'
 import { GoodPicker, SitePicker, missingText } from './ui/panels'
 import { Timers } from './ui/hud/Timers'
@@ -91,6 +93,7 @@ const FEATURE_NAMES: Record<number, string> = {
   [Feature.Road]: 'Ticaret yolu',
   [Feature.Bridge]: 'Köprü',
   [Feature.Inn]: 'Han',
+  [Feature.City]: 'Serbest şehir',
 }
 
 const RULE_NAMES: Record<number, string> = {
@@ -317,7 +320,7 @@ function App({
   // The first view is held back until the ground around the kingdom (or the sites to choose from) is painted: the
   // camera has moved there and no chunk on screen is missing for a moment.
   const [ready, setReady] = useState(false)
-  const tapRef = useRef<(tile: Point, building?: number, army?: number) => void>(() => {})
+  const tapRef = useRef<(tile: Point, building?: number, army?: number, inn?: number, city?: number) => void>(() => {})
   const strokeRef = useRef<(spots: Point[]) => void>(() => {})
 
   useEffect(() => {
@@ -330,10 +333,11 @@ function App({
         onHover: setHover,
         onCamera: setCameraCenter,
         onLoading: setLoading,
-        onTap: (tile, building, army) => tapRef.current(tile, building, army),
+        onTap: (tile, building, army, inn, city) => tapRef.current(tile, building, army, inn, city),
         onStroke: (spots) => strokeRef.current(spots),
       },
       serverNow,
+      lobby.world_rev ?? 1,
     ).then((v) => {
       if (cancelled) return v.destroy()
       created = v
@@ -669,13 +673,21 @@ function App({
   const [panel, setPanel] = useState<TabId | null>(null)
   // The building whose menu is open (it replaces the open tab).
   const [selected, setSelected] = useState<number | null>(null)
+  // The inn whose sheet is open (its index in world.inns).
+  const [innOpen, setInnOpen] = useState<number | null>(null)
+  // The free city whose sheet is open (its index in world.cities).
+  const [cityOpen, setCityOpen] = useState<number | null>(null)
   const toggleTab = useCallback((tab: TabId) => {
     setSelected(null)
+    setInnOpen(null)
+    setCityOpen(null)
     setPanel((open) => (open === tab ? null : tab))
   }, [])
   const closeTab = useCallback(() => {
     setPanel(null)
     setSelected(null)
+    setInnOpen(null)
+    setCityOpen(null)
   }, [])
   useTabKeys(toggleTab, closeTab)
   useEffect(() => {
@@ -683,8 +695,8 @@ function App({
   }, [panel, journal.unread, markRead])
   // On phones the open sheet covers the map controls; the stylesheet hides them meanwhile.
   useEffect(() => {
-    document.documentElement.dataset.sheet = panel || selected !== null ? 'open' : 'closed'
-  }, [panel, selected])
+    document.documentElement.dataset.sheet = panel || selected !== null || innOpen !== null || cityOpen !== null ? 'open' : 'closed'
+  }, [panel, selected, innOpen, cityOpen])
   const [placing, setPlacing] = useState<BuildingKind | null>(null)
   // A gate turned with R (null: it follows the wall around it).
   const [turned, setTurned] = useState<Along | null>(null)
@@ -786,8 +798,10 @@ function App({
     setAiming(null)
   }
 
-  tapRef.current = (tile, building, army) => {
+  tapRef.current = (tile, building, army, inn, city) => {
     const current = kingdomRef.current
+    if (aiming === null && !tool && !placingKind) setInnOpen(inn ?? null)
+    if (aiming === null && !tool && !placingKind) setCityOpen(city ?? null)
     // Choosing where an army marches.
     if (aiming !== null) {
       sendArmy(aiming, tile)
@@ -828,7 +842,13 @@ function App({
       }
       return
     }
-    // Without a building in hand, a tap on a building opens its menu; on open ground it closes it.
+    // Without a building in hand, a tap on a building opens its menu; on open ground it closes it. An inn opens its
+    // sheet (above).
+    if ((inn !== undefined || city !== undefined) && !placingKind) {
+      setSelected(null)
+      setPanel(null)
+      return
+    }
     if (view && current && !placingKind) {
       setSelected(building ?? null)
       if (building !== undefined) setPanel(null)
@@ -996,13 +1016,13 @@ function App({
   const kingdoms: KingdomInfo[] = useMemo(
     () => [
       ...(kingdom
-        ? [{ id: mine.id, name: kingdom.name ?? 'Krallığın', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null, score: scoreOf(kingdom, now) }]
+        ? [{ id: mine.id, name: kingdom.name ?? 'Krallığın', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null, score: scoreOf(kingdom, now), tradeGood: kingdom.trade.idle ? null : kingdom.trade.good, tradeLedger: kingdom.trade.ledger ?? null, tradeDamaged: !!kingdom.trade.damaged }]
         : []),
-      ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings, shieldUntil: r.shield_until, score: r.score ?? null })),
+      ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings, shieldUntil: r.shield_until, score: r.score ?? null, tradeGood: r.trade_good ?? null, tradeLedger: r.trade_ledger ?? null, tradeDamaged: !!r.trade_damaged })),
     ],
     // Palace levels only change with the buildings.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [kingdom?.name, kingdom?.color, kingdom?.site, kingdom?.queen, kingdom?.buildings, rivals, mine.id],
+    [kingdom?.name, kingdom?.color, kingdom?.site, kingdom?.queen, kingdom?.buildings, kingdom?.trade, rivals, mine.id],
   )
   const online: Online = {
     ...layer,
@@ -1218,9 +1238,29 @@ function App({
         />
       )}
       {view && kingdom && !holding && <Dock open={panel} unread={journal.unread} onToggle={toggleTab} />}
-      {view && kingdom && !holding && !panel && !selectedBuilding && <Timers kingdom={kingdom} online={online} now={now} />}
+      {view && kingdom && !holding && !panel && !selectedBuilding && innOpen === null && cityOpen === null && <Timers kingdom={kingdom} online={online} now={now} />}
       {view && kingdom && !holding && hover?.building && hover.building.owner === undefined && hover.building.id !== selected && (
         <MapTip building={kingdom.buildings.find((b) => b.id === hover.building!.id)} at={hover.building.screen} now={now} />
+      )}
+      {view && kingdom && !holding && hover?.inn && hover.inn.index !== innOpen && (
+        <InnTip world={view.world} index={hover.inn.index} at={hover.inn.screen} />
+      )}
+      {view && kingdom && !holding && hover?.city && hover.city.index !== cityOpen && (
+        <CityTip world={view.world} index={hover.city.index} at={hover.city.screen} />
+      )}
+      {view && kingdom && !holding && cityOpen !== null && !panel && !selectedBuilding && (
+        <CitySheet
+          world={view.world}
+          index={cityOpen}
+          kingdom={kingdom}
+          now={now}
+          onCity={(city) => online.act({ type: 'tradeCity', city })}
+          onShow={(tile) => view.centerOn(tile)}
+          onClose={closeTab}
+        />
+      )}
+      {view && kingdom && !holding && innOpen !== null && !panel && !selectedBuilding && (
+        <InnSheet world={view.world} index={innOpen} online={online} now={now} home={kingdom.site} onShow={(tile) => view.centerOn(tile)} onClose={closeTab} />
       )}
       {view && kingdom && !holding && hover?.building?.owner !== undefined && (() => {
         const owner = rivals.find((r) => r.id === hover.building!.owner)

@@ -34,6 +34,10 @@ import {
   productionRound,
   roundOutcome,
   tradeRepairCost,
+  tradeLoad,
+  tradePrice,
+  tradeTripMs,
+  tradeTripsPerRound,
   tradeUnits,
   tradeCapacity,
   tradeAmountReadyAt,
@@ -41,6 +45,8 @@ import {
   upgradeError,
   upgradeSpec,
 } from '@game/shared'
+import { TradeShares } from './inns'
+import { TradeDestination } from './cities'
 import type { BuildingKind, Good, Kingdom, Market, Plot, Point, Resource, TaxLevel, World } from '@game/shared'
 import { useEffect, useRef, useState } from 'react'
 import { STRUCTURE_SPRITES, palaceIn } from '../../game/buildingSprites'
@@ -92,12 +98,12 @@ export function flows(kingdom: Kingdom, now: number, market?: Market | null) {
   const { villagers } = population(kingdom, now)
   const l = ledger(kingdom, now)
   const eaten = villagers * balance.economy.foodPerVillager + l.soldiersFood
-  const trips = balance.economy.productionSeconds / balance.economy.trade.tripSeconds
+  const trips = tradeTripsPerRound(kingdom)
   const post = kingdom.buildings.find((b) => b.kind === 'tradePost')
   const walledIn = !!post && cutOff(kingdom.buildings, kingdom.site, now).has(post.id)
-  const sold = kingdom.trade.good && !walledIn && !kingdom.trade.damaged ? tradeUnits(kingdom) * trips : 0
+  const sold = kingdom.trade.good && !walledIn && !kingdom.trade.damaged ? tradeLoad(kingdom) * trips : 0
   const bonus = 1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade
-  const tradeGold = kingdom.trade.good ? sold * priceAt(market, kingdom.trade.good, now) * bonus : 0
+  const tradeGold = kingdom.trade.good ? sold * tradePrice(kingdom, kingdom.trade.good, market, now) * bonus : 0
   const tributesIn = l.tributes.filter((t) => t.gold > 0).reduce((a, t) => a + t.gold, 0)
   const tributesOut = -l.tributes.filter((t) => t.gold < 0).reduce((a, t) => a + t.gold, 0)
   const result = {} as Record<Resource, { made: number; used: number; net: number }>
@@ -234,8 +240,8 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
   const armory = armoryOf(kingdom)
   const { weapons } = roundOutcome(kingdom, now)
   const l = ledger(kingdom, now)
-  const trips = balance.economy.productionSeconds / balance.economy.trade.tripSeconds
-  const tradeGold = kingdom.trade.good ? tradeUnits(kingdom) * trips * priceAt(online?.market, kingdom.trade.good, now) : 0
+  const trips = tradeTripsPerRound(kingdom)
+  const tradeGold = kingdom.trade.good ? tradeLoad(kingdom) * trips * tradePrice(kingdom, kingdom.trade.good, online?.market, now) : 0
   const cap = storageCap(kingdom, now)
   const room = (r: Resource) => (r === 'gold' ? goldCap(kingdom, now) : cap)
   return (
@@ -318,6 +324,7 @@ export function TradeTab(data: HudData) {
     <>
       <TradePost {...data} />
       <MarketSection {...data} />
+      {data.online && <TradeShares online={data.online} />}
     </>
   )
 }
@@ -457,11 +464,11 @@ function TradeAmount({ kingdom, now, onTradeAmount }: HudData) {
 }
 
 function TradePost(data: HudData) {
-  const { kingdom, now, onGood, onUpgrade, onShow, online } = data
+  const { world, kingdom, now, onGood, onUpgrade, onShow, online } = data
   const post = kingdom.buildings.find((b) => b.kind === 'tradePost')
   if (!post) return <Placeholder icon="trade" title="Ticaret noktan yok">Ticaret arsası bulunamadı.</Placeholder>
   const { trade } = kingdom
-  const tripMs = balance.economy.trade.tripSeconds * 1000
+  const tripMs = tradeTripMs(kingdom)
   const progress = trade.good ? Math.min(1, (now - trade.departedAt) / tripMs) : 0
   const next = tradeUpgradeCost(kingdom)
   const nextUnits = balance.economy.trade.levels[trade.level + 1]?.units
@@ -483,13 +490,15 @@ function TradePost(data: HudData) {
       <Section title="Satılacak mal" icon="chest">
         <GoodChoice kingdom={kingdom} selected={trade.good} onGood={onGood} market={online?.market} now={now} />
       </Section>
+      <TradeDestination world={world} kingdom={kingdom} market={online?.market} now={now} onCity={(city) => online?.act({ type: 'tradeCity', city })} />
       <div className="feature">
         <SpriteView sprite={thumb('tradePost')} scale={0.5} />
         <div>
           <b>Ticaret noktası · Seviye {trade.level + 1}</b>
           <p className="hint">
-            Tüccar her {balance.economy.trade.tripSeconds} saniyede {tradeUnits(kingdom)} birim mal götürüp lobinin o anki fiyatından altına çevirir
-            {kingdom.trade.good ? ` (şu an birimi ${priceAt(online?.market, kingdom.trade.good, now).toFixed(2).replace('.', ',')} altın)` : ''}.
+            Tüccar her {Math.round(tripMs / 1000)} saniyede {tradeLoad(kingdom)} birim mal götürüp{' '}
+            {trade.city ? 'serbest şehrin sabit fiyatından' : 'lobinin o anki fiyatından'} altına çevirir
+            {kingdom.trade.good ? ` (şu an birimi ${tradePrice(kingdom, kingdom.trade.good, online?.market, now).toFixed(2).replace('.', ',')} altın)` : ''}.
           </p>
           <button className="btn small" onClick={() => onShow(center(post))}>
             <Icon name="pin" size={16} /> Haritada göster

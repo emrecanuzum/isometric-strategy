@@ -1,7 +1,7 @@
 import { BattleScene } from './BattleScene'
 import { startBattleMusic } from '../../audio/sfx'
 import { duckMusic } from '../../net/settings'
-import { UNITS, armoryOf, armyAt, balance, countOf, familiarityAt, familiarityBonus, garrisonOf, moraleAt, nearInn, recruitment, territoryRect, territoryStage, trainError, unitSpec } from '@game/shared'
+import { UNITS, armoryOf, armyAt, nearCity, balance, countOf, familiarityAt, familiarityBonus, garrisonOf, moraleAt, nearInn, recruitment, territoryRect, territoryStage, trainError, unitSpec } from '@game/shared'
 import type { Army, Kingdom, Point, Unit, Units, World } from '@game/shared'
 import { useEffect, useState } from 'react'
 import { KINGDOM_COLORS } from '../../game/buildingSprites'
@@ -23,11 +23,11 @@ const clock = (ms: number) => {
   return s >= 3600 ? `${Math.floor(s / 3600)} sa ${Math.floor((s % 3600) / 60)} dk` : s >= 60 ? `${Math.floor(s / 60)} dk ${s % 60} sn` : `${s} sn`
 }
 
-// Where an army rests: its own lands, by an inn, or the open field.
+// Where an army rests: its own lands, by an inn or a free city, or the open field.
 export const restOf = (world: World, kingdom: Kingdom, now: number) => (p: Point) => {
   const t = territoryRect(kingdom.site, territoryStage(kingdom, now))
   if (p.x >= t.x && p.y >= t.y && p.x < t.x + t.size && p.y < t.y + t.size) return 'home' as const
-  return nearInn(world.inns, p) ? ('inn' as const) : ('field' as const)
+  return nearInn(world.inns, p) || nearCity(world.cities, p) ? ('inn' as const) : ('field' as const)
 }
 
 const REST_NAMES = { home: 'kendi topraklarında, moral topluyor', inn: 'hanın yanında, hızla moral topluyor', field: 'açık arazide' }

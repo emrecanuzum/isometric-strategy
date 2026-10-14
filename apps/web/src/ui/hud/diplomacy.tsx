@@ -24,7 +24,8 @@ import type { BattleRecord, Envoy, Operation, Pact, PeaceTerms, SpyTopic } from 
 import { useState } from 'react'
 import { KINGDOM_COLORS } from '../../game/buildingSprites'
 import type { KingdomColor } from '../../game/buildingSprites'
-import { INN_LOOKS, innLook } from '../../game/innSprites'
+import { INN_KIND_NAMES, innInfo } from '../../game/innInfo'
+import { innLook, isCaravanserai } from '../../game/innSprites'
 import type { Estimate } from '../../net/online'
 import { Icon } from '../icons'
 import { RESOURCE_NAMES, UNIT_NAMES } from '../names'
@@ -159,7 +160,7 @@ function KingdomList({ data, online }: { data: HudData; online: Online }) {
     </li>
   )
   const inns = world.inns
-    .map((p) => ({ p, distance: Math.round(Math.hypot(p.x - kingdom.site.x, p.y - kingdom.site.y)) }))
+    .map((p, index) => ({ p, index, distance: Math.round(Math.hypot(p.x - kingdom.site.x, p.y - kingdom.site.y)) }))
     .sort((a, b) => a.distance - b.distance)
     .slice(0, 4)
   return (
@@ -183,18 +184,23 @@ function KingdomList({ data, online }: { data: HudData; online: Online }) {
       </Section>
       <Section title="Tarafsız hanlar" icon="inn" aside="ordular burada moral toplar">
         <ul className="places">
-          {inns.map(({ p, distance }) => (
+          {inns.map(({ p, index, distance }) => {
+            const info = innInfo(world, index, isCaravanserai(world, p))
+            return (
             <li key={`${p.x},${p.y}`}>
               <SpriteView sprite={innLook(world, p).sprite} scale={0.25} />
               <span>
-                <b>{['Yarı ahşap han', 'Yarı ahşap han', 'Taş han', 'Kütük han', 'Kütük han', 'Kervansaray'][INN_LOOKS.indexOf(innLook(world, p))]}</b>
-                <small>{distance} karo uzakta</small>
+                <b>{info.name}</b>
+                <small>
+                  {INN_KIND_NAMES[info.kind]} · {distance} karo uzakta
+                </small>
               </span>
               <button className="btn icon-only" onClick={() => onShow({ x: p.x + 1, y: p.y + 1 })} aria-label="Haritada göster">
                 <Icon name="pin" size={16} />
               </button>
             </li>
-          ))}
+            )
+          })}
         </ul>
       </Section>
     </>

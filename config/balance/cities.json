@@ -1,0 +1,19 @@
+{
+  "count": [1, 2],
+  "size": 16,
+  "minSpacing": 380,
+  "edgeMargin": 150,
+  "innGap": 36,
+  "maxSlope": 40,
+  "flatBlend": 12,
+  "kingdomGapTiles": 40,
+  "safeTiles": 26,
+  "restTiles": 22,
+  "trade": {
+    "loadFactor": 3,
+    "priceFactor": 1.1,
+    "baseSeconds": 10,
+    "secondsPerTile": 0.12,
+    "changeCooldownSeconds": 120
+  }
+}

@@ -152,13 +152,15 @@ async function moveArmies(lobby: string, world: LobbyWorld, rows: Row[], pacts: 
         a.goal = { kind: 'move' }
       }
     }
-    // Field battles: two armies of kingdoms at war within reach of each other (not one in retreat).
+    // Field battles: two armies of kingdoms at war within reach of each other (not one in retreat), never in the peace
+    // of a free city.
     for (const x of live) {
       if (x.engaged || x.army.goal.retreat) continue
       for (const y of live) {
         if (y.engaged || x.engaged || y.army.goal.retreat || y.army.id <= x.army.id) continue
         if (!game.atWar(pacts, x.army.kingdom_id, y.army.kingdom_id)) continue
         if (dist(here.get(x.army.id)!, here.get(y.army.id)!) > m.contactTiles) continue
+        if (game.inCityPeace(world.cities, here.get(x.army.id)!) || game.inCityPeace(world.cities, here.get(y.army.id)!)) continue
         await startBattle(lobby, world, rows, states, pacts, live, t, x, y, null)
       }
     }

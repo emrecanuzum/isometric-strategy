@@ -1,9 +1,10 @@
-import { Terrain, balance } from '@game/shared'
+import { Terrain, balance, cityCenter } from '@game/shared'
 import type { Point, Rect, World } from '@game/shared'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { Icon } from '../ui/icons'
 import { TERRAIN_COLORS } from './createWorld'
+import { cityInfo } from './cities'
 
 // The whole world on one screen, opened from the minimap on phones: the land in the same isometric angle as the
 // map, shaded by its relief, with the trade routes, rivers, inns and the kingdoms' borders and names on it. A tap
@@ -168,6 +169,11 @@ export function WorldMap({
           {world.inns.map((p) => (
             <span key={`${p.x},${p.y}`} className="worldmap-inn" style={marker({ x: p.x + 1, y: p.y + 1 })} aria-hidden>
               <Icon name="inn" size={zoom > 0 ? 16 : 8} />
+            </span>
+          ))}
+          {world.cities.map((c, index) => (
+            <span key={`city${index}`} className="worldmap-name city" style={marker(cityCenter(c))}>
+              {cityInfo(world, index).name.replace(' Serbest Şehri', '')}
             </span>
           ))}
           {kingdoms.map((kingdom) => (

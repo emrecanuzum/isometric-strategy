@@ -1,4 +1,4 @@
-import type { PlanStep, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units } from '@game/shared'
+import type { PlanStep, Good, TradeLedger, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units } from '@game/shared'
 import { supabase } from '../lib/supabase'
 
 // The lobby as the client sees it: the player's own kingdom in full, the others only as they show on the map, and the
@@ -14,6 +14,8 @@ export interface Lobby {
   season_end: string
   has_password: boolean
   market: Market | null
+  // How its world was made from the seed (worldgen WORLD_REV; absent before the column existed: 1).
+  world_rev?: number
 }
 
 // The player's row: the sites shown before founding, then the economy.
@@ -41,6 +43,9 @@ export interface Rival {
   shield_until?: number | null
   // The lobby ranking's breakdown, as the server last worked it out.
   score?: Score | null
+  // What its merchant sells now, and all it has sold this season (rounded for others).
+  trade_good?: Good | null
+  trade_ledger?: TradeLedger | null
 }
 
 export interface ChatMessage {
@@ -94,7 +99,7 @@ export async function listLobbies(): Promise<LobbyListing[]> {
   return data as LobbyListing[]
 }
 
-const LOBBY_COLUMNS = 'id, name, seed, is_public, max_players, season_start, season_end, has_password, market'
+const LOBBY_COLUMNS = 'id, name, seed, is_public, max_players, season_start, season_end, has_password, market, world_rev'
 
 export async function getLobby(id: string): Promise<Lobby | null> {
   const { data } = await supabase.from('lobbies').select(LOBBY_COLUMNS).eq('id', id).maybeSingle()
@@ -160,6 +165,7 @@ export type Command =
   | { type: 'buy'; good: string; units: number }
   | { type: 'plan'; steps: PlanStep[] }
   | { type: 'tradeAmount'; units: number }
+  | { type: 'tradeCity'; city: number | null }
   | { type: 'repairWalls' }
   | { type: 'envoy'; to: number; kind: Envoy['kind']; gold?: number; terms?: PeaceTerms }
   | { type: 'respond'; envoy: number; accept: boolean }

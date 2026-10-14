@@ -130,6 +130,13 @@ export function findPlot(world: World, territory: Rect, anchor: number): Plot | 
 }
 
 function blockedFraction(world: World, rect: Rect) {
+  // A kingdom keeps well away from a free city (a city is wider than the step, so the coarse look finds it).
+  const gap = balance.cities.kingdomGapTiles
+  for (let y = Math.max(0, rect.y - gap); y < Math.min(world.size, rect.y + rect.size + gap); y += 8) {
+    for (let x = Math.max(0, rect.x - gap); x < Math.min(world.size, rect.x + rect.size + gap); x += 8) {
+      if (world.feature[y * world.size + x] === Feature.City) return 1
+    }
+  }
   let blocked = 0
   for (let y = rect.y; y < rect.y + rect.size; y++) {
     for (let x = rect.x; x < rect.x + rect.size; x++) {

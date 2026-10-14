@@ -7,6 +7,7 @@ import {
   balance,
   generateWorld,
   groundToScreen,
+  WORLD_REV,
   heightAt,
   screenToGround,
   tileToScreen,
@@ -20,6 +21,7 @@ import { createArmies } from './armies'
 import { dashes } from './dashes'
 import type { MapArmy, MapBattle } from './armies'
 import { createCaravans } from './caravans'
+import { cityAt, cityInfo, cityStructures, cityTrails } from './cities'
 import { CHIMNEYS, linkWalls, structureParts } from './buildingSprites'
 import { openGate } from './wallSprites'
 import { SPRITES, lightsOf, outlineOf, silhouetteOf } from './sprites'
@@ -49,6 +51,7 @@ export const FEATURE_COLORS: Record<number, number> = {
   [Feature.Road]: 0xb08a55,
   [Feature.Bridge]: 0x7a5230,
   [Feature.Inn]: 0xc0392b,
+  [Feature.City]: 0xe8c45a,
 }
 
 const HOVER = 0xffffff
@@ -87,6 +90,8 @@ export type MapTool = 'demolish' | 'move' | null
 const DASH = 12
 const GAP = 8
 const NAME_MAX_ZOOM = 0.5
+const CITY_NAME_MAX_ZOOM = 1
+const CITY_NAME = 0xf6e3a1
 
 // Top-left tile of a footprint of `size` held under the pointer at `tile`.
 export const footprintOrigin = (tile: Point, size: number): Point => ({
@@ -101,6 +106,10 @@ export interface Hover {
   rule: number
   // The building under the pointer, and the screen point above its top; `owner` is set for another kingdom's.
   building?: { id: number; screen: Point; owner?: number }
+  // The inn under the pointer (its index in world.inns), and the screen point above its top.
+  inn?: { index: number; screen: Point }
+  // The free city under the pointer (its index in world.cities), and the screen point above it.
+  city?: { index: number; screen: Point }
 }
 
 export interface Plots {
@@ -128,7 +137,7 @@ export interface WorldHandlers {
   onCamera(center: Point): void
   onLoading(loading: boolean): void
   // A tap or click that did not drag the map, and the player's building or the army drawn under it, if any.
-  onTap(tile: Point, building?: number, army?: number): void
+  onTap(tile: Point, building?: number, army?: number, inn?: number, city?: number): void
   // A row of footprints drawn by dragging while placing a stroke kind (see Placement.stroke).
   onStroke?(spots: Point[]): void
 }
@@ -197,6 +206,8 @@ export async function createWorld(
   { onHover, onCamera, onLoading, onTap, onStroke }: WorldHandlers,
   // The shared game clock (server time), so every player sees the same hour, caravans and animals.
   clock: () => number = Date.now,
+  // How the lobby's world is made from its seed (see WORLD_REV).
+  rev = WORLD_REV,
 ): Promise<WorldView> {
   const app = new Application()
   await app.init({
@@ -210,7 +221,7 @@ export async function createWorld(
   app.canvas.style.imageRendering = 'pixelated'
   host.appendChild(app.canvas)
 
-  const world = generateWorld(seed)
+  const world = generateWorld(seed, rev)
   const chunkSize = balance.map.chunkSize
   const chunkCount = world.size / chunkSize
 
@@ -304,7 +315,18 @@ export async function createWorld(
   const armies = createArmies(world, caravans.layer, armyRoutes, armyLabels)
   app.stage.addChild(light, above)
   for (const inn of world.inns) {
-    const lit = lightsOf(innLook(world, inn).sprite)
+    // Inns are painted into the ground, but trees lifted out of it to sway stand in the walkers' layer: a copy of the
+    // inn stands there too, so the trees behind it stay behind it.
+    const look = innLook(world, inn).sprite
+    const cover = new Sprite(textureOf(look))
+    cover.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
+    const front = groundToScreen(world, { x: inn.x + 2, y: inn.y + 2 })
+    const sy = (inn.x + inn.y + 4) * (TILE_HEIGHT / 2) - heightAt(world, inn.x + 1, inn.y + 1)
+    cover.position.set(front.x, sy)
+    cover.zIndex = sy
+    cover.label = 'inn'
+    caravans.layer.addChild(cover)
+    const lit = lightsOf(look)
     if (!lit) continue
     addLight(textureOf(lit), lit.anchorX / lit.width, lit.anchorY / lit.height, (inn.x - inn.y) * (TILE_WIDTH / 2), (inn.x + inn.y + 4) * (TILE_HEIGHT / 2) - heightAt(world, inn.x + 1, inn.y + 1))
   }
@@ -384,7 +406,7 @@ export async function createWorld(
     // Zoomed far out, walkers, caravans and animals are left out but the buildings (which share their layer, to hide
     // whoever walks behind them) stay; zoomed back in, each walker's own update shows it again.
     if (scale < CARAVAN_MIN_ZOOM) {
-      for (const child of caravans.layer.children) child.visible = child.label === 'occluder' || child.label === 'shade' || child.label.startsWith('army')
+      for (const child of caravans.layer.children) child.visible = child.label === 'occluder' || child.label === 'inn' || child.label === 'shade' || child.label.startsWith('army')
       return
     }
     const margin = 40
@@ -673,6 +695,20 @@ export async function createWorld(
       text.scale.set(1 / camera.scale.x)
       rivalLabels.addChild(text)
     }
+    // The free cities' names stand over their walls when zoomed out.
+    if (camera.scale.x > CITY_NAME_MAX_ZOOM) return
+    world.cities.forEach((_, index) => {
+      const text = nameLabel(CITY_NAME)
+      text.text = cityInfo(world, index).name
+      const middle = groundToScreen(world, cityHall(index))
+      text.position.set(middle.x, middle.y - 110 - 14 / camera.scale.y)
+      text.scale.set(1 / camera.scale.x)
+      rivalLabels.addChild(text)
+    })
+  }
+  const cityHall = (index: number) => {
+    const c = world.cities[index]
+    return { x: c.x + balance.cities.size / 2, y: c.y + balance.cities.size / 2 }
   }
 
   // Steps to a zoom level, keeping the ground under the given screen point fixed.
@@ -703,6 +739,8 @@ export async function createWorld(
     clearCursor()
     highlight.visible = false
     pickedBuilding = undefined
+    pickedInn = undefined
+    pickedCity = undefined
     if (!inside) return onHover(null)
     const i = tile.y * world.size + tile.x
     // A building is picked by the pixels it covers on screen, nearest first, not by the ground behind its roof.
@@ -710,9 +748,10 @@ export async function createWorld(
     const wy = (at.y - camera.y) / camera.scale.y
     const hit = placement && tool !== 'move'
       ? undefined
-      : hits.find(({ sprite, sx, sy, owner }) => {
-          // Other kingdoms' buildings only show what they are, never while tearing down or moving.
-          if (owner && tool) return false
+      : hits.find(({ sprite, sx, sy, owner, inn, city }) => {
+          // Other kingdoms' buildings, the inns and the free cities only show what they are, never while tearing down
+          // or moving.
+          if ((owner || inn || city) && tool) return false
           const px = Math.floor(wx - sx + sprite.anchorX)
           const py = Math.floor(wy - sy + sprite.anchorY)
           return px >= 0 && py >= 0 && px < sprite.width && py < sprite.height && sprite.pixels[py * sprite.width + px] >>> 24 === 0xff
@@ -724,10 +763,29 @@ export async function createWorld(
       highlight.position.set(hit.sx, hit.sy)
       highlight.tint = hit.owner?.tint ?? toolTint()
       highlight.visible = true
-      if (!hit.owner) pickedBuilding = hit.id
       const top = { x: camera.x + hit.sx * camera.scale.x, y: camera.y + (hit.sy - hit.sprite.anchorY + contentTop(hit.sprite)) * camera.scale.y }
+      if (hit.city) {
+        pickedCity = hit.id
+        onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y), city: { index: hit.id, screen: top } })
+        return tile
+      }
+      if (hit.inn) {
+        pickedInn = hit.id
+        onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y), inn: { index: hit.id, screen: top } })
+        return tile
+      }
+      if (!hit.owner) pickedBuilding = hit.id
       const building = { id: hit.id, screen: top, ...(hit.owner && { owner: hit.owner.kingdom }) }
       onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y), building })
+      return tile
+    }
+    // The streets and yards of a free city name the city too.
+    const city = placement || tool ? undefined : cityAt(world, tile)
+    if (city !== undefined) {
+      pickedCity = city
+      const ground = groundToScreen(world, { x: tile.x + 0.5, y: tile.y + 0.5 })
+      const screen = { x: camera.x + ground.x * camera.scale.x, y: camera.y + (ground.y - 24) * camera.scale.y }
+      onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y), city: { index: city, screen } })
       return tile
     }
     if (placement) {
@@ -786,6 +844,8 @@ export async function createWorld(
     return spots
   }
   let pickedBuilding: number | undefined
+  let pickedInn: number | undefined
+  let pickedCity: number | undefined
   let lastPointer: Point | null = null
 
   // One finger (or the mouse) drags; zoom is on the buttons and the wheel only, so extra fingers are
@@ -824,7 +884,7 @@ export async function createWorld(
     if (press && !press.moved && e.type === 'pointerup') {
       const tile = pick({ x: e.global.x, y: e.global.y })
       const army = placement ? undefined : armies.pick({ x: (e.global.x - camera.x) / camera.scale.x, y: (e.global.y - camera.y) / camera.scale.y })
-      if (tile) onTap(tile, army === undefined ? pickedBuilding : undefined, army)
+      if (tile) onTap(tile, army === undefined ? pickedBuilding : undefined, army, army === undefined ? pickedInn : undefined, army === undefined ? pickedCity : undefined)
     }
     press = null
   }
@@ -1024,7 +1084,7 @@ export async function createWorld(
   const GATE_REACH = 0.9
   function sortWalkers() {
     if (occluders.length === 0) return
-    const walkers = caravans.layer.children.filter((c) => c.visible && c.label !== 'occluder' && c.label !== 'shade' && c.label !== 'army-ring' && c.label !== 'tree')
+    const walkers = caravans.layer.children.filter((c) => c.visible && c.label !== 'occluder' && c.label !== 'shade' && c.label !== 'army-ring' && c.label !== 'tree' && c.label !== 'inn')
     for (const o of occluders) {
       if (!o.gate) continue
       const open = walkers.some(({ position: { x: px, y: py } }) => {
@@ -1041,7 +1101,7 @@ export async function createWorld(
       }
     }
     for (const child of caravans.layer.children) {
-      if (!child.visible || child.label === 'occluder' || child.label === 'shade' || child.label === 'army-ring' || child.label === 'tree') continue
+      if (!child.visible || child.label === 'occluder' || child.label === 'shade' || child.label === 'army-ring' || child.label === 'tree' || child.label === 'inn') continue
       const { x: px, y: py } = child.position
       for (const o of occluders) {
         if (o.walked || px < o.left || px > o.right || py < o.top || py > o.sy + 2) continue
@@ -1075,13 +1135,23 @@ export async function createWorld(
   }
   // The buildings as drawn (main sprite and its anchor in world pixels), nearest to the viewer first; other kingdoms'
   // carry their owner.
-  let hits: { id: number; sprite: Sprite_; sx: number; sy: number; owner?: Structure['owner'] }[] = []
+  let hits: { id: number; sprite: Sprite_; sx: number; sy: number; depth: number; owner?: Structure['owner']; inn?: boolean; city?: boolean }[] = []
+  // The inns answer to the pointer too (their id is their index in world.inns).
+  const innHits = world.inns.map((p, index) => ({
+    id: index,
+    sprite: innLook(world, p).sprite,
+    sx: (p.x - p.y) * (TILE_WIDTH / 2),
+    sy: (p.x + p.y + 4) * (TILE_HEIGHT / 2) - heightAt(world, p.x + 1, p.y + 1),
+    depth: p.x + p.y + 4,
+    inn: true,
+  }))
+  hits = innHits.slice().sort((a, b) => b.depth - a.depth)
   let structureKeys = new Set<string>()
   let marked = new Map<number, 'demolish' | 'move'>()
   function placeMarks() {
     for (const child of marks.removeChildren()) child.destroy()
     for (const hit of hits) {
-      const tone = hit.owner ? undefined : marked.get(hit.id)
+      const tone = hit.owner || hit.inn || hit.city ? undefined : marked.get(hit.id)
       if (!tone) continue
       // The one picked up to be moved is washed out more: it is leaving.
       for (const [look, alpha] of [[silhouetteOf(hit.sprite), tone === 'move' ? 0.6 : 0.45], [outlineOf(hit.sprite), 0.95]] as const) {
@@ -1098,15 +1168,19 @@ export async function createWorld(
   let trailPoints: Point[] = []
   // Tiles on a footpath: the town's walkers keep to them (see findPath).
   let worn = new Set<number>()
-  function setStructures(placed: Structure[], trails: Point[][]) {
-    const structures = linkWalls(placed)
+  function setStructures(placed: Structure[], townTrails: Point[][]) {
+    const trails = [...cityTrails(world), ...townTrails]
+    // The free cities stand with the kingdoms' buildings, and answer to the pointer as a whole (by the city's index).
+    const structures = linkWalls([...cityStructures(world), ...placed])
     hits = structures
-      .filter((s) => s.id !== undefined)
-      .map((s) => {
+      .filter((s) => s.id !== undefined || s.city !== undefined)
+      .map((s): (typeof hits)[number] => {
         const parts = structureParts(world, s)
         const main = parts.filter((p) => p.solid).at(-1) ?? parts[0]
-        return { id: s.id!, sprite: main.sprite, sx: (main.fx - main.fy) * (TILE_WIDTH / 2), sy: (main.fx + main.fy) * (TILE_HEIGHT / 2) - main.z, depth: main.fx + main.fy, owner: s.owner }
+        const at = { sprite: main.sprite, sx: (main.fx - main.fy) * (TILE_WIDTH / 2), sy: (main.fx + main.fy) * (TILE_HEIGHT / 2) - main.z, depth: main.fx + main.fy }
+        return s.city !== undefined ? { id: s.city, ...at, city: true } : { id: s.id!, ...at, owner: s.owner }
       })
+      .concat(innHits)
       .sort((a, b) => b.depth - a.depth)
     placeMarks()
     const keyOf = (s: Structure) => `${s.x},${s.y},${s.size},${s.look},${s.variant},${s.level ?? 1},${JSON.stringify(s.pier ?? null)},${s.links ?? ''}`

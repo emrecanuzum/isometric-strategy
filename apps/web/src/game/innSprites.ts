@@ -1,6 +1,8 @@
 import { TILE_HEIGHT, TILE_WIDTH, Terrain, hash } from '@game/shared'
 import type { Point, World } from '@game/shared'
-import { Canvas, GLASS, ROOF, STONE, TIMBER, WALL, diamondAt, ellipseAt, pick, ramp, rgb, shadeBlobs } from './sprites'
+import { innKind } from './innInfo'
+import type { InnKind } from './innInfo'
+import { CLOTH, Canvas, GLASS, ROOF, SACK, STONE, TIMBER, WALL, diamondAt, ellipseAt, pick, ramp, rgb, shadeBlobs } from './sprites'
 import type { Sprite } from './sprites'
 
 // Inns come in a few styles that suit the land they stand on. Every one covers a 2×2 tile footprint and is
@@ -30,12 +32,12 @@ interface Style {
   chimneys: { dx: number; height: number }[]
 }
 
-function build(style: Style): InnLook {
+function build(style: Style, kind: InnKind): InnLook {
   const w = TILE_WIDTH
   const h = TILE_HEIGHT
   const wall = style.wallHeight
   const roofHeight = style.roof?.height ?? 26
-  const canvas = new Canvas(w * 2 + 10, h * 2 + wall + roofHeight + 30)
+  const canvas = new Canvas(w * 2 + 30, h * 2 + wall + roofHeight + 30)
   const cx = canvas.width >> 1
   const base = canvas.height - 2
   const top = base - h * 2
@@ -113,7 +115,116 @@ function build(style: Style): InnLook {
     canvas.set(cx - 6, domeY - 14, rgb(0xd9b44a))
     for (const { dx, height } of style.chimneys) stack(cx + dx, base - h - wall + 6, height)
   }
+  adorn(canvas, kind, cx, base, wall)
   return { sprite: canvas.sprite(cx, base, 0), smoke }
+}
+
+const WATER = ramp(0x2a4a6a, 0x3f6f96, 0x6aa0c4)
+const BARREL = ramp(0x3a2414, 0x5c3a20, 0x80542e, 0xa06c3c)
+
+// What stands against an inn's walls tells its trade: market stalls under a striped awning, a horse trough and hay at
+// a post house, a striped barrier and a flag at a toll house, barrels and a hanging sign at a plain inn. Every one has
+// lanterns by its door, lit at night.
+function adorn(canvas: Canvas, kind: InnKind, cx: number, base: number, wall: number) {
+  const w = TILE_WIDTH
+  const h = TILE_HEIGHT
+  // A point `out` pixels in front of the left (side -1, lit) or right wall, `t` along it from the outer corner toward
+  // the front corner, `z` above the ground.
+  const at = (side: number, t: number, z: number, out = 0) => ({ x: cx + side * (w - t) + side * out, y: base - h + t / 2 - z + out / 2 })
+  const dot = (p: { x: number; y: number }, color: number) => canvas.set(p.x, p.y, color)
+  // A box on the ground in front of a wall: `len` along it, `deep` out from it, `tall` high.
+  const box = (side: number, t: number, out: number, len: number, deep: number, tall: number, colors: Uint32Array) => {
+    for (let d = deep; d >= 0; d--) {
+      for (let u = 0; u < len; u++) {
+        for (let z = 0; z <= tall; z++) {
+          const top = z === tall
+          const front = d === deep
+          dot(at(side, t + u, z, out + d), colors[top ? colors.length - 1 : front ? (side < 0 ? 2 : 1) : 1])
+        }
+      }
+    }
+  }
+  const barrel = (side: number, t: number, out: number) => {
+    const p = at(side, t, 0, out)
+    for (let z = 0; z < 7; z++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const hoop = z === 1 || z === 5
+        canvas.set(p.x + dx, p.y - z, hoop ? STONE[1] : BARREL[dx < 0 ? 3 : dx === 0 ? 2 : 1])
+      }
+    }
+    for (let dx = -1; dx <= 1; dx++) canvas.set(p.x + dx, p.y - 7, BARREL[0])
+  }
+  // Lanterns either side of the door (on the lit wall, see the styles' doors around t 44..59).
+  for (const t of [41, 62]) {
+    const p = at(-1, t, 18, 2)
+    canvas.set(p.x, p.y - 1, TIMBER[0])
+    canvas.set(p.x, p.y, GLASS[2])
+    canvas.set(p.x, p.y + 1, GLASS[1])
+  }
+  if (kind === 'market') {
+    // A striped awning along the shaded wall, sloping down and out over crates and sacks.
+    const top = Math.min(wall - 6, 20)
+    for (let t = 6; t <= 56; t++) {
+      for (let k = 0; k <= 7; k++) {
+        const stripe = Math.floor(t / 5) % 2 === 0
+        const edge = k === 7
+        const color = edge ? (stripe ? CLOTH[0][1] : rgb(0xb8ab92)) : stripe ? CLOTH[0][k < 3 ? 3 : 2] : rgb(k < 3 ? 0xf2ead6 : 0xd8ccb4)
+        dot(at(1, t, top - k * 0.9, k * 1.4), color)
+      }
+      if (t % 25 === 6) for (let z = 0; z < top - 6; z++) dot(at(1, t, z, 10), TIMBER[1])
+    }
+    box(1, 12, 3, 6, 3, 4, SACK)
+    box(1, 22, 4, 5, 3, 5, BARREL)
+    box(1, 38, 3, 7, 3, 3, SACK)
+    // Bolts of cloth on the counter.
+    for (let u = 0; u < 4; u++) for (let z = 4; z < 6; z++) dot(at(1, 39 + u, z, 4), CLOTH[1][2 + (z & 1)])
+    box(-1, 14, 3, 6, 3, 4, SACK)
+  } else if (kind === 'post') {
+    // A water trough and a heap of hay by the lit wall, a hitching rail on the shaded one.
+    box(-1, 10, 3, 14, 3, 3, BARREL)
+    for (let u = 1; u < 13; u++) dot(at(-1, 10 + u, 3, 4), WATER[u % 5 === 0 ? 2 : 1])
+    const hay = at(-1, 30, 0, 5)
+    const pile = new Canvas(canvas.width, canvas.height)
+    shadeBlobs(pile, [{ x: hay.x, y: hay.y - 3, r: 5 }, { x: hay.x + 4, y: hay.y - 2, r: 4 }], ramp(0x6b4f22, 0x8d6b2f, 0xae8a41, 0xc8a658, 0xdcc07a), 71, 0.7)
+    for (let i = 0; i < pile.pixels.length; i++) if (pile.pixels[i] && Math.floor(i / canvas.width) <= hay.y) canvas.pixels[i] = pile.pixels[i]
+    for (let t = 14; t <= 44; t++) dot(at(1, t, 9, 5), TIMBER[2])
+    for (const t of [14, 29, 44]) for (let z = 0; z < 10; z++) dot(at(1, t, z, 5), TIMBER[1])
+  } else if (kind === 'toll') {
+    // A red and white barrier on posts out in front of the shaded wall, and a tall flagpole beside it.
+    for (let t = 8; t <= 50; t++) {
+      const color = Math.floor(t / 4) % 2 === 0 ? rgb(0xc23a2c) : rgb(0xf0e8d8)
+      dot(at(1, t, 10, 12), color)
+      dot(at(1, t, 11, 12), color)
+    }
+    for (const t of [8, 50]) for (let z = 0; z < 12; z++) dot(at(1, t, z, 12), TIMBER[1])
+    // The flagpole stands off the shaded wall's far corner, clear of the roof.
+    const pole = at(1, 6, 0, 8)
+    for (let z = 0; z < wall + 52; z++) {
+      canvas.set(pole.x, pole.y - z, TIMBER[2])
+      canvas.set(pole.x + 1, pole.y - z, TIMBER[0])
+    }
+    canvas.set(pole.x, pole.y - wall - 53, rgb(0xd9b44a))
+    for (let y = 0; y < 8; y++) {
+      for (let x = 2; x < 15; x++) {
+        const wave = Math.round(Math.sin(x * 0.6) * 0.8)
+        canvas.set(pole.x + x, pole.y - wall - 50 + y + wave, y === 3 || y === 4 ? rgb(0xf0e8d8) : CLOTH[0][x < 8 ? 2 : 1])
+      }
+    }
+    box(1, 26, 4, 5, 3, 4, SACK)
+  } else {
+    // Barrels by the door and a sign on a bracket over it.
+    barrel(-1, 33, 4)
+    barrel(-1, 37, 7)
+    barrel(1, 50, 4)
+    const bracket = at(-1, 64, 24, 0)
+    for (let i = 0; i < 7; i++) canvas.set(bracket.x - i, bracket.y + i / 2, TIMBER[0])
+    for (let y = 0; y < 6; y++) {
+      for (let x = 0; x < 6; x++) {
+        const edge = y === 0 || x === 0 || y === 5 || x === 5
+        canvas.set(bracket.x - 8 + x, bracket.y + 4 + y + x / 2, edge ? TIMBER[0] : (x === 2 || x === 3) && y > 1 ? rgb(0xd9b44a) : TIMBER[2])
+      }
+    }
+  }
 }
 
 // A door on the lit wall and windows in bays along both walls.
@@ -227,18 +338,27 @@ const caravanserai: Style = {
   chimneys: [{ dx: 30, height: 9 }],
 }
 
-export const INN_LOOKS: InnLook[] = [
-  build(timber(ROOF)),
-  build(timber(SLATE)),
-  build(stone),
-  build(lodge(THATCH, false)),
-  build(lodge(THATCH, true)),
-  build(caravanserai),
-]
+const STYLES: Style[] = [timber(ROOF), timber(SLATE), stone, lodge(THATCH, false), lodge(THATCH, true), caravanserai]
+const DESERT = 5
+// Each style with each trade, made when first seen.
+const looks = new Map<number, InnLook>()
+export const innLookOf = (style: number, kind: InnKind) => {
+  const key = style * 8 + ['inn', 'market', 'post', 'toll'].indexOf(kind)
+  let look = looks.get(key)
+  if (!look) looks.set(key, (look = build(STYLES[style], kind)))
+  return look
+}
 
 // The look of an inn follows the ground it stands on: caravanserais in the desert, stone near the mountains, log
 // lodges in the woods, timber-framed houses elsewhere.
 export function innLook(world: World, inn: Point): InnLook {
+  return innLookOf(innStyle(world, inn), innKind(world, inn))
+}
+
+// Whether the inn is a caravanserai of the desert.
+export const isCaravanserai = (world: World, inn: Point) => innStyle(world, inn) === DESERT
+
+function innStyle(world: World, inn: Point): number {
   const { size, terrain, height, levels, moisture } = world
   const i = (inn.y + 1) * size + inn.x + 1
   const roll = hash(inn.x, inn.y, world.seed + 991)
@@ -252,10 +372,10 @@ export function innLook(world: World, inn: Point): InnLook {
     }
     return false
   }
-  if (terrain[i] === Terrain.Desert || moisture[i] < levels.desert + 0.01) return INN_LOOKS[5]
-  if (height[i] > 70 || near(10, (t) => t === Terrain.Mountain)) return INN_LOOKS[roll < 0.75 ? 2 : 1]
-  if (terrain[i] === Terrain.Forest || near(4, (t) => t === Terrain.Forest)) return INN_LOOKS[roll < 0.5 ? 3 : 4]
-  return INN_LOOKS[roll < 0.45 ? 0 : roll < 0.7 ? 1 : roll < 0.85 ? 3 : 2]
+  if (terrain[i] === Terrain.Desert || moisture[i] < levels.desert + 0.01) return DESERT
+  if (height[i] > 70 || near(10, (t) => t === Terrain.Mountain)) return roll < 0.75 ? 2 : 1
+  if (terrain[i] === Terrain.Forest || near(4, (t) => t === Terrain.Forest)) return roll < 0.5 ? 3 : 4
+  return roll < 0.45 ? 0 : roll < 0.7 ? 1 : roll < 0.85 ? 3 : 2
 }
 
 // Puffs of chimney smoke, small to large.
