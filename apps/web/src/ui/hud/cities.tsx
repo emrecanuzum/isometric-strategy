@@ -23,6 +23,7 @@ export function TradeDestination({ world, kingdom, market, now, onCity }: {
   const current = kingdom.trade.city?.index ?? null
   const wait = Math.max(0, Math.ceil((tradeCityReadyAt(kingdom) - now) / 1000))
   const { loadFactor, changeCooldownSeconds } = balance.cities.trade
+  const premium = Math.round((balance.cities.trade.priceFactor - 1) * 100)
   const good = kingdom.trade.good
   return (
     <Section title="Tüccar nereye gitsin" icon="trade" aside={wait > 0 ? `${wait} sn sonra değişir` : undefined}>
@@ -41,14 +42,14 @@ export function TradeDestination({ world, kingdom, market, now, onCity }: {
               <Icon name="crown" size={24} />
               <b>{cityInfo(world, index).name}</b>
               <small>{trip ? `${seconds(trip)} sn sefer` : 'yol yok'}</small>
-              <small>{tradeUnits(kingdom) * loadFactor} birim, sabit fiyat</small>
-              {good && <small>birimi {price(cityPrice(good))} altın</small>}
+              <small>{tradeUnits(kingdom) * loadFactor} birim, lobi fiyatı +%{premium}</small>
+              {good && <small>birimi {price(cityPrice(good, market, now))} altın</small>}
             </button>
           )
         })}
       </div>
       <p className="hint">
-        Serbest şehir {loadFactor} kat yük alır ve kendi sabit fiyatından öder; lobinin fiyatlarını düşürmez. Ama yol uzundur: sefer şehrin uzaklığıyla uzar.
+        Serbest şehir {loadFactor} kat yük alır ve lobinin o anki fiyatının %{premium} fazlasını öder; lobinin fiyatlarını düşürmez. Ama yol uzundur: sefer şehrin uzaklığıyla uzar.
         Değiştirince tüccar yeni sefere başlar; {Math.round(changeCooldownSeconds / 60)} dakika yeniden değiştiremezsin.
       </p>
     </Section>
@@ -67,10 +68,11 @@ export function CityTip({ world, index, at }: { world: World; index: number; at:
 }
 
 // A free city's sheet: who rules it, what it buys, and sending the merchant there.
-export function CitySheet({ world, index, kingdom, now, onCity, onShow, onClose }: {
+export function CitySheet({ world, index, kingdom, market, now, onCity, onShow, onClose }: {
   world: World
   index: number
   kingdom: Kingdom | null
+  market?: Market | null
   now: number
   onCity(city: number | null): void
   onShow(tile: Point): void
@@ -112,13 +114,13 @@ export function CitySheet({ world, index, kingdom, now, onCity, onShow, onClose 
             </small>
           </div>
         </div>
-        <Section title="Şehrin ödediği fiyat" icon="gold" aside="sabit">
+        <Section title="Şehrin ödediği fiyat" icon="gold" aside={`lobi fiyatı +%${Math.round((balance.cities.trade.priceFactor - 1) * 100)}`}>
           <div className="price-row">
             {GOODS.map((g) => (
               <span key={g} className="price" title={RESOURCE_NAMES[g]}>
                 <Icon name={RESOURCE_ICONS[g]} size={16} />
-                <b>{price(cityPrice(g))}</b>
-                <small>taban {balance.economy.trade.price[g]}</small>
+                <b>{price(cityPrice(g, market, now))}</b>
+                <small>lobide {price(priceAt(market, g, now))}</small>
               </span>
             ))}
           </div>

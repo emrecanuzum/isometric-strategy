@@ -140,7 +140,9 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   (bkz. §7). Yola yakınlık ekonomik avantajdır.
 - **Serbest şehirler (NPC):** Haritada çok nadir, **1–2 tane** surlu
   şehir; hiçbir krallığa ait değildir, **güvenli bölgedir** (savaş için
-  değil, tüccarların gidip ticaret yaptığı yer). Ayrıntı §7.7.
+  değil, tüccarların gidip ticaret yaptığı yer). Büyük göllerin
+  kıyısındadır, limanı ve gemileri vardır; ikiyse birbirinden olabildiğince
+  uzaktır. Ayrıntı §7.7.
 - **Kaynak noktaları:** Maden ocakları, taş ocakları, zengin ormanlar —
   sahiplenilmesi için rekabet doğar.
 - **Haydut kampları (opsiyonel PvE):** Ticaret yollarını tehdit eder.
@@ -548,7 +550,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   dalgalanarak uzanırlar (yürüyenler yine aynı yolu izler). Sur ve kapılar patika üretmez. Saraya en yakın
   yapıların yolu önce açılır, sonrakiler var olan patikaya katılır (patika
   karosu yürümesi daha ucuzdur); böylece saraydan dallanan birkaç ortak
-  patika oluşur, yelpaze gibi açılan düz çizgiler değil. Köylüler de
+  patika oluşur, yelpaze gibi açılan düz çizgiler değil. Bir yürüyüşün
+  var olan patikanın üstünde (ya da bir karo yanında) kalan kısmı yeniden
+  çizilmez; yalnızca yeni açılan kısmı çizilir ve patikaya bağlanır, böylece
+  aynı yere giden yollar örgü gibi yan yana iki çizgi olmaz. Köylüler de
   patikalardan yürür. Patikalar bütün krallıklarda çizilir (rakiplerinki de
   herkese görünür).
 - **İnşa menüsü (devam):**
@@ -794,6 +799,23 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   Şehrin altı düzlenir, çevresi yumuşakça ona iner. Şehir karoları inşa
   edilemez; krallıklar yerleşirken son hudutları şehre `kingdomGapTiles`
   karodan yaklaşmaz.
+  Yeni lobilerde (dünya sürümü 4) şehir **büyük bir gölün kıyısına**
+  kurulur: surun bir yüzünün ortasından dışarı bakınca su 2–6 karo
+  ötede başlar ve en az 14 karo açık su uzanır; göl en az 2500 karodur
+  (`harbour`). Uygun bütün kıyı yerleri toplanır; iki şehir varsa
+  **birbirinden en uzak** iki yer seçilir, tek şehir rastgele bir kıyı
+  yerine kurulur. Hiçbir göl kıyısı uymazsa açık arazide en uzak yerler
+  seçilir.
+- **Liman** (`cityHarbour` dünya üretiminde, `harbourOf` istemcide; yalnızca
+  görsel): Göle bakan surun ortasında bir **liman kapısı**, kapıdan inen
+  patika, kıyıdan göle uzanan 3 karo genişliğinde, 12 karoya kadar uzun
+  **büyük ahşap iskele**, yer varsa yanında ikinci bir iskele ve kıyıda
+  bir liman evi vardır. İskelelerin yanında **büyük gemiler** yanaşmıştır
+  (iki direkli, kıç kasaralı tüccar gemileri; yelkenleri sarılı, suda
+  hafifçe sallanır); göl genişse biri açıkta demirli bekler, biri de
+  yelken açıp açığa gidip geri gelir (`apps/web/src/game/shipSprites.ts`,
+  `ambient.ts`). Eski lobilerdeki şehirlerin yanı uygun bir göle bakıyorsa
+  onlarda da liman görünür.
 - **Yollar:** Şehirler ticaret yolu ağının düğümleridir (hanlar gibi).
   Şehre giden yol **surda biter**, orada kapı vardır; şehre gitmeyen yollar
   şehrin çevresinden dolanır. Kervanlar şehir kapısına kadar gelir.
@@ -811,11 +833,14 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   toplar.
 - **Ticaret:** Ticaret sekmesinde "Tüccar nereye gitsin": lobi pazarı ya
   da bir serbest şehir. Şehre giden tüccar sefer başına **3 kat yük**
-  (`loadFactor`) götürür ve şehrin **sabit fiyatından** (taban fiyat ×
-  1,1) satar; bu satış **lobi fiyatlarını düşürmez**. Ama sefer uzundur:
-  10 sn + ticaret noktası ile şehir arasındaki her karo için 0,12 sn
-  (ör. 200 karo ≈ 34 sn). Lobi fiyatları çok satılmaktan düşmüşken ya da
-  şehir yakınken kârlıdır. Hedef değiştirilince tüccar yeni sefere
+  (`loadFactor`) götürür ve **lobinin o anki fiyatının %10 fazlasından**
+  (`priceFactor` 1,1) satar; sabit fiyat yoktur, lobi fiyatı düşünce
+  şehrin ödediği de düşer. Bu satış **lobi fiyatlarını düşürmez**. Ama
+  sefer her zaman lobi pazarınınkinden (10 sn) uzundur: 10 sn + ticaret
+  noktası ile şehir arasındaki her karo için 0,12 sn (ör. 200 karo ≈ 34
+  sn; hudutlar şehre 40 karodan yaklaşmadığı için en az ~15 sn). Şehir
+  yakınken ve lobide çok satılan bir malı fiyatı daha da düşürmeden
+  satmak için kârlıdır. Hedef değiştirilince tüccar yeni sefere
   başlar; 2 dakika yeniden değiştirilemez (`trade.city`, `setTradeCity`;
   sunucuda `tradeCity` komutu, sefer süresini sunucu hesaplar).
 - **Eski lobiler:** Lobi, dünyasının hangi kuralla üretildiğini saklar
@@ -826,7 +851,9 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   kurulur ve her biri en yakın yola yeni bir yolla bağlanır. Lobiyi 3'e
   geçirirken sunucudaki `lobby_worlds` karoları da 3'ün karolarıyla
   değiştirilir (yalnızca şehir ve yeni yol karoları farklıdır); önce
-  krallıkların hududuna değen karo olmadığı denetlenir.
+  krallıkların hududuna değen karo olmadığı denetlenir. **4**, 2'nin
+  aynısıdır ama şehirler göl kıyısına ve birbirinden en uzağa kurulur;
+  yeni lobiler 4'tür (`command` lobiyi açarken `world_rev`'i yazar).
 - **İleride:** paralı asker kiralama, barış görüşmelerinde arabuluculuk,
   rehine/fidye takası, kara borsa, şehirden mal satın alma.
 

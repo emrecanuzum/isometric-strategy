@@ -1,5 +1,5 @@
-import { balance, cityCenter, hash } from '@game/shared'
-import type { Point, World } from '@game/shared'
+import { Terrain, balance, cityCenter, cityHarbour, hash } from '@game/shared'
+import type { CitySide, Point, World } from '@game/shared'
 import type { Structure, StructureLook } from './buildingSprites'
 
 // The free cities (CLAUDE.md §4.2, §7.6): one or two walled towns that belong to no kingdom. Their name and layout
@@ -31,7 +31,130 @@ export function cityAt(world: World, tile: Point): number | undefined {
   return index < 0 ? undefined : index
 }
 
-type Side = 'n' | 's' | 'w' | 'e'
+type Side = CitySide
+
+// A big ship of a city's harbour: where it lies (tile coordinates of its middle) and along which axis; a sailing one
+// goes out and back between `at` and `to` over `period` seconds.
+export interface HarbourShip {
+  at: Point
+  along: 'x' | 'y'
+  sailing: boolean
+  to?: Point
+  period?: number
+  seed: number
+}
+
+interface Harbour {
+  gate: { side: Side; at: number }
+  // Bow out toward the lake means toward -along on this side.
+  reverse: boolean
+  // The lane from the sea gate down to the jetty.
+  lane: Point[]
+  structures: Structure[]
+  ships: HarbourShip[]
+}
+
+// A free city on a big lake's shore has a harbour (CLAUDE.md §7.7): a sea gate in the middle of the wall facing the
+// lake, a broad jetty from the bank below it out over the water and a narrower one beside it, a harbour house on the
+// bank, big ships moored along the jetties and one sailing out and back. It follows from the world's tiles alone.
+const harbours = new WeakMap<World, (Harbour | null)[]>()
+export function harbourOf(world: World, index: number): Harbour | null {
+  let list = harbours.get(world)
+  if (!list) {
+    list = world.cities.map((c, i) => makeHarbour(world, c, i))
+    harbours.set(world, list)
+  }
+  return list[index] ?? null
+}
+
+function makeHarbour(world: World, c: Point, index: number): Harbour | null {
+  const found = cityHarbour(world, c)
+  if (!found) return null
+  const S = balance.cities.size
+  const { side } = found
+  const { size, terrain } = world
+  // Harbour space: d tiles out from the wall, l tiles across from the middle of the side (+l toward the viewer).
+  const point = (d: number, l: number): Point =>
+    side === 's' ? { x: c.x + S / 2 + l, y: c.y + S - 1 + d }
+    : side === 'n' ? { x: c.x + S / 2 + l, y: c.y + 1 - d }
+    : side === 'e' ? { x: c.x + S - 1 + d, y: c.y + S / 2 + l }
+    : { x: c.x + 1 - d, y: c.y + S / 2 + l }
+  const tile = (d: number, l: number) => {
+    const p = point(d + 0.5, l + 0.5)
+    return { x: Math.floor(p.x), y: Math.floor(p.y) }
+  }
+  const lake = (d: number, l: number) => {
+    const t = tile(d, l)
+    return t.x >= 0 && t.y >= 0 && t.x < size && t.y < size && terrain[t.y * size + t.x] === Terrain.Lake
+  }
+  const land = (d: number, l: number) => {
+    const t = tile(d, l)
+    const k = terrain[t.y * size + t.x]
+    return k !== Terrain.Lake && k !== Terrain.River && k !== Terrain.Mountain
+  }
+  // The tiles from d0 to d1 and l0 to l1 as a rectangle of tiles.
+  const rect = (d0: number, d1: number, l0: number, l1: number) => {
+    const a = tile(d0, l0)
+    const b = tile(d1, l1)
+    return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x) + 1, h: Math.abs(a.y - b.y) + 1 }
+  }
+  // The jetty leaves the bank where the water begins under all three of its lanes (the shore is ragged).
+  const first = (l: number) => {
+    let d = 1
+    while (d < 12 && !lake(d, l)) d++
+    return d
+  }
+  const shore = Math.max(first(-1), first(0), first(1))
+  // How far open water runs out across lanes l0..l1, from the shore.
+  const run = (l0: number, l1: number, max: number) => {
+    let n = 0
+    while (n < max) {
+      for (let l = l0; l <= l1; l++) if (!lake(shore + n, l)) return n
+      n++
+    }
+    return n
+  }
+  const along: 'x' | 'y' = side === 'n' || side === 's' ? 'y' : 'x'
+  const gateTile = tile(0, 0)
+  const structures: Structure[] = []
+  const jetty = (l0: number, l1: number, length: number) => {
+    const r = rect(shore - 1, shore + length - 1, l0, l1)
+    structures.push({ x: gateTile.x, y: gateTile.y, size: 1, look: 'jetty', variant: 0, city: index, pier: { ...r, along } })
+  }
+  const main = Math.min(12, run(-1, 1, 12))
+  if (main < 4) return null
+  jetty(-1, 1, main)
+  const side2 = Math.min(main - 3, run(6, 7, main - 3))
+  if (side2 >= 4) jetty(6, 7, side2)
+  // The harbour house on the bank, beside the lane down to the jetty.
+  if (shore >= 4 && [1, 2].every((d) => [-5, -4].every((l) => land(d, l)))) {
+    const r = rect(1, 2, -5, -4)
+    structures.push({ x: r.x, y: r.y, size: 2, look: 'dock', level: 3, variant: index, city: index })
+  }
+  // Ships moored along the jetties (on their near sides, so a jetty never shows over a ship), and one under sail.
+  const ships: HarbourShip[] = []
+  const moor = (d: number, l: number, n: number) => {
+    // The ship's whole length must lie on the lake.
+    for (let k = -2; k <= 2; k++) if (!lake(Math.floor(d + k), Math.floor(l))) return
+    ships.push({ at: point(d, l), along, sailing: false, seed: index * 31 + n })
+  }
+  moor(shore + main / 2 + 0.5, 2.8, 0)
+  if (side2 >= 4) moor(shore + side2 / 2 + 0.5, 8.8, 1)
+  const out = run(-7, -5, 40)
+  // One more lies at anchor off the harbour, waiting its turn at the jetty.
+  const anchorage = run(-11, -9, 30)
+  if (anchorage >= 14) moor(shore + anchorage - 5, -10, 2)
+  if (out >= 12) {
+    ships.push({ at: point(shore + 4, -6), to: point(shore + out - 3, -6), along, sailing: true, period: 50 + out * 4, seed: index * 31 + 7 })
+  }
+  return {
+    gate: { side, at: Math.floor(S / 2) },
+    reverse: side === 'n' || side === 'w',
+    lane: [point(0.5, 0.5), point(shore - 0.5, 0)],
+    structures,
+    ships,
+  }
+}
 
 // The roads into a city end at its wall (see generateWorld): a gate stands wherever one does (local coordinates along
 // the side it comes in by).
@@ -48,6 +171,9 @@ function gatesOf(world: World, c: Point): { side: Side; at: number }[] {
       if (!gates.some((g) => g.side === side && Math.abs(g.at - at) < 4)) gates.push({ side, at })
     }
   }
+  const index = world.cities.indexOf(c)
+  const harbour = index >= 0 ? harbourOf(world, index) : null
+  if (harbour && !gates.some((g) => g.side === harbour.gate.side && Math.abs(g.at - harbour.gate.at) < 4)) gates.push(harbour.gate)
   if (gates.length === 0) gates.push({ side: 's', at: S / 2 })
   return gates
 }
@@ -157,7 +283,7 @@ const made = new WeakMap<World, Structure[]>()
 export function cityStructures(world: World): Structure[] {
   let found = made.get(world)
   if (!found) {
-    found = world.cities.flatMap((_, index) => layout(world, index))
+    found = world.cities.flatMap((_, index) => [...layout(world, index), ...(harbourOf(world, index)?.structures ?? [])])
     made.set(world, found)
   }
   return found
@@ -184,7 +310,8 @@ export function cityTrails(world: World): Point[][] {
         const gate = g.side === 'n' || g.side === 's' ? { x: c.x + g.at + 0.5, y: c.y + fixed } : { x: c.x + fixed, y: c.y + g.at + 0.5 }
         return [gate, hall]
       })
-      return [ring, ...streets]
+      const harbour = harbourOf(world, world.cities.indexOf(c))
+      return [ring, ...streets, ...(harbour ? [harbour.lane] : [])]
     })
     lanes.set(world, found)
   }

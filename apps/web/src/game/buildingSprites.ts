@@ -2256,7 +2256,8 @@ function fisherHut(variant = 0): Sprite {
 
 const variants = <T>(count: number, make: (i: number) => T) => Array.from({ length: count }, (_, i) => make(i))
 
-export type StructureLook = BuildingKind | 'scaffold' | 'brokenWall' | 'gateY' | 'towerWall' | 'tradePostRuined'
+// 'jetty': a pier on its own (a free city's harbour), nothing but its `pier`.
+export type StructureLook = BuildingKind | 'scaffold' | 'brokenWall' | 'gateY' | 'towerWall' | 'tradePostRuined' | 'jetty'
 
 // A building as the map draws it; docks carry their jetty (tile rectangle over the water).
 export interface Structure {
@@ -2331,7 +2332,7 @@ export const palaceIn = (color: string | undefined, level = 1): Sprite => {
 export const looksOf = (look: StructureLook, level = 1): Sprite[] =>
   look === 'tradePostRuined'
     ? ruinedTradeAt(Math.max(1, Math.min(3, level)))
-    : look !== 'scaffold' && look !== 'brokenWall' && look !== 'gateY' && look !== 'towerWall' && level > 1
+    : look !== 'scaffold' && look !== 'brokenWall' && look !== 'gateY' && look !== 'towerWall' && look !== 'jetty' && level > 1
       ? (LEVEL_SPRITES[look]?.[level - 2] ?? STRUCTURE_SPRITES[look])
       : STRUCTURE_SPRITES[look]
 
@@ -2360,6 +2361,7 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   fisherHut: variants(4, (v) => fisherHut(v)),
   brokenWall: [wallLook('brokenWall', 3, 0)],
   scaffold: [scaffold(1), scaffold(2), scaffold(3)],
+  jetty: [new Canvas(1, 1).sprite(0, 0, 0)],
 }
 
 export const VILLAGER_SPRITES = [SACK, CLOTH[2], CLOTH[1], CLOTH[3]].map((tunic) => [peasant(0, tunic), peasant(1, tunic)])
@@ -2389,6 +2391,7 @@ const once = (key: string, make: () => Sprite) => made.get(key) ?? (made.set(key
 // fields) reaching down to the ground.
 export function structureParts(world: World, s: Structure): Part[] {
   const at = (x: number, y: number) => Math.round(heightAt(world, x, y))
+  if (s.look === 'jetty') return s.pier ? [pierPart(s, s.pier, at)] : []
   const back = at(s.x, s.y)
   const left = at(s.x, s.y + s.size)
   const front = at(s.x + s.size, s.y + s.size)
@@ -2414,13 +2417,15 @@ export function structureParts(world: World, s: Structure): Part[] {
   }
   parts.push({ sprite: looks[s.variant % looks.length], fx, fy, z, solid: !flat })
   if (s.look === 'farm' && (s.level ?? 1) >= 2) parts.push({ sprite: once(`farmProps:${s.level}:${s.variant % 3}`, () => farmProps(s.level!, s.variant)), fx, fy, z, solid: false, stands: true })
-  if (s.pier) {
-    const p = s.pier
-    // The deck starts level with the bank it leaves from.
-    const shore = p.along === 'x' ? { x: p.x < s.x ? p.x + p.w : p.x, y: p.y + p.h / 2 } : { x: p.x + p.w / 2, y: p.y < s.y ? p.y + p.h : p.y }
-    const lift = Math.max(5, Math.min(14, at(shore.x, shore.y) + 2))
-    const sprite = once(`pier:${p.w}:${p.h}:${p.along}:${lift}`, () => pier(p.w, p.h, p.along, lift))
-    parts.push({ sprite, fx: p.x + p.w, fy: p.y + p.h, z: 0, solid: false })
-  }
+  if (s.pier) parts.push(pierPart(s, s.pier, at))
   return parts
+}
+
+// A jetty reaching out over the water from the building (or, for a jetty on its own, from the tile it is given at).
+function pierPart(s: Structure, p: NonNullable<Structure['pier']>, at: (x: number, y: number) => number): Part {
+  // The deck starts level with the bank it leaves from.
+  const shore = p.along === 'x' ? { x: p.x < s.x ? p.x + p.w : p.x, y: p.y + p.h / 2 } : { x: p.x + p.w / 2, y: p.y < s.y ? p.y + p.h : p.y }
+  const lift = Math.max(5, Math.min(14, at(shore.x, shore.y) + 2))
+  const sprite = once(`pier:${p.w}:${p.h}:${p.along}:${lift}`, () => pier(p.w, p.h, p.along, lift))
+  return { sprite, fx: p.x + p.w, fy: p.y + p.h, z: 0, solid: false }
 }

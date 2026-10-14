@@ -497,7 +497,7 @@ function TradePost(data: HudData) {
           <b>Ticaret noktası · Seviye {trade.level + 1}</b>
           <p className="hint">
             Tüccar her {Math.round(tripMs / 1000)} saniyede {tradeLoad(kingdom)} birim mal götürüp{' '}
-            {trade.city ? 'serbest şehrin sabit fiyatından' : 'lobinin o anki fiyatından'} altına çevirir
+            {trade.city ? 'serbest şehirde lobi fiyatının biraz üstünden' : 'lobinin o anki fiyatından'} altına çevirir
             {kingdom.trade.good ? ` (şu an birimi ${tradePrice(kingdom, kingdom.trade.good, online?.market, now).toFixed(2).replace('.', ',')} altın)` : ''}.
           </p>
           <button className="btn small" onClick={() => onShow(center(post))}>

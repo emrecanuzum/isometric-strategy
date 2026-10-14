@@ -22,8 +22,9 @@ export const Feature = {
 // Worlds are made the same way from the same seed for as long as a lobby lives; a lobby keeps the revision its world
 // was made with. 1: before the free cities. 2: free cities joined into the road network as it is laid out. 3: the
 // world of revision 1 left as it is, with free cities added on open land and a road from each to the nearest road (for
-// lobbies opened before the cities).
-export const WORLD_REV = 2
+// lobbies opened before the cities). 4: as 2, but the cities stand on the shore of a big lake (a harbour, see
+// cityHarbour) and as far from one another as the land allows.
+export const WORLD_REV = 4
 
 export interface Polyline {
   points: Point[]
@@ -503,7 +504,7 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
   // random draw of their own, so the rest of the world comes out as it did before them.
   const cities: Point[] = []
   // `clear`: whatever else a spot must be (in revision 3, off the roads and bridges already laid).
-  const placeCities = (clear: (p: Point) => boolean) => {
+  const placeCities = (clear: (p: Point) => boolean, lakeside = false) => {
     const town = balance.cities
     const S = town.size
     const draw = mulberry32(seed ^ 0x51c17e5)
@@ -525,13 +526,32 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
       const cy = p.y + S / 2
       return inns.every((inn) => Math.hypot(inn.x + 1 - cx, inn.y + 1 - cy) >= S / 2 + town.innGap)
     }
-    for (let attempt = 0; attempt < wanted * 600 && cities.length < wanted; attempt++) {
-      const p = {
-        x: town.edgeMargin + Math.floor(draw() * (size - town.edgeMargin * 2 - S)),
-        y: town.edgeMargin + Math.floor(draw() * (size - town.edgeMargin * 2 - S)),
+    if (lakeside) {
+      // Revision 4: every spot that fits on the shore of a big lake, then the ones farthest apart (on open land if
+      // no lake has room for a city).
+      const big = bigLakes(size, terrain, town.harbour.minLakeTiles)
+      const spots: Point[] = []
+      const open: Point[] = []
+      const step = 4
+      for (let y = town.edgeMargin; y < size - town.edgeMargin - S; y += step) {
+        for (let x = town.edgeMargin; x < size - town.edgeMargin - S; x += step) {
+          const p = { x, y }
+          if (!fits(p) || !clear(p)) continue
+          const harbour = cityHarbour({ size, terrain }, p)
+          if (harbour && big[harbour.water.y * size + harbour.water.x]) spots.push(p)
+          else open.push(p)
+        }
       }
-      if (cities.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < town.minSpacing) || !fits(p) || !clear(p)) continue
-      cities.push(p)
+      cities.push(...farthest(spots.length > 0 ? spots : open, wanted, town.minSpacing, draw))
+    } else {
+      for (let attempt = 0; attempt < wanted * 600 && cities.length < wanted; attempt++) {
+        const p = {
+          x: town.edgeMargin + Math.floor(draw() * (size - town.edgeMargin * 2 - S)),
+          y: town.edgeMargin + Math.floor(draw() * (size - town.edgeMargin * 2 - S)),
+        }
+        if (cities.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < town.minSpacing) || !fits(p) || !clear(p)) continue
+        cities.push(p)
+      }
     }
     // In the order the server finds them in the tiles (citiesOf), so both name a city by the same index.
     cities.sort((a, b) => a.y - b.y || a.x - b.x)
@@ -554,6 +574,7 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
     }
   }
   if (rev === 2) placeCities(() => true)
+  if (rev >= 4) placeCities(() => true, true)
   // The roads meet at the inns and run into the middle of each city.
   const hubs: Point[] = [...inns, ...cities.map((c) => ({ x: c.x + balance.cities.size / 2, y: c.y + balance.cities.size / 2 }))]
   for (const hub of hubs) pinned.add(toCell(hub))
@@ -720,7 +741,7 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
 
   // Revision 3: the cities come last, on land no road, bridge or inn touches, so nothing laid before them changes;
   // each is joined by a new road to the nearest road.
-  if (rev >= 3) {
+  if (rev === 3) {
     const margin = 4
     placeCities((p) => {
       for (let y = p.y - margin; y < p.y + S + margin; y++) {
@@ -781,6 +802,106 @@ export function citiesOf(world: Pick<World, 'size' | 'feature'>): Point[] {
     }
   }
   return found
+}
+
+// Tiles of lakes at least `min` tiles big (rivers are not lakes).
+function bigLakes(size: number, terrain: Uint8Array, min: number) {
+  const big = new Uint8Array(size * size)
+  const seen = new Uint8Array(size * size)
+  const stack: number[] = []
+  for (let start = 0; start < terrain.length; start++) {
+    if (seen[start] || terrain[start] !== Terrain.Lake) continue
+    const lake: number[] = []
+    seen[start] = 1
+    stack.push(start)
+    while (stack.length > 0) {
+      const i = stack.pop()!
+      lake.push(i)
+      const x = i % size
+      for (const j of [x > 0 ? i - 1 : -1, x < size - 1 ? i + 1 : -1, i - size, i + size]) {
+        if (j < 0 || j >= terrain.length || seen[j] || terrain[j] !== Terrain.Lake) continue
+        seen[j] = 1
+        stack.push(j)
+      }
+    }
+    if (lake.length >= min) for (const i of lake) big[i] = 1
+  }
+  return big
+}
+
+// `count` spots as far apart as possible: one at random, then each time the one farthest from those taken; with two,
+// the pair farthest apart. None closer than `spacing`.
+function farthest(spots: Point[], count: number, spacing: number, draw: () => number): Point[] {
+  if (spots.length === 0 || count <= 0) return []
+  // A fair sample of a long list keeps the pairwise search quick.
+  const limit = 1500
+  if (spots.length > limit) spots = Array.from({ length: limit }, (_, i) => spots[Math.floor((i + draw()) * (spots.length / limit))])
+  const d = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
+  if (count === 2) {
+    let best: [Point, Point] | null = null
+    let far = spacing
+    for (let i = 0; i < spots.length; i++) {
+      for (let j = i + 1; j < spots.length; j++) {
+        const dist = d(spots[i], spots[j])
+        if (dist >= far) [far, best] = [dist, [spots[i], spots[j]]]
+      }
+    }
+    if (best) return best
+  }
+  const taken = [spots[Math.floor(draw() * spots.length)]]
+  while (taken.length < count) {
+    let next: Point | null = null
+    let far = spacing
+    for (const p of spots) {
+      const near = Math.min(...taken.map((q) => d(p, q)))
+      if (near >= far) [far, next] = [near, p]
+    }
+    if (!next) break
+    taken.push(next)
+  }
+  return taken
+}
+
+export type CitySide = 'n' | 's' | 'w' | 'e'
+
+// A free city's harbour (CLAUDE.md §7.7): the side of its wall facing a lake a few tiles off, with open water reaching
+// out from the shore; the first water tile straight out from the middle of that side, and how far the water runs on.
+export function cityHarbour(world: Pick<World, 'size' | 'terrain'>, city: Point): { side: CitySide; shore: number; water: Point; reach: number } | null {
+  const { size, terrain } = world
+  const S = balance.cities.size
+  const { shoreTiles, openWater } = balance.cities.harbour
+  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= size || y >= size ? Terrain.Mountain : terrain[y * size + x])
+  const sides: [CitySide, number, number][] = [['s', 0, 1], ['e', 1, 0], ['n', 0, -1], ['w', -1, 0]]
+  let best: { side: CitySide; shore: number; water: Point; reach: number } | null = null
+  for (const [side, dx, dy] of sides) {
+    // From the wall outward along a few lines across the middle of the side; all must reach the lake alike.
+    let shore = 0
+    let reach = Infinity
+    let water: Point | null = null
+    for (const off of [-2, 0, 2]) {
+      const mid = S / 2 + off
+      const ox = dx > 0 ? S - 1 : dx < 0 ? 0 : mid
+      const oy = dy > 0 ? S - 1 : dy < 0 ? 0 : mid
+      let k = 1
+      while (k <= shoreTiles[1] && at(city.x + ox + dx * k, city.y + oy + dy * k) !== Terrain.Lake) {
+        const t = at(city.x + ox + dx * k, city.y + oy + dy * k)
+        if (t === Terrain.River || t === Terrain.Mountain) k = Infinity
+        else k++
+      }
+      if (k < shoreTiles[0] || k > shoreTiles[1]) {
+        reach = 0
+        break
+      }
+      let run = 0
+      while (run < openWater * 2 && at(city.x + ox + dx * (k + run), city.y + oy + dy * (k + run)) === Terrain.Lake) run++
+      shore = Math.max(shore, k)
+      reach = Math.min(reach, run)
+      if (off === 0) water = { x: city.x + ox + dx * k, y: city.y + oy + dy * k }
+    }
+    if (reach < openWater || !water) continue
+    if (!best || reach > best.reach) best = { side, shore, water, reach }
+  }
+  return best
 }
 
 // The middle of a free city, in tile coordinates.

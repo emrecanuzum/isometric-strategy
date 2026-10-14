@@ -4,6 +4,8 @@ import { Container, Sprite as PixiSprite } from 'pixi.js'
 import type { Texture } from 'pixi.js'
 import { ROUTE_STEP, resampleRoute } from './chunkPainter'
 import { SMOKE_PUFFS, innLook } from './innSprites'
+import { harbourOf } from './cities'
+import { ship } from './shipSprites'
 import { SPRITES, cloudShapes } from './sprites'
 import type { Sprite } from './sprites'
 import { textureOf } from './textures'
@@ -605,6 +607,51 @@ export function createAmbient(world: World, actors: Container): Ambient {
     birdShadows.finish()
   }
 
+  // --- Harbour ships ---
+  // The big ships of the free cities: moored ones rock gently at the jetties, a sailing one goes out across the lake
+  // and comes back, its bow always the way it goes. Their looks are made on first sight.
+  const ships = world.cities.flatMap((_, index) => {
+    const harbour = harbourOf(world, index)
+    return harbour ? harbour.ships.map((s) => ({ ...s, reverse: harbour.reverse })) : []
+  })
+  const shipLooks = new Map<string, { sprite: Sprite; texture: Texture }>()
+  const shipLook = (along: 'x' | 'y', sailing: boolean, seed: number, reverse: boolean) => {
+    const key = `${along}:${sailing}:${seed % 3}:${reverse}`
+    let look = shipLooks.get(key)
+    if (!look) {
+      const sprite = ship(along, sailing, seed % 3, reverse)
+      look = { sprite, texture: textureOf(sprite) }
+      shipLooks.set(key, look)
+    }
+    return look
+  }
+  const shipPool = new Pool(actors)
+
+  function updateShips(seconds: number, view: View) {
+    for (const s of ships) {
+      let { x, y } = s.at
+      let reverse = s.reverse
+      if (s.to && s.period) {
+        const u = (seconds / s.period + s.seed * 0.137) % 1
+        const outward = u < 0.5
+        const f = outward ? u * 2 : 2 - u * 2
+        const e = f * f * (3 - 2 * f)
+        x += (s.to.x - x) * e
+        y += (s.to.y - y) * e
+        if (!outward) reverse = !reverse
+      }
+      const screen = toScreen(x, y, 0)
+      if (!inView(view, screen.x, screen.y, 200)) continue
+      const look = shipLook(s.along, s.sailing, s.seed, reverse)
+      const sprite = shipPool.take(look.texture)
+      anchored(sprite, look.sprite)
+      const bob = Math.round(Math.sin(seconds * 1.1 + s.seed) * 1)
+      sprite.position.set(Math.round(screen.x), Math.round(screen.y) + bob)
+      sprite.zIndex = screen.y
+    }
+    shipPool.finish()
+  }
+
   // --- Clouds ---
   const span = { left: -size * (TILE_WIDTH / 2), width: size * TILE_WIDTH, height: size * (TILE_HEIGHT / 2) * 2 }
   const clouds = Array.from({ length: CLOUDS }, (_, i) => {
@@ -668,6 +715,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
       chimneys = [...innChimneys, ...points.map((c, i) => ({ ...c, phase: hash(i, Math.round(c.x), seed + 953) }))]
     },
     update(seconds, view, zoom) {
+      updateShips(seconds, view)
       if (zoom >= FLOW_MIN_ZOOM) updateFlow(seconds, view)
       else flowPool.finish()
       if (zoom >= LIFE_MIN_ZOOM) {

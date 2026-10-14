@@ -8,7 +8,7 @@
 import { gzipSync } from 'node:zlib'
 import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
-import { generateWorld } from '../packages/shared/src/index.ts'
+import { WORLD_REV, generateWorld } from '../packages/shared/src/index.ts'
 
 const args = process.argv.slice(2)
 const flag = (name: string) => args.indexOf(name)
@@ -31,7 +31,7 @@ const packed = gzipSync(tiles, { level: 9 })
 
 const { data: lobby, error } = await db
   .from('lobbies')
-  .insert({ name, seed, is_public: flag('--private') < 0, max_players: players })
+  .insert({ name, seed, is_public: flag('--private') < 0, max_players: players, world_rev: WORLD_REV })
   .select()
   .single()
 if (error) throw error

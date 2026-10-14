@@ -97,6 +97,12 @@ async function openLobby(user: string, cmd: any): Promise<string> {
   const { data: lobby, error } = await admin.rpc('open_lobby', { owner: user, lobby_name: name, lobby_seed: seed, players, password })
   if (error?.message === 'lobbies') refuse('lobbies')
   if (error || !lobby) throw error ?? new Error('open_lobby')
+  // The world above was made by this revision of the rules; clients make the same one from it.
+  const { error: revError } = await admin.from('lobbies').update({ world_rev: game.WORLD_REV }).eq('id', lobby)
+  if (revError) {
+    await admin.from('lobbies').delete().eq('id', lobby)
+    throw revError
+  }
   const { error: worldError } = await admin.from('lobby_worlds').insert({ lobby_id: lobby, size: world.size, tiles: `\\x${toHex(packed)}` })
   if (worldError) {
     await admin.from('lobbies').delete().eq('id', lobby)

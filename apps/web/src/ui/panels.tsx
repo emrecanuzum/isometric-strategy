@@ -203,7 +203,7 @@ export function SitePicker({
               </button>
             ))}
           </div>
-          <p className="hint">Nehir ve çayır yemeği, orman yapı malzemesini, dağ savaş malzemesini artırır; bataklık hepsini biraz düşürür.</p>
+          <p className="hint site-why">Nehir ve çayır yemeği, orman yapı malzemesini, dağ savaş malzemesini artırır; bataklık hepsini biraz düşürür.</p>
         </>
       )}
       <label className="name-field">

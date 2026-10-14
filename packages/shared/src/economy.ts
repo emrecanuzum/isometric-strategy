@@ -888,17 +888,19 @@ export function setTradeGood(kingdom: Kingdom, good: Good | null, now: number): 
 
 // ---- Free cities (CLAUDE.md §7.6) ----------------------------------------------------------------------------------
 
-// What a free city pays for one unit: its own price, steady and untouched by the lobby's trade.
-export const cityPrice = (good: Good) => balance.economy.trade.price[good] * balance.cities.trade.priceFactor
+// What a free city pays for one unit: a little over the lobby's price of the moment (its own sales leave that price
+// untouched).
+export const cityPrice = (good: Good, market: Market | null | undefined, at: number) =>
+  priceAt(market, good, at) * balance.cities.trade.priceFactor
 
 // How long the merchant's trip takes: to the lobby's market from the trade post, or to a free city and back.
 export const tradeTripMs = (kingdom: Kingdom) => kingdom.trade.city?.tripMs ?? tripMs()
 
 // What the merchant takes on one trip, and what a unit fetches before bonuses: a free city takes a bigger load at its
-// own steady price.
+// price, a little over the lobby's.
 export const tradeLoad = (kingdom: Kingdom) => tradeUnits(kingdom) * (kingdom.trade.city ? balance.cities.trade.loadFactor : 1)
 export const tradePrice = (kingdom: Kingdom, good: Good, market: Market | null | undefined, at: number) =>
-  kingdom.trade.city ? cityPrice(good) : priceAt(market, good, at)
+  kingdom.trade.city ? cityPrice(good, market, at) : priceAt(market, good, at)
 
 // Trips the merchant makes in one production round.
 export const tradeTripsPerRound = (kingdom: Kingdom) => (balance.economy.productionSeconds * 1000) / tradeTripMs(kingdom)

@@ -9,6 +9,11 @@
   "kingdomGapTiles": 40,
   "safeTiles": 26,
   "restTiles": 22,
+  "harbour": {
+    "minLakeTiles": 2500,
+    "shoreTiles": [2, 6],
+    "openWater": 14
+  },
   "trade": {
     "loadFactor": 3,
     "priceFactor": 1.1,

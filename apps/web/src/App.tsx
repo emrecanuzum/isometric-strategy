@@ -65,6 +65,7 @@ import { BattleView } from './ui/hud/war'
 import type { Settings } from './net/settings'
 import { Chat } from './ui/Chat'
 import { findPath, tilesAlong } from './game/town'
+import type { Path } from './game/town'
 import type { Errand } from './game/town'
 import { Icon } from './ui/icons'
 import { BUILDING_NAMES, FORTUNE_TEXTS, RESOURCE_NAMES, SCOPE_NAMES } from './ui/names'
@@ -279,15 +280,52 @@ function footpaths(world: World, buildings: TownBuilding[], time: number): Point
     ...(gate ? visited.map((b) => ({ from: doorstep(b), to: gate })).sort((a, b) => far(a.from) - far(b.from)) : []),
     ...townErrands(buildings, time),
   ]
+  // Tiles a footpath already wears, with a tile of margin either side: a later walk there keeps to that path and is
+  // not drawn again beside it (two lines a tile apart read as a braid).
   const worn = new Set<number>()
+  const isWorn = (x: number, y: number) => worn.has(y * world.size + x)
   const blocked = (x: number, y: number) => solid.has(y * world.size + x) || !walkable(world, x, y)
   return routes.flatMap(({ from, to }) => {
     if (Math.hypot(to.x - from.x, to.y - from.y) > TRAIL_MAX_TILES) return []
-    const path = findPath(from, to, blocked, (x, y) => worn.has(y * world.size + x))
+    const path = findPath(from, to, blocked, isWorn)
     if (!path) return []
-    tilesAlong(path.points, (x, y) => worn.add(y * world.size + x))
-    return [path.points]
+    const pieces = freshStretches(path, isWorn)
+    tilesAlong(path.points, (x, y) => {
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) worn.add((y + dy) * world.size + x + dx)
+    })
+    return pieces
   })
+}
+
+// The stretches of a walk off the paths already worn, each reaching a step onto them so it joins up.
+function freshStretches(path: Path, worn: (x: number, y: number) => boolean): Point[][] {
+  const STEP = 0.25
+  const pointAt = (d: number): Point => {
+    let i = 1
+    while (i < path.points.length - 1 && path.at[i] < d) i++
+    const a = path.points[i - 1]
+    const b = path.points[i]
+    const t = Math.min(1, Math.max(0, (d - path.at[i - 1]) / Math.max(1e-6, path.at[i] - path.at[i - 1])))
+    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }
+  }
+  const count = Math.max(1, Math.ceil(path.length / STEP))
+  const fresh = Array.from({ length: count + 1 }, (_, n) => {
+    const p = pointAt((path.length * n) / count)
+    return !worn(Math.floor(p.x), Math.floor(p.y))
+  })
+  const pieces: Point[][] = []
+  for (let n = 0; n <= count; n++) {
+    if (!fresh[n] || (n > 0 && fresh[n - 1])) continue
+    let end = n
+    while (end < count && fresh[end + 1]) end++
+    // One step onto the worn path at either end, so the new stretch meets it.
+    const d0 = (path.length * Math.max(0, n - 1)) / count
+    const d1 = (path.length * Math.min(count, end + 1)) / count
+    const corners = path.points.filter((_, i) => path.at[i] > d0 && path.at[i] < d1)
+    const piece = [pointAt(d0), ...corners, pointAt(d1)]
+    if (d1 - d0 > STEP) pieces.push(piece)
+  }
+  return pieces
 }
 
 function App({
@@ -1253,6 +1291,7 @@ function App({
           world={view.world}
           index={cityOpen}
           kingdom={kingdom}
+          market={online.market}
           now={now}
           onCity={(city) => online.act({ type: 'tradeCity', city })}
           onShow={(tile) => view.centerOn(tile)}

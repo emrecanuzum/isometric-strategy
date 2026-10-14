@@ -3012,9 +3012,58 @@ small {
   gap: calc(var(--px) * 3);
 }
 
+/* The multipliers sit on parchment, where the light up/down tones of the dark panels cannot be read. */
+.site-card .up {
+  color: #1f5a16 !important;
+}
+
+.site-card .down {
+  color: #8a1c14 !important;
+}
+
+.site-yield > b {
+  font-size: 15px;
+}
+
+/* On a phone the three sites stack as short rows: the name, then the three multipliers side by side, then the land. */
 @media (max-width: 560px) {
+  .dialog.site-picker {
+    max-height: calc(100dvh - var(--gap) * 4);
+  }
+
   .site-cards {
     grid-template-columns: 1fr;
+    gap: calc(var(--px) * 3);
+  }
+
+  .site-card {
+    grid-template-columns: auto repeat(3, minmax(0, 1fr));
+    align-items: center;
+    gap: calc(var(--px) * 2) calc(var(--px) * 4);
+    padding: calc(var(--px) * 4);
+  }
+
+  .site-card > b {
+    font-size: 15px;
+  }
+
+  .site-yield {
+    grid-template-columns: auto auto;
+    justify-content: start;
+    gap: calc(var(--px) * 2);
+  }
+
+  .site-yield .meter {
+    display: none;
+  }
+
+  .site-card small {
+    grid-column: 1 / -1;
+    font-size: 12px;
+  }
+
+  .site-picker .site-why {
+    display: none;
   }
 }
 
