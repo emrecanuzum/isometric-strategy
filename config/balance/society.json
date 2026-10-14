@@ -1,5 +1,5 @@
 {
-  "popCapPerPalaceLevel": 16,
+  "popCapPerPalaceLevel": 24,
   "unlockPalaceLevel": 2,
   "tax": {
     "default": "normal",

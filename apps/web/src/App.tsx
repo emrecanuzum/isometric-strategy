@@ -1370,12 +1370,17 @@ function App({
   // Every kingdom's banner on the minimap.
   const flags = useMemo(
     (): MinimapFlag[] => [
-      ...rivals.map((r) => ({ site: r.site, color: hexOf(r.color), own: false })),
-      ...(kingdom ? [{ site: kingdom.site, color: hexOf(kingdom.color), own: true }] : []),
+      ...rivals.map((r) => ({
+        site: r.site,
+        color: hexOf(r.color),
+        own: false,
+        rect: territoryRect(r.site, territoryStage({ buildings: r.buildings } as Kingdom, serverNow())),
+      })),
+      ...(kingdom ? [{ site: kingdom.site, color: hexOf(kingdom.color), own: true, rect: territoryRect(kingdom.site, stage) }] : []),
     ],
     // The player's site and colour only change at founding.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rivals, kingdom?.site, kingdom?.color],
+    [rivals, kingdom?.site, kingdom?.color, stage],
   )
 
   // The towns on the minimap and the world map, roofed in their holders' colours (CLAUDE.md §8.4).

@@ -273,11 +273,12 @@ export async function createWorld(
     anchor: { x: 0.5, y: 0.5 },
     style: {
       fontFamily: "'Digits', 'Pixelify Sans', ui-monospace, monospace",
-      fontSize: 22,
+      // Kingdoms' and capitals' names, large enough to read the map by.
+      fontSize: 30,
       fontWeight: '600',
       fill,
       letterSpacing: 1,
-      stroke: { color: 0x120d0b, width: 5, join: 'round' },
+      stroke: { color: 0x120d0b, width: 6, join: 'round' },
       dropShadow: { color: 0x000000, alpha: 0.5, blur: 0, distance: 2, angle: Math.PI / 2 },
     },
   })
@@ -293,8 +294,9 @@ export async function createWorld(
     return g
   }
   const besideName = (banner: Graphics, text: Text) => {
-    banner.scale.set(text.scale.x)
-    banner.position.set(text.x - (text.width / 2) - 20 * text.scale.x, text.y + 2 * text.scale.x)
+    // Scaled up with the name (drawn for a 22 px name), and set just left of it.
+    banner.scale.set(text.scale.x * 1.35)
+    banner.position.set(text.x - text.width / 2 - 26 * text.scale.x, text.y + 3 * text.scale.x)
   }
   let kingdomBanner: Graphics | null = null
   // A building under the pointer is outlined instead of the tile.
@@ -456,7 +458,7 @@ export async function createWorld(
     // Zoomed far out, walkers, caravans and animals are left out but the buildings (which share their layer, to hide
     // whoever walks behind them) stay; zoomed back in, each walker's own update shows it again.
     if (scale < CARAVAN_MIN_ZOOM) {
-      for (const child of caravans.layer.children) child.visible = child.label === 'occluder' || child.label === 'inn' || child.label === 'shade' || child.label.startsWith('army')
+      for (const child of caravans.layer.children) child.visible = child.label === 'occluder' || child.label === 'inn' || child.label === 'shade' || child.label === 'ship' || child.label.startsWith('army')
       return
     }
     const margin = 40

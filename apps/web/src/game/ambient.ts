@@ -644,6 +644,8 @@ export function createAmbient(world: World, actors: Container): Ambient {
       if (!inView(view, screen.x, screen.y, 200)) continue
       const look = shipLook(s.along, s.sailing, s.seed, reverse)
       const sprite = shipPool.take(look.texture)
+      // Seen at every zoom, like the buildings (see the far-out filter in createWorld).
+      sprite.label = 'ship'
       anchored(sprite, look.sprite)
       const bob = Math.round(Math.sin(seconds * 1.1 + s.seed) * 1)
       sprite.position.set(Math.round(screen.x), Math.round(screen.y) + bob)

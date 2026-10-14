@@ -215,97 +215,129 @@ export function findRoute(world: Ground, from: Point, to: Point, blocked?: Block
   const ty = Math.floor(to.y)
   if (!ok(tx, ty)) return null
   const cellOf = (x: number, y: number) => Math.floor(y / CELL) * n + Math.floor(x / CELL)
-  const start = cellOf(fx, fy)
-  const goal = cellOf(tx, ty)
 
-  // Whether two neighbouring cells are joined: a walk exists from one into the other inside the two of them (the 2×2
-  // block for diagonal neighbours).
-  const joinedMemo = new Map<number, boolean>()
-  const joined = (a: number, b: number) => {
-    const key = a < b ? a * n * n + b : b * n * n + a
-    const known = joinedMemo.get(key)
-    if (known !== undefined) return known
-    const ax = a % n
-    const ay = Math.floor(a / n)
-    const bx = b % n
-    const by = Math.floor(b / n)
-    const x0 = Math.min(ax, bx) * CELL
-    const y0 = Math.min(ay, by) * CELL
-    const w = (Math.abs(ax - bx) + 1) * CELL
-    const h = (Math.abs(ay - by) + 1) * CELL
-    const seen = new Uint8Array(w * h)
-    const queue: number[] = []
-    for (let y = ay * CELL; y < ay * CELL + CELL; y++) {
-      for (let x = ax * CELL; x < ax * CELL + CELL; x++) {
-        if (!ok(x, y)) continue
-        const i = (y - y0) * w + (x - x0)
-        seen[i] = 1
-        queue.push(i)
+  // Step one runs over the walkable parts of cells, not whole cells: a cell a wall runs through is two parts, one on
+  // either side, so the search cannot slip through the wall there and must find the gate. A part is the tiles of a
+  // cell joined to one another inside it; a node is a cell and the number of one of its parts.
+  const parts = new Map<number, Int8Array>()
+  const partsOf = (cell: number) => {
+    let labels = parts.get(cell)
+    if (labels) return labels
+    labels = new Int8Array(CELL * CELL).fill(-1)
+    const x0 = (cell % n) * CELL
+    const y0 = Math.floor(cell / n) * CELL
+    let next = 0
+    for (let k = 0; k < CELL * CELL; k++) {
+      if (labels[k] >= 0 || !ok(x0 + (k % CELL), y0 + Math.floor(k / CELL))) continue
+      const queue = [k]
+      labels[k] = next
+      for (let q = 0; q < queue.length; q++) {
+        const i = queue[q]
+        const x = i % CELL
+        const y = Math.floor(i / CELL)
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < 0 || ny < 0 || nx >= CELL || ny >= CELL) continue
+          const j = ny * CELL + nx
+          if (labels[j] >= 0 || !ok(x0 + nx, y0 + ny)) continue
+          labels[j] = next
+          queue.push(j)
+        }
       }
+      next++
     }
-    let found = false
-    for (let q = 0; q < queue.length && !found; q++) {
-      const i = queue[q]
-      const x = (i % w) + x0
-      const y = Math.floor(i / w) + y0
-      if (cellOf(x, y) === b) found = true
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = x + dx
-        const ny = y + dy
-        if (nx < x0 || ny < y0 || nx >= x0 + w || ny >= y0 + h) continue
-        const j = (ny - y0) * w + (nx - x0)
-        if (seen[j] || !ok(nx, ny)) continue
-        seen[j] = 1
-        queue.push(j)
-      }
-    }
-    joinedMemo.set(key, found)
-    return found
+    parts.set(cell, labels)
+    return labels
   }
+  const PARTS = CELL * CELL
+  const nodeAt = (x: number, y: number) => {
+    const cell = cellOf(x, y)
+    const part = partsOf(cell)[(y % CELL) * CELL + (x % CELL)]
+    return part < 0 ? -1 : cell * PARTS + part
+  }
+  // The parts a part steps into across its cell's edge (corners only where neither side tile is blocked).
+  const stepsFrom = (node: number) => {
+    const cell = Math.floor(node / PARTS)
+    const part = node % PARTS
+    const labels = partsOf(cell)
+    const x0 = (cell % n) * CELL
+    const y0 = Math.floor(cell / n) * CELL
+    const out = new Set<number>()
+    for (let k = 0; k < PARTS; k++) {
+      if (labels[k] !== part) continue
+      const x = x0 + (k % CELL)
+      const y = y0 + Math.floor(k / CELL)
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < 0 || ny < 0 || nx >= size || ny >= size || cellOf(nx, ny) === cell || !ok(nx, ny)) continue
+          if (dx && dy && (!ok(x + dx, y) || !ok(x, y + dy))) continue
+          out.add(nodeAt(nx, ny))
+        }
+      }
+    }
+    return out
+  }
+  // Where the walk starts: the start tile's part, or (standing on a blocked tile, in a doorway) the parts beside it.
+  const starts = new Set<number>()
+  if (ok(fx, fy)) starts.add(nodeAt(fx, fy))
+  else for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (ok(fx + dx, fy + dy)) starts.add(nodeAt(fx + dx, fy + dy))
+  const goal = nodeAt(tx, ty)
+  if (starts.size === 0) return null
 
-  // Step one: over cells.
-  const cost = new Float64Array(n * n).fill(Infinity)
-  const closed = new Uint8Array(n * n)
-  const came = new Int32Array(n * n).fill(-1)
+  // Step one: over the parts of cells.
+  const cost = new Map<number, number>()
+  const closed = new Set<number>()
+  const came = new Map<number, number>()
   const open = heapOf()
-  const h = (c: number) => Math.hypot((c % n) - (goal % n), Math.floor(c / n) - Math.floor(goal / n))
-  cost[start] = 0
-  open.push(h(start), start)
+  const center = (node: number) => {
+    const cell = Math.floor(node / PARTS)
+    return { x: cell % n, y: Math.floor(cell / n) }
+  }
+  const goalAt = center(goal)
+  const h = (node: number) => {
+    const c = center(node)
+    return Math.hypot(c.x - goalAt.x, c.y - goalAt.y)
+  }
+  for (const s of starts) {
+    cost.set(s, 0)
+    open.push(h(s), s)
+  }
+  let reached = false
   while (open.size > 0) {
-    const c = open.pop()
-    if (closed[c]) continue
-    closed[c] = 1
-    if (c === goal) break
-    const cx = c % n
-    const cy = Math.floor(c / n)
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (!dx && !dy) continue
-        const nx = cx + dx
-        const ny = cy + dy
-        if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue
-        const next = ny * n + nx
-        if (closed[next]) continue
-        const g = cost[c] + (dx && dy ? Math.SQRT2 : 1)
-        if (g >= cost[next] || !joined(c, next)) continue
-        cost[next] = g
-        came[next] = c
-        open.push(g + h(next), next)
-      }
+    const node = open.pop()
+    if (closed.has(node)) continue
+    closed.add(node)
+    if (node === goal) {
+      reached = true
+      break
+    }
+    const here = center(node)
+    for (const next of stepsFrom(node)) {
+      if (closed.has(next)) continue
+      const there = center(next)
+      const g = cost.get(node)! + (here.x !== there.x && here.y !== there.y ? Math.SQRT2 : 1)
+      if (g >= (cost.get(next) ?? Infinity)) continue
+      cost.set(next, g)
+      came.set(next, node)
+      open.push(g + h(next), next)
     }
   }
-  if (start !== goal && came[goal] === -1) return null
+  if (!reached) return null
 
   // The corridor: the cells chosen and those around them.
   const corridor = new Set<number>()
   let guard = 0
-  for (let c = goal; ; c = came[c]) {
-    const cx = c % n
-    const cy = Math.floor(c / n)
+  for (let node: number | undefined = goal; node !== undefined; node = came.get(node)) {
+    const cx = Math.floor(node / PARTS) % n
+    const cy = Math.floor(Math.floor(node / PARTS) / n)
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       if (cx + dx >= 0 && cy + dy >= 0 && cx + dx < n && cy + dy < n) corridor.add((cy + dy) * n + cx + dx)
     }
-    if (c === start || ++guard > n * n) break
+    if (++guard > n * n * PARTS) break
   }
 
   // Step two: tile by tile inside the corridor (no cutting a corner past a blocked tile).

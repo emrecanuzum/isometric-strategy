@@ -1,5 +1,5 @@
 {
-  "perPlayers": 0.75,
+  "perPlayers": 1.2,
   "size": 8,
   "edgeMargin": 110,
   "minSpacing": 110,
@@ -11,10 +11,10 @@
   "siegeSeconds": 900,
   "lossPerDefender": 0.6,
   "kinds": {
-    "gold": { "perRound": 4 },
-    "food": { "perRound": 3 },
-    "materials": { "perRound": 2.5 },
-    "arms": { "perRound": 2 },
-    "people": { "villagers": 10 }
+    "gold": { "perRound": 7 },
+    "food": { "perRound": 5 },
+    "materials": { "perRound": 4 },
+    "arms": { "perRound": 3.5 },
+    "people": { "villagers": 14 }
   }
 }

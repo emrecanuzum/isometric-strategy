@@ -156,12 +156,22 @@ function makeHarbour(world: World, c: Point, index: number): Harbour | null {
   }
   moor(shore + main / 2 + 0.5, 2.8, 0)
   if (side2 >= 4) moor(shore + side2 / 2 + 0.5, 8.8, 1)
-  const out = run(-7, -5, 40)
   // One more lies at anchor off the harbour, waiting its turn at the jetty.
   const anchorage = run(-11, -9, 30)
   if (anchorage >= 14) moor(shore + anchorage - 5, -10, 2)
-  if (out >= 12) {
-    ships.push({ at: point(shore + 4, -6), to: point(shore + out - 3, -6), along, sailing: true, period: 50 + out * 4, seed: index * 31 + 7 })
+  // Every harbour has one galley under sail, going out across the lake and back: on the lane clear of the jetties and
+  // the moored ships with the longest open water, starting where the water begins under it (the shore is ragged).
+  const lane = (centre: number) => {
+    let from = shore
+    while (from < shore + 12 && ![-1, 0, 1].every((dl) => lake(from, centre + dl))) from++
+    let length = 0
+    while (length < 40 && [-1, 0, 1].every((dl) => lake(from + length, centre + dl))) length++
+    return { centre, from, length }
+  }
+  const best = [-6, -14, -17, -20, -23, 12, 15, 18, 21, 24, 4].map(lane).reduce((a, b) => (b.length > a.length ? b : a))
+  if (best.length >= 9) {
+    const { centre, from, length } = best
+    ships.push({ at: point(from + 4, centre), to: point(from + length - 3, centre), along, sailing: true, period: 50 + length * 4, seed: index * 31 + 7 })
   }
   return {
     gate: { side, at: Math.floor(S / 2) },

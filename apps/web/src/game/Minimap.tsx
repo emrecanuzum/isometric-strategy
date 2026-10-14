@@ -2,10 +2,11 @@ import { Terrain, balance } from '@game/shared'
 import type { Point, World } from '@game/shared'
 import { useEffect, useMemo, useRef } from 'react'
 import { FEATURE_COLORS, TERRAIN_COLORS } from './createWorld'
+import { cityInfo } from './cities'
 
 // Pixels per side: two tiles to a pixel on the 1024-tile world. Icons are drawn at ICON times their pixel sizes.
 const SIZE = 512
-const ICON = 1.7
+const ICON = 2.4
 
 function renderBase(world: World) {
   const step = world.size / SIZE
@@ -43,6 +44,8 @@ export interface MinimapFlag {
   site: Point
   color: string
   own: boolean
+  // Its territory, shaded in its colour.
+  rect?: { x: number; y: number; size: number }
 }
 
 // A town (CLAUDE.md §8.4), drawn as a little house roofed in its holder's colour (free: a plain thatch).
@@ -73,11 +76,13 @@ const CLOTH_H = 5
 
 // The minimap is turned 45° and squashed to half height on screen (see .minimap); a banner is drawn through the inverse
 // of that, so it stands upright with its pole on the site.
-function drawFlag(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, own: boolean) {
+function drawFlag(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, own: boolean, lift = 0) {
   ctx.save()
   ctx.translate(x, y)
   ctx.rotate(-Math.PI / 4)
   ctx.scale(ICON, ICON * 2)
+  // Raised (a crown's banner over its castle).
+  ctx.translate(0, -lift)
   const edge = own ? '#f2d16b' : '#120d0b'
   ctx.fillStyle = edge
   ctx.fillRect(-1, -POLE - 1, 3, POLE + 1)
@@ -182,9 +187,24 @@ export function Minimap({ world, center, flags = [], towns = [], patrols = [], o
       ctx.lineWidth = 4
       ctx.strokeRect(center.x * scale - 12, center.y * scale - 12, 24, 24)
     }
-    // Free cities under the banners, at the middle of each city.
+    // Each kingdom's lands in its colour, the player's edged in gold.
+    for (const flag of flags) {
+      if (!flag.rect) continue
+      const r = flag.rect
+      ctx.globalAlpha = 0.35
+      ctx.fillStyle = flag.color
+      ctx.fillRect(r.x * scale, r.y * scale, r.size * scale, r.size * scale)
+      ctx.globalAlpha = 1
+      ctx.strokeStyle = flag.own ? '#f2d16b' : flag.color
+      ctx.lineWidth = 3
+      ctx.strokeRect(r.x * scale, r.y * scale, r.size * scale, r.size * scale)
+    }
+    // The crowns' capitals under the banners, at the middle of each, flying their crown's colour.
     const half = balance.cities.size / 2
-    for (const c of world.cities) drawCastle(ctx, (c.x + half) * scale, (c.y + half) * scale)
+    world.cities.forEach((c, i) => {
+      drawCastle(ctx, (c.x + half) * scale, (c.y + half) * scale)
+      drawFlag(ctx, (c.x + half) * scale, (c.y + half) * scale - 2, cityInfo(world, i).color, false, 18)
+    })
     for (const t of towns) drawHouse(ctx, t.at.x * scale, t.at.y * scale, t.color ?? '#b08a3c')
     for (const p of patrols) drawPatrol(ctx, p.at.x * scale, p.at.y * scale, p.color)
     // Back to front on screen (the screen's vertical is x + y), the player's own on top.

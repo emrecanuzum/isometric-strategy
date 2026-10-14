@@ -350,7 +350,8 @@ uzaklık olmalı; kimse tamamen dezavantajlı başlamamalı.
   Lobi, büyüklüğü kadar renk sunar (9 ya da 18; `packages/shared/src/colors.ts`)
   ve **bir renk lobide yalnızca bir krallığındır**: alınmış renk seçilemez. Sarayın
   çatıları bu renkte çizilir. Harita uzaklaştırıldığında (½× ve altı)
-  krallığın adı **sarayın üstünde** yazar (saray yoksa hududun ortasında).
+  krallığın adı **sarayın üstünde**, haritayı okutacak kadar **büyük** (30
+  piksel) yazar (saray yoksa hududun ortasında); taç başkentlerinin adları da.
 - **1 parsel = 4×4 karo** (yani 32×32 karodan 64×64 karoya). Değerler
   `config/balance/territory.json` içindedir.
 - Karenin içinde **yerleşim tamamen oyuncuya aittir**: neyi nereye inşa
@@ -869,9 +870,11 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   (yaklaşık 6,6 karo boyunda, uzun ve alçak; burnunda tunç mahmuz, iki
   yanında kürek sırası, bordasında kalkanlar, tek direkte çizgili büyük kare
   yelken, kıçta tenteli kasara ve fener; demirliyken kürekler dik çekili,
-  yelken sarılı, suda hafifçe sallanır); göl genişse biri açıkta demirli bekler, biri de
-  yelken açıp açığa gidip geri gelir (`apps/web/src/game/shipSprites.ts`,
-  `ambient.ts`). Eski lobilerdeki şehirlerin yanı uygun bir göle bakıyorsa
+  yelken sarılı, suda hafifçe sallanır); göl genişse biri açıkta demirli bekler.
+  **Her limanda** bir kadırga yelken açıp açığa gidip geri gelir: iskelelerden
+  ve demirli gemilerden uzak şeritler arasından en uzun açık suyun olduğu
+  seçilir. Kadırgalar **her yakınlaştırmada** görünür (yürüyenler ve kervanlar
+  gibi uzakta gizlenmez) (`apps/web/src/game/shipSprites.ts`, `ambient.ts`). Eski lobilerdeki şehirlerin yanı uygun bir göle bakıyorsa
   onlarda da liman görünür.
 - **Yollar:** Şehirler ticaret yolu ağının düğümleridir (hanlar gibi).
   Şehre giden yol **surda biter**, orada kapı vardır; şehre gitmeyen yollar
@@ -1089,8 +1092,8 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
 (`lobby_towns` tablosu); çizim `apps/web/src/game/towns.ts`, panel
 `apps/web/src/ui/hud/towns.tsx`.
 
-- **Yer:** Lobi başına oyuncu sayısının ~¾'ü kadar (9 kişilik lobide 7)
-  kasaba, 8×8 karo. Lobi tohumundan, sunucu tarafından **bir kez** yerleşir
+- **Yer:** Lobi başına oyuncu sayısının ~1,2 katı (9 kişilik lobide 11,
+  18 kişilikte 22; `perPlayers`) kasaba, 8×8 karo. Lobi tohumundan, sunucu tarafından **bir kez** yerleşir
   (ilk komutta; eski lobiler dahil): dağ halkasının içinde, düz kuru arazide,
   yollardan, hanlardan, taç başkentlerinden, birbirinden ve o ana kadar
   verilmiş bütün kuruluş yerlerinin son hududundan uzakta. Sonra gelen
@@ -1099,8 +1102,8 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
   oduncu, demirhane, tapınak), çevresinde evler, köşede gözcü kulesi, önünde
   bir patika. Adı üstünde yazar; sahibi varsa sahibinin renginde ve adıyla.
 - **Türler ve katkı** (tur başına, yokluk cezasına tabi): vergi kasabası
-  +4 altın, tarım +3 yemek, kereste +2,5 yapı malzemesi, demirci +2 savaş
-  malzemesi; kalabalık kasaba **+10 köylü** (nüfus sınırı ve barınak birlikte
+  +7 altın, tarım +5 yemek, kereste +4 yapı malzemesi, demirci +3,5 savaş
+  malzemesi; kalabalık kasaba **+14 köylü** (nüfus sınırı ve barınak birlikte
   artar). Türler kasabalar arasında dağıtılır; her tür en az bir kez vardır.
 - **Kuşatma:** Kasabaya tıklayınca panel açılır; "Gönder" ile bir ordu
   seçilir (ordu "Hareket" ile kasabanın üstüne gönderilerek de aynısı olur).
@@ -1608,6 +1611,10 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
 - Dünya haritası (telefonda küçük haritaya dokununca) yakınlaştırılınca her
   yöne, yukarı-aşağı da kaydırılabilir; yakınlaştırma bakılan yeri ortaya
   getirir.
+- Küçük haritada her krallığın **hududu kendi renginde** yarı saydam bir
+  alan ve çerçeveyle (oyuncununki altın çerçeveli) boyanır; taç başkentlerinin
+  kalesinin üstünde tacın renginde sancak dalgalanır. Simgeler (sancak, kale,
+  kasaba, devriye) büyüktür.
 - Küçük haritada krallıklar renkli sancakla, **serbest şehirler** açık
   taş renginde küçük bir **kale** simgesiyle (iki kuleli, kapılı),
   **kasabalar** sahibinin renginde çatılı küçük bir **ev** simgesiyle
