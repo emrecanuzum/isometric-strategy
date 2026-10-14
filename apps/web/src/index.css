@@ -2286,16 +2286,23 @@ small {
     display: none;
   }
 
-  /* The last chip of the store bar, its list dropping down under the bar's right end. */
+  /* The last chip of the store bar, as wide as the others, its list dropping down under the bar's right end. */
   .map-menu {
     position: relative;
-    flex: none;
+    flex: 1;
+    min-width: 0;
     display: flex;
     box-shadow: calc(var(--px) * -1) 0 0 0 var(--panel-lo), calc(var(--px) * -2) 0 0 0 var(--panel-hi);
   }
 
   .menu-toggle {
-    padding: 0 calc(var(--px) * 3);
+    flex: 1;
+    justify-content: center;
+  }
+
+  .menu-toggle .icon {
+    width: 18px;
+    height: 18px;
   }
 
   .map-menu-list {
@@ -3040,15 +3047,51 @@ small {
   bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10 + 44px + var(--px) * 6);
   z-index: 4;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: calc(var(--px) * 2);
   width: min(300px, calc(100vw - var(--gap) * 2));
   max-height: 40vh;
-  overflow: hidden auto;
   margin: 0;
-  padding: calc(var(--px) * 4) calc(var(--px) * 5);
-  list-style: none;
+  padding: calc(var(--px) * 3) calc(var(--px) * 5) calc(var(--px) * 4);
   font-size: 14px;
   pointer-events: none;
+}
+
+.timers.folded {
+  width: auto;
+  padding-bottom: calc(var(--px) * 3);
+}
+
+/* The header folds the list away; it alone takes taps, the timers let them through to the map. */
+.timers-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.timers-head small {
+  margin-left: auto;
+  padding-left: calc(var(--px) * 4);
+  color: var(--text);
+}
+
+.timers-list {
+  display: grid;
+  gap: calc(var(--px) * 2);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden auto;
+  list-style: none;
 }
 
 .timer {

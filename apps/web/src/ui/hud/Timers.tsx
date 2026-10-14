@@ -1,6 +1,6 @@
 import { BUILDINGS, RESEARCH, balance, unitSpec } from '@game/shared'
 import type { Kingdom } from '@game/shared'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Icon } from '../icons'
 import type { IconName } from '../icons'
 import { BUILDING_NAMES, RESEARCH_NAMES, UNIT_NAMES } from '../names'
@@ -94,9 +94,33 @@ export function Timers({ kingdom, online, now }: { kingdom: Kingdom; online?: On
   for (const t of timersOf(kingdom, online, now)) seen.current.set(t.key, t)
   for (const [key, t] of seen.current) if (t.end <= now - FLASH_MS) seen.current.delete(key)
   const list = [...seen.current.values()].sort((a, b) => a.end - b.end)
+  // Folded away to its header (remembered in the browser): the count and the soonest to end.
+  const [folded, setFolded] = useState(() => {
+    try {
+      return localStorage.getItem(FOLD_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const fold = () => {
+    setFolded(!folded)
+    try {
+      localStorage.setItem(FOLD_KEY, folded ? '0' : '1')
+    } catch {
+      // Without storage it is only folded for now.
+    }
+  }
   if (list.length === 0) return null
+  const next = list.find((t) => t.end > now)
   return (
-    <ul className="timers frame" aria-label="Süren işler">
+    <section className={folded ? 'timers frame folded' : 'timers frame'} aria-label="Süren işler">
+      <button className="timers-head" onClick={fold} aria-expanded={!folded}>
+        <Icon name={folded ? 'plus' : 'minus'} size={8} />
+        <span>Süren işler · {list.length}</span>
+        {folded && next && <small>{left(next.end - now)}</small>}
+      </button>
+      {!folded && (
+    <ul className="timers-list">
       {list.map((t) => {
         const done = t.end <= now
         return (
@@ -109,5 +133,9 @@ export function Timers({ kingdom, online, now }: { kingdom: Kingdom; online?: On
         )
       })}
     </ul>
+      )}
+    </section>
   )
 }
+
+const FOLD_KEY = 'timers-folded'

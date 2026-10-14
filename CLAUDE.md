@@ -568,7 +568,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   kuşatma kalkanı ve kalkan bekleyen ordu) sol altta menünün üstünde kalan
   süre ve ilerleme çubuğuyla listelenir; biten iş birkaç saniye yeşil yanıp
   söner. Sohbet düğmesinin (açıkken sohbetin) üstünde durur; bir sekme ya
-  da bina menüsü açıkken gizlenir.
+  da bina menüsü açıkken gizlenir. Başlığına ("Süren işler · N") dokununca
+  liste daralır; daralmışken yalnızca sayı ve ilk bitecek işin kalan süresi
+  görünür (tercih tarayıcıda hatırlanır).
 - **Ses efektleri kısadır** (hepsi 1 saniyenin altında).
 - Ana menüde müzik daha kısık çalar (haritadaki sesin yaklaşık %45'i).
   Her düğme hafif bir tık sesiyle cevap verir; lobiye girerken yükselen,
