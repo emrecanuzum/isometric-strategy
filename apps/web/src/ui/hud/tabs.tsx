@@ -13,6 +13,7 @@ import {
   palaceLevel,
   buildingCount,
   cutOff,
+  imprisoned,
   isFree,
   buyCost,
   buyError,
@@ -740,6 +741,12 @@ function Society({ kingdom, now, online }: { kingdom: Kingdom; now: number; onli
       {(kingdom.fearUntil ?? 0) > now && (
         <p className="alert">
           <Icon name="warn" size={16} /> Sınırında düşman ordusu bekliyor: halk korkuyor (mutluluk {balance.military.fear.happiness}).
+        </p>
+      )}
+      {imprisoned(kingdom.buildings, kingdom.site, now) && (
+        <p className="alert">
+          <Icon name="warn" size={16} /> Surlarında kapı yok, halk dışarı çıkamıyor: krallığın bir hapishane (mutluluk {balance.society.happiness.imprisoned}).
+          Sura bir kapı koy.
         </p>
       )}
       {(kingdom.revoltUntil ?? 0) > now && (

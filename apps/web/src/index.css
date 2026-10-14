@@ -2173,6 +2173,42 @@ small {
   z-index: 3;
 }
 
+/* Standing trouble (a town with no gate, buildings walled off…) on the right edge, between the top bar and the map
+   buttons. */
+.map-alerts {
+  position: fixed;
+  right: var(--gap);
+  top: 50%;
+  transform: translateY(-60%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(var(--px) * 4);
+  max-width: min(280px, calc(100vw - 2 * var(--gap) - 56px));
+  z-index: 3;
+}
+
+.map-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 4) calc(var(--px) * 6);
+  --hi: #a83a2a;
+  --lo: #2e0c08;
+  background: #4a1a14;
+  color: #ffe2dc;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-alert svg {
+  flex: none;
+  margin-top: 1px;
+}
+
 .minimap {
   position: fixed;
   right: 64px;
@@ -2485,6 +2521,7 @@ small {
 
   /* The open sheet covers the map controls. */
   :root[data-sheet='open'] .zoom,
+  :root[data-sheet='open'] .map-alerts,
   :root[data-sheet='open'] .minimap {
     display: none;
   }

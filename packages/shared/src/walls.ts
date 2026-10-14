@@ -10,22 +10,34 @@ import { territoryRect } from './territory'
 
 const blocks = (b: Building, at: number) => b.kind === 'wall' && !b.broken && b.doneAt <= at
 
-const memo = new WeakMap<Building[], Map<string, Set<number>>>()
-// The last answer for each list of buildings: a production round asks the same question for every building.
-const last = new WeakMap<Building[], { at: number; out: Set<number> }>()
-
-// The ids of the buildings that cannot be reached from the palace at `at`.
-export function cutOff(buildings: Building[], site: Point, at: number): Set<number> {
-  const recent = last.get(buildings)
-  if (recent && recent.at === at) return recent.out
-  const out = cutOffAt(buildings, site, at)
-  last.set(buildings, { at, out })
-  return out
+// What the flood found: the buildings it never reached, and whether it stayed inside the walls (no way out of town).
+interface Flood {
+  out: Set<number>
+  enclosed: boolean
 }
 
-function cutOffAt(buildings: Building[], site: Point, at: number): Set<number> {
+const OPEN: Flood = { out: new Set(), enclosed: false }
+const memo = new WeakMap<Building[], Map<string, Flood>>()
+// The last answer for each list of buildings: a production round asks the same question for every building.
+const last = new WeakMap<Building[], { at: number; flood: Flood }>()
+
+function flood(buildings: Building[], site: Point, at: number): Flood {
+  const recent = last.get(buildings)
+  if (recent && recent.at === at) return recent.flood
+  const result = floodAt(buildings, site, at)
+  last.set(buildings, { at, flood: result })
+  return result
+}
+
+// The ids of the buildings that cannot be reached from the palace at `at`.
+export const cutOff = (buildings: Building[], site: Point, at: number): Set<number> => flood(buildings, site, at).out
+
+// Walls ring the palace with no gate (nor a broken stretch) to leave by: the town is a prison and the people sulk.
+export const imprisoned = (buildings: Building[], site: Point, at: number): boolean => flood(buildings, site, at).enclosed
+
+function floodAt(buildings: Building[], site: Point, at: number): Flood {
   const walls = buildings.filter((b) => blocks(b, at))
-  if (walls.length === 0) return new Set()
+  if (walls.length === 0) return OPEN
   const key = walls.map((w) => w.id).join(',')
   let byWalls = memo.get(buildings)
   if (!byWalls) memo.set(buildings, (byWalls = new Map()))
@@ -34,7 +46,7 @@ function cutOffAt(buildings: Building[], site: Point, at: number): Set<number> {
 
   const palace = buildings.find((b) => b.kind === 'palace')
   const out = new Set<number>()
-  if (!palace) return out
+  if (!palace) return OPEN
   // The box: the fully grown territory and every building, with a margin to walk round the outside.
   const t = territoryRect(site, balance.territory.stageParcels.length - 1)
   let x0 = t.x
@@ -57,6 +69,8 @@ function cutOffAt(buildings: Building[], site: Point, at: number): Set<number> {
   for (const b of walls) wall[(b.y - y0) * w + (b.x - x0)] = 1
   const seen = new Uint8Array(w * h)
   const queue: number[] = []
+  // The box reaches past the territory; a flood that touches its edge has found the way out.
+  let enclosed = true
   for (let y = palace.y; y < palace.y + palace.size; y++) {
     for (let x = palace.x; x < palace.x + palace.size; x++) {
       const i = (y - y0) * w + (x - x0)
@@ -71,7 +85,10 @@ function cutOffAt(buildings: Building[], site: Point, at: number): Set<number> {
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nx = x + dx
       const ny = y + dy
-      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) {
+        enclosed = false
+        continue
+      }
       const n = ny * w + nx
       if (seen[n] || wall[n]) continue
       seen[n] = 1
@@ -91,6 +108,7 @@ function cutOffAt(buildings: Building[], site: Point, at: number): Set<number> {
     }
     if (!reached) out.add(b.id)
   }
-  byWalls.set(key, out)
-  return out
+  const result = { out, enclosed }
+  byWalls.set(key, result)
+  return result
 }

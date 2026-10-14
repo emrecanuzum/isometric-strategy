@@ -28,6 +28,7 @@
     "queen": 15,
     "starving": -30,
     "looted": -20,
+    "imprisoned": -15,
     "approachPerRound": 0.08
   },
   "recruits": {

@@ -64,7 +64,7 @@ import type { KingdomInfo, Online } from './ui/hud/online'
 import { BattleView } from './ui/hud/war'
 import type { Settings } from './net/settings'
 import { Chat } from './ui/Chat'
-import { findPath } from './game/town'
+import { findPath, tilesAlong } from './game/town'
 import type { Errand } from './game/town'
 import { Icon } from './ui/icons'
 import { BUILDING_NAMES, FORTUNE_TEXTS, RESOURCE_NAMES, SCOPE_NAMES } from './ui/names'
@@ -72,6 +72,7 @@ import { Dock, Sheet, TopBar, useTabKeys } from './ui/hud/Hud'
 import type { TabId } from './ui/hud/Hud'
 import { useJournal } from './ui/hud/journal'
 import { BuildingSheet } from './ui/hud/BuildingSheet'
+import { MapAlerts } from './ui/hud/MapAlerts'
 import { MapTip } from './ui/hud/MapTip'
 import type { HudData } from './ui/hud/tabs'
 import { GoodPicker, SitePicker, missingText } from './ui/panels'
@@ -258,7 +259,8 @@ const doorstep = (b: TownBuilding): Point => ({ x: b.x + b.size * 0.7, y: b.y + 
 
 // Footpaths worn in a town (the player's or a rival's, as everyone sees them alike): from every building's door to
 // the palace gate, around the buildings in between, and along the villagers' daily walks from home to work. Walls
-// and gates send nobody out, so they wear no paths of their own.
+// and gates send nobody out, so they wear no paths of their own. The walks nearest the palace are worn first and later
+// ones join them where they can (see findPath), so the town grows a few shared paths branching out from the palace.
 function footpaths(world: World, buildings: TownBuilding[], time: number): Point[][] {
   const palace = buildings.find((b) => b.kind === 'palace')
   const solid = new Set<number>()
@@ -268,11 +270,20 @@ function footpaths(world: World, buildings: TownBuilding[], time: number): Point
     for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) solid.add(y * world.size + x)
   }
   const visited = buildings.filter((b) => b !== palace && b.doneAt <= time && b.kind !== 'wall' && b.kind !== 'gate')
-  const routes = [...(palace ? visited.map((b) => ({ from: doorstep(b), to: doorstep(palace) })) : []), ...townErrands(buildings, time)]
+  const gate = palace && doorstep(palace)
+  const far = (p: Point) => (gate ? Math.hypot(p.x - gate.x, p.y - gate.y) : 0)
+  const routes = [
+    ...(gate ? visited.map((b) => ({ from: doorstep(b), to: gate })).sort((a, b) => far(a.from) - far(b.from)) : []),
+    ...townErrands(buildings, time),
+  ]
+  const worn = new Set<number>()
+  const blocked = (x: number, y: number) => solid.has(y * world.size + x) || !walkable(world, x, y)
   return routes.flatMap(({ from, to }) => {
     if (Math.hypot(to.x - from.x, to.y - from.y) > TRAIL_MAX_TILES) return []
-    const path = findPath(from, to, (x, y) => solid.has(y * world.size + x) || !walkable(world, x, y))
-    return path ? [path.points] : []
+    const path = findPath(from, to, blocked, (x, y) => worn.has(y * world.size + x))
+    if (!path) return []
+    tilesAlong(path.points, (x, y) => worn.add(y * world.size + x))
+    return [path.points]
   })
 }
 
@@ -1301,6 +1312,16 @@ function App({
         </div>
       )}
       {ready && view && loading && <PixelSpinner />}
+      {kingdom && !needsPalace && (
+        <MapAlerts
+          kingdom={kingdom}
+          now={now}
+          onOpen={(tab) => {
+            setSelected(null)
+            setPanel(tab)
+          }}
+        />
+      )}
       {view && (
         <div className="zoom">
           <button className="btn icon-only" onClick={() => site && view.centerOn(site)} aria-label="Üsse dön" title="Üsse dön">

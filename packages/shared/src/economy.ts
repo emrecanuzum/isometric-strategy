@@ -4,7 +4,7 @@ import { priceAt } from './market'
 import type { Market } from './market'
 import { happinessStep, happinessTarget, isNightAt, popCapFor, recruitTerms, taxSpec } from './society'
 import { addUnits, countOf, garrisonOf, unitSpec } from './units'
-import { cutOff } from './walls'
+import { cutOff, imprisoned } from './walls'
 import { fortuneEffects, fortunesBegun, hasResearch, hospitalHeal, levelOf, researchEffects, sermonTaxFactor, templeHappiness } from './institutions'
 import type { FortuneKind, FortuneScope } from './institutions'
 import type { Unit, Units } from './units'
@@ -299,9 +299,25 @@ export function surveySite(world: World, site: Point): Survey {
 const overlaps = (a: Rect, b: Rect, gap: number) =>
   a.x < b.x + b.size + gap && b.x < a.x + a.size + gap && a.y < b.y + b.size + gap && b.y < a.y + a.size + gap
 
-// Walls and gates keep a tile's clearance from every other building (and other buildings from them), so a tall wall
-// never stands against a house or cuts through a yard on screen.
+// Walls and gates keep clear of every other building (and other buildings of them), so a tall wall never stands
+// against a house or cuts through a yard on screen. A wall in front of a building (toward the bottom of the screen,
+// past its far x or y edge) rises over the ground between, so it keeps further off there than behind.
 const wallish = (kind: BuildingKind) => kind === 'wall' || kind === 'gate'
+
+function tooClose(building: Rect, wall: Rect) {
+  const { behind, front } = balance.economy.wallClearance
+  return (
+    wall.x < building.x + building.size + front &&
+    building.x - behind < wall.x + wall.size &&
+    wall.y < building.y + building.size + front &&
+    building.y - behind < wall.y + wall.size
+  )
+}
+
+const clash = (b: Building, spot: Rect, gap: number, kind?: BuildingKind) => {
+  if (!kind || wallish(kind) === wallish(b.kind)) return overlaps(b, spot, gap)
+  return wallish(kind) ? tooClose(b, spot) : tooClose(spot, b)
+}
 
 // Inside the territory, on free land, clear of other buildings by `gap` tiles (one tile between a wall or gate and
 // anything else when `kind` is given).
@@ -312,7 +328,7 @@ export function canPlace(world: World, kingdom: Pick<Kingdom, 'site' | 'building
     // Shore buildings stand on shore tiles, everything else on free land.
     for (let x = spot.x; x < spot.x + spot.size; x++) if (tileRule(world, x, y) !== (kind && BUILDINGS[kind].shoreOnly ? TileRule.DockOnly : TileRule.Free)) return false
   }
-  return !kingdom.buildings.some((b) => overlaps(b, spot, kind && wallish(kind) !== wallish(b.kind) ? Math.max(1, gap) : gap))
+  return !kingdom.buildings.some((b) => clash(b, spot, gap, kind))
 }
 
 // ---- Gates --------------------------------------------------------------------------------------------------------
@@ -1009,6 +1025,7 @@ export function happinessFor(k: Kingdom, at: number) {
     taxFactor: sermonTaxFactor(k, at),
     extra:
       ((k.fearUntil ?? 0) > at ? balance.military.fear.happiness : 0) +
+      (imprisoned(k.buildings, k.site, at) ? balance.society.happiness.imprisoned : 0) +
       templeHappiness(k, at) +
       researchEffects(k, at).happiness +
       (k.sickness ?? 0) * balance.institutions.sickness.happinessPerShare +

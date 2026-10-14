@@ -38,9 +38,14 @@ export interface Path {
   length: number
 }
 
+// Stepping onto a worn footpath costs this much of fresh ground, so new walks join the paths already there and the
+// town wears a few shared paths instead of a fan of straight lines.
+const WORN_COST = 0.35
+
 // Shortest walk over tiles that are not blocked (8 directions, no corner cutting), pulled taut wherever a straight
-// line stays clear. The two ends may stand on blocked tiles (a field, a doorway).
-export function findPath(from: Point, to: Point, blocked: (x: number, y: number) => boolean): Path | null {
+// line stays clear. The two ends may stand on blocked tiles (a field, a doorway). With `worn`, tiles on footpaths are
+// cheaper to walk, and the walk is pulled taut only along stretches that stay all on or all off them.
+export function findPath(from: Point, to: Point, blocked: (x: number, y: number) => boolean, worn?: (x: number, y: number) => boolean): Path | null {
   const x0 = Math.floor(Math.min(from.x, to.x)) - SEARCH_MARGIN
   const y0 = Math.floor(Math.min(from.y, to.y)) - SEARCH_MARGIN
   const w = Math.floor(Math.max(from.x, to.x)) + SEARCH_MARGIN - x0 + 1
@@ -49,19 +54,48 @@ export function findPath(from: Point, to: Point, blocked: (x: number, y: number)
   const start = index(from)
   const goal = index(to)
   const free = (i: number) => i === start || i === goal || !blocked(x0 + (i % w), y0 + Math.floor(i / w))
+  const step = (i: number) => (worn?.(x0 + (i % w), y0 + Math.floor(i / w)) ? WORN_COST : 1)
   // Float64: with 32-bit costs rounding can make two tiles each look cheaper by way of the other, which loops the
   // walk back from the goal forever.
   const cost = new Float64Array(w * h).fill(Infinity)
   const closed = new Uint8Array(w * h)
   const came = new Int32Array(w * h).fill(-1)
-  const open: number[] = [start]
   cost[start] = 0
-  const guess = (i: number) => Math.hypot((i % w) - (goal % w), Math.floor(i / w) - Math.floor(goal / w))
-  while (open.length > 0) {
-    // Few tiles: a linear scan for the best open node is plenty.
-    let best = 0
-    for (let n = 1; n < open.length; n++) if (cost[open[n]] + guess(open[n]) < cost[open[best]] + guess(open[best])) best = n
-    const i = open.splice(best, 1)[0]
+  // The guess never overestimates, even when the whole way could be on footpaths.
+  const scale = worn ? WORN_COST : 1
+  const guess = (i: number) => scale * Math.hypot((i % w) - (goal % w), Math.floor(i / w) - Math.floor(goal / w))
+  // A binary heap of [priority, tile]; stale entries are skipped when popped.
+  const heap: [number, number][] = [[guess(start), start]]
+  const push = (entry: [number, number]) => {
+    heap.push(entry)
+    for (let c = heap.length - 1; c > 0; ) {
+      const p = (c - 1) >> 1
+      if (heap[p][0] <= heap[c][0]) break
+      ;[heap[p], heap[c]] = [heap[c], heap[p]]
+      c = p
+    }
+  }
+  const pop = () => {
+    const top = heap[0]
+    const end = heap.pop()!
+    if (heap.length > 0) {
+      heap[0] = end
+      for (let p = 0; ; ) {
+        const l = p * 2 + 1
+        const r = l + 1
+        let m = p
+        if (l < heap.length && heap[l][0] < heap[m][0]) m = l
+        if (r < heap.length && heap[r][0] < heap[m][0]) m = r
+        if (m === p) break
+        ;[heap[p], heap[m]] = [heap[m], heap[p]]
+        p = m
+      }
+    }
+    return top
+  }
+  while (heap.length > 0) {
+    const i = pop()[1]
+    if (closed[i]) continue
     closed[i] = 1
     if (i === goal) break
     const x = i % w
@@ -73,11 +107,11 @@ export function findPath(from: Point, to: Point, blocked: (x: number, y: number)
         if ((dx === 0 && dy === 0) || nx < 0 || ny < 0 || nx >= w || ny >= h) continue
         const n = ny * w + nx
         if (closed[n] || !free(n) || (dx !== 0 && dy !== 0 && (!free(y * w + nx) || !free(ny * w + x)))) continue
-        const next = cost[i] + (dx !== 0 && dy !== 0 ? Math.SQRT2 : 1)
+        const next = cost[i] + (dx !== 0 && dy !== 0 ? Math.SQRT2 : 1) * step(n)
         if (next >= cost[n]) continue
-        if (cost[n] === Infinity) open.push(n)
         cost[n] = next
         came[n] = i
+        push([next + guess(n), n])
       }
     }
   }
@@ -89,13 +123,21 @@ export function findPath(from: Point, to: Point, blocked: (x: number, y: number)
     cells.push({ x: x0 + (i % w) + 0.5, y: y0 + Math.floor(i / w) + 0.5 })
   }
   const raw = [from, ...cells.reverse().slice(0, -1), to]
-  // String pulling: skip corners while the straight line between stays on free tiles.
+  // String pulling: skip corners while the straight line between stays on free tiles (and on or off the footpaths
+  // throughout, so a walk that joins a path keeps to it).
   const clear = (a: Point, b: Point) => {
     const steps = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 4)
+    let side: boolean | null = null
     for (let s = 1; s < steps; s++) {
       const p = { x: a.x + ((b.x - a.x) * s) / steps, y: a.y + ((b.y - a.y) * s) / steps }
       const i = index(p)
-      if (i !== start && i !== goal && blocked(Math.floor(p.x), Math.floor(p.y))) return false
+      if (i === start || i === goal) continue
+      if (blocked(Math.floor(p.x), Math.floor(p.y))) return false
+      if (worn) {
+        const on = worn(Math.floor(p.x), Math.floor(p.y))
+        if (side !== null && on !== side) return false
+        side = on
+      }
     }
     return true
   }
@@ -106,6 +148,16 @@ export function findPath(from: Point, to: Point, blocked: (x: number, y: number)
   const at = [0]
   for (let i = 1; i < points.length; i++) at.push(at[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y))
   return { points, at, length: at[at.length - 1] }
+}
+
+// The tiles a walked line passes over.
+export function tilesAlong(points: Point[], visit: (x: number, y: number) => void) {
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]
+    const b = points[i]
+    const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 3))
+    for (let s = 0; s <= steps; s++) visit(Math.floor(a.x + ((b.x - a.x) * s) / steps), Math.floor(a.y + ((b.y - a.y) * s) / steps))
+  }
 }
 
 // Position and screen heading at distance `d` along a path.
@@ -133,7 +185,7 @@ function walker(layer: Container, pair: Sprite[]): Walker {
 }
 
 export interface Town {
-  set(errands: Errand[], merchant: MerchantTrip | null, blocked: (x: number, y: number) => boolean): void
+  set(errands: Errand[], merchant: MerchantTrip | null, blocked: (x: number, y: number) => boolean, worn: (x: number, y: number) => boolean): void
   update(now: number, view: { left: number; top: number; right: number; bottom: number }): void
 }
 
@@ -155,10 +207,10 @@ export function createTown(world: World, layer: Container): Town {
   }
 
   return {
-    set(errands, next, blocked) {
+    set(errands, next, blocked, worn) {
       for (const v of villagers) v.sprite.destroy()
       villagers = errands.flatMap((errand, i) => {
-        const path = findPath(errand.from, errand.to, blocked)
+        const path = findPath(errand.from, errand.to, blocked, worn)
         if (!path) return []
         const pair = VILLAGER_SPRITES[Math.floor(hash(i, 3, world.seed) * VILLAGER_SPRITES.length)]
         const roll = (n: number) => hash(Math.round(errand.from.x * 7 + errand.to.y), i * 8 + n, world.seed + 77)
@@ -172,7 +224,7 @@ export function createTown(world: World, layer: Container): Town {
         ]
       })
       const far = !next || Math.hypot(next.market.x - next.home.x, next.market.y - next.home.y) > MERCHANT_MAX_TILES
-      const path = next && !far ? findPath(next.home, next.market, blocked) : null
+      const path = next && !far ? findPath(next.home, next.market, blocked, worn) : null
       trip = next && path ? { ...next, path } : null
     },
     update(now, view) {

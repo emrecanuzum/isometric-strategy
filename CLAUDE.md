@@ -485,8 +485,12 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   mantık `packages/shared/src/fishing.ts`.
 - **Patikalar:** Her yapının kapısından saraya ve köylülerin evden işe
   yürüdüğü yollar boyunca, yapıların etrafından dolaşan ince toprak
-  patikalar zemine işlenir. Sur ve kapılar patika üretmez. Patikalar bütün
-  krallıklarda çizilir (rakiplerinki de herkese görünür).
+  patikalar zemine işlenir. Sur ve kapılar patika üretmez. Saraya en yakın
+  yapıların yolu önce açılır, sonrakiler var olan patikaya katılır (patika
+  karosu yürümesi daha ucuzdur); böylece saraydan dallanan birkaç ortak
+  patika oluşur, yelpaze gibi açılan düz çizgiler değil. Köylüler de
+  patikalardan yürür. Patikalar bütün krallıklarda çizilir (rakiplerinki de
+  herkese görünür).
 - **İnşa menüsü (devam):**
   - **İnşa listesi** saray seviyesine göre 5 sekmedir (1. sv. … 5. sv.): her
     sekmede o seviyede açılan yapılar ve sınırı artan yapılar yazar; henüz
@@ -535,9 +539,11 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     "Döndür" düğmesiyle çevrilebilir; yerleştirirken üç karonun önizlemesi
     görünür. Var olan sur parçalarının üstüne kurulabilir (onların yerini
     alır).
-  - **Boşluk:** Sur ve kapılar diğer binalarla arasında en az 1 karo boşluk
-    bırakır (surlar birbirine bitişik olabilir), böylece uzun sur bir binanın
-    avlusunu ya da duvarını ekranda kesmez.
+  - **Boşluk:** Sur ve kapılar diğer binalarla arasında boşluk bırakır
+    (surlar birbirine bitişik olabilir): binanın arkasında 1 karo, önünde
+    (ekranın altına doğru, x ya da y yönünde ileride) 2 karo; çünkü öndeki
+    yüksek sur aradaki zeminin üstüne yükselir ve 1 karoda binanın avlusunu
+    ekranda keserdi (`economy.json` → `wallClearance`).
   - **Surlar insanları da tutar:** köylüler ve tüccar saraydan yürüyerek
     çıkar; ayakta duran sur parçasından geçemez, yalnızca **sur kapısından**
     (saray 2. seviye, 1 karo) ya da yıkık bir sur kesiminden geçer. Saraydan
@@ -545,6 +551,13 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     çevrilmiş ticaret noktası ya da surun içinde kalan tüccar hiçbir şey
     satmaz. Ordular bundan etkilenmez; kuşatmada kapı sur sayılır
     (`packages/shared/src/walls.ts`).
+  - **Hapishane:** Surlar sarayı kapısız (ve yıkık kesimsiz) çevrelerse halk
+    dışarı çıkamaz: "Krallığın bir hapishane" uyarısı çıkar ve mutluluk
+    hedefi düşer (`society.json` → `happiness.imprisoned`, −15).
+  - **Harita uyarıları:** Süren sorunlar (hapishane, sur arkasında kalan
+    yapılar, sınırdaki düşman ordusu, ayaklanma) ekranın sağ ortasında, üst
+    çubukla harita düğmeleri arasında kırmızı kartlarla durur; dokununca
+    ilgili sekme açılır (`apps/web/src/ui/hud/MapAlerts.tsx`).
   - **İlk oduncu kampı, ilk ev ve ilk tarla ücretsizdir** (bir kez), böylece
     bütün malzemesini harcayan oyuncu kilitlenmez.
   - **Ev ve nüfus sınırı:** Evler (ve sarayın kendi odaları) nüfus

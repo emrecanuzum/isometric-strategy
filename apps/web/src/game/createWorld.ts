@@ -30,7 +30,7 @@ import { CHUNK_PAD } from './chunkPainter'
 import type { LiftedTree, Structure } from './chunkPainter'
 import type { PaintRequest, PaintResult } from './paintWorker'
 import { freeTexture, textureOf } from './textures'
-import { createTown } from './town'
+import { createTown, tilesAlong } from './town'
 import type { Errand, MerchantTrip } from './town'
 import type { FederatedPointerEvent } from 'pixi.js'
 
@@ -1020,6 +1020,8 @@ export async function createWorld(
   }
   let trailKey = '[]'
   let trailPoints: Point[] = []
+  // Tiles on a footpath: the town's walkers keep to them (see findPath).
+  let worn = new Set<number>()
   function setStructures(structures: Structure[], trails: Point[][]) {
     hits = structures
       .filter((s) => s.id !== undefined)
@@ -1053,6 +1055,8 @@ export async function createWorld(
       for (const p of [...trailPoints, ...points]) dirty.push({ x: Math.floor(p.x), y: Math.floor(p.y), size: 1 })
       trailPoints = points
       trailKey = nextTrailKey
+      worn = new Set()
+      for (const line of trails) tilesAlong(line, (x, y) => worn.add(y * world.size + x))
     }
     for (const s of dirty) {
       const clamp = (v: number) => Math.min(chunkCount - 1, Math.max(0, Math.floor(v / chunkSize)))
@@ -1136,7 +1140,7 @@ export async function createWorld(
         if (solid.has(y * world.size + x) || x < 0 || y < 0 || x >= world.size || y >= world.size) return true
         const t = world.terrain[y * world.size + x]
         return t === Terrain.Lake || t === Terrain.River || t === Terrain.Mountain
-      }),
+      }, (x, y) => worn.has(y * world.size + x)),
     blocksWalkers: (x, y) => solid.has(y * world.size + x),
     float,
     zoomBy: (step) => zoomTo(zoomIndex + step, { x: app.screen.width / 2, y: app.screen.height / 2 }),
