@@ -377,6 +377,22 @@ small {
   }
 }
 
+/* Opened by a tap on touch screens; its button leads on to the tab. */
+.res-wrap.open .pop {
+  display: flex;
+  pointer-events: auto;
+}
+
+.pop-go {
+  align-self: stretch;
+  justify-content: center;
+}
+
+/* The phone menu: hidden where the settings and main-menu buttons stand on their own. */
+.map-menu {
+  display: none;
+}
+
 .pop-head {
   display: flex;
   align-items: center;
@@ -1261,15 +1277,24 @@ small {
 
 .worldmap-scroll {
   flex: 1;
+  min-height: 0;
   overflow: auto;
-  display: grid;
-  place-items: center;
+  display: flex;
+  container-type: size;
   touch-action: pan-x pan-y;
+}
+
+.worldmap-pad {
+  flex: none;
+  margin: auto;
+}
+
+.worldmap-pad.zoomed {
+  padding: 40cqh 30cqw;
 }
 
 .worldmap-sheet {
   position: relative;
-  min-width: 100%;
 }
 
 .worldmap-sheet canvas {
@@ -2251,8 +2276,54 @@ small {
 
   .top {
     left: var(--gap);
-    right: calc(var(--gap) + 56px);
+    right: var(--gap);
     max-width: none;
+  }
+
+  /* Settings and the main menu fold into one menu under the store bar, opening downward. */
+  .btn.music,
+  .btn.exit {
+    display: none;
+  }
+
+  .map-menu {
+    position: fixed;
+    top: calc(var(--gap) + 52px + var(--px) * 4);
+    right: var(--gap);
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: calc(var(--px) * 3);
+  }
+
+  .map-menu-list {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--px) * 2);
+    padding: calc(var(--px) * 3);
+  }
+
+  .map-menu-list .btn {
+    justify-content: flex-start;
+    gap: calc(var(--px) * 3);
+  }
+
+  /* Cards open under the whole bar, as wide as the screen allows. */
+  .pop,
+  .pop.right {
+    position: fixed;
+    top: calc(var(--gap) + 52px + var(--px) * 4);
+    left: var(--gap);
+    right: var(--gap);
+    width: auto;
+    max-height: 70vh;
+    overflow: auto;
+    box-sizing: border-box;
+  }
+
+  .pop::before {
+    display: none;
   }
 
   .topbar {
@@ -2266,18 +2337,20 @@ small {
     min-width: 0;
   }
 
+  /* Icon above the number, so the chips fit side by side across the screen. */
   .res {
     flex: 1;
+    flex-direction: column;
     justify-content: center;
-    gap: var(--px);
+    gap: calc(var(--px) * 1);
     min-width: 0;
-    padding: 0 var(--px);
+    padding: calc(var(--px) * 2) 0;
   }
 
   .res .icon {
     flex: none;
-    width: 10px;
-    height: 10px;
+    width: 18px;
+    height: 18px;
   }
 
   .res-value b {
@@ -2287,7 +2360,6 @@ small {
   }
 
   .res-value small,
-  .clock .icon,
   .tile-tag {
     display: none;
   }

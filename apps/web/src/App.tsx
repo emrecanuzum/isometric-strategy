@@ -314,6 +314,17 @@ function App({
   useEffect(() => view?.setDetail(settings.detail), [view, settings.detail])
   // The sound settings, opened from the corner button or the kingdom tab.
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // The phone menu (settings, main menu); a tap anywhere else closes it.
+  const [menuOpen, setMenuOpen] = useState(false)
+  const mapMenu = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!menuOpen) return
+    const away = (e: PointerEvent) => {
+      if (!mapMenu.current?.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', away)
+    return () => document.removeEventListener('pointerdown', away)
+  }, [menuOpen])
 
   // The server's copy of the player's row, and the kingdom as shown: the server's state settled up to now by the same
   // `advance` the server runs, with the player's commands applied at once while the server confirms them.
@@ -1094,6 +1105,29 @@ function App({
       <button className="btn icon-only music frame" onClick={() => setSettingsOpen(true)} title="Ayarlar" aria-label="Ayarlar">
         <Icon name="gear" size={16} />
       </button>
+      {/* On phones the settings and the way back to the main menu fold into one menu under the store bar. */}
+      <div className="map-menu" ref={mapMenu}>
+        <button className="btn icon-only frame menu-toggle" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} aria-label="Menü">
+          <Icon name={menuOpen ? 'close' : 'menu'} size={16} />
+        </button>
+        {menuOpen && (
+          <div className="map-menu-list frame" role="menu">
+            <button
+              className="btn small"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false)
+                setSettingsOpen(true)
+              }}
+            >
+              <Icon name="gear" size={16} /> Ayarlar
+            </button>
+            <button className="btn small" role="menuitem" onClick={onExit}>
+              <Icon name="home" size={16} /> Ana menü
+            </button>
+          </div>
+        )}
+      </div>
       {settingsOpen && (
         <div className="modal" role="dialog" aria-labelledby="settings-title" onClick={(e) => e.target === e.currentTarget && setSettingsOpen(false)}>
           <section className="dialog frame settings-dialog">

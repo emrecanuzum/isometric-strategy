@@ -1017,7 +1017,8 @@ mertebesindedir.
   sarayı kuşatan ordu surların önünde durur ve kuşatma orada başlar.
 - **Detay animasyonları** (Ayarlar → Görüntü, varsayılan açık): 1× ve üstü
   yakınlaştırmada ağaçlar zemine işlenmek yerine ayrı çizilir ve rüzgârda
-  hafifçe sallanır. Kapatılınca harita onlarsız yeniden çizilir.
+  hafifçe sallanır; yürüyenler, hayvanlar ve binalarla aynı derinlik
+  sırasındadır (ormandaki geyik önündeki ağacın arkasında kalır). Kapatılınca harita onlarsız yeniden çizilir.
 - Gece yanan pencerelerin çevresinde yumuşak bir **parıltı** vardır (aynı
   ışıklar bulanıklaştırılıp gecenin üstüne eklenir).
 - Ordular binalar, surlar ve yürüyenlerle aynı derinlik sıralamasında
@@ -1163,7 +1164,14 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   yoklama).
 - Telefonda yakınlaştırma (+/−) ve üsse dön düğmeleri sağ altta, küçük
   harita sol alttadır; sohbet düğmesi küçük haritanın, sayaçlar sohbet
-  düğmesinin üstünde durur. Üst çubukta ikonlar ve sayılar küçülür.
+  düğmesinin üstünde durur. Üst çubuk ekranın tam genişliğindedir, her
+  kartta ikon üstte, sayı altta. Ayarlar ve ana menü tek bir **hamburger**
+  düğmesinde (çubuğun altında, sağda) aşağı açılan menüdedir. Dokunmatik
+  ekranda bir karta dokunmak bilgi kartını açar; kartın altındaki "Depoya
+  git" / "Halka git" ilgili sekmeyi açar, başka yere dokunmak kartı kapatır.
+- Dünya haritası (telefonda küçük haritaya dokununca) yakınlaştırılınca her
+  yöne, yukarı-aşağı da kaydırılabilir; yakınlaştırma bakılan yeri ortaya
+  getirir.
 - Harita ekranının sağ üstünde, ayarların altında **ana menüye dön**
   düğmesi (ev ikonu) vardır. Yakınlaştırma düğmelerinin üstündeki **üsse
   dön** düğmesi (konum pini) kamerayı krallığa götürür.

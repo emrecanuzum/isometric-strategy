@@ -261,9 +261,6 @@ export async function createWorld(
   // Armies stay in sight at every zoom (the caravans' layer hides when zoomed out), their routes on the ground.
   const armyRoutes = new Graphics()
   const armyLabels = new Container()
-  // Trees lifted out of the ground painting to sway, above the ground and below everything that stands on it.
-  const treeLayer = new Container()
-  treeLayer.sortableChildren = true
   // Red silhouettes over the buildings marked to be torn down.
   const marks = new Container()
   // The building being moved, following the pointer.
@@ -273,7 +270,7 @@ export async function createWorld(
     clearCursor()
     for (const child of carried.removeChildren()) child.destroy()
   }
-  camera.addChild(ground, treeLayer, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, marks, ambient.sky, cursor, carried, highlight)
+  camera.addChild(ground, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, marks, ambient.sky, cursor, carried, highlight)
   app.stage.addChild(camera)
   // Day and night: the whole map is multiplied by the colour of the light at this hour of the game day. Lit windows
   // and the labels sit above it, in a layer that follows the camera, so night never dims them.
@@ -481,8 +478,11 @@ export async function createWorld(
       tree.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
       const at = groundToScreen(world, { x: t.tx, y: t.ty })
       tree.position.set(at.x, at.y)
+      // Trees lifted out of the ground painting to sway stand with the walkers, animals and buildings, sorted by
+      // where they meet the ground, so a deer in the woods walks behind the trees in front of it.
       tree.zIndex = at.y
-      treeLayer.addChild(tree)
+      tree.label = 'tree'
+      caravans.layer.addChild(tree)
       return tree
     })
     chunks.set(key, { sprite, bitmap, lod, bytes, version, trees })
@@ -952,7 +952,7 @@ export async function createWorld(
   function sortWalkers() {
     if (occluders.length === 0) return
     for (const child of caravans.layer.children) {
-      if (!child.visible || child.label === 'occluder' || child.label === 'army-ring') continue
+      if (!child.visible || child.label === 'occluder' || child.label === 'army-ring' || child.label === 'tree') continue
       const { x: px, y: py } = child.position
       for (const o of occluders) {
         if (o.walked || px < o.left || px > o.right || py < o.top || py > o.sy + 2) continue

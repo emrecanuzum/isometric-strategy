@@ -1,6 +1,7 @@
 import { BUILDINGS, balance, buildingOutput, gameTime, goldCap, population, storageCap, tradeUnits } from '@game/shared'
 import type { BuildingKind, Kingdom, Resource, Stock } from '@game/shared'
 import type React from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PHASE_NAMES, dayPhase, isNight } from '../../game/daylight'
 import { Icon } from '../icons'
 import { BUILDING_NAMES, RESOURCE_ICONS, RESOURCE_NAMES } from '../names'
@@ -9,7 +10,10 @@ import { History, Meter, fmt, short, signed } from './primitives'
 import { RESOURCES, flows } from './tabs'
 
 // Stores along the top. Each one shows a small card on hover (or keyboard focus): where it comes from, where it goes,
-// its recent course. The clock at the end tells the game time; one game day passes in one real hour.
+// its recent course. The clock at the end tells the game time; one game day passes in one real hour. On touch screens,
+// with no hover, a tap opens the card (and its button leads on to the tab), and a tap anywhere else closes it.
+
+const touchOnly = typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches
 
 interface Props {
   kingdom: Kingdom
@@ -23,16 +27,34 @@ interface Props {
 export function TopBar({ kingdom, now, seasonStart, history, onOpen }: Props) {
   const flow = flows(kingdom, now)
   const { villagers, jobs } = population(kingdom, now)
+  const [open, setOpen] = useState<string | null>(null)
+  const bar = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (open === null) return
+    const away = (e: PointerEvent) => {
+      if (!bar.current?.contains(e.target as Node)) setOpen(null)
+    }
+    document.addEventListener('pointerdown', away)
+    return () => document.removeEventListener('pointerdown', away)
+  }, [open])
+  // On touch screens a tap shows the card; elsewhere it goes straight to the tab.
+  const tap = (key: string, tab: TabId) => () => (touchOnly ? setOpen((o) => (o === key ? null : key)) : onOpen(tab))
+  const go = (tab: TabId) => () => {
+    setOpen(null)
+    onOpen(tab)
+  }
   return (
-    <div className="topbar frame" role="group" aria-label="Kaynaklar">
+    <div ref={bar} className="topbar frame" role="group" aria-label="Kaynaklar">
       {RESOURCES.map((r) => {
         const net = flow[r].net
         return (
           <Chip
             key={r}
             label={`${RESOURCE_NAMES[r]} ${fmt(kingdom.stock[r])}, tur başına ${signed(net)}`}
-            onClick={() => onOpen('store')}
+            open={open === r}
+            onClick={tap(r, 'store')}
             card={<ResourceCard resource={r} kingdom={kingdom} now={now} history={history} />}
+            go={{ label: 'Depoya git', onClick: go('store') }}
           >
             <Icon name={RESOURCE_ICONS[r]} size={24} />
             <span className="res-value">
@@ -42,27 +64,52 @@ export function TopBar({ kingdom, now, seasonStart, history, onOpen }: Props) {
           </Chip>
         )
       })}
-      <Chip label={`Köylü ${villagers}, iş gücü ihtiyacı ${jobs}`} onClick={() => onOpen('people')} card={<PeopleCard kingdom={kingdom} now={now} />}>
+      <Chip
+        label={`Köylü ${villagers}, iş gücü ihtiyacı ${jobs}`}
+        open={open === 'people'}
+        onClick={tap('people', 'people')}
+        card={<PeopleCard kingdom={kingdom} now={now} />}
+        go={{ label: 'Halka git', onClick: go('people') }}
+      >
         <Icon name="villager" size={24} />
         <span className="res-value">
           <b>{villagers}</b>
           <small className={villagers < jobs ? 'down' : ''}>/{jobs}</small>
         </span>
       </Chip>
-      <Clock now={now} seasonStart={seasonStart} nextRound={kingdom.nextProductionAt} />
+      <Clock now={now} seasonStart={seasonStart} nextRound={kingdom.nextProductionAt} open={open === 'clock'} onTap={() => setOpen((o) => (o === 'clock' ? null : 'clock'))} />
     </div>
   )
 }
 
-// A store button with its hover card below it.
-function Chip({ label, onClick, card, children }: { label: string; onClick: () => void; card: React.ReactNode; children: React.ReactNode }) {
+// A store button with its hover card below it (opened by a tap on touch screens, with a button on to the tab).
+function Chip({
+  label,
+  open,
+  onClick,
+  card,
+  go,
+  children,
+}: {
+  label: string
+  open: boolean
+  onClick: () => void
+  card: React.ReactNode
+  go: { label: string; onClick: () => void }
+  children: React.ReactNode
+}) {
   return (
-    <div className="res-wrap">
-      <button className="res" onClick={onClick} aria-label={label}>
+    <div className={open ? 'res-wrap open' : 'res-wrap'}>
+      <button className="res" onClick={onClick} aria-label={label} aria-expanded={touchOnly ? open : undefined}>
         {children}
       </button>
       <div className="pop frame" role="tooltip">
         {card}
+        {open && (
+          <button className="btn small pop-go" onClick={go.onClick}>
+            {go.label}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -192,14 +239,14 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
 }
 
 // Game date and time, with a card showing the day as a 24-hour strip.
-function Clock({ now, seasonStart, nextRound }: { now: number; seasonStart: number; nextRound?: number }) {
+function Clock({ now, seasonStart, nextRound, open, onTap }: { now: number; seasonStart: number; nextRound?: number; open: boolean; onTap: () => void }) {
   const t = gameTime(now, seasonStart)
   const night = isNight(t.hour)
   const time = `${String(t.hh).padStart(2, '0')}:${String(t.mm).padStart(2, '0')}`
   const phase = PHASE_NAMES[dayPhase(t.hour)]
   return (
-    <div className="res-wrap">
-      <span className="res clock" tabIndex={0} aria-label={`${t.day}. gün, saat ${time}, ${phase}`}>
+    <div className={open ? 'res-wrap open' : 'res-wrap'}>
+      <span className="res clock" tabIndex={0} aria-label={`${t.day}. gün, saat ${time}, ${phase}`} onClick={touchOnly ? onTap : undefined}>
         <Icon name={night ? 'moon' : 'sun'} size={24} />
         <span className="res-value">
           <b>{time}</b>

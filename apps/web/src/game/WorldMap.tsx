@@ -1,6 +1,6 @@
 import { Terrain, balance } from '@game/shared'
 import type { Point, Rect, World } from '@game/shared'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { Icon } from '../ui/icons'
 import { TERRAIN_COLORS } from './createWorld'
@@ -71,6 +71,22 @@ export function WorldMap({
   const canvas = useRef<HTMLCanvasElement>(null)
   const base = useMemo(() => paintBase(world), [world])
   const [zoom, setZoom] = useState(0)
+  const scroller = useRef<HTMLDivElement>(null)
+  const here = useRef<HTMLSpanElement>(null)
+  // Zooming brings the spot being looked at (or the middle of the world) to the middle of the screen.
+  useLayoutEffect(() => {
+    const box = scroller.current
+    if (!box) return
+    const spot = here.current?.getBoundingClientRect()
+    const view = box.getBoundingClientRect()
+    if (spot) {
+      box.scrollLeft += spot.left + spot.width / 2 - (view.left + view.width / 2)
+      box.scrollTop += spot.top + spot.height / 2 - (view.top + view.height / 2)
+    } else {
+      box.scrollLeft = (box.scrollWidth - box.clientWidth) / 2
+      box.scrollTop = (box.scrollHeight - box.clientHeight) / 2
+    }
+  }, [zoom])
   const k = SAMPLES / world.size
   const toCanvas = (p: Point) => ({ x: (p.x - p.y) * k + SAMPLES, y: ((p.x + p.y) * k) / 2 })
 
@@ -143,8 +159,11 @@ export function WorldMap({
           <Icon name="close" size={16} />
         </button>
       </header>
-      <div className="worldmap-scroll">
-        <div className="worldmap-sheet" style={{ width: `${ZOOMS[zoom] * 100}%` }}>
+      {/* Centred with margins, not by the grid, so a zoomed map can be scrolled to every edge; zoomed in, a margin
+          all round lets any spot be brought to the middle, up and down as well as sideways. */}
+      <div className="worldmap-scroll" ref={scroller}>
+        <div className={zoom > 0 ? 'worldmap-pad zoomed' : 'worldmap-pad'}>
+        <div className="worldmap-sheet" style={{ width: `${ZOOMS[zoom] * 100}cqw` }}>
           <canvas ref={canvas} width={W} height={H} onClick={pick} />
           {world.inns.map((p) => (
             <span key={`${p.x},${p.y}`} className="worldmap-inn" style={marker({ x: p.x + 1, y: p.y + 1 })} aria-hidden>
@@ -160,7 +179,8 @@ export function WorldMap({
               {kingdom.name}
             </span>
           ))}
-          {center && <span className="worldmap-here" style={marker(center)} aria-label="Şu an baktığın yer" />}
+          {center && <span ref={here} className="worldmap-here" style={marker(center)} aria-label="Şu an baktığın yer" />}
+        </div>
         </div>
       </div>
       <footer className="worldmap-legend frame">
