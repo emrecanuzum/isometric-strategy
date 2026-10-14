@@ -616,8 +616,9 @@ export async function createWorld(
   }
 
   // Screen points of a path over the ground, following its height one tile at a time.
-  const drape = (corners: Point[]) =>
-    corners.flatMap((from, i) => {
+  // Flat screen points along the corners, draped over the ground; back to the first corner unless `closed` is false.
+  const drape = (corners: Point[], closed = true) => [
+    ...corners.slice(0, closed ? corners.length : corners.length - 1).flatMap((from, i) => {
       const to = corners[(i + 1) % corners.length]
       const steps = Math.max(1, Math.round(Math.hypot(to.x - from.x, to.y - from.y)))
       return Array.from({ length: steps }, (_, n) => {
@@ -627,7 +628,9 @@ export async function createWorld(
         })
         return [p.x, p.y]
       }).flat()
-    })
+    }),
+    ...(closed ? [] : (({ x, y }) => [x, y])(groundToScreen(world, corners[corners.length - 1]))),
+  ]
   const square = (x: number, y: number, size: number) =>
     drape([{ x, y }, { x: x + size, y }, { x: x + size, y: y + size }, { x, y: y + size }])
 
@@ -637,6 +640,42 @@ export async function createWorld(
     const points = []
     for (let k = 0; k < border.length; k += 2) points.push({ x: border[k], y: border[k + 1] })
     dashes(points, DASH / camera.scale.x, GAP / camera.scale.x, true, (x0, y0, x1, y1) => g.moveTo(x0, y0).lineTo(x1, y1))
+  }
+
+  // The stretches of `r`'s border that bound the union of `r` and `other`: whole tile edges whose outer tile is not in
+  // `other`, joined into runs of corners (one closed loop when nothing is left out). Two overlapping areas so read as
+  // one, with no line through where they meet.
+  function borderOutside(r: Rect, other: Rect | null): { corners: Point[]; closed: boolean }[] {
+    const inOther = (x: number, y: number) => !!other && x >= other.x && y >= other.y && x < other.x + other.size && y < other.y + other.size
+    // Clockwise unit edges: each from a corner to the next, with the tile just outside it.
+    const edges: { from: Point; to: Point; out: Point }[] = []
+    for (let i = 0; i < r.size; i++) edges.push({ from: { x: r.x + i, y: r.y }, to: { x: r.x + i + 1, y: r.y }, out: { x: r.x + i, y: r.y - 1 } })
+    for (let i = 0; i < r.size; i++) edges.push({ from: { x: r.x + r.size, y: r.y + i }, to: { x: r.x + r.size, y: r.y + i + 1 }, out: { x: r.x + r.size, y: r.y + i } })
+    for (let i = r.size - 1; i >= 0; i--) edges.push({ from: { x: r.x + i + 1, y: r.y + r.size }, to: { x: r.x + i, y: r.y + r.size }, out: { x: r.x + i, y: r.y + r.size } })
+    for (let i = r.size - 1; i >= 0; i--) edges.push({ from: { x: r.x, y: r.y + i + 1 }, to: { x: r.x, y: r.y + i }, out: { x: r.x - 1, y: r.y + i } })
+    const kept = edges.map((e) => !inOther(e.out.x, e.out.y))
+    if (kept.every(Boolean)) return [{ corners: [{ x: r.x, y: r.y }, { x: r.x + r.size, y: r.y }, { x: r.x + r.size, y: r.y + r.size }, { x: r.x, y: r.y + r.size }], closed: true }]
+    // Start right after a left-out edge, so no run is split across the start of the list.
+    const start = kept.indexOf(false) + 1
+    const runs: { corners: Point[]; closed: boolean }[] = []
+    let run: Point[] | null = null
+    for (let k = 0; k < edges.length; k++) {
+      const i = (start + k) % edges.length
+      if (!kept[i]) {
+        run = null
+        continue
+      }
+      if (!run) runs.push({ corners: (run = [edges[i].from]), closed: false })
+      run.push(edges[i].to)
+    }
+    return runs
+  }
+  // An open (or closed) line along tile corners, draped over the ground, as a dashed border.
+  function dashedRun(g: Graphics, run: { corners: Point[]; closed: boolean }) {
+    const flat = drape(run.corners, run.closed)
+    const points: Point[] = []
+    for (let k = 0; k < flat.length; k += 2) points.push({ x: flat[k], y: flat[k + 1] })
+    dashes(points, DASH / camera.scale.x, GAP / camera.scale.x, run.closed, (x0, y0, x1, y1) => g.moveTo(x0, y0).lineTo(x1, y1))
   }
 
   // Overlay lines keep their screen thickness at every zoom level, so they are redrawn when it changes.
@@ -686,10 +725,12 @@ export async function createWorld(
       line({ x: rect.x, y: rect.y + i }, { x: rect.x + rect.size, y: rect.y + i })
     }
     territory.stroke({ width: 1 / camera.scale.x, color: 0xffffff, alpha: 0.1 })
-    dashed(territory, outline(rect))
+    // The territory and the ground beside a dock plot outside it read as one area: each draws only its border outside
+    // the other.
+    for (const run of borderOutside(rect, plots.annex ?? null)) dashedRun(territory, run)
     territory.stroke({ width: thick, color: TERRITORY, alpha: 0.5, cap: 'butt' })
     if (plots.annex) {
-      dashed(territory, outline(plots.annex))
+      for (const run of borderOutside(plots.annex, rect)) dashedRun(territory, run)
       territory.stroke({ width: thick, color: DOCK_PLOT, alpha: 0.6, cap: 'butt' })
     }
     for (const [key, color] of [['dock', DOCK_PLOT], ['trade', TRADE_PLOT]] as const) {

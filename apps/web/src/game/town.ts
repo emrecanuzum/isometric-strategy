@@ -162,11 +162,6 @@ export function tilesAlong(points: Point[], visit: (x: number, y: number) => voi
 }
 
 // Position and screen heading at distance `d` along a path.
-function straight(from: Point, to: Point): Path {
-  const length = Math.hypot(to.x - from.x, to.y - from.y)
-  return { points: [from, to], at: [0, length], length }
-}
-
 function along(path: Path, d: number) {
   d = Math.min(path.length, Math.max(0, d))
   let i = 1
@@ -231,12 +226,10 @@ export function createTown(world: World, layer: Container): Town {
       for (const t of trips) for (const w of [t.merchant, ...t.camels]) w.sprite.destroy()
       trips = next.flatMap((trip) => {
         // Walls can send the way round by a gate well off the straight line, and water by a bridge: look wider
-        // before giving up. A far trade post's trip takes longer (lobbyTripMs), so the walk keeps its pace.
-        const path =
-          findPath(trip.home, trip.market, blocked, worn) ??
-          findPath(trip.home, trip.market, blocked, worn, WIDE_MARGIN) ??
-          // No way round at all (water with no bridge near): straight across, rather than not at all.
-          straight(trip.home, trip.market)
+        // before giving up. A far trade post's trip takes longer (lobbyTripMs), so the walk keeps its pace. With no
+        // way out at all (walled in without a gate) the merchant stays home, as he sells nothing then either.
+        const path = findPath(trip.home, trip.market, blocked, worn) ?? findPath(trip.home, trip.market, blocked, worn, WIDE_MARGIN)
+        if (!path) return []
         const robe = Math.min(SPRITES.merchant.length - 1, trip.robe ?? SPRITES.merchant.length - 1)
         return [{ ...trip, path, merchant: walker(layer, SPRITES.merchant[robe]), camels: [0, 1, 2].map((load) => walker(layer, SPRITES.camel[robe][load])) }]
       })

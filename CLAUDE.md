@@ -535,7 +535,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   16 sn, 250 karo ≈ 27 sn; `economy.json` → `trade.walkFreeTiles`, `walkSecondsPerTile`;
   `lobbyTripMs`). Serbest şehre sefer ayrıca hesaplanır (§7.7).
   Tüccar haritada devesiyle saraydan ticaret noktasına yürür (uzaklık ne
-  olursa olsun; seferi uzadığı için hızı aynı kalır, köprülerden geçer); **başka
+  olursa olsun; seferi uzadığı için hızı aynı kalır, köprülerden geçer;
+  surlar kapısız çevirdiyse yürümez, evde kalır); **başka
   krallıkların tüccarları da** kendi saraylarıyla ticaret noktaları
   arasında yürür (bir şey satıyorlarsa ve ticaret noktaları harap
   değilse). Yola çıkış anları gizli olduğu için her krallığın tüccarı kendi
@@ -551,6 +552,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   nehir/göl (balık) ve çayır (tarım) → yemek; orman → yapı malzemesi;
   dağ → savaş malzemesi; bataklık hepsini biraz düşürür, kurak yemeği
   düşürür. Çarpanlar kuruluşta sabitlenir.
+- **Yemek üretimi** (tur başına, arazi çarpanından önce): tarla 1,5 / 2,25 /
+  3,5, iskele 1,5 / 3 / 4,5 (seviye 1/2/3). Su payının yemek çarpanına
+  katkısı 3,5'tir (`economy.json` → `yield.foodPerWater`; yalnızca yeni
+  kurulan krallıkları etkiler).
 - **İskele:** Krallığın önceden belirli iskele arsasına kurulur (yer
   seçilmez, tek tane). Balık tutar (yemek). İskelenin ahşap kısmı arsanın
   en açık suya bakan kenarından nehre/göle doğru uzanır.
