@@ -984,15 +984,21 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   çıkarır. Her 15 dakikalık turda her devriye, tohumdan seçilen bir **biat
   etmiş lordun** sarayına gider (turun %40'ı), orada biraz kalır (%15) ve
   geri döner. Bir tacın iki devriyesi aynı turda aynı lordu seçmez.
-  Devriyeler haritada tacın renginde (kızıl / lacivert) küçük bir bölük
-  olarak herkese görünür; konumları saatten hesaplanır.
+  Devriyeler haritada tacın renginde (kızıl / lacivert), sıradan ordulardan
+  iri, **arka arkaya 5 bölüklük bir kol** olarak herkese görünür: bölükler
+  aynı yolu biraz arayla izler, her biri kendi yönünü alır; yolun başında
+  ve sonunda öndekinin çevresinde toplanırlar. Konumları saatten
+  hesaplanır.
   - **Kendi tacının devriyesi** lordun **eğlence merkezine** uğrar, içer,
     eğlenir ve **120 altın bahşiş** bırakır. Eğlence merkezi yoksa sarayın
     önüne gelip geçer, bahşiş bırakmaz.
   - **Rakip tacın devriyesi** sarayın kapısına gelip **haraç ister**:
-    hazinenin %8'i (en az 40, en fazla 400 altın). Elçi diyaloğunda **"Öde"**
-    ya da **"Reddet"**. Reddedilirse ya da 5 dakika içinde cevap verilmezse
-    o tacın bütün lordlarıyla ilişki **−8** düşer.
+    hazinenin %8'i (en az 40, en fazla 400 altın); diyalog bunun hazinenin
+    yüzde kaçı olduğunu da yazar. Elçi diyaloğunda **"Öde"** ya da
+    **"Reddet"**. Reddedilirse o tacın bütün lordlarıyla ilişki **−8** düşer.
+    5 dakika içinde cevap verilmezse (oyuncu çevrimdışıysa da) devriye
+    haracı **zorla alır** (hazinede ne kadar varsa, en fazla istenen kadar);
+    ilişki düşmez.
   - Biat etmemiş lordlara devriye gelmez.
 - **Eğlence merkezi** (4. seviye saray, krallıkta bir tane; 1200 altın, 700
   yapı malzemesi, 120 sn): bayraklı, fenerli, küçük sahneli iki katlı bir
@@ -1470,6 +1476,8 @@ mertebesindedir.
   sırasındadır (ormandaki geyik önündeki ağacın arkasında kalır). Kapatılınca harita onlarsız yeniden çizilir.
 - Gece yanan pencerelerin çevresinde yumuşak bir **parıltı** vardır (aynı
   ışıklar bulanıklaştırılıp gecenin üstüne eklenir).
+- Ordular (ve devriyeler) köprüden geçerken güvertenin üstünde yürür,
+  suyun hizasında değil (`chunkPainter.ts` → `surfaceHeight`).
 - Ordular binalar, surlar ve yürüyenlerle aynı derinlik sıralamasında
   çizilir: önlerindeki bina ya da sur onları örter, bir kapının içinden
   geçerken kemerin altında gizlenirler; uzak yakınlaştırmada da görünürler.

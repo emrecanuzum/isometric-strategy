@@ -35,7 +35,6 @@ import {
   buildError,
   constructing,
   population,
-  productionRound,
   roundOutcome,
   tradeRepairCost,
   tradeLoad,
@@ -52,7 +51,7 @@ import {
 import { TradeShares } from './inns'
 import { CrownBanner, Fealty, TradeDestination } from './cities'
 import { cityInfo } from '../../game/cities'
-import type { BuildingKind, Good, Kingdom, Market, Plot, Point, Resource, TaxLevel, World } from '@game/shared'
+import type { BuildingKind, Good, Kingdom, Market, Plot, Point, Resource, Stock, TaxLevel, World } from '@game/shared'
 import { useEffect, useRef, useState } from 'react'
 import { STRUCTURE_SPRITES, palaceIn } from '../../game/buildingSprites'
 import { Icon } from '../icons'
@@ -99,7 +98,7 @@ const thumb = (kind: BuildingKind, color?: string) => (kind === 'palace' ? palac
 
 // Per production round: what buildings add, what villagers eat and what the merchant takes away.
 export function flows(kingdom: Kingdom, now: number, market?: Market | null) {
-  const round = productionRound(kingdom, now)
+  const { delta: round, worked } = roundOutcome(kingdom, now)
   const { villagers } = population(kingdom, now)
   const l = ledger(kingdom, now)
   const eaten = villagers * balance.economy.foodPerVillager + l.soldiersFood
@@ -113,12 +112,12 @@ export function flows(kingdom: Kingdom, now: number, market?: Market | null) {
   const bonus = 1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade
   // At the lobby's price as it stands (or the free city's), and less for a ruler long away, as the merchant is paid.
   const tradeGold = good ? sold * tradePrice(kingdom, good, market, now) * bonus * idleFactor(kingdom, now) : 0
-  const tributesIn = l.tributes.filter((t) => t.gold > 0).reduce((a, t) => a + t.gold, 0)
   const tributesOut = -l.tributes.filter((t) => t.gold < 0).reduce((a, t) => a + t.gold, 0)
-  const result = {} as Record<Resource, { made: number; used: number; net: number; wasted: number }> & { tradeGold: number; sold: number; tax: number }
+  const result = {} as Record<Resource, { made: number; used: number; net: number; wasted: number }> & { tradeGold: number; sold: number; tax: number; worked: Partial<Stock> }
   for (const r of RESOURCES) {
-    const made = r === 'gold' ? tradeGold + l.tax + tributesIn : (round[r] ?? 0) + (r === 'food' ? eaten : 0)
-    const used = (r === 'food' ? eaten : 0) + (r === kingdom.trade.good ? sold : 0) + (r === 'gold' ? l.soldiersGold + tributesOut : 0)
+    // The forges' raw goods are shown going out, not taken off what comes in.
+    const made = r === 'gold' ? (round.gold ?? 0) + l.soldiersGold + tributesOut + tradeGold : (round[r] ?? 0) + (r === 'food' ? eaten : 0) + (worked[r] ?? 0)
+    const used = (worked[r] ?? 0) + (r === 'food' ? eaten : 0) + (r === kingdom.trade.good ? sold : 0) + (r === 'gold' ? l.soldiersGold + tributesOut : 0)
     // What does not fit in the stores (or the treasury) is lost, so a full store gains nothing.
     const room = Math.max(0, (r === 'gold' ? goldCap(kingdom, now) : storageCap(kingdom, now)) - kingdom.stock[r])
     const net = made - used
@@ -127,6 +126,7 @@ export function flows(kingdom: Kingdom, now: number, market?: Market | null) {
   result.tradeGold = tradeGold
   result.sold = sold
   result.tax = l.tax
+  result.worked = worked
   return result
 }
 

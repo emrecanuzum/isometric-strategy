@@ -219,10 +219,11 @@ const NOTICE_CUES: Record<string, Cue> = {
   patrol_tribute: 'war',
   patrol_tip: 'coin',
   patrol_ignored: 'bad',
+  patrol_taken: 'bad',
 }
 
 // News that goes against the player: kept under the journal's "Önemli" tab.
-const HURTFUL = new Set(['patrol_tribute', 'patrol_ignored', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
+const HURTFUL = new Set(['patrol_tribute', 'patrol_ignored', 'patrol_taken', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
 function noticeHurts(n: Notice, me: string | undefined) {
   if (HURTFUL.has(n.kind)) return true
   const p = n.payload as { kind?: string; accepted?: boolean; report?: { losses?: Record<string, number> } }
@@ -1354,7 +1355,7 @@ function App({
         if (!route || route.length === 0) continue
         const [path, departAt, arriveAt] =
           t < times.arrive ? [route, times.start, times.arrive] : t < times.leave ? [[route[route.length - 1]], times.leave, times.leave] : [[...route].reverse(), times.leave, times.home]
-        out.push({ id: -(crown * 16 + p + 1), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 5, catapult: false })
+        out.push({ id: -(crown * 16 + p + 1), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 4, catapult: false, train: 5, size: 1.6 })
       }
     })
     if (patrolRoutes.current.size > 64) patrolRoutes.current.clear()

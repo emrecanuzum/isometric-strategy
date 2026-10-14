@@ -141,7 +141,7 @@ function ResourceCard({ resource: r, kingdom, now, history, market }: { resource
   if (r === 'food' && villagers > 0) lines.push({ name: `Köylüler (${villagers})`, value: -villagers * balance.economy.foodPerVillager })
   if (r === kingdom.trade.good) lines.push({ name: 'Tüccar satıyor', value: -flow.sold })
   // Raw goods worked into weapons in the forges.
-  const worked = used - (r === 'food' ? villagers * balance.economy.foodPerVillager : 0) - (r === kingdom.trade.good ? flow.sold : 0)
+  const worked = flow.worked[r] ?? 0
   if (worked > 0.05) lines.push({ name: 'Atölyede işleniyor', value: -worked })
   const scale = Math.max(made, used, 0.01)
   const runsOut = net < -0.01 ? Math.floor(kingdom.stock[r] / -net) : null

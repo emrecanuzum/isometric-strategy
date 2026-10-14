@@ -141,20 +141,26 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         ? { icon: 'crown', title: `${p.name} artık senin!`, text: `${p.name} kasabası kapılarını açtı${Number(p.lost) > 0 ? `; ${fmt(Number(p.lost))} asker kaybettin` : ''}. Bundan sonra sana katkı gönderecek.` }
         : { icon: 'warn', title: `${p.name} elden çıktı`, text: `${p.by} ${p.name} kasabanı aldı. Kasabanın katkısı artık onlara gidiyor.` }
     }
-    case 'patrol_tribute':
+    case 'patrol_tribute': {
+      // How much of the treasury it is (newer notices carry the treasury as it stood).
+      const share = Number(p.gold) > 0 ? ` (hazinenin %${Math.max(1, Math.round((Number(p.amount) / Number(p.gold)) * 100))} kadarı)` : ''
       return {
         icon: 'banner',
         title: `${crown(p.crown)} devriyesi kapında`,
-        text: `Rakip taç ${crown(p.crown)} atlıları sarayına geldi ve ${fmt(Number(p.amount))} altın haraç istiyor. Ödersen yollarına giderler. Reddedersen ya da ${Math.round(balance.cities.crown.patrol.answerSeconds / 60)} dakika içinde cevap vermezsen o tacın lordlarıyla ilişkin ${-balance.cities.crown.patrol.refuseRelation} düşer.`,
+        text: `Rakip taç ${crown(p.crown)} atlıları sarayına geldi ve ${fmt(Number(p.amount))} altın${share} haraç istiyor. Ödersen yollarına giderler. Reddedersen o tacın lordlarıyla ilişkin ${-balance.cities.crown.patrol.refuseRelation} düşer. ${Math.round(balance.cities.crown.patrol.answerSeconds / 60)} dakika içinde cevap vermezsen haracı zorla alırlar.`,
       }
+    }
     case 'patrol_tip':
       return { icon: 'gold', title: 'Devriye eğlenip gitti', text: `${crown(p.crown)} devriyesi eğlence merkezinde soluklandı, içti, şarkı söyledi ve ${fmt(Number(p.amount))} altın bahşiş bıraktı.` }
+    case 'patrol_taken':
+      return { icon: 'gold', title: 'Devriye haracı aldı', text: `${crown(p.crown)} devriyesine kimse cevap vermedi; atlılar hazineden ${fmt(Number(p.amount))} altın alıp gitti.` }
     case 'patrol_ignored':
       return { icon: 'warn', title: 'Haraç cevapsız kaldı', text: `${crown(p.crown)} devriyesi ${fmt(Number(p.amount))} altınını alamadan döndü. O tacın lordları bunu unutmayacak: ilişkin ${-balance.cities.crown.patrol.refuseRelation} düştü.` }
     case 'town_held':
       return { icon: 'warn', title: `${p.name} dayandı`, text: `${p.name} garnizonu kuşatmayı püskürttü; ordundan ${fmt(Number(p.lost))} asker düştü, kimse kalmadı.` }
     default:
-      return { icon: 'scroll', title: 'Elçiden haber', text: '' }
+      // A kind this page does not know yet: the game was updated while it was open.
+      return { icon: 'scroll', title: 'Elçiden haber', text: 'Oyun güncellendi; bu haberi okumak için sayfayı yenile.' }
   }
 }
 

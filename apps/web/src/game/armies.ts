@@ -1,4 +1,4 @@
-import { armyAt, groundToScreen } from '@game/shared'
+import { armyAt, groundToScreen, routeLength, tileToScreen } from '@game/shared'
 import type { Point, World } from '@game/shared'
 import { Container, Graphics, Sprite as PixiSprite, Text } from 'pixi.js'
 import { KINGDOM_COLORS } from './buildingSprites'
@@ -7,6 +7,7 @@ import { Canvas, STONE, TIMBER, ramp, rgb, shadow } from './sprites'
 import type { Sprite } from './sprites'
 import { dashes } from './dashes'
 import { textureOf } from './textures'
+import { surfaceHeight } from './chunkPainter'
 
 // Armies on the map (CLAUDE.md §9.7): a squad of spearmen under the kingdom's banner, walking along the route the
 // server keeps, which is drawn ahead of the player's own armies as a dashed line; crossed swords mark battles.
@@ -26,7 +27,13 @@ export interface MapArmy {
   // Figures drawn (3–9, by its size) and whether a catapult rolls behind it.
   figures: number
   catapult: boolean
+  // A column of this many squads one behind another (the crowns' patrols), each drawn this much larger.
+  train?: number
+  size?: number
 }
+
+// Tiles between the squads of a column.
+const TRAIN_GAP = 1.7
 
 export interface MapBattle {
   id: number
@@ -160,9 +167,16 @@ interface Shown {
   // The catapult rolling behind, and the way the army last faced (tile space).
   cart: PixiSprite | null
   facing: Point
+  // The squads riding behind the first in a column.
+  followers: PixiSprite[]
 }
 
 export function createArmies(world: World, walkers: Container, routes: Graphics, labels: Container) {
+  // Where a marcher stands on screen: on a bridge's deck when crossing, not down at the water.
+  const standAt = (p: Point) => {
+    const s = tileToScreen(p)
+    return { x: s.x, y: s.y - surfaceHeight(world, p) }
+  }
   const shown = new Map<number, Shown>()
   let battles: { battle: MapBattle; sprite: PixiSprite }[] = []
 
@@ -174,6 +188,7 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
       s.ring.destroy()
       s.label?.destroy()
       s.cart?.destroy()
+      for (const f of s.followers) f.destroy()
       shown.delete(id)
     }
     for (const army of armies) {
@@ -187,10 +202,18 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
         body.label = 'army'
         ring.label = 'army-ring'
         walkers.addChild(ring, body)
-        s = { army, body, ring, label: null, cart: null, facing: { x: 1, y: 0 } }
+        s = { army, body, ring, label: null, cart: null, facing: { x: 1, y: 0 }, followers: [] }
         shown.set(army.id, s)
       }
       s.army = army
+      const behind = Math.max(0, (army.train ?? 1) - 1)
+      while (s.followers.length < behind) {
+        const f = new PixiSprite(textureOf(squadOf(army.color, 0)))
+        f.label = 'army'
+        walkers.addChild(f)
+        s.followers.push(f)
+      }
+      while (s.followers.length > behind) s.followers.pop()!.destroy()
       if (army.catapult && !s.cart) {
         s.cart = new PixiSprite(textureOf(CATAPULTS[0]))
         s.cart.label = 'army'
@@ -230,7 +253,7 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
       const { army, body, ring, label } = s
       const route = { path: army.path, depart_at: new Date(army.departAt).toISOString(), arrive_at: new Date(army.arriveAt).toISOString() }
       const here = armyAt(route, time)
-      const screen = groundToScreen(world, here)
+      const screen = standAt(here)
       const moving = !army.battle && time < army.arriveAt && army.path.length > 1
       // Which way it is heading: from a moment ago to now (kept when it stops).
       if (moving) {
@@ -243,7 +266,7 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
       if (s.cart) {
         // A tile and a half behind the column, facing the way it goes, wheels turning while it rolls (when close).
         const behind = { x: here.x - s.facing.x * 1.5, y: here.y - s.facing.y * 1.5 }
-        const at = groundToScreen(world, behind)
+        const at = standAt(behind)
         const frame = moving && scale >= 1 ? Math.floor(time / 120) % 4 : 0
         s.cart.texture = textureOf(CATAPULTS[frame])
         s.cart.position.set(at.x, at.y)
@@ -261,8 +284,30 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
       body.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
       body.position.set(screen.x, screen.y)
       // Larger than life when zoomed out, so an army never shrinks out of sight.
-      body.scale.set(Math.max(1, 0.6 / scale))
+      const size = Math.max(1, 0.6 / scale) * (army.size ?? 1)
+      body.scale.set(size)
       body.zIndex = screen.y
+      // The rest of a column ride the same road a little later, each on its own; bunched up where the road ends (or
+      // has not yet begun) they gather round the first.
+      if (s.followers.length > 0) {
+        const speed = routeLength(army.path) / Math.max(1, army.arriveAt - army.departAt)
+        s.followers.forEach((f, i) => {
+          const k = i + 1
+          const lag = speed > 0 ? (k * TRAIN_GAP) / speed : 0
+          const trail = armyAt(route, time - lag)
+          const angle = (k / s.followers.length) * Math.PI * 2 + army.id
+          const rest = { x: here.x + Math.cos(angle) * 1.4, y: here.y + Math.sin(angle) * 1.4 }
+          const w = Math.min(1, Math.hypot(trail.x - here.x, trail.y - here.y) / (k * TRAIN_GAP))
+          const at = { x: rest.x + (trail.x - rest.x) * w, y: rest.y + (trail.y - rest.y) * w }
+          const p = standAt(at)
+          f.visible = true
+          f.texture = body.texture
+          f.anchor.copyFrom(body.anchor)
+          f.position.set(p.x, p.y)
+          f.scale.set(size)
+          f.zIndex = p.y
+        })
+      }
       ring.clear()
       if (army.selected) {
         ring.ellipse(screen.x, screen.y, 16, 8).stroke({ width: 2 / scale, color: 0xf2d16b })

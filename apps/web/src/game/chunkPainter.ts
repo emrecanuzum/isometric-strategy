@@ -376,6 +376,36 @@ export function deckHeight(bridge: Bridge, t: number) {
   return level + BRIDGE_LIFT * rise
 }
 
+// Every bridge of a world (on the trade routes and the stone crossings), worked out once.
+const bridgesOf = new WeakMap<World, Bridge[]>()
+export function worldBridges(world: World): Bridge[] {
+  let list = bridgesOf.get(world)
+  if (!list) {
+    list = world.roads.flatMap((route) => findBridges(world, resampleRoute(roundRoute(route.points))))
+    for (const { a, b } of world.crossings) list.push({ from: 0, to: 0, ax: a.x, ay: a.y, bx: b.x, by: b.y, ha: heightAt(world, a.x, a.y), hb: heightAt(world, b.x, b.y), stone: true })
+    bridgesOf.set(world, list)
+  }
+  return list
+}
+
+// The height of what one walks on at a point: a bridge's deck where it crosses, the ground elsewhere.
+export function surfaceHeight(world: World, p: Point) {
+  const ground = heightAt(world, p.x, p.y)
+  let best = ground
+  for (const bridge of worldBridges(world)) {
+    const dx = bridge.bx - bridge.ax
+    const dy = bridge.by - bridge.ay
+    const lengthSq = dx * dx + dy * dy
+    if (lengthSq === 0) continue
+    const t = ((p.x - bridge.ax) * dx + (p.y - bridge.ay) * dy) / lengthSq
+    if (t < 0 || t > 1) continue
+    const across = Math.abs((p.x - bridge.ax) * dy - (p.y - bridge.ay) * dx) / Math.sqrt(lengthSq)
+    if (across > 1) continue
+    best = Math.max(best, deckHeight(bridge, t))
+  }
+  return best
+}
+
 // Each stretch of a resampled route over water becomes a straight bridge reaching a little onto both banks.
 export function findBridges(world: World, points: Point[]): Bridge[] {
   const wet = points.map((p) => sample(world, world.elevation, p.x, p.y) < world.levels.lake)

@@ -1,6 +1,6 @@
 // The crown kingdoms' patrols on the server (CLAUDE.md §7.8): each visit is settled once, when the patrol reaches the
 // lord: a tip at the house of entertainment from its own crown, a demand for tribute from a rival one (paid or
-// refused by the lord; let run out, it counts as refused).
+// refused by the lord; left unanswered, as by a lord who is away, the patrol takes it all the same).
 
 import * as game from './game.js'
 import { admin, changeRelation, iso, ms, mutateKingdom, notify } from './server.ts'
@@ -46,10 +46,10 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
         if (target === null) continue
         const row = rows.find((r) => r.id === target)
         if (!row?.state) continue
-        // A demand whose time to answer had already run out when it was first seen (the server was away) is let go: the
-        // lord never had the chance to answer it.
+        // A demand whose time to answer had already run out when it was first seen (the server was away) is taken at
+        // once, without asking.
         const late = arrive + spec.answerSeconds * 1000 <= now
-        const kind = late && game.visitKind(crown, row.state.liege) === 'tribute' ? 'visit' : game.visitKind(crown, row.state.liege)
+        const kind = game.visitKind(crown, row.state.liege)
         const settled = game.advance(row.state, arrive).kingdom
         const tip = kind === 'tip' && hasTavern(settled, arrive)
         const amount = kind === 'tribute' ? game.tributeDemand(settled.stock?.gold ?? 0) : tip ? spec.tip : 0
@@ -65,7 +65,7 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
               kingdom_id: target,
               kind: kind === 'tribute' ? 'tribute' : tip ? 'tip' : 'visit',
               amount,
-              status: kind === 'tribute' ? 'pending' : 'done',
+              status: kind === 'tribute' && !late ? 'pending' : 'done',
               visit_at: iso(arrive),
               expires_at: kind === 'tribute' ? iso(arrive + spec.answerSeconds * 1000) : null,
             },
@@ -74,8 +74,11 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
           .select('id')
           .maybeSingle()
         if (!written) continue
-        if (kind === 'tribute') {
-          await notify(lobby, [target], 'patrol_tribute', { visit: written.id, crown, amount, expiresAt: arrive + spec.answerSeconds * 1000 }, arrive)
+        if (kind === 'tribute' && late) {
+          await takeTribute(lobby, target, crown, amount, arrive + spec.answerSeconds * 1000)
+        } else if (kind === 'tribute') {
+          const gold = Math.round(settled.stock?.gold ?? 0)
+          await notify(lobby, [target], 'patrol_tribute', { visit: written.id, crown, amount, gold, expiresAt: arrive + spec.answerSeconds * 1000 }, arrive)
         } else if (tip) {
           await mutateKingdom(target, arrive, (k) => ({ ...k, stock: { ...k.stock, gold: k.stock.gold + amount } }))
           await notify(lobby, [target], 'patrol_tip', { crown, amount }, arrive)
@@ -83,7 +86,7 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
       }
     }
   }
-  // Demands left unanswered count as refused.
+  // Demands left unanswered: the patrol takes the tribute anyway.
   const { data: lapsed } = await admin
     .from('patrol_visits')
     .update({ status: 'expired' })
@@ -91,9 +94,15 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
     .eq('status', 'pending')
     .lte('expires_at', iso(now))
     .select('*')
-  for (const visit of (lapsed ?? []) as VisitRow[]) {
-    const at = ms(visit.expires_at)
-    await refuseDemand(visit, rows, at)
-    await notify(lobby, [visit.kingdom_id], 'patrol_ignored', { crown: visit.crown, amount: visit.amount }, at)
-  }
+  for (const visit of (lapsed ?? []) as VisitRow[]) await takeTribute(lobby, visit.kingdom_id, visit.crown, visit.amount, ms(visit.expires_at))
+}
+
+// A demand nobody answered: the patrol carries off the tribute (as much as the treasury holds).
+async function takeTribute(lobby: string, kingdom: number, crown: number, amount: number, at: number) {
+  let taken = 0
+  await mutateKingdom(kingdom, at, (k) => {
+    taken = Math.min(amount, Math.max(0, Math.floor(k.stock.gold)))
+    return { ...k, stock: { ...k.stock, gold: k.stock.gold - taken } }
+  })
+  await notify(lobby, [kingdom], 'patrol_taken', { crown, amount: taken }, at)
 }

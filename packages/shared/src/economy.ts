@@ -598,6 +598,8 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
   const { villagers } = population(kingdom, at)
   const delta: Partial<Stock> = {}
   const weapons: Partial<Armory> = {}
+  // What the forges take from the stores to work it.
+  const worked: Partial<Stock> = {}
   const left = { ...stock }
   const round = roundContext(kingdom, at)
   for (const b of kingdom.buildings) {
@@ -609,6 +611,7 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
     for (const [r, per] of Object.entries(out.uses ?? {})) {
       left[r as Resource] -= units * (per ?? 0)
       delta[r as Resource] = (delta[r as Resource] ?? 0) - units * (per ?? 0)
+      worked[r as Resource] = (worked[r as Resource] ?? 0) + units * (per ?? 0)
     }
     if (isGood(out.makes)) delta[out.makes] = (delta[out.makes] ?? 0) + units
     else weapons[out.makes] = (weapons[out.makes] ?? 0) + units
@@ -625,7 +628,7 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
   const sends = townYield(kingdom.towns)
   const idle = idleFactor(kingdom, at)
   for (const r of ['gold', 'food', 'materials', 'arms'] as const) if (sends[r]) delta[r] = (delta[r] ?? 0) + sends[r] * idle
-  return { delta, weapons }
+  return { delta, weapons, worked }
 }
 
 // What one production round adds to (and eats from) the stores.
