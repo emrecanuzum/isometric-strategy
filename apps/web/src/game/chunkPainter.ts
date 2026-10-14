@@ -111,12 +111,15 @@ export function setStructures(context: PaintContext, structures: Structure[], tr
   }
   context.trail = new Float32Array(size * size).fill(TRAIL_REACH + 1)
   context.trailNear = new Map()
-  // An end of a path is loose unless it meets another path there (a branch joining a trunk) or reaches a building's
-  // door (or a field it crosses into).
+  // An end of a path is loose unless it meets another path there (a branch joining a trunk), reaches a building's
+  // door (or a field it crosses into), or comes out on a trade route.
   const atBuilding = (p: Point) =>
     structures.some((s) => p.x > s.x - 0.8 && p.x < s.x + s.size + 0.8 && p.y > s.y - 0.8 && p.y < s.y + s.size + 0.8)
+  const atRoad = (p: Point) =>
+    context.road[Math.min(size - 1, Math.max(0, Math.floor(p.y))) * size + Math.min(size - 1, Math.max(0, Math.floor(p.x)))] < ROAD_HALF + 1.6
   const meets = (p: Point, own: Point[]) =>
     atBuilding(p) ||
+    atRoad(p) ||
     trails.some((other) => {
       if (other === own) return false
       for (let i = 1; i < other.length; i++) {

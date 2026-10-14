@@ -593,7 +593,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   patikalar zemine işlenir; cetvelle çizilmiş gibi düz değil, hafifçe
   dalgalanarak uzanırlar (yürüyenler yine aynı yolu izler). Başka bir
   patikaya bağlanmayan ucunda patika birden kesilmez: son ~2,5 karoda
-  daralır ve yer yer çimenle kesilerek söner. Sur ve kapılar patika üretmez. Saraya en yakın
+  daralır ve yer yer çimenle kesilerek söner. Ticaret yolu da aşınmış yol
+  sayılır: yürüyenler onu kullanır, yolun üstüne ya da yanına ona paralel
+  patika çizilmez; yola varan patika yolun kenarında birleşir. Sur ve kapılar patika üretmez. Saraya en yakın
   yapıların yolu önce açılır, sonrakiler var olan patikaya katılır (patika
   karosu yürümesi daha ucuzdur); böylece saraydan dallanan birkaç ortak
   patika oluşur, yelpaze gibi açılan düz çizgiler değil. Bir yürüyüşün

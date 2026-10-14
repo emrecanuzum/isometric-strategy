@@ -291,14 +291,28 @@ function footpaths(world: World, buildings: TownBuilding[], time: number): Point
   // Tiles a footpath already wears, with a tile of margin either side: a later walk there keeps to that path and is
   // not drawn again beside it (two lines a tile apart read as a braid).
   const worn = new Set<number>()
-  const isWorn = (x: number, y: number) => worn.has(y * world.size + x)
+  // A trade route (and a tile beside it) is worn ground already: walks keep to it, and no footpath is drawn on it or
+  // running alongside it; a path that reaches it simply ends there.
+  const nearRoad = (x: number, y: number) => {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < 0 || ny < 0 || nx >= world.size || ny >= world.size) continue
+        const f = world.feature[ny * world.size + nx]
+        if (f === Feature.Road || f === Feature.Bridge) return true
+      }
+    }
+    return false
+  }
+  const isWorn = (x: number, y: number) => worn.has(y * world.size + x) || nearRoad(x, y)
   const blocked = (x: number, y: number) => solid.has(y * world.size + x) || !walkable(world, x, y)
   const drawn: Point[][] = []
   for (const { from, to } of routes) {
     if (Math.hypot(to.x - from.x, to.y - from.y) > TRAIL_MAX_TILES) continue
     const path = findPath(from, to, blocked, isWorn)
     if (!path) continue
-    const pieces = freshStretches(path, isWorn, drawn)
+    const pieces = freshStretches(path, isWorn, drawn, nearRoad)
     tilesAlong(path.points, (x, y) => {
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) worn.add((y + dy) * world.size + x + dx)
     })
@@ -331,7 +345,7 @@ function nearestOn(lines: Point[][], p: Point): Point | null {
 
 // The stretches of a walk off the paths already worn. Where a stretch leaves or meets a worn path, its end is carried
 // onto that path's line, so it joins it in a clean fork instead of stopping a tile short of it.
-function freshStretches(path: Path, worn: (x: number, y: number) => boolean, drawn: Point[][]): Point[][] {
+function freshStretches(path: Path, worn: (x: number, y: number) => boolean, drawn: Point[][], road: (x: number, y: number) => boolean): Point[][] {
   const STEP = 0.25
   const pointAt = (d: number): Point => {
     let i = 1
@@ -357,7 +371,12 @@ function freshStretches(path: Path, worn: (x: number, y: number) => boolean, dra
     const corners = path.points.filter((_, i) => path.at[i] > d0 && path.at[i] < d1)
     const a = pointAt(d0)
     const b = pointAt(d1)
-    const piece = [(n > 0 && nearestOn(drawn, a)) || a, ...corners, (d1 < path.length && nearestOn(drawn, b)) || b]
+    // Where it leaves a footpath it joins that path. Where it leaves a trade route it reaches a tile further, under
+    // the road (which is painted over it), so it meets the road's edge instead of stopping short of it.
+    const onRoad = (p: Point) => road(Math.floor(p.x), Math.floor(p.y))
+    const start = n > 0 && onRoad(a) ? pointAt(Math.max(0, d0 - 1)) : (n > 0 && nearestOn(drawn, a)) || a
+    const finish = d1 < path.length && onRoad(b) ? pointAt(Math.min(path.length, d1 + 1)) : (d1 < path.length && nearestOn(drawn, b)) || b
+    const piece = [start, ...corners, finish]
     if (d1 - d0 > STEP) pieces.push(piece)
   }
   return pieces
