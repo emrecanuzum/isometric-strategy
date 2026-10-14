@@ -23,7 +23,7 @@ export interface ChunkImage {
   trees?: LiftedTree[]
 }
 
-export type TreeSet = 'pine' | 'leaf' | 'fir' | 'birch' | 'poplar' | 'autumn' | 'blossom' | 'oak' | 'giantPine'
+export type TreeSet = 'pine' | 'leaf' | 'fir' | 'birch' | 'poplar' | 'autumn' | 'blossom' | 'bigBlossom' | 'oak' | 'giantPine'
 
 export interface LiftedTree {
   set: TreeSet
@@ -58,6 +58,8 @@ export type { Structure }
 // Footpaths are this many tiles wide either side of their center line.
 const TRAIL_HALF = 0.2
 const TRAIL_REACH = 2
+// How far a footpath wanders off its straight line, in tiles (peak to peak).
+const WANDER = 1.3
 // Within this many tiles of a footpath, the distance to it is measured exactly (see PaintContext.trailNear).
 const NEAR_TRAIL = 0.6
 
@@ -97,7 +99,7 @@ export function setStructures(context: PaintContext, structures: Structure[], tr
           const t = Math.min(1, Math.max(0, ((x + 0.5 - a.x) * dx + (y + 0.5 - a.y) * dy) / lengthSq))
           const d = Math.hypot(x + 0.5 - a.x - dx * t, y + 0.5 - a.y - dy * t)
           if (d < context.trail[y * size + x]) context.trail[y * size + x] = d
-          if (d < NEAR_TRAIL + 0.75) {
+          if (d < NEAR_TRAIL + 0.75 + WANDER / 2) {
             const near = context.trailNear.get(y * size + x)
             if (near) near.push(a.x, a.y, b.x, b.y)
             else context.trailNear.set(y * size + x, [a.x, a.y, b.x, b.y])
@@ -432,9 +434,10 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       const e = elevation[i00] * w00 + elevation[i00 + 1] * w01 + elevation[i10] * w10 + elevation[i10 + 1] * w11
       const way = road[i00] * w00 + road[i00 + 1] * w01 + road[i10] * w10 + road[i10 + 1] * w11
       let foot = trail[i00] * w00 + trail[i00 + 1] * w01 + trail[i10] * w10 + trail[i10 + 1] * w11
-      if (foot < NEAR_TRAIL + 0.5) {
+      if (foot < NEAR_TRAIL + 0.5 + WANDER / 2) {
         const near = trailNear.get(Math.floor(wy) * size + Math.floor(wx))
-        if (near) foot = segmentDistance(near, wx, wy)
+        // Measured from a point nudged by a gentle noise, so the path wanders a little instead of running ruler-straight.
+        if (near) foot = segmentDistance(near, wx + (valueNoise(wx * 0.22, wy * 0.22, seed + 91) - 0.5) * WANDER, wy + (valueNoise(wx * 0.22, wy * 0.22, seed + 97) - 0.5) * WANDER)
       }
       const depthBelow = levels.lake - e
 
@@ -619,12 +622,14 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
     for (let dy = 0; dy <= 2; dy++) {
       for (let dx = 0; dx <= 2; dx++) {
         const i = Math.max(0, y - dy) * size + Math.max(0, x - dx)
-        if (road[i] < ROAD_HALF + 0.4 || trail[i] < TRAIL_HALF + 0.6) return true
+        if (road[i] < ROAD_HALF + 0.4 || trail[i] < TRAIL_HALF + 0.6 + WANDER / 2) return true
       }
     }
     return false
   }
   const choose = <T>(list: T[], r: number) => list[Math.floor(r * list.length)]
+  // Patches of open ground where trees in flower grow thick, like old orchards gone wild, 0..1.
+  const bloom = (x: number, y: number) => smoothstep(0.55, 0.8, valueNoise(x * 0.07, y * 0.07, seed + 71))
   // Rare great trees: a few in the woods, now and then one alone in a meadow.
   const giantAt = (x: number, y: number) => {
     if (x < 0 || y < 0 || x >= size || y >= size) return false
@@ -677,7 +682,9 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
         else if (turning && h < 0.6) set = 'autumn'
         else if (h < smoothstep(0.55, 0.75, grove) * 0.75) set = 'birch'
         else if (woods < 0.35 && h > 0.93) set = 'poplar'
-        else if (woods < 0.35 && h > 0.88) set = 'blossom'
+        // Trees in flower, here and there on open ground and thick in orchard-like patches; now and then a great one.
+        else if (woods < 0.35 && h < 0.12 + bloom(x, y) * 0.55) set = hash(x, y, seed + 57 + n) < 0.07 ? 'bigBlossom' : 'blossom'
+        else if (woods < 0.7 && h > 0.97) set = 'blossom'
         else set = 'leaf'
         grow(set, n, spot(n))
       }

@@ -680,6 +680,87 @@ function blossomTree(seed: number): Sprite {
   return { ...tree, pixels }
 }
 
+// Trees in flower, each kind its own blossom: cherry, apple, almond, lilac and the yellow chains of laburnum.
+const PETALS = {
+  cherry: ramp(0x8a3050, 0xc85a80, 0xec94b2, 0xffcadb),
+  apple: ramp(0xa8a29c, 0xd4d0c8, 0xf0eee6, 0xffffff),
+  almond: ramp(0xb4808e, 0xdcaab8, 0xf4d6de, 0xfff0f2),
+  lilac: ramp(0x46366e, 0x6a54a0, 0x9682c8, 0xc2b2e6),
+  laburnum: ramp(0x86640e, 0xc49c1e, 0xeac63e, 0xfff07a),
+}
+const CHERRY_BARK = ramp(0x241212, 0x40201e, 0x5e342e, 0x7c4c40)
+
+interface Bloom {
+  petals: Uint32Array
+  leaves: Uint32Array
+  // How much of the crown is in flower, 0..1.
+  cover: number
+  bark?: Uint32Array
+  // A great old tree, about twice the size, on a thick trunk.
+  big?: boolean
+  // Flowers hanging in chains under the crown.
+  hanging?: boolean
+}
+
+// A tree in flower: a leafy crown dusted (or smothered) in blossom, more on its lit side, and fallen petals on the
+// ground round its foot. The petals lie flat: drawn a hair short of opaque, they throw no shadow and are never picked.
+function flowering(seed: number, b: Bloom): Sprite {
+  const random = mulberry32(seed)
+  const s = b.big ? 1.9 : 1
+  const r = Math.round((8 + random() * 3) * s)
+  const canvas = new Canvas(Math.round(r * 2.7) + 16, Math.round(r * 2 + 26 * s) + 4)
+  const cx = canvas.width >> 1
+  const base = canvas.height - 4
+  const cy = Math.round(base - 11 * s - r * 0.7)
+  const bark = b.bark ?? BARK
+  if (b.big) {
+    thickTrunk(canvas, cx, base, cy, 2, bark, seed)
+    // Limbs spreading up into the crown.
+    for (const dir of [-1, 1]) for (let t = 0; t < r * 0.7; t++) canvas.set(cx + dir * (2 + t * 0.8), cy + r * 0.25 - t * 0.6, bark[dir < 0 ? 2 : 1])
+  } else trunk(canvas, cx, base, cy, bark)
+  // A wide, rounded crown of a few lumps.
+  const blobs: Blob[] = [{ x: cx, y: cy, r }]
+  const lumps = 5 + Math.floor(random() * 3)
+  for (let i = 0; i < lumps; i++) {
+    const angle = (i / lumps) * Math.PI * 2 + random()
+    blobs.push({ x: cx + Math.cos(angle) * r * 0.78, y: cy + Math.sin(angle) * r * 0.45, r: r * (0.42 + random() * 0.22) })
+  }
+  const crown = new Canvas(canvas.width, canvas.height)
+  shadeBlobs(crown, blobs, b.leaves, seed)
+  crown.rim(b.leaves[0])
+  for (let i = 0; i < crown.pixels.length; i++) {
+    const c = crown.pixels[i]
+    if (!c) continue
+    const x = i % canvas.width
+    const y = Math.floor(i / canvas.width)
+    const lit = b.leaves.indexOf(c)
+    let color = c
+    if (lit > 0 && hash(x, y, seed + 3) < b.cover * (0.55 + lit * 0.11)) color = b.petals[Math.min(3, Math.max(0, lit - 2 + (hash(x, y, seed + 5) < 0.5 ? 0 : 1)))]
+    canvas.pixels[i] = color
+  }
+  if (b.hanging) {
+    // Chains of flowers hanging from the underside of the crown.
+    for (let x = 1; x < canvas.width - 1; x++) {
+      let bottom = -1
+      for (let y = canvas.height - 1; y >= 0 && bottom < 0; y--) if (crown.pixels[y * canvas.width + x]) bottom = y
+      if (bottom < 0 || hash(x, 7, seed) > 0.55) continue
+      const length = 2 + Math.floor(hash(x, 9, seed) * 4 * s)
+      for (let d = 1; d <= length; d++) canvas.set(x, bottom + d, b.petals[d === length ? 1 : 3 - (d & 1)])
+    }
+  }
+  // Fallen petals scattered round the foot, thicker toward the trunk.
+  const fallen = Math.round(r * 2.2)
+  for (let n = 0; n < fallen; n++) {
+    const a = random() * Math.PI * 2
+    const d = Math.sqrt(random()) * r * 0.95
+    const x = Math.round(cx + Math.cos(a) * d)
+    const y = Math.round(base - 1 + Math.sin(a) * d * 0.45)
+    if (canvas.get(x, y)) continue
+    canvas.set(x, y, ((b.petals[2 + (n & 1)] & 0x00ffffff) | 0xfe000000) >>> 0)
+  }
+  return canvas.sprite(cx, base, r * 0.95)
+}
+
 // A trunk several pixels thick, lit from the left, with roots spreading over the ground at its foot.
 function thickTrunk(canvas: Canvas, cx: number, base: number, top: number, half: number, colors: Uint32Array, seed: number) {
   for (let y = top; y <= base; y++) {
@@ -1540,7 +1621,19 @@ export const SPRITES = {
   birch: variants(5, birch),
   poplar: variants(3, poplar),
   autumn: [...variants(3, (s) => leafTree(s + 3, AUTUMN[0])), ...variants(3, (s) => leafTree(s + 4, AUTUMN[1]))],
-  blossom: variants(3, (s) => blossomTree(s + 5)),
+  blossom: [
+    ...variants(3, (s) => blossomTree(s + 5)),
+    ...variants(3, (s) => flowering(s + 21, { petals: PETALS.cherry, leaves: LEAF[1], cover: 0.85, bark: CHERRY_BARK })),
+    ...variants(2, (s) => flowering(s + 22, { petals: PETALS.apple, leaves: LEAF[0], cover: 0.5 })),
+    ...variants(2, (s) => flowering(s + 23, { petals: PETALS.almond, leaves: LEAF[2], cover: 0.7 })),
+    ...variants(2, (s) => flowering(s + 24, { petals: PETALS.lilac, leaves: LEAF[1], cover: 0.65 })),
+    ...variants(2, (s) => flowering(s + 25, { petals: PETALS.laburnum, leaves: LEAF[0], cover: 0.3, hanging: true })),
+  ],
+  // Great old trees in flower, about twice the size, much rarer.
+  bigBlossom: [
+    ...variants(2, (s) => flowering(s + 31, { petals: PETALS.cherry, leaves: LEAF[1], cover: 0.85, bark: CHERRY_BARK, big: true })),
+    ...variants(2, (s) => flowering(s + 32, { petals: PETALS.apple, leaves: LEAF[0], cover: 0.6, big: true })),
+  ],
   // Rare, much bigger trees.
   oak: [...variants(3, (s) => oak(s, LEAF[0])), oak(9001, LEAF[1])],
   giantPine: variants(3, giantPine),

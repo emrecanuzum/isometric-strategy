@@ -178,7 +178,10 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
 - **Ağaçlar türlerine göre öbeklenir:** yapraklı ağaçlar, çamlar, daha koyu
   ve sık katlı **ladinler**, beyaz gövdeli **huş** koruları, erken sararan
   (pas ve altın renkli) küçük ağaç kümeleri; açık arazide tek tük **kavak**
-  ve **çiçek açmış ağaçlar**. Çok nadiren **ulu ağaçlar** çıkar: ormanda
+  ve **çiçek açmış ağaçlar** (kiraz, beyaz elma, badem, leylak, sarı
+  salkımlı laburnum; açık arazide yer yer meyve bahçesi gibi öbekler
+  halinde, dökülen yaprakları yerde; nadiren iki kat büyüklükte ulu
+  kiraz ya da beyaz çiçekli ulu ağaç). Çok nadiren **ulu ağaçlar** çıkar: ormanda
   dallı, geniş taçlı ulu meşe ya da öbürlerinin iki katı boyunda yaşlı
   çam, nadiren çayırda tek başına bir meşe. Ulu ağacın çevresindeki ağaçlar
   ona yer açar (`chunkPainter.ts` → `giantAt`).
@@ -530,7 +533,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   mantık `packages/shared/src/fishing.ts`.
 - **Patikalar:** Her yapının kapısından saraya ve köylülerin evden işe
   yürüdüğü yollar boyunca, yapıların etrafından dolaşan ince toprak
-  patikalar zemine işlenir. Sur ve kapılar patika üretmez. Saraya en yakın
+  patikalar zemine işlenir; cetvelle çizilmiş gibi düz değil, hafifçe
+  dalgalanarak uzanırlar (yürüyenler yine aynı yolu izler). Sur ve kapılar patika üretmez. Saraya en yakın
   yapıların yolu önce açılır, sonrakiler var olan patikaya katılır (patika
   karosu yürümesi daha ucuzdur); böylece saraydan dallanan birkaç ortak
   patika oluşur, yelpaze gibi açılan düz çizgiler değil. Köylüler de
