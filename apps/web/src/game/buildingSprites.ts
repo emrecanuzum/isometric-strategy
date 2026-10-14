@@ -2407,7 +2407,11 @@ export function structureParts(world: World, s: Structure): Part[] {
   const flat = s.look === 'farm'
   const parts: Part[] = []
   let z = at(s.x + s.size / 2, s.y + s.size / 2)
-  if (high - low >= LEVEL_TOLERANCE) {
+  // Shore buildings (the dock house, the fisher's hut) stand on a steep bank: raised to its top they would sit on a
+  // tall block of stone high above their jetty. They sit low instead, by the water, cut into the bank behind them.
+  const shore = s.look === 'dock' || s.look === 'fisherHut'
+  if (shore && high - low >= LEVEL_TOLERANCE) z = low + 1
+  else if (high - low >= LEVEL_TOLERANCE) {
     z = high + 1
     const key = `plinth:${s.size}:${left}:${front}:${right}:${z}:${flat}`
     // The watchtower stands on rough stone like its own footing, not on a paved slab.

@@ -561,6 +561,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   en açık suya bakan kenarından nehre/göle doğru uzanır.
 - **Eğim:** Yokuşa kurulan yapı, en yüksek köşesi hizasında düz bir taş
   kaide üzerinde durur (tarlada toprak set); kaide aşağıdaki zemine iner.
+  Kıyı yapıları (iskele binası, balıkçı kulübesi) kaideye çıkmaz: dik
+  kıyıda suya bakan alçak köşeye oturur, arkasındaki yamaca gömülür;
+  böylece iskelenin ahşap kısmıyla aynı hizada kalır.
   Kaidedeki yapının gölgesi kaide yüksekliğinden aşağıdaki zemine düşer
   (güneşten öteye kayar; `shadows.ts` → `setFootprint`).
 - **Esrarengiz balıkçı kulübesi** (3. seviye saray, bir tane, yalnızca
