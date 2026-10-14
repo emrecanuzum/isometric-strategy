@@ -1,5 +1,5 @@
 import { balance } from './balance'
-import { gameTime } from './clock'
+import { gameTime, nextHourAt } from './clock'
 
 // The people (CLAUDE.md §9.7): the palace's level caps the population, taxes bring gold and cost happiness, and
 // happiness decides how many would take up arms and at what price.
@@ -21,10 +21,7 @@ export function isNightAt(at: number) {
 // When the current part of the day (night or day) ends after `at`.
 export function phaseEndsAt(at: number) {
   const { startHour, endHour } = balance.society.night
-  const hour = gameTime(at, 0).hour
-  let dh = (isNightAt(at) ? endHour : startHour) - hour
-  if (dh <= 0) dh += 24
-  return at + (dh / 24) * balance.time.gameDayMs
+  return nextHourAt(at, isNightAt(at) ? endHour : startHour)
 }
 
 // What weighs on the people besides the tax: a night shift, a kidnapped queen, an incited revolt.

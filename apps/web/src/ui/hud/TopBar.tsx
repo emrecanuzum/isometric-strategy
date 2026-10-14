@@ -308,9 +308,9 @@ function Clock({ now, seasonStart, nextRound, open, onTap }: { now: number; seas
         </ul>
         <Meter value={t.day / balance.time.seasonGameDays} label="Sezon ilerlemesi" segments={16} />
         <p className="pop-foot">
-          Oyunda 1 gün = gerçekte 1 saat. Çubuktaki her kare 1 oyun saatidir (gerçekte {(balance.time.gameDayMs / 24 / 60000).toString().replace('.', ',')} dk).
+          Oyunda 1 gün = gerçekte 1 saat. Çubuktaki her kare 1 oyun saatidir (gerçekte ortalama {(balance.time.gameDayMs / 24 / 60000).toString().replace('.', ',')} dk): gece daha hızlı, şafak ve gün batımı daha yavaş geçer.
           <br />
-          <b>Tur</b>, her {balance.economy.productionSeconds} saniyede (oyunda {Math.round((balance.economy.productionSeconds * 1000 * 24 * 60) / balance.time.gameDayMs)} dk) bir işleyen üretim turudur: binalar üretir, halk yer, vergi ve maaşlar ödenir. Bir oyun saatinde {Math.round(balance.time.gameDayMs / 24 / (balance.economy.productionSeconds * 1000))} tur geçer.
+          <b>Tur</b>, her {balance.economy.productionSeconds} saniyede (oyunda {Math.round((balance.economy.productionSeconds * 1000 * 24 * 60) / balance.time.gameDayMs)} dk) bir işleyen üretim turudur: binalar üretir, halk yer, vergi ve maaşlar ödenir. Bir oyun saatinde ortalama {Math.round(balance.time.gameDayMs / 24 / (balance.economy.productionSeconds * 1000))} tur geçer.
         </p>
       </div>
     </div>

@@ -167,6 +167,11 @@ function render(model: Model, above: number): Sprite {
     pz[o] = z
   }
   const STEP = 0.3
+  // The boxes are the sprite's solids too, for its shadow.
+  for (const b of model.boxes) {
+    const corner = (u: number, v: number) => [cx + u - v, back + (u + v) / 2]
+    canvas.solid([...corner(b.u0, b.v0), ...corner(b.u1, b.v0), ...corner(b.u1, b.v1), ...corner(b.u0, b.v1)], b.z0, b.z1)
+  }
   model.boxes.forEach((b, i) => {
     for (let u = b.u0; u <= b.u1 + 1e-6; u += STEP) for (let v = b.v0; v <= b.v1 + 1e-6; v += STEP) plot(u, v, b.z1, 0, i)
     for (let v = b.v0; v <= b.v1 + 1e-6; v += STEP) for (let z = b.z0; z <= b.z1 + 1e-6; z += STEP) plot(b.u1, v, z, 1, i)

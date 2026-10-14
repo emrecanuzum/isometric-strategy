@@ -47,6 +47,10 @@ export interface PaintContext {
   occupied: Uint8Array
   // Per tile: distance to the nearest footpath between the player's buildings, in tiles.
   trail: Float32Array
+  // Per tile near a footpath, the footpath segments passing close by ([ax, ay, bx, by] each): close to a path the
+  // painting measures the distance to them exactly, as tile-centre distances blend a thin line crossing a tile
+  // corner-wise into a string of dots.
+  trailNear: Map<number, number[]>
 }
 
 export type { Structure }
@@ -54,6 +58,21 @@ export type { Structure }
 // Footpaths are this many tiles wide either side of their center line.
 const TRAIL_HALF = 0.2
 const TRAIL_REACH = 2
+// Within this many tiles of a footpath, the distance to it is measured exactly (see PaintContext.trailNear).
+const NEAR_TRAIL = 0.6
+
+// Distance from (x, y) to the nearest of the segments ([ax, ay, bx, by] each).
+function segmentDistance(segments: number[], x: number, y: number) {
+  let best = Infinity
+  for (let i = 0; i < segments.length; i += 4) {
+    const [ax, ay, bx, by] = [segments[i], segments[i + 1], segments[i + 2], segments[i + 3]]
+    const dx = bx - ax
+    const dy = by - ay
+    const t = Math.min(1, Math.max(0, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)))
+    best = Math.min(best, Math.hypot(x - ax - dx * t, y - ay - dy * t))
+  }
+  return best
+}
 
 export function setStructures(context: PaintContext, structures: Structure[], trails: Point[][]) {
   const { size } = context.world
@@ -65,6 +84,7 @@ export function setStructures(context: PaintContext, structures: Structure[], tr
     }
   }
   context.trail = new Float32Array(size * size).fill(TRAIL_REACH + 1)
+  context.trailNear = new Map()
   for (const line of trails) {
     for (let i = 1; i < line.length; i++) {
       const a = line[i - 1]
@@ -77,6 +97,11 @@ export function setStructures(context: PaintContext, structures: Structure[], tr
           const t = Math.min(1, Math.max(0, ((x + 0.5 - a.x) * dx + (y + 0.5 - a.y) * dy) / lengthSq))
           const d = Math.hypot(x + 0.5 - a.x - dx * t, y + 0.5 - a.y - dy * t)
           if (d < context.trail[y * size + x]) context.trail[y * size + x] = d
+          if (d < NEAR_TRAIL + 0.75) {
+            const near = context.trailNear.get(y * size + x)
+            if (near) near.push(a.x, a.y, b.x, b.y)
+            else context.trailNear.set(y * size + x, [a.x, a.y, b.x, b.y])
+          }
         }
       }
     }
@@ -215,7 +240,7 @@ export function preparePaint(world: World): PaintContext {
     }
   }
   for (let i = 0; i < road.length; i++) if (road[i] === Infinity) road[i] = reach + 1
-  return { world, lit, patch, road, bridges, structures: [], occupied: new Uint8Array(size * size), trail: new Float32Array(size * size).fill(TRAIL_REACH + 1) }
+  return { world, lit, patch, road, bridges, structures: [], occupied: new Uint8Array(size * size), trail: new Float32Array(size * size).fill(TRAIL_REACH + 1), trailNear: new Map() }
 }
 
 // How a biome border looks around a point: finely dithered, in blotches and islands, or in frayed fibres. The
@@ -355,7 +380,7 @@ function shadowOf(sprite: Sprite, foot: number, sun: SunShadow) {
 // farther ground. Sprites are then composited against the depth of the ground they stand behind.
 // `lift`: leave the trees out and hand back where they stand instead (see ChunkImage.trees).
 export function paintChunk(context: PaintContext, cx: number, cy: number, k: number, lift = false, sun: SunShadow = NOON): ChunkImage {
-  const { world, lit, patch, road, bridges, structures, occupied, trail } = context
+  const { world, lit, patch, road, bridges, structures, occupied, trail, trailNear } = context
   const { size, seed, elevation, moisture, height, levels } = world
   const S = balance.map.chunkSize
   const chunkCount = size / S
@@ -406,7 +431,11 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       const h = height[i00] * w00 + height[i00 + 1] * w01 + height[i10] * w10 + height[i10 + 1] * w11
       const e = elevation[i00] * w00 + elevation[i00 + 1] * w01 + elevation[i10] * w10 + elevation[i10 + 1] * w11
       const way = road[i00] * w00 + road[i00 + 1] * w01 + road[i10] * w10 + road[i10 + 1] * w11
-      const foot = trail[i00] * w00 + trail[i00 + 1] * w01 + trail[i10] * w10 + trail[i10 + 1] * w11
+      let foot = trail[i00] * w00 + trail[i00 + 1] * w01 + trail[i10] * w10 + trail[i10 + 1] * w11
+      if (foot < NEAR_TRAIL + 0.5) {
+        const near = trailNear.get(Math.floor(wy) * size + Math.floor(wx))
+        if (near) foot = segmentDistance(near, wx, wy)
+      }
       const depthBelow = levels.lake - e
 
       const y = row + pad - Math.round(h * k)

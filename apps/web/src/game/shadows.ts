@@ -1,7 +1,7 @@
 import { AlphaFilter, Container, Sprite as PixiSprite, Texture } from 'pixi.js'
 import { sunShadow } from './daylight'
-import { castShadow } from './sprites'
-import type { Sprite } from './sprites'
+import { castShadow, shadeOn } from './sprites'
+import type { ShadeJob, Sprite } from './sprites'
 import { freeTexture, lookOf, textureOf } from './textures'
 
 // Shadows of everything standing in the walkers' layer (buildings, walls, swaying trees, walkers, animals, armies),
@@ -13,7 +13,9 @@ const TINT = 0x0c1226
 // The sun's direction moves in steps of this many game hours; every shadow is cast anew at each step.
 const STEP = 1 / 6
 // Sprites in the walkers' layer that throw no shadow.
-const NONE = new Set(['smoke'])
+const NONE = new Set(['smoke', 'shade', 'inn'])
+// Shadows falling on buildings are worked out a few buildings at a time, this many milliseconds a frame.
+const BUDGET_MS = 4
 
 export interface Shadows {
   layer: Container
@@ -28,6 +30,13 @@ export function createShadows(): Shadows {
   layer.filters = [filter]
   const footprints = new WeakMap<Container, number>()
   const shades = new Map<PixiSprite, { shade: PixiSprite; frame: number }>()
+  // Shadows that fall on buildings: per building, an overlay of its pixels in the shade of another building (its own
+  // shading is drawn into it). Worked out anew for every step of the sun and whenever the buildings change.
+  const shaded = new Map<PixiSprite, { overlay: PixiSprite | null; look: Sprite; cast: Sprite | null }>()
+  let queue: PixiSprite[] = []
+  // The building being shaded now, a few rows a frame.
+  let job: { target: PixiSprite; work: ShadeJob } | null = null
+  let built = ''
   let frame = 0
   let step = NaN
   let sun = sunShadow(0)
@@ -40,6 +49,74 @@ export function createShadows(): Shadows {
     let shadow = byLook.get(key)
     if (!shadow) byLook.set(key, (shadow = castShadow(look, sun, size > 0, flip)))
     return shadow
+  }
+
+  // A building's pixel is in shade when the line from it toward the sun passes through another building's solids.
+  // Walls do not shade walls: a run of wall is lit as one model already.
+  function shadeBuildings(casters: Container, sunMoved: boolean, alpha: number) {
+    const buildings = casters.children.filter((c): c is PixiSprite => c instanceof PixiSprite && c.label === 'occluder' && !!lookOf(c.texture))
+    const key = buildings.map((b) => `${b.x},${b.y}`).join(';')
+    if (sunMoved || key !== built) {
+      built = key
+      queue = buildings.slice()
+      job = null
+      const standing = new Set(buildings)
+      for (const [building, entry] of shaded) {
+        if (standing.has(building)) continue
+        entry.overlay?.destroy()
+        if (entry.cast) freeTexture(entry.cast)
+        shaded.delete(building)
+      }
+    } else {
+      // A building whose look changed (a gate swinging open) is shaded again on its own.
+      for (const building of buildings) {
+        const entry = shaded.get(building)
+        if (entry && entry.look !== lookOf(building.texture) && !queue.includes(building)) queue.push(building)
+      }
+    }
+    for (const entry of shaded.values()) if (entry.overlay) entry.overlay.alpha = alpha
+    const deadline = performance.now() + BUDGET_MS
+    while (performance.now() < deadline) {
+      if (!job) {
+        const target = queue.shift()
+        if (!target) break
+        if (target.destroyed || !lookOf(target.texture)) continue
+        job = { target, work: startShading(target, buildings) }
+      }
+      if (!job.work.step(deadline)) break
+      if (!job.target.destroyed) finish(job.target, job.work.result(), casters, alpha)
+      job = null
+    }
+  }
+
+  function startShading(target: PixiSprite, buildings: PixiSprite[]) {
+    const others = buildings.flatMap((other) => {
+      const o = lookOf(other.texture)
+      return other === target || !o ? [] : [{ look: o, x: other.x, y: other.y, shadow: shadowOf(o, 1, false) }]
+    })
+    return shadeOn({ look: lookOf(target.texture)!, x: target.x, y: target.y }, others, sun)
+  }
+
+  // Puts what fell on a building over it (or takes the old overlay away).
+  function finish(target: PixiSprite, cast: Sprite | null, casters: Container, alpha: number) {
+    const look = lookOf(target.texture)!
+    const old = shaded.get(target)
+    if (old?.cast) freeTexture(old.cast)
+    if (!cast) {
+      old?.overlay?.destroy()
+      shaded.set(target, { overlay: null, look, cast: null })
+      return
+    }
+    const overlay = old?.overlay ?? new PixiSprite()
+    overlay.texture = textureOf(cast)
+    overlay.anchor.set(cast.anchorX / cast.width, cast.anchorY / cast.height)
+    overlay.position.copyFrom(target.position)
+    overlay.zIndex = target.zIndex + 0.01
+    overlay.tint = TINT
+    overlay.alpha = alpha
+    overlay.label = 'shade'
+    if (!overlay.parent) casters.addChild(overlay)
+    shaded.set(target, { overlay, look, cast })
   }
 
   return {
@@ -94,6 +171,7 @@ export function createShadows(): Shadows {
         entry.shade.destroy()
         shades.delete(child)
       }
+      shadeBuildings(casters, now !== step || old !== null, filter.alpha)
       if (old) for (const byLook of old.values()) for (const shadow of byLook.values()) freeTexture(shadow)
     },
   }

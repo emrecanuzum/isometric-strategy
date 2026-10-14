@@ -16,6 +16,261 @@ export interface Sprite {
   lift?: Uint8Array
   // Per pixel, whether it lies flat on the ground (a paved yard); buildings only.
   flat?: Uint8Array
+  // The building's shape as a few solids, when it was drawn from them (see Solid): its shadow is cast from these.
+  solids?: Solid[]
+}
+
+// A solid of a building's shape, in the sprite's own pixels: a prism standing on a convex base, or a pyramid tapering
+// from that base to `apex`. A point of the base is (x, g): its column and the row of the ground under it; the solid
+// rises from height z0 to z1 (pixels), so a point at height z is drawn z rows above its ground.
+export interface Solid {
+  base: number[]
+  z0: number
+  z1: number
+  apex?: [number, number]
+}
+
+// The base of a footprint diamond centred on (x, g) with half-width w (and half-height w / 2).
+export const diamondAt = (x: number, g: number, w: number) => [x - w, g, x, g - w / 2, x + w, g, x, g + w / 2]
+// The base of a round tower centred on (x, g), radius r across (r / 2 deep).
+export const ellipseAt = (x: number, g: number, r: number, n = 14) =>
+  Array.from({ length: n }, (_, i) => {
+    const a = (i / n) * Math.PI * 2
+    return [x + Math.cos(a) * r, g + Math.sin(a) * r * 0.5]
+  }).flat()
+
+// Whether (x, g) lies inside a convex polygon given as flat [x, g, …] points (either winding).
+function insidePolygon(points: number[], x: number, g: number) {
+  let sign = 0
+  for (let i = 0; i < points.length; i += 2) {
+    const j = (i + 2) % points.length
+    const cross = (points[j] - points[i]) * (g - points[i + 1]) - (points[j + 1] - points[i + 1]) * (x - points[i])
+    if (cross === 0) continue
+    if (sign === 0) sign = Math.sign(cross)
+    else if (Math.sign(cross) !== sign) return false
+  }
+  return true
+}
+
+// Whether the point (x, g, z) is inside a solid.
+export function insideSolid(solid: Solid, x: number, g: number, z: number) {
+  if (z < solid.z0 || z > solid.z1) return false
+  if (!solid.apex) return insidePolygon(solid.base, x, g)
+  // A pyramid: at height z the base has shrunk toward the apex.
+  const f = (z - solid.z0) / (solid.z1 - solid.z0 || 1)
+  if (f >= 1) return false
+  const [ax, ag] = solid.apex
+  return insidePolygon(solid.base, ax + (x - ax) / (1 - f), ag + (g - ag) / (1 - f))
+}
+
+// Convex hull of flat [x, g, …] points (monotone chain), as flat points.
+function hull(points: number[]) {
+  const pts: [number, number][] = []
+  for (let i = 0; i < points.length; i += 2) pts.push([points[i], points[i + 1]])
+  pts.sort((a, b) => a[0] - b[0] || a[1] - b[1])
+  if (pts.length < 3) return pts.flat()
+  const cross = (o: [number, number], a: [number, number], b: [number, number]) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+  const lower: [number, number][] = []
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop()
+    lower.push(p)
+  }
+  const upper: [number, number][] = []
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i]
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop()
+    upper.push(p)
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)].flat()
+}
+
+// The shadow of a building drawn from solids: each solid's outline on the ground, swept from its foot to its top
+// along the sun, filled. Crisp and true to the building's shape.
+function solidShadow(sprite: Sprite, sun: { x: number; y: number }): Sprite {
+  const shapes = sprite.solids!.map((solid) => {
+    const at = (x: number, g: number, z: number) => [x + z * sun.x, g + z * sun.y]
+    const points: number[] = []
+    for (let i = 0; i < solid.base.length; i += 2) points.push(...at(solid.base[i], solid.base[i + 1], solid.z0))
+    if (solid.apex) points.push(...at(solid.apex[0], solid.apex[1], solid.z1))
+    else for (let i = 0; i < solid.base.length; i += 2) points.push(...at(solid.base[i], solid.base[i + 1], solid.z1))
+    return hull(points)
+  })
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const shape of shapes) {
+    for (let i = 0; i < shape.length; i += 2) {
+      minX = Math.min(minX, Math.floor(shape[i]))
+      maxX = Math.max(maxX, Math.ceil(shape[i]))
+      minY = Math.min(minY, Math.floor(shape[i + 1]))
+      maxY = Math.max(maxY, Math.ceil(shape[i + 1]))
+    }
+  }
+  if (!isFinite(minX)) return new Canvas(1, 1).sprite(0, 0, 0)
+  const canvas = new Canvas(maxX - minX + 1, maxY - minY + 1)
+  for (const shape of shapes) {
+    let x0 = Infinity
+    let x1 = -Infinity
+    let y0 = Infinity
+    let y1 = -Infinity
+    for (let i = 0; i < shape.length; i += 2) {
+      x0 = Math.min(x0, shape[i])
+      x1 = Math.max(x1, shape[i])
+      y0 = Math.min(y0, shape[i + 1])
+      y1 = Math.max(y1, shape[i + 1])
+    }
+    for (let y = Math.floor(y0); y <= Math.ceil(y1); y++) {
+      for (let x = Math.floor(x0); x <= Math.ceil(x1); x++) {
+        if (insidePolygon(shape, x + 0.5, y + 0.5)) canvas.pixels[(y - minY) * canvas.width + x - minX] = 0xffffffff
+      }
+    }
+  }
+  return canvas.sprite(sprite.anchorX - minX, sprite.anchorY - minY, 0)
+}
+
+// The pixels of a building (placed with its anchor at x, y on screen) in the shade of other buildings: where the line
+// from the pixel toward the sun passes through another building's solids. Each other building comes with its shadow
+// (castShadow, same sun) for a quick test first. Parts standing on the same spot belong to the building itself, and
+// walls do not shade walls (a run of wall is lit as one model already). Null when nothing falls on it.
+interface Placed {
+  look: Sprite
+  x: number
+  y: number
+}
+export interface ShadeJob {
+  // Works on until the clock passes `deadline` (performance.now()); true once finished.
+  step(deadline: number): boolean
+  // What fell on the building, once finished.
+  result(): Sprite | null
+}
+const NOTHING: ShadeJob = { step: () => true, result: () => null }
+export function shadeOn(target: Placed, others: (Placed & { shadow: Sprite })[], sun: { x: number; y: number }): ShadeJob {
+  const { look } = target
+  const lift = solidLiftOf(look)
+  if (!lift) return NOTHING
+  const left = target.x - look.anchorX
+  const top = target.y - look.anchorY
+  // Only buildings up and to the left of it on screen can stand between it and the sun.
+  const reach = 260
+  const near = others.flatMap((o) => {
+    if (o.x === target.x && o.y === target.y) return []
+    const solids = o.look.solids
+    if (!solids || (o.look.lift && look.lift)) return []
+    const ol = o.x - o.look.anchorX
+    const ot = o.y - o.look.anchorY
+    if (ol > left + look.width || ol + o.look.width < left - reach || ot > top + look.height || ot + o.look.height < top - reach) return []
+    const boxed = solids.map((solid) => {
+      const xs = solid.base.filter((_, i) => i % 2 === 0)
+      const gs = solid.base.filter((_, i) => i % 2 === 1)
+      return { solid, x0: Math.min(...xs), x1: Math.max(...xs), g0: Math.min(...gs), g1: Math.max(...gs) }
+    })
+    return [{ ...o, boxed, ol, ot, z: Math.max(...solids.map((s) => s.z1)) }]
+  })
+  if (near.length === 0) return NOTHING
+  const canvas = new Canvas(look.width, look.height)
+  let any = false
+  let row = 0
+  const shadeRow = (y: number) => {
+    for (let x = 0; x < look.width; x++) {
+      const i = y * look.width + x
+      if (look.pixels[i] >>> 24 !== 0xff) continue
+      const h = lift[i]
+      // The point on screen, and the ground under it.
+      const px = left + x + 0.5
+      const pg = top + y + 0.5 + h
+      for (const o of near) {
+        // The line toward the sun runs up and to the left on screen: a building right of or below the point is no use.
+        if (o.ol > px || o.ot > top + y + 0.5) continue
+        // Quick test: the point's own shadow would land inside the other building's shadow.
+        const qx = Math.floor(px + h * sun.x) - (o.x - o.shadow.anchorX)
+        const qy = Math.floor(pg + h * sun.y) - (o.y - o.shadow.anchorY)
+        if (qx < 0 || qy < 0 || qx >= o.shadow.width || qy >= o.shadow.height || !o.shadow.pixels[qy * o.shadow.width + qx]) continue
+        let hit = false
+        for (let t = 1; t <= o.z - h && !hit; t += 1.5) {
+          const sx = px - t * sun.x - o.ol
+          const sg = pg - t * sun.y - o.ot
+          const z = h + t
+          for (const b of o.boxed) {
+            if (z < b.solid.z0 || z > b.solid.z1 || sx < b.x0 || sx > b.x1 || sg < b.g0 || sg > b.g1) continue
+            if (insideSolid(b.solid, sx, sg, z)) {
+              hit = true
+              break
+            }
+          }
+        }
+        if (hit) {
+          canvas.pixels[i] = 0xffffffff
+          any = true
+          break
+        }
+      }
+    }
+  }
+  return {
+    step(deadline) {
+      while (row < look.height) {
+        shadeRow(row++)
+        if (performance.now() > deadline) break
+      }
+      return row >= look.height
+    },
+    result: () => (any ? canvas.sprite(look.anchorX, look.anchorY, 0) : null),
+  }
+}
+
+// Per pixel of a building drawn from solids, how high the surface seen there stands over its ground: the point of
+// the solids nearest the viewer along the pixel's line of sight. 0 where no solid is seen (props, yards).
+const solidLifts = new WeakMap<Sprite, Uint8Array>()
+export function solidLiftOf(sprite: Sprite): Uint8Array | null {
+  if (!sprite.solids) return sprite.lift ?? null
+  let lift = solidLifts.get(sprite)
+  if (lift) return lift
+  const { width, height, pixels, solids } = sprite
+  lift = new Uint8Array(pixels.length)
+  for (let x = 0; x < width; x++) {
+    const cx = x + 0.5
+    // Per solid, the span of ground rows its base covers in this column (a prism is seen there from z0 to z1).
+    const spans = solids.map((solid) => {
+      let g0 = Infinity
+      let g1 = -Infinity
+      const b = solid.base
+      for (let i = 0; i < b.length; i += 2) {
+        const j = (i + 2) % b.length
+        const [xa, ga, xb, gb] = [b[i], b[i + 1], b[j], b[j + 1]]
+        if ((cx < Math.min(xa, xb)) || cx > Math.max(xa, xb)) continue
+        const g = xa === xb ? Math.min(ga, gb) : ga + ((cx - xa) / (xb - xa)) * (gb - ga)
+        const g2 = xa === xb ? Math.max(ga, gb) : g
+        g0 = Math.min(g0, g)
+        g1 = Math.max(g1, g2)
+      }
+      return { solid, g0, g1 }
+    })
+    for (let y = 0; y < height; y++) {
+      const i = y * width + x
+      if (pixels[i] >>> 24 !== 0xff) continue
+      const cy = y + 0.5
+      let best = -1
+      for (const { solid, g0, g1 } of spans) {
+        if (!isFinite(g0)) continue
+        if (!solid.apex) {
+          // Seen at height z where the ground row cy + z lies on the base: the highest such z.
+          const z = Math.min(solid.z1, g1 - cy)
+          if (z >= Math.max(solid.z0, g0 - cy) && z > best) best = z
+          continue
+        }
+        for (let z = Math.floor(Math.min(solid.z1, g1 - cy)); z >= Math.max(solid.z0, best + 1, 0); z--) {
+          if (insideSolid(solid, cx, cy + z, z)) {
+            best = z
+            break
+          }
+        }
+      }
+      if (best > 0) lift[i] = Math.min(255, Math.round(best))
+    }
+  }
+  solidLifts.set(sprite, lift)
+  return lift
 }
 
 export const rgb = (hex: number) => (0xff000000 | ((hex & 0xff) << 16) | (hex & 0xff00) | (hex >> 16)) >>> 0
@@ -85,6 +340,8 @@ export class Canvas {
   width: number
   height: number
   pixels: Uint32Array
+  // The solids the building is drawn from (see Solid), for its shadow.
+  solids: Solid[] = []
   // While set, what is drawn lies flat on the ground (see Sprite.flat); drawing anything else over it lifts it again.
   paving = false
   flat: Uint8Array | null = null
@@ -102,6 +359,10 @@ export class Canvas {
     if (this.paving) (this.flat ??= new Uint8Array(this.pixels.length))[i] = 1
     else if (this.flat) this.flat[i] = 0
   }
+  // Records a solid of the shape being drawn (see Solid).
+  solid(base: number[], z0: number, z1: number, apex?: [number, number]) {
+    this.solids.push({ base, z0, z1, ...(apex && { apex }) })
+  }
   get(x: number, y: number) {
     return x >= 0 && y >= 0 && x < this.width && y < this.height ? this.pixels[y * this.width + x] : 0
   }
@@ -116,7 +377,7 @@ export class Canvas {
     for (const i of edge) this.pixels[i] = color
   }
   sprite(anchorX: number, anchorY: number, shadow: number): Sprite {
-    return { width: this.width, height: this.height, anchorX, anchorY, pixels: this.pixels, shadow, ...(this.flat && { flat: this.flat }) }
+    return { width: this.width, height: this.height, anchorX, anchorY, pixels: this.pixels, shadow, ...(this.flat && { flat: this.flat }), ...(this.solids.length > 0 && { solids: this.solids }) }
   }
 }
 
@@ -157,6 +418,7 @@ function liftOf(sprite: Sprite): Uint8Array {
 // lift) or has it guessed (liftOf); anything else stands on one point, its anchor. `flip` casts the sprite as drawn
 // mirrored; the shadow itself is never mirrored, the sun does not move.
 export function castShadow(sprite: Sprite, sun: { x: number; y: number }, building = false, flip = false): Sprite {
+  if (sprite.solids && !flip) return solidShadow(sprite, sun)
   const { width, height, anchorY, pixels } = sprite
   const anchorX = flip ? width - sprite.anchorX : sprite.anchorX
   const lift = sprite.lift ?? (building ? liftOf(sprite) : null)

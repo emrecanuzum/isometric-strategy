@@ -1,6 +1,6 @@
 import { TILE_HEIGHT, TILE_WIDTH, Terrain, hash } from '@game/shared'
 import type { Point, World } from '@game/shared'
-import { Canvas, GLASS, ROOF, STONE, TIMBER, WALL, pick, ramp, rgb, shadeBlobs } from './sprites'
+import { Canvas, GLASS, ROOF, STONE, TIMBER, WALL, diamondAt, ellipseAt, pick, ramp, rgb, shadeBlobs } from './sprites'
 import type { Sprite } from './sprites'
 
 // Inns come in a few styles that suit the land they stand on. Every one covers a 2×2 tile footprint and is
@@ -48,6 +48,8 @@ function build(style: Style): InnLook {
       for (let z = 0; z <= wall; z++) canvas.set(x, ground - z, style.wall(side, t, z))
     }
   }
+  // Its shape for the shadow (see Solid): the walls, then the roof and chimneys below.
+  canvas.solid(diamondAt(cx, base - h, w), 0, wall)
 
   const stack = (x: number, foot: number, height: number) => {
     for (let z = 0; z < height; z++) {
@@ -57,12 +59,14 @@ function build(style: Style): InnLook {
       }
     }
     smoke.push({ x: x + 3 - cx, y: foot - height - base })
+    canvas.solid(diamondAt(x + 3.5, base - h, 3.5), wall, base - h - (foot - height))
   }
 
   if (style.roof) {
     // Hip roof: a pyramid over the footprint. Its two front faces show, bounded below by the front eaves and above
     // by the hips running from the apex down to the left and right eave corners.
     const { height: roof, eave, color } = style.roof
+    canvas.solid(diamondAt(cx, base - h, w + eave), Math.max(0, wall - eave / 2), wall + roof, [cx, base - h])
     const apexY = top + h - wall - roof
     const cornerY = base - wall + eave - (w + eave) / 2
     const ridgeAt = (dx: number) => apexY + dx * ((cornerY - apexY) / (w + eave))
@@ -95,6 +99,8 @@ function build(style: Style): InnLook {
     }
     const dome = new Canvas(canvas.width, canvas.height)
     const domeY = base - h - wall - 2
+    canvas.solid(diamondAt(cx, base - h, w), wall, wall + 3)
+    canvas.solid(ellipseAt(cx - 6, base - h, 13), wall, wall + 15, [cx - 6, base - h])
     shadeBlobs(dome, [{ x: cx - 6, y: domeY, r: 15 }], ADOBE, 51, 0.85)
     dome.rim(ADOBE[1])
     for (let y = 0; y < dome.height; y++) {

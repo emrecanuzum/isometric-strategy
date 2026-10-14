@@ -41,8 +41,10 @@ diğer krallıklarla diplomasi, entrika veya savaş.
 - Ayrıca **ay** kavramı kullanılabilir (ör. 30 oyun günü ≈ 30 saat) — büyük
   olaylar, rapor özetleri ve bazı kontrat süreleri için.
 - **Saat ve gece-gündüz:** Oyun saati duvar saatinden hesaplanır (gerçek
-  saatin başı = gece yarısı, her gerçek dakika = 24 oyun dakikası), yani
-  herkes aynı anda aynı saati görür. Arayüzde saat, gün (sezon başından),
+  saatin başı = gece yarısı), yani herkes aynı anda aynı saati görür.
+  Saatler aynı hızda akmaz: **gece hızlı geçer** (22:00–04:00 gerçekte ~10
+  dk), kazanılan süre **şafağa ve gün batımına** eklenir (her biri ~12 dk);
+  gün yine tam 1 gerçek saattir (`config/balance/time.json` → `pace`). Arayüzde saat, gün (sezon başından),
   ay ve sezon ilerlemesi gösterilir. Harita saate göre renklenir: şafak,
   gündüz, gün batımı ve gece (loş mavi, harita okunur kalır). Akşamdan itibaren binaların
   ve hanların pencereleri (atölyede ocak ateşi) yanar; krallık adı ve
@@ -195,10 +197,15 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   koyu, akşam uzun ve sağ alta doğrudur. Gece yalnızca dibinde kısa, soluk
   bir gölge kalır (`daylight.ts` → `sunShadow`). Gölge sprite'ın kendi
   silüetinden piksel piksel düşürülür (`sprites.ts` → `castShadow`).
-  Her pikselin altındaki yerden yüksekliği bilinir: surlarda modelden
-  tam olarak gelir, diğer binalarda ön duvarın dibinden ölçülür (döşenmiş
-  avlu düz sayılır, gölge atmaz). Böylece gölge binayla aynı genişlikte
-  düşer ve yan yana duran sur parçalarının gölgesi tek parça olur. Binalar, surlar, kuleler, sallanan ağaçlar,
+  Binalar çizilirken şekilleri birkaç katı olarak da kaydedilir (duvar
+  kutusu, kırma çatı piramidi, kule silindiri ve konisi, baca, kaide; sur
+  parçalarında modelin kutuları). Binanın gölgesi bu katıların güneş
+  yönündeki izdüşümüdür: yapının birebir, keskin kenarlı kırılımı; avlu,
+  çit ve küçük eşyalar gölge atmaz. Gölge yalnızca zemine değil **başka
+  binaların üstüne de düşer**: bir binanın pikselinden güneşe giden çizgi
+  başka bir binanın katısından geçiyorsa o piksel gölgede kalır (sur
+  parçaları birbirini gölgelemez, sur zaten tek model gibi ışıklıdır). Bu
+  hesap güneşin her adımında birkaç binada bir, karelere yayılarak yapılır. Binalar, surlar, kuleler, sallanan ağaçlar,
   yürüyenler, hayvanlar ve ordular gölgelerini ayrı bir katmana çizer
   (`shadows.ts`). Katman tek seferde saydamlaştırıldığı için üst üste
   binen gölgeler iki kat koyulaşmaz; gölgelerin yönü oyunun 10 dakikada
@@ -456,7 +463,7 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   **Savaş malzemesi**. Başlangıçta her birinden bir miktar stok verilir.
 - **Tur:** Ekonomi **üretim turlarıyla** işler: her 10 gerçek saniyede
   (oyunda 4 dakika) bir tur; binalar üretir, halk yer, vergi ve maaşlar
-  ödenir. Bir oyun saatinde 15 tur geçer. Saat kartı bunu ve sonraki tura
+  ödenir. Bir oyun saatinde ortalama 15 tur geçer (gece daha az, şafakta ve akşam daha çok). Saat kartı bunu ve sonraki tura
   kalan süreyi yazar; saatteki şeridin her karesi bir oyun saatidir.
 - **Depo sınırı:** Her hammaddeden (yemek, yapı malzemesi, savaş
   malzemesi) depoda tutulabilecek miktar saray seviyesiyle artar (400 /

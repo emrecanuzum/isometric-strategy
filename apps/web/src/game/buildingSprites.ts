@@ -1,6 +1,6 @@
 import { TILE_HEIGHT, TILE_WIDTH, hash, heightAt } from '@game/shared'
 import type { BuildingKind, KingdomColorId, Point, World } from '@game/shared'
-import { BARK, Canvas, CLOTH, GLASS, ROOF, SACK, STONE, TIMBER, WALL, pick, ramp, rgb, shadeBlobs, shadow } from './sprites'
+import { BARK, Canvas, CLOTH, GLASS, ROOF, SACK, STONE, TIMBER, WALL, diamondAt, ellipseAt, pick, ramp, rgb, shadeBlobs, shadow } from './sprites'
 import type { Sprite } from './sprites'
 import { WALL_KINDS, wallLinks, wallLook } from './wallSprites'
 import type { WallKind } from './wallSprites'
@@ -141,6 +141,9 @@ function hall(canvas: Canvas, cx: number, base: number, s: HallStyle) {
       }
     }
   }
+  // Its shape for the shadow: the walls (an open stall has only posts) and the roof over them.
+  if (!s.open) canvas.solid(diamondAt(cx, base - h, w), 0, wall)
+  canvas.solid(diamondAt(cx, base - h, w + eave), Math.max(0, wall - eave / 2), wall + roof, [cx, base - h])
   // Hip roof: a pyramid over the footprint, its two front faces bounded below by the eaves and above by the hips.
   const apexY = base - h - wall - roof
   const cornerY = base - wall + eave - (w + eave) / 2
@@ -179,6 +182,7 @@ function hall(canvas: Canvas, cx: number, base: number, s: HallStyle) {
         canvas.set(cx + dx + x, foot - z, z > tall - 3 ? STONE[1] : x < width / 2 ? STONE[4] : STONE[2])
       }
     }
+    canvas.solid(diamondAt(cx + dx + width / 2, base - h, width / 2), wall, base - h - (foot - tall))
     return { x: cx + dx + width / 2, y: foot - tall, chimney: true }
   }
   return { x: cx, y: apexY, chimney: false }
@@ -187,6 +191,8 @@ function hall(canvas: Canvas, cx: number, base: number, s: HallStyle) {
 // A round tower standing on (cx, base) with battlements and a pointed roof (none when `roofs` is null: an open
 // crenellated top).
 function tower(canvas: Canvas, cx: number, base: number, r: number, tall: number, walls: Uint32Array, roofs: Uint32Array | null, lit = false) {
+  canvas.solid(ellipseAt(cx, base, r), 0, tall + 3)
+  if (roofs) canvas.solid(ellipseAt(cx, base, r + 1), tall + 2, tall + 2 + Math.round(r * 2.2), [cx, base])
   for (let x = -r; x <= r; x++) {
     const f = x / r
     const curve = Math.sqrt(1 - f * f) * r * 0.5
@@ -278,6 +284,7 @@ function drape(canvas: Canvas, cx: number, base: number, w: number, side: number
 
 // A crenellated wall running from (x0, y0) to (x1, y1) on the ground; `lit` for walls facing the light.
 function rampart(canvas: Canvas, x0: number, y0: number, x1: number, y1: number, tall: number, walls: Uint32Array, lit: boolean) {
+  canvas.solid([x0, y0 - 1.5, x1, y1 - 1.5, x1, y1 + 1.5, x0, y0 + 1.5], 0, tall + 3)
   const n = Math.abs(x1 - x0)
   for (let i = 0; i <= n; i++) {
     const x = x0 + Math.sign(x1 - x0) * i
@@ -1159,6 +1166,7 @@ function plinth(tiles: number, left: number, front: number, right: number, top: 
   const base = canvas.height - 3 - Math.ceil(Math.max(0, front - Math.min(left, front, right)))
   // Height above the anchor (the ground at the front corner) maps to screen rows.
   const lift = (z: number) => z - front
+  canvas.solid(diamondAt(cx, base - h, w), Math.min(left, front, right) - front, top - front)
   for (const side of [-1, 1]) {
     const far = side < 0 ? left : right
     for (let t = 0; t <= w; t++) {
@@ -1581,6 +1589,8 @@ function watchtower(variant = 0, level = 1): Sprite {
   const g = base - TILE_HEIGHT / 2
   // Stone footing, wider at the foot, its top a paved ring.
   const foot = 12
+  if (v === 1 && level === 1) canvas.solid(ellipseAt(cx, g, 12), foot - 1, foot)
+  else canvas.solid(ellipseAt(cx, g, 15), 0, foot)
   for (let z = 0; z <= foot; z++) {
     if (v === 1 && level === 1) break
     const r = 15 - z * 0.25
@@ -1604,6 +1614,7 @@ function watchtower(variant = 0, level = 1): Sprite {
   const half = 8
   const z0 = foot + 2
   const z1 = level === 2 ? 96 : 80
+  canvas.solid(diamondAt(cx, g, half), z0, z1)
   const at = (x: number, z: number) => Math.round(g - z + (half - Math.abs(x)) / 2)
   for (let z = z0; z <= z1; z++) {
     for (let x = -half; x <= half; x++) canvas.set(cx + x, at(x, z), PLANK[(x < 0 ? 3 : 1) - (Math.abs(x) % 3 === 0 ? 1 : 0)])
@@ -1625,6 +1636,7 @@ function watchtower(variant = 0, level = 1): Sprite {
   // The lookout: a plank floor overhanging the shaft, seen from above, its front edge on joists.
   const deck = 15
   const floor = z1 + 3
+  canvas.solid(diamondAt(cx, g, deck), z1, floor)
   const back = (x: number, z: number) => Math.round(g - z - (deck - Math.abs(x)) / 2)
   const front = (x: number, z: number) => Math.round(g - z + (deck - Math.abs(x)) / 2)
   for (let x = -deck; x <= deck; x++) {
@@ -1664,6 +1676,9 @@ function watchtower(variant = 0, level = 1): Sprite {
   // A steep pyramid roof of slate, its front ridge facing the viewer.
   const roof = 18
   const apex = eave + 32
+  canvas.solid(diamondAt(cx, g, roof), eave, apex, [cx, g])
+  // The corner posts holding up the roof.
+  for (const x of [-deck, 0, deck]) canvas.solid(diamondAt(cx + x, g + (deck - Math.abs(x)) / 2, 1), floor, eave)
   for (let x = -roof; x <= roof; x++) {
     const bottom = Math.round(g - eave + (roof - Math.abs(x)) / 2)
     const topY = Math.round(g - apex + (Math.abs(x) / roof) * (apex - eave))

@@ -3,5 +3,18 @@
   "seasonGameDays": 336,
   "messengerDelayGameDays": 0.008333,
   "monthGameDays": 30,
-  "contactSeconds": 30
+  "contactSeconds": 30,
+  "pace": {
+    "night": 0.6,
+    "twilight": 1.35,
+    "day": 1,
+    "dawnHours": [
+      -0.5,
+      3
+    ],
+    "duskHours": [
+      -3.5,
+      0
+    ]
+  }
 }

@@ -384,7 +384,7 @@ export async function createWorld(
     // Zoomed far out, walkers, caravans and animals are left out but the buildings (which share their layer, to hide
     // whoever walks behind them) stay; zoomed back in, each walker's own update shows it again.
     if (scale < CARAVAN_MIN_ZOOM) {
-      for (const child of caravans.layer.children) child.visible = child.label === 'occluder' || child.label.startsWith('army')
+      for (const child of caravans.layer.children) child.visible = child.label === 'occluder' || child.label === 'shade' || child.label.startsWith('army')
       return
     }
     const margin = 40
@@ -1024,7 +1024,7 @@ export async function createWorld(
   const GATE_REACH = 0.9
   function sortWalkers() {
     if (occluders.length === 0) return
-    const walkers = caravans.layer.children.filter((c) => c.visible && c.label !== 'occluder' && c.label !== 'army-ring' && c.label !== 'tree')
+    const walkers = caravans.layer.children.filter((c) => c.visible && c.label !== 'occluder' && c.label !== 'shade' && c.label !== 'army-ring' && c.label !== 'tree')
     for (const o of occluders) {
       if (!o.gate) continue
       const open = walkers.some(({ position: { x: px, y: py } }) => {
@@ -1041,7 +1041,7 @@ export async function createWorld(
       }
     }
     for (const child of caravans.layer.children) {
-      if (!child.visible || child.label === 'occluder' || child.label === 'army-ring' || child.label === 'tree') continue
+      if (!child.visible || child.label === 'occluder' || child.label === 'shade' || child.label === 'army-ring' || child.label === 'tree') continue
       const { x: px, y: py } = child.position
       for (const o of occluders) {
         if (o.walked || px < o.left || px > o.right || py < o.top || py > o.sy + 2) continue
