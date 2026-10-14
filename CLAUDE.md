@@ -521,8 +521,13 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 - **Ticaret noktası:** Kurulduğu an oyuncu satılacak malı seçer (3
   hammaddeden biri; sonradan değiştirilebilir). Tüccar her **10 saniyede**
   seçilen maldan bir miktar götürüp satar ve altın getirir. Seviye
-  yükseldikçe sefer başına satılan miktar artar.
-  Tüccar haritada devesiyle saraydan ticaret noktasına yürür; **başka
+  yükseldikçe sefer başına satılan miktar artar. **Ticaret noktası saraydan
+  uzaksa sefer uzar:** saray ile ticaret noktası arasındaki ilk 12 karo
+  10 saniyeye dahildir, ötesindeki her karo 0,15 sn ekler (ör. 100 karo ≈
+  23 sn; `economy.json` → `trade.walkFreeTiles`, `walkSecondsPerTile`;
+  `lobbyTripMs`). Serbest şehre sefer ayrıca hesaplanır (§7.7).
+  Tüccar haritada devesiyle saraydan ticaret noktasına yürür (uzaklık ne
+  olursa olsun; seferi uzadığı için hızı aynı kalır, köprülerden geçer); **başka
   krallıkların tüccarları da** kendi saraylarıyla ticaret noktaları
   arasında yürür (bir şey satıyorlarsa ve ticaret noktaları harap
   değilse). Yola çıkış anları gizli olduğu için her krallığın tüccarı kendi

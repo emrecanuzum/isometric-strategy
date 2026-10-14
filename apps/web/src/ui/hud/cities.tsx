@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { GOODS, balance, cityCenter, cityPrice, cityTripMs, priceAt, tradeCityReadyAt, tradeUnits } from '@game/shared'
+import { GOODS, balance, cityCenter, cityPrice, cityTripMs, lobbyTripMs, priceAt, tradeCityReadyAt, tradeUnits } from '@game/shared'
 import type { Kingdom, Market, Point, World } from '@game/shared'
 import { cityInfo } from '../../game/cities'
 import { Icon } from '../icons'
@@ -32,7 +32,7 @@ export function TradeDestination({ world, kingdom, market, now, onCity }: {
         <button role="radio" aria-checked={current === null} className={current === null ? 'good active' : 'good'} disabled={wait > 0 && current !== null} onClick={() => onCity(null)}>
           <Icon name="gold" size={24} />
           <b>Lobi pazarı</b>
-          <small>{balance.economy.trade.tripSeconds} sn sefer</small>
+          <small>{seconds(lobbyTripMs(kingdom.buildings))} sn sefer</small>
           <small>{tradeUnits(kingdom)} birim, lobi fiyatı</small>
           {good && <small>birimi {price(priceAt(market, good, now))} altın</small>}
         </button>

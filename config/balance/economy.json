@@ -23,6 +23,8 @@
   "maxConstructions": 2,
   "trade": {
     "tripSeconds": 10,
+    "walkFreeTiles": 12,
+    "walkSecondsPerTile": 0.15,
     "amountStep": 5,
     "amountCooldownSeconds": 120,
     "price": {

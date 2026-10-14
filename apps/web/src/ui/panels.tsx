@@ -1,4 +1,4 @@
-import { BUILDINGS, GOODS, atFloor, balance, constructing, fortuneEffects, idleFactor, priceAt, researchEffects, tradeLoad, tradePrice } from '@game/shared'
+import { BUILDINGS, GOODS, atFloor, balance, constructing, fortuneEffects, idleFactor, lobbyTripMs, priceAt, researchEffects, tradeLoad, tradePrice } from '@game/shared'
 import type { Cost, Good, Kingdom, Market, Resource, Survey } from '@game/shared'
 import { useState } from 'react'
 import type React from 'react'
@@ -117,7 +117,7 @@ export function GoodPicker({ kingdom, onGood, market, now }: { kingdom: Kingdom;
           </div>
         </header>
         <p className="hint">
-          Tüccarın hangi malı satsın? Her {balance.economy.trade.tripSeconds} saniyede bir seçtiğin maldan götürüp altın
+          Tüccarın hangi malı satsın? Her {Math.round(lobbyTripMs(kingdom.buildings) / 1000)} saniyede bir seçtiğin maldan götürüp altın
           getirir. Sonradan Ticaret sekmesinden değiştirebilirsin.
         </p>
         <GoodChoice kingdom={kingdom} selected={null} onGood={onGood} market={market} now={now} />

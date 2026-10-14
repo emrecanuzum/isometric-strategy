@@ -256,7 +256,16 @@ export type EconomyEvent =
   | { kind: 'researched'; id: string }
   | { kind: 'fortune'; fortune: FortuneKind; scope: FortuneScope; until: number; lost?: Partial<Stock>; gold?: number }
 
-const tripMs = () => balance.economy.trade.tripSeconds * 1000
+// The merchant's trip to the lobby's market: the base trip, and longer the farther the trade post lies from the
+// palace he sets out from (beyond a short walk that the base covers). Straight-line tiles between the two.
+export function lobbyTripMs(buildings: readonly Pick<Building, 'kind' | 'x' | 'y' | 'size'>[]) {
+  const { tripSeconds, walkFreeTiles, walkSecondsPerTile } = balance.economy.trade
+  const palace = buildings.find((b) => b.kind === 'palace')
+  const post = buildings.find((b) => b.kind === 'tradePost')
+  if (!palace || !post) return tripSeconds * 1000
+  const tiles = Math.hypot(post.x + post.size / 2 - (palace.x + palace.size / 2), post.y + post.size / 2 - (palace.y + palace.size / 2))
+  return Math.round((tripSeconds + Math.max(0, tiles - walkFreeTiles) * walkSecondsPerTile) * 1000)
+}
 const productionMs = () => balance.economy.productionSeconds * 1000
 
 // ---- Survey: what the land around a site is good for -------------------------------------------------------------
@@ -921,7 +930,7 @@ export const cityPrice = (good: Good, market: Market | null | undefined, at: num
   priceAt(market, good, at) * balance.cities.trade.priceFactor
 
 // How long the merchant's trip takes: to the lobby's market from the trade post, or to a free city and back.
-export const tradeTripMs = (kingdom: Kingdom) => kingdom.trade.city?.tripMs ?? tripMs()
+export const tradeTripMs = (kingdom: Kingdom) => kingdom.trade.city?.tripMs ?? lobbyTripMs(kingdom.buildings)
 
 // What the merchant takes on one trip, and what a unit fetches before bonuses: a free city takes a bigger load at its
 // price, a little over the lobby's.

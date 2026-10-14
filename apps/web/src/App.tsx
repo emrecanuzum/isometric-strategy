@@ -5,6 +5,8 @@ import {
   TileRule,
   advance,
   balance,
+  lobbyTripMs,
+  tradeTripMs,
   build,
   buildError,
   armyAt,
@@ -698,6 +700,7 @@ function App({
   // Villagers walk from their houses to the fields and workshops; every kingdom's merchant walks to its trade post.
   const buildings = kingdom?.buildings
   const departedAt = kingdom?.trade.good ? kingdom.trade.departedAt : null
+  const ownTripMs = kingdom ? tradeTripMs(kingdom) : 0
   const doneCount = buildings?.filter((b) => b.doneAt <= now).length ?? 0
   // Others' merchants change only with what they sell, a wrecked post, or where palace and post stand; their rows
   // change far more often than that.
@@ -709,7 +712,6 @@ function App({
   useEffect(() => {
     if (!view) return
     const time = serverNow()
-    const tripMs = balance.economy.trade.tripSeconds * 1000
     // A merchant's walk from the palace door to the trade post's, when both stand.
     const walk = (town: TownBuilding[]) => {
       const done = town.filter((b) => b.doneAt <= time)
@@ -718,15 +720,17 @@ function App({
       return palace && post ? { home: doorstep(palace), market: doorstep(post) } : null
     }
     const own = walk(buildings ?? [])
-    const merchants: MerchantTrip[] = own && departedAt !== null ? [{ ...own, departedAt, tripMs }] : []
+    // A trip takes longer the farther the trade post lies from the palace; the merchant walks the whole way in it.
+    const merchants: MerchantTrip[] = own && departedAt !== null ? [{ ...own, departedAt, tripMs: ownTripMs }] : []
     // Others' merchants: when each set out is the other kingdom's own business, so each keeps a pace of its own. One
     // selling nothing stays home, as does one whose trade post lies wrecked.
     for (const r of rivalsRef.current) {
       const trip = r.trade_good && !r.trade_damaged ? walk(r.buildings) : null
+      const tripMs = lobbyTripMs(r.buildings)
       if (trip) merchants.push({ ...trip, departedAt: (r.id * 7919) % tripMs, tripMs, robe: r.id % 3 })
     }
     view.setTown(townErrands(buildings ?? [], time), merchants)
-  }, [view, buildings, departedAt, doneCount, rivalTrade])
+  }, [view, buildings, departedAt, ownTripMs, doneCount, rivalTrade])
 
   // ---- Commands ----
 

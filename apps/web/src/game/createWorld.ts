@@ -1318,6 +1318,8 @@ export async function createWorld(
       town.set(errands, merchants, (x, y) => {
         if ((solid.has(y * world.size + x) && !gates.has(y * world.size + x)) || x < 0 || y < 0 || x >= world.size || y >= world.size) return true
         const t = world.terrain[y * world.size + x]
+        // Bridges carry walkers over the water.
+        if (world.feature[y * world.size + x] === Feature.Bridge) return false
         return t === Terrain.Lake || t === Terrain.River || t === Terrain.Mountain
       }, (x, y) => worn.has(y * world.size + x)),
     blocksWalkers: (x, y) => solid.has(y * world.size + x),
