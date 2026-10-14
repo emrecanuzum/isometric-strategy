@@ -482,7 +482,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     binalar) gösterir. Alttaki plan çubuğu adımları, harcanacak ve iade
     edilecek malları gösterir (Geri al / Temizle / Onayla); "Onayla"
     **"Emin misin?"** diye sorar ve bütün plan tek komutla gider
-    (`plan`, en fazla `economy.json` → `maxPlan` adım). Önce yıkımlar,
+    (`plan`, en fazla `economy.json` → `maxPlan` = 256 adım; çubuk "N / 256
+    adım" yazar, dolunca yeni adım eklenmez ve "önce onayla" der). Önce yıkımlar,
     sonra taşımalar, sonra inşalar uygulanır; inşaat yeri doluysa adım yer
     boşalınca başlar; yapılamayan adımlar atlanır
     (`packages/shared/src/economy.ts` → `applyPlan`).

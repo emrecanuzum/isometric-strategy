@@ -2128,6 +2128,15 @@ small {
   min-width: 0;
 }
 
+.plan-count {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plan-count.down {
+  color: var(--down);
+}
+
 .plan-back {
   display: inline-flex;
   align-items: center;

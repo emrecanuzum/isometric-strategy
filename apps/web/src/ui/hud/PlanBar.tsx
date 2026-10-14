@@ -1,3 +1,4 @@
+import { balance } from '@game/shared'
 import type { Building, Cost, Kingdom, PlanStep, Resource } from '@game/shared'
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../icons'
@@ -78,6 +79,9 @@ export function PlanBar({
         <Icon name="build" size={24} />
         <span className="plan-text">
           <b>Plan</b> · {text}
+          <small className={steps.length >= balance.economy.maxPlan ? 'plan-count down' : 'plan-count'} title="Bir planda en fazla bu kadar adım olur">
+            {steps.length} / {balance.economy.maxPlan} adım{steps.length >= balance.economy.maxPlan ? ' · plan dolu, önce onayla' : ''}
+          </small>
           <span className="card-meta">
             {Object.keys(spent).length > 0 && <CostList cost={spent} stock={kingdom.stock} />}
             {Object.keys(back).length > 0 && (

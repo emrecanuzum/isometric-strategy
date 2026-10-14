@@ -788,7 +788,7 @@ function App({
       const origin = footprintOrigin(tile, movingBuilding.size)
       const error = moveError(view.world, shown, stage, movingBuilding.id, origin, serverNow())
       if (error && error !== 'queue') return setToast(BUILD_ERRORS[error])
-      setPlan((steps) => [...steps, { type: 'move', id: movingBuilding.id, ...origin }])
+      addToPlan([{ type: 'move', id: movingBuilding.id, ...origin }])
       setMoving(null)
       return
     }
@@ -828,7 +828,7 @@ function App({
     const error = buildError(view.world, base, stage, placingKind, origin, serverNow(), turned)
     if (error && error !== 'queue') return setToast(error === 'cost' ? (missingText(BUILDINGS[placingKind].cost, base.stock) ?? BUILD_ERRORS.cost) : BUILD_ERRORS[error])
     const along = placingKind === 'gate' ? gateAlong(base, origin, turned) : undefined
-    setPlan((steps) => [...steps, { type: 'build', kind: placingKind, ...origin, ...(along && { along }) }])
+    addToPlan([{ type: 'build', kind: placingKind, ...origin, ...(along && { along }) }])
   }
   const confirmBuild = () => {
     const current = kingdomRef.current
@@ -854,7 +854,14 @@ function App({
     const placeable = spots.filter((p) => canPlace(view.world, current, stage, { ...p, size }, 0, placingKind))
     if (placeable.length === 0) return setToast(BUILD_ERRORS.spot)
     const kind = placingKind
-    setPlan((steps) => [...steps, ...placeable.map((p): PlanStep => ({ type: 'build', kind, ...p }))])
+    addToPlan(placeable.map((p): PlanStep => ({ type: 'build', kind, ...p })))
+  }
+  // Steps join the plan up to the most one command carries (balance.economy.maxPlan); the rest wait for the next plan.
+  const planFull = `Plan en fazla ${balance.economy.maxPlan} adım alır; önce onu onayla`
+  const addToPlan = (steps: PlanStep[]) => {
+    const room = balance.economy.maxPlan - plan.length
+    if (room < steps.length) setToast(planFull)
+    if (room > 0) setPlan([...plan, ...steps.slice(0, room)])
   }
   // The plan, confirmed: every step goes to the server in one command.
   const confirmPlan = () => {
@@ -891,7 +898,9 @@ function App({
     pickUp(id)
   }
   const planDemolish = (id: number) => {
-    setPlan((steps) => [...steps.filter((s) => !((s.type === 'move' || s.type === 'demolish') && s.id === id)), { type: 'demolish', id }])
+    const kept = plan.filter((s) => !((s.type === 'move' || s.type === 'demolish') && s.id === id))
+    if (kept.length >= balance.economy.maxPlan) return setToast(planFull)
+    setPlan([...kept, { type: 'demolish', id }])
   }
 
   const startPlacing = (kind: BuildingKind) => {
@@ -903,7 +912,7 @@ function App({
     setMoving(null)
     // The dock has its own plot on the shore: no placing, it joins the plan there.
     if (kind === 'dock' && view && kingdom?.dockPlot) {
-      setPlan((steps) => [...steps, { type: 'build', kind: 'dock', x: kingdom.dockPlot!.x, y: kingdom.dockPlot!.y }])
+      addToPlan([{ type: 'build', kind: 'dock', x: kingdom.dockPlot.x, y: kingdom.dockPlot.y }])
       view.centerOn({ x: kingdom.dockPlot.x + 1, y: kingdom.dockPlot.y + 1 })
       return
     }
