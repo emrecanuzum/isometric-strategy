@@ -35,7 +35,7 @@ import {
   upgradeSpec,
   upgradeTrade,
 } from '@game/shared'
-import type { Along, BuildError, Building, EconomyEvent, BuildingKind, Good, Kingdom, PlanStep, Point, World } from '@game/shared'
+import type { Along, BuildError, EconomyEvent, BuildingKind, Good, Kingdom, PlanStep, Point, World } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { WorldMap } from './game/WorldMap'
@@ -232,8 +232,11 @@ const walkable = (world: World, x: number, y: number) => {
 // Footpaths are worn only between buildings closer than this to the palace.
 const TRAIL_MAX_TILES = 40
 
+// What the town's walkers need to know of a building (rivals' buildings carry no more).
+type TownBuilding = Rival['buildings'][number]
+
 // Villagers walk from their homes to the fields and workshops; the merchant tends the trade post.
-function townErrands(buildings: Building[], time: number): Errand[] {
+function townErrands(buildings: TownBuilding[], time: number): Errand[] {
   const done = buildings.filter((b) => b.doneAt <= time)
   const palace = done.find((b) => b.kind === 'palace')
   const work = done.filter((b) => BUILDINGS[b.kind].workers && b.kind !== 'tradePost')
@@ -249,9 +252,29 @@ function townErrands(buildings: Building[], time: number): Errand[] {
   return errands
 }
 
-const center = (b: Building): Point => ({ x: b.x + b.size / 2, y: b.y + b.size / 2 })
+const center = (b: TownBuilding): Point => ({ x: b.x + b.size / 2, y: b.y + b.size / 2 })
 // Where a walker stands outside a building: just past the middle of its front-left wall, by the door.
-const doorstep = (b: Building): Point => ({ x: b.x + b.size * 0.7, y: b.y + b.size + 0.35 })
+const doorstep = (b: TownBuilding): Point => ({ x: b.x + b.size * 0.7, y: b.y + b.size + 0.35 })
+
+// Footpaths worn in a town (the player's or a rival's, as everyone sees them alike): from every building's door to
+// the palace gate, around the buildings in between, and along the villagers' daily walks from home to work. Walls
+// and gates send nobody out, so they wear no paths of their own.
+function footpaths(world: World, buildings: TownBuilding[], time: number): Point[][] {
+  const palace = buildings.find((b) => b.kind === 'palace')
+  const solid = new Set<number>()
+  for (const b of buildings) {
+    // Fields and gates are walked over; everything else is walked around.
+    if (b.kind === 'farm' || b.kind === 'gate') continue
+    for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) solid.add(y * world.size + x)
+  }
+  const visited = buildings.filter((b) => b !== palace && b.doneAt <= time && b.kind !== 'wall' && b.kind !== 'gate')
+  const routes = [...(palace ? visited.map((b) => ({ from: doorstep(b), to: doorstep(palace) })) : []), ...townErrands(buildings, time)]
+  return routes.flatMap(({ from, to }) => {
+    if (Math.hypot(to.x - from.x, to.y - from.y) > TRAIL_MAX_TILES) return []
+    const path = findPath(from, to, (x, y) => solid.has(y * world.size + x) || !walkable(world, x, y))
+    return path ? [path.points] : []
+  })
+}
 
 function App({
   lobby,
@@ -604,25 +627,8 @@ function App({
       ...buildings.map((b) => structure(b, shown?.color, true, b.id, !!shown?.trade.damaged)),
       ...rivals.flatMap((r) => r.buildings.map((b) => structure(b, r.color, false, r.id * 1000 + b.id, !!r.trade_damaged))),
     ]
-    // Footpaths worn from every building's door to the palace gate, around the buildings in between.
-    const palace = buildings.find((b) => b.kind === 'palace')
-    const solid = new Set<number>()
-    for (const b of buildings) {
-      // Fields and gates are walked over; everything else is walked around.
-      if (b.kind === 'farm' || b.kind === 'gate') continue
-      for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) solid.add(y * view.world.size + x)
-    }
-    // Villagers also wear paths on their daily walks from home to work, so every route walked is a footpath (and
-    // nothing grows in front of it to stand over the walkers; see paintChunk).
-    const routes = [
-      ...(palace ? buildings.filter((b) => b !== palace && b.doneAt <= time).map((b) => ({ from: doorstep(b), to: doorstep(palace) })) : []),
-      ...townErrands(buildings, time),
-    ]
-    const trails = routes.flatMap(({ from, to }) => {
-      if (Math.hypot(to.x - from.x, to.y - from.y) > TRAIL_MAX_TILES) return []
-      const path = findPath(from, to, (x, y) => solid.has(y * view.world.size + x) || !walkable(view.world, x, y))
-      return path ? [path.points] : []
-    })
+    // Footpaths (nothing grows in front of them to stand over the walkers; see paintChunk).
+    const trails = [buildings, ...rivals.map((r) => r.buildings)].flatMap((town) => footpaths(view.world, town, time))
     view.setStructures(structures, trails)
   }, [view, shown, mapBuildings, rivals])
 
