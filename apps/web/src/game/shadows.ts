@@ -19,8 +19,9 @@ const BUDGET_MS = 4
 
 export interface Shadows {
   layer: Container
-  // A building standing on a footprint of this many tiles (it rises from the footprint's back edges).
-  setFootprint(caster: Container, size: number): void
+  // A building standing on a footprint of this many tiles (it rises from the footprint's back edges), `raise` pixels
+  // above the ground at its front corner (on the stone base that levels it on a slope).
+  setFootprint(caster: Container, size: number, raise?: number): void
   update(hour: number, casters: Container): void
 }
 
@@ -29,6 +30,7 @@ export function createShadows(): Shadows {
   const filter = new AlphaFilter({ alpha: 0, resolution: 'inherit' })
   layer.filters = [filter]
   const footprints = new WeakMap<Container, number>()
+  const raises = new WeakMap<Container, number>()
   const shades = new Map<PixiSprite, { shade: PixiSprite; frame: number }>()
   // Shadows that fall on buildings: per building, an overlay of its pixels in the shade of another building (its own
   // shading is drawn into it). Worked out anew for every step of the sun and whenever the buildings change.
@@ -121,8 +123,9 @@ export function createShadows(): Shadows {
 
   return {
     layer,
-    setFootprint(caster, size) {
+    setFootprint(caster, size, raise = 0) {
       footprints.set(caster, size)
+      raises.set(caster, Math.max(0, raise))
     },
     update(hour, casters) {
       filter.alpha = sunShadow(hour).alpha
@@ -161,7 +164,10 @@ export function createShadows(): Shadows {
           shade.texture = texture
           shade.anchor.set(shadow.anchorX / shadow.width, shadow.anchorY / shadow.height)
         }
-        shade.position.copyFrom(child.position)
+        // A building raised on a base throws its shadow from that height down onto the ground below the base: the
+        // ground under it is `raise` lower on screen, and every point stands `raise` higher above it.
+        const raise = raises.get(child) ?? 0
+        shade.position.set(child.x + raise * sun.x, child.y + raise + raise * sun.y)
         shade.scale.set(Math.abs(child.scale.x), Math.abs(child.scale.y))
         shade.visible = true
       }

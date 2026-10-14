@@ -139,11 +139,35 @@ const WHY: Record<Good, string> = {
 }
 
 const NAME_MAX = 24
-const NAME_ROOTS = ['Akdere', 'Karasu', 'Gökova', 'Demirkaya', 'Ulupınar', 'Kızılırmak', 'Yeşilyurt', 'Altınova', 'Kartaltepe', 'Sarıçam', 'Aydoğdu', 'Bozkurt']
-const NAME_KINDS = ['Krallığı', 'Beyliği', 'Diyarı', 'Hanedanı']
-// A name to start from; the player may type their own.
-const suggestName = () =>
-  `${NAME_ROOTS[Math.floor(Math.random() * NAME_ROOTS.length)]} ${NAME_KINDS[Math.floor(Math.random() * NAME_KINDS.length)]}`
+// Place names in the manner of Ulupınar, Gökova, Altınova: a first word (a colour, a metal, a beast, a quality) and a
+// feature of the land. Any first word goes with any feature, so there are some thousands of names; a few that came
+// out awkward are left out.
+const NAME_HEADS = [
+  'Ak', 'Kara', 'Gök', 'Demir', 'Ulu', 'Kızıl', 'Yeşil', 'Altın', 'Kartal', 'Sarı', 'Ay', 'Boz', 'Gümüş', 'Bakır', 'Mavi',
+  'Kır', 'Al', 'Yıldız', 'Güneş', 'Şahin', 'Doğan', 'Ceylan', 'Geyik', 'Aslan', 'Kurt', 'Kaplan', 'Turna', 'Bülbül',
+  'Elma', 'Çınar', 'Meşe', 'Söğüt', 'Kavak', 'Ardıç', 'Lale', 'Gül', 'Menekşe', 'Nergis', 'Sedef', 'Mercan', 'İnci',
+  'Yakut', 'Zümrüt', 'Firuze', 'Tunç', 'Çelik', 'Kaya', 'Taş', 'Bulut', 'Rüzgar', 'Yel', 'Şimşek', 'Ilık', 'Serin',
+  'Derin', 'Uzun', 'Yüce', 'Eski', 'Yeni', 'Bey', 'Han', 'Hatun', 'Tekin', 'Bayram', 'Sultan', 'Erguvan', 'Safran',
+]
+const NAME_TAILS = [
+  'pınar', 'ova', 'dere', 'su', 'kaya', 'ırmak', 'yurt', 'tepe', 'çam', 'kale', 'köy', 'yaka', 'bel', 'göl', 'yazı',
+  'bük', 'çay', 'dağ', 'kent', 'hisar', 'alan', 'yayla', 'koru', 'kum', 'kuyu', 'çeşme', 'bağ', 'bahçe', 'eli',
+  'oba', 'kır', 'konak', 'burun', 'ada', 'pınarı', 'suyu', 'ırmağı', 'bayır', 'taş',
+]
+// Pairs that read badly as one word.
+const NAME_SKIP = new Set(['Taştaş', 'Kayakaya', 'Kırkır', 'Kayataş', 'Taşkaya', 'Hanhan', 'Alalan', 'Akak'])
+const NAME_KINDS = ['Krallığı', 'Beyliği', 'Diyarı', 'Hanedanı', 'Ülkesi', 'Hükümdarlığı', 'Sancağı', 'Yurdu']
+const pick = <T,>(list: readonly T[]) => list[Math.floor(Math.random() * list.length)]
+// A name to start from, unlike any the lobby's other kingdoms already carry; the player may type their own.
+const suggestName = (taken: ReadonlySet<string> = new Set()) => {
+  const used = new Set([...taken].map((n) => n.split(' ')[0].toLocaleLowerCase('tr-TR')))
+  for (let tries = 0; ; tries++) {
+    const root = pick(NAME_HEADS) + pick(NAME_TAILS)
+    if (NAME_SKIP.has(root) || (used.has(root.toLocaleLowerCase('tr-TR')) && tries < 50)) continue
+    const name = `${root} ${pick(NAME_KINDS)}`
+    if (name.length <= NAME_MAX) return name
+  }
+}
 
 // Before founding: the sites the player was given, side by side, with what the land around each would yield; the
 // player picks one of them.
@@ -154,6 +178,7 @@ export function SitePicker({
   onFound,
   colors,
   taken,
+  names = [],
 }: {
   surveys: Survey[]
   selected: number
@@ -162,8 +187,10 @@ export function SitePicker({
   // The lobby's colours, and those other kingdoms already fly.
   colors: KingdomColor[]
   taken: ReadonlySet<string>
+  // The names the lobby's other kingdoms carry: a suggested name is never one of them.
+  names?: string[]
 }) {
-  const [name, setName] = useState(suggestName)
+  const [name, setName] = useState(() => suggestName(new Set(names)))
   const [chosen, setColor] = useState<KingdomColor | null>(null)
   // The first free colour until the player picks one; a colour taken meanwhile falls back to a free one.
   const free = colors.filter((c) => !taken.has(c))
@@ -218,7 +245,7 @@ export function SitePicker({
             autoComplete="off"
             spellCheck={false}
           />
-          <button type="button" className="btn icon-only" onClick={() => setName(suggestName())} aria-label="Rastgele ad öner" title="Rastgele ad öner">
+          <button type="button" className="btn icon-only" onClick={() => setName(suggestName(new Set(names)))} aria-label="Rastgele ad öner" title="Rastgele ad öner">
             <Icon name="crown" size={16} />
           </button>
         </span>

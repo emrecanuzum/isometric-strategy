@@ -31,16 +31,32 @@ export function FisherPanel({ data }: { data: HudData }) {
   // The seed the server drew for this cast (the game is played from it), while the cast is on.
   const [seed, setSeed] = useState<number | null>(null)
   const [result, setResult] = useState<FisherEntry | null>(null)
+  // The dialog opens at once on a cast; it waits there for the server's seed, and again for its verdict.
+  const [open, setOpen] = useState(false)
+  const [reeling, setReeling] = useState(false)
   const why = fishError(kingdom, now)
   const log = kingdom.fisherLog ?? []
+  const close = () => {
+    setOpen(false)
+    setSeed(null)
+    setResult(null)
+    setReeling(false)
+  }
   const cast = async () => {
     setResult(null)
+    setSeed(null)
+    setReeling(false)
+    setOpen(true)
     const answer = await online?.act<{ seed: number }>({ type: 'cast' })
+    // Refused (or no answer): nothing to play.
     if (answer) setSeed(answer.seed)
+    else setOpen(false)
   }
   // The presses go to the server, which plays the cast again to decide the catch.
   const finish = async (toggles: number[]) => {
+    setReeling(true)
     const entry = await online?.act<FisherEntry>({ type: 'fish', toggles })
+    setReeling(false)
     setResult(entry ?? { at: Date.now(), kind: 'miss' })
   }
   return (
@@ -50,7 +66,7 @@ export function FisherPanel({ data }: { data: HudData }) {
           Kulübedeki tuhaf balıkçı oltasını sana veriyor. Basılı tut (fare, dokunma ya da boşluk tuşu) ve yeşil alanı kaçan balığın üstünde tut;
           çubuk dolarsa tutarsın. Bazen bir kese mal, bazen de bir şişe içinde başka bir krallık hakkında bir not çıkar.
         </p>
-        <button className="btn wide" disabled={why !== null} onClick={cast}>
+        <button className="btn wide" disabled={why !== null || open} onClick={cast}>
           <span>
             <Icon name="food" size={16} /> Oltayı at
           </span>
@@ -72,7 +88,7 @@ export function FisherPanel({ data }: { data: HudData }) {
           </ul>
         )}
       </Section>
-      {seed !== null && (
+      {open && (
         <div className="modal" role="dialog" aria-labelledby="fishing-title">
           <section className="dialog frame fishing">
             <header className="sheet-head">
@@ -85,10 +101,12 @@ export function FisherPanel({ data }: { data: HudData }) {
             {result ? (
               <div className="fishing-result">
                 <p className={result.kind === 'miss' ? 'down' : 'up'}>{describeCatch(result)}</p>
-                <button className="btn small" onClick={() => (setSeed(null), setResult(null))}>
+                <button className="btn small" onClick={close}>
                   Tamam
                 </button>
               </div>
+            ) : seed === null || reeling ? (
+              <p className="hint fishing-wait">{seed === null ? 'Olta suya atılıyor…' : 'Olta çekiliyor…'}</p>
             ) : (
               <FishingGame seed={seed} onDone={finish} />
             )}

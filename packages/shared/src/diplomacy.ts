@@ -46,18 +46,29 @@ export interface Envoy {
 
 export const pairOf = (x: number, y: number) => (x < y ? { a: x, b: y } : { a: y, b: x })
 
-export const clampRelation = (v: number) => Math.max(-100, Math.min(100, v))
+// Where a relation rests (it starts there and drifts back to it) and how high it can go. Lords sworn to rival crown
+// kingdoms start cool and never grow close (CLAUDE.md §7.8); everyone else rests at 0 and may reach 100.
+export interface RelationTerms {
+  rest: number
+  max: number
+}
+const PLAIN: RelationTerms = { rest: 0, max: 100 }
+export const relationTerms = (liegeX?: number | null, liegeY?: number | null): RelationTerms =>
+  liegeX != null && liegeY != null && liegeX !== liegeY ? { rest: balance.diplomacy.crowns.rivalRest, max: balance.diplomacy.crowns.rivalMax } : PLAIN
 
-// The value at `now`, drifted toward 0 since it was set.
-export function relationAt(value: number, setAt: number, now: number) {
+export const clampRelation = (v: number, terms: RelationTerms = PLAIN) => Math.max(-100, Math.min(terms.max, v))
+
+// The value at `now`, drifted toward where it rests since it was set.
+export function relationAt(value: number, setAt: number, now: number, terms: RelationTerms = PLAIN) {
   const drift = (balance.diplomacy.driftPerHour * Math.max(0, now - setAt)) / 3_600_000
-  return value > 0 ? Math.max(0, value - drift) : Math.min(0, value + drift)
+  const v = clampRelation(value, terms)
+  return v > terms.rest ? Math.max(terms.rest, v - drift) : Math.min(terms.rest, v + drift)
 }
 
-export function relationBetween(relations: Relation[], x: number, y: number, now: number) {
+export function relationBetween(relations: Relation[], x: number, y: number, now: number, terms: RelationTerms = PLAIN) {
   const { a, b } = pairOf(x, y)
   const r = relations.find((r) => r.a === a && r.b === b)
-  return r ? relationAt(r.value, Date.parse(r.at), now) : 0
+  return r ? relationAt(r.value, Date.parse(r.at), now, terms) : terms.rest
 }
 
 const active = (p: Pact) => p.ended_at === null
@@ -89,7 +100,7 @@ export const hasClaim = (claims: Claim[], holder: number, target: number, now: n
 // The relation a war needs: anything below zero with a claim, deep enmity without one.
 export const warThreshold = (claim: boolean) => (claim ? balance.diplomacy.casusBelli.maxRelation : balance.diplomacy.war.maxRelation)
 
-export function proposalError(kind: EnvoyKind | 'war', relation: number, pacts: Pact[], me: number, other: number, claim = false): DiplomacyError | null {
+export function proposalError(kind: EnvoyKind | 'war', relation: number, pacts: Pact[], me: number, other: number, claim = false, max = 100): DiplomacyError | null {
   const d = balance.diplomacy
   if (me === other) return 'self'
   if (kind === 'alliance') {
@@ -103,6 +114,8 @@ export function proposalError(kind: EnvoyKind | 'war', relation: number, pacts: 
     if (relation > warThreshold(claim)) return 'relation'
   }
   if (kind === 'peace' && !atWar(pacts, me, other)) return 'none'
+  // Lords of rival crowns get no closer than their cap (see relationTerms): courtesies past it are wasted.
+  if (kind === 'improve' && relation >= max) return 'relation'
   // At war, envoys bring only peace.
   if ((kind === 'improve' || kind === 'gift' || kind === 'tribute') && atWar(pacts, me, other)) return 'war'
   if (kind === 'tribute' && (tributeBetween(pacts, me, other) || allied(pacts, me, other))) return 'already'
@@ -169,9 +182,9 @@ export function reputation(relations: number[]) {
   return Math.max(1 - r.maxPenalty, 1 - hostility / r.perPenalty)
 }
 
-// A kingdom's relations with all the others at `now` (0 with those it has none with).
-export const relationsOf = (relations: Relation[], me: number, others: number[], now: number) =>
-  others.filter((o) => o !== me).map((o) => relationBetween(relations, me, o, now))
+// A kingdom's relations with all the others at `now` (where they rest with those it has none with).
+export const relationsOf = (relations: Relation[], me: number, others: number[], now: number, termsWith: (other: number) => RelationTerms = () => PLAIN) =>
+  others.filter((o) => o !== me).map((o) => relationBetween(relations, me, o, now, termsWith(o)))
 
 // ---- Raiding a trade route ---------------------------------------------------------------------------------------
 

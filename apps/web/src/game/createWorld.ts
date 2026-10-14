@@ -148,6 +148,8 @@ export interface RivalTerritory {
   color: number
   // Where its palace stands (a tile on it), for the name over it.
   palace?: Point
+  // The banner colour of the crown kingdom its lord is sworn to (CLAUDE.md §7.8), flown beside the name.
+  banner?: number
 }
 
 export interface WorldView {
@@ -158,7 +160,7 @@ export interface WorldView {
   // Keeps the camera on whatever `target` says each frame (an army on the march), until null is given or the map is
   // dragged; `onStop` hears when a drag ended it.
   follow(target: (() => Point | null) | null, onStop?: () => void): void
-  setTerritory(rect: Rect | null, plots: Plots, name?: string, palace?: Point): void
+  setTerritory(rect: Rect | null, plots: Plots, name?: string, palace?: Point, banner?: number): void
   // The other kingdoms of the lobby: their borders in their own colour, and their names when zoomed out.
   setRivals(rivals: RivalTerritory[]): void
   // Every army in the lobby and the battles being fought (see armies.ts).
@@ -269,6 +271,20 @@ export async function createWorld(
   })
   const kingdomLabel = nameLabel(TERRITORY)
   kingdomLabel.visible = false
+  // A lord's crown banner beside its name on the map: a pole with a swallow-tailed flag in the crown's colour, drawn in
+  // screen pixels and set left of the name.
+  const crownBanner = (color: number) => {
+    const g = new Graphics()
+    g.rect(-1, -16, 2, 26).fill(0x2a1c10)
+    g.poly([1, -15, 15, -15, 11, -10, 15, -5, 1, -5]).fill(color).stroke({ width: 1, color: 0x120d0b })
+    g.circle(0, -17, 1.5).fill(0xd2aa44)
+    return g
+  }
+  const besideName = (banner: Graphics, text: Text) => {
+    banner.scale.set(text.scale.x)
+    banner.position.set(text.x - (text.width / 2) - 20 * text.scale.x, text.y + 2 * text.scale.x)
+  }
+  let kingdomBanner: Graphics | null = null
   // A building under the pointer is outlined instead of the tile.
   const highlight = new Sprite()
   highlight.tint = HIGHLIGHT
@@ -622,7 +638,7 @@ export async function createWorld(
   }
 
   // Overlay lines keep their screen thickness at every zoom level, so they are redrawn when it changes.
-  let claimed: [Rect | null, Plots, string | undefined, Point | undefined] = [null, { dock: null, trade: null }, undefined, undefined]
+  let claimed: [Rect | null, Plots, string | undefined, Point | undefined, number | undefined] = [null, { dock: null, trade: null }, undefined, undefined, undefined]
   // A kingdom's name stands over its palace, just above the top of the palace as drawn; without a palace yet, over
   // the middle of its territory.
   let palaces: { x: number; y: number; size: number; top: number }[] = []
@@ -635,11 +651,13 @@ export async function createWorld(
     const middle = groundToScreen(world, { x: rect.x + rect.size / 2, y: rect.y + rect.size / 2 })
     return { x: middle.x, y: middle.y - 24 / camera.scale.y }
   }
-  function setTerritory(rect: Rect | null, plots: Plots, name?: string, palace?: Point) {
-    claimed = [rect, plots, name, palace]
+  function setTerritory(rect: Rect | null, plots: Plots, name?: string, palace?: Point, banner?: number) {
+    claimed = [rect, plots, name, palace, banner]
     territory.clear()
     for (const text of Object.values(plotLabels)) text.visible = false
     kingdomLabel.visible = false
+    kingdomBanner?.destroy()
+    kingdomBanner = null
     if (!rect) return
     if (name && camera.scale.x <= NAME_MAX_ZOOM) {
       kingdomLabel.text = name
@@ -647,6 +665,11 @@ export async function createWorld(
       kingdomLabel.position.set(at.x, at.y)
       kingdomLabel.scale.set(1 / camera.scale.x)
       kingdomLabel.visible = true
+      if (banner !== undefined) {
+        kingdomBanner = crownBanner(banner)
+        besideName(kingdomBanner, kingdomLabel)
+        above.addChild(kingdomBanner)
+      }
     }
     const thick = 3 / camera.scale.x
     const outline = (r: Rect) => square(r.x, r.y, r.size)
@@ -694,6 +717,11 @@ export async function createWorld(
       text.position.set(at.x, at.y)
       text.scale.set(1 / camera.scale.x)
       rivalLabels.addChild(text)
+      if (rival.banner !== undefined) {
+        const flag = crownBanner(rival.banner)
+        besideName(flag, text)
+        rivalLabels.addChild(flag)
+      }
     }
     // The free cities' names stand over their walls when zoomed out.
     if (camera.scale.x > CITY_NAME_MAX_ZOOM) return
@@ -1003,7 +1031,7 @@ export async function createWorld(
         const sprite = new Sprite(textureOf(look))
         sprite.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
         sprite.label = 'occluder'
-        shadows.setFootprint(sprite, s.size)
+        shadows.setFootprint(sprite, s.size, part.z - heightAt(world, part.fx, part.fy))
         const sx = (part.fx - part.fy) * (TILE_WIDTH / 2)
         const sy = (part.fx + part.fy) * (TILE_HEIGHT / 2) - part.z
         sprite.position.set(sx, sy)

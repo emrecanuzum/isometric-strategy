@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { KINGDOM_COLORS } from '../game/buildingSprites'
 import type { KingdomColor } from '../game/buildingSprites'
 import type { ChatMessage } from '../net/online'
@@ -66,6 +67,7 @@ export function Chat({
   kingdoms,
   onKingdom,
   onLocate,
+  banner,
 }: {
   // Where this lobby's read marker is kept.
   storeKey: string
@@ -78,6 +80,8 @@ export function Chat({
   onSend: (body: string) => Promise<void>
   kingdoms: KingdomInfo[]
   onKingdom: (id: number) => void
+  // The crown banner a kingdom's lord flies (CLAUDE.md §7.8), beside its name.
+  banner?: (kingdom: number) => ReactNode
   // Moves the camera to a kingdom's palace.
   onLocate: (site: { x: number; y: number }) => void
 }) {
@@ -217,7 +221,7 @@ export function Chat({
         </button>
       </header>
       {tab === 'ranking' ? (
-        <Ranking kingdoms={kingdoms} mine={mine} onKingdom={onKingdom} />
+        <Ranking kingdoms={kingdoms} mine={mine} onKingdom={onKingdom} banner={banner} />
       ) : tab === 'kingdoms' ? (
         <ol className="chat-kingdoms">
           {kingdoms.map((k) => (
@@ -225,7 +229,9 @@ export function Chat({
               <button className={k.id === mine ? 'own' : undefined} onClick={() => onKingdom(k.id)} disabled={k.id === mine}>
                 <i style={{ background: swatch(k.color) }} />
                 <span>
-                  <b style={{ color: `color-mix(in srgb, ${swatch(k.color)} 45%, #f3e6c8)` }}>{k.name}</b>
+                  <b style={{ color: `color-mix(in srgb, ${swatch(k.color)} 45%, #f3e6c8)` }}>
+                    {banner?.(k.id)} {k.name}
+                  </b>
                   <small>{k.id === mine ? 'sen' : (k.username ?? '—')}</small>
                 </span>
                 {k.id !== mine && (
@@ -245,7 +251,9 @@ export function Chat({
           <li key={m.id} className={m.kingdom_id === mine ? 'own' : undefined}>
             <i style={{ background: swatch(m.color) }} />
             <span>
-              <b style={{ color: `color-mix(in srgb, ${swatch(m.color)} 45%, #f3e6c8)` }}>{m.name}</b>
+              <b style={{ color: `color-mix(in srgb, ${swatch(m.color)} 45%, #f3e6c8)` }}>
+                {banner?.(m.kingdom_id)} {m.name}
+              </b>
               {m.username && <small className="who">{m.username}</small>}
               <small>{timeOf(m.created_at)}</small>
               <br />
@@ -291,7 +299,7 @@ const PARTS: { key: keyof Omit<Score, 'total'>; name: string }[] = [
 ]
 
 // The lobby's ranking: kingdoms by score, each with what its score is made of.
-function Ranking({ kingdoms, mine, onKingdom }: { kingdoms: KingdomInfo[]; mine: number | null; onKingdom: (id: number) => void }) {
+function Ranking({ kingdoms, mine, onKingdom, banner }: { kingdoms: KingdomInfo[]; mine: number | null; onKingdom: (id: number) => void; banner?: (kingdom: number) => ReactNode }) {
   const ranked = [...kingdoms].sort((a, b) => (b.score?.total ?? 0) - (a.score?.total ?? 0))
   return (
     <ol className="chat-ranking">
@@ -301,7 +309,9 @@ function Ranking({ kingdoms, mine, onKingdom }: { kingdoms: KingdomInfo[]; mine:
             <span className="rank">{i + 1}.</span>
             <i style={{ background: swatch(k.color) }} />
             <span className="who">
-              <b style={{ color: `color-mix(in srgb, ${swatch(k.color)} 45%, #f3e6c8)` }}>{k.name}</b>
+              <b style={{ color: `color-mix(in srgb, ${swatch(k.color)} 45%, #f3e6c8)` }}>
+                {banner?.(k.id)} {k.name}
+              </b>
               <small>
                 {k.score
                   ? PARTS.filter((p) => (k.score![p.key] ?? 0) > 0)

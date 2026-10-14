@@ -26,12 +26,14 @@ import { KINGDOM_COLORS } from '../../game/buildingSprites'
 import type { KingdomColor } from '../../game/buildingSprites'
 import { INN_KIND_NAMES, innInfo } from '../../game/innInfo'
 import { innLook, isCaravanserai } from '../../game/innSprites'
+import { cityInfo } from '../../game/cities'
 import type { Estimate } from '../../net/online'
 import { Icon } from '../icons'
 import { RESOURCE_NAMES, UNIT_NAMES } from '../names'
 import type { HudData } from './tabs'
 import type { KingdomInfo, Online } from './online'
-import { kingdomName, lastSeen } from './online'
+import { kingdomName, lastSeen, relationTermsIn } from './online'
+import { CrownBanner } from './cities'
 import { Meter, Placeholder, Section, SpriteView, Stat, fmt } from './primitives'
 
 // The diplomacy tab (CLAUDE.md §9.7): the kingdoms of the lobby and the player's standing with each, a kingdom
@@ -142,7 +144,9 @@ function KingdomList({ data, online }: { data: HudData; online: Online }) {
       <button className="card kingdom-row" onClick={() => online.setFocus(k.id)}>
         <Dot color={k.color} />
         <span>
-          <b>{k.name}</b>
+          <b>
+            <CrownBanner world={data.world} liege={k.liege} /> {k.name}
+          </b>
           <small>
             {k.username ?? '—'} · {k.palace}. seviye saray{k.queen ? ' · kraliçe' : ''}
             {k.id !== online.me && <> · {lastSeen(k.seenAt, data.now)}</>}
@@ -155,7 +159,7 @@ function KingdomList({ data, online }: { data: HudData; online: Online }) {
             ))}
           </span>
         </span>
-        <RelationBar value={relationBetween(online.relations, online.me, k.id, now)} />
+        <RelationBar value={relationBetween(online.relations, online.me, k.id, now, relationTermsIn(online, online.me, k.id))} />
       </button>
     </li>
   )
@@ -252,9 +256,10 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
   const [termsGold, setTermsGold] = useState(100)
   const [outcome, setOutcome] = useState<string | null>(null)
   const me = online.me
-  const relation = relationBetween(online.relations, me, target.id, now)
+  const bond = relationTermsIn(online, me, target.id)
+  const relation = relationBetween(online.relations, me, target.id, now, bond)
   // Enemies elsewhere make the player's courtesies count for less.
-  const standing = reputation(relationsOf(online.relations, me, online.kingdoms.map((k) => k.id), now))
+  const standing = reputation(relationsOf(online.relations, me, online.kingdoms.map((k) => k.id), now, (o) => relationTermsIn(online, me, o)))
   const war = atWar(online.pacts, me, target.id)
   const ally = allied(online.pacts, me, target.id)
   const theyPay = tributeBetween(online.pacts, me, target.id)
@@ -271,7 +276,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
   const theirTributes = online.pacts.filter((p: Pact) => p.kind === 'tribute' && (p.from_id === target.id || p.to_id === target.id))
   const theirRelations = online.relations
     .filter((r) => (r.a === target.id || r.b === target.id) && r.a !== me && r.b !== me)
-    .map((r) => ({ other: r.a === target.id ? r.b : r.a, value: relationAt(r.value, Date.parse(r.at), now) }))
+    .map((r) => ({ other: r.a === target.id ? r.b : r.a, value: relationAt(r.value, Date.parse(r.at), now, relationTermsIn(online, r.a, r.b)) }))
     .filter((r) => Math.abs(r.value) >= 1)
     .sort((a, b) => b.value - a.value)
   const envoy = (kind: Envoy['kind'], extra: { gold?: number; terms?: PeaceTerms } = {}) => online.act({ type: 'envoy', to: target.id, kind, ...extra })
@@ -292,9 +297,15 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
       <div className="feature kingdom-head">
         <Dot color={target.color} />
         <div>
-          <b>{target.name}</b>
+          <b>
+            <CrownBanner world={data.world} liege={target.liege} /> {target.name}
+          </b>
           <p className="hint">
             {target.username ?? '—'} · {target.palace}. seviye saray{target.queen ? ' · kraliçesi var' : ''} · {lastSeen(target.seenAt, now)}
+          </p>
+          <p className="hint">
+            {target.liege != null && data.world.cities[target.liege] ? `${cityInfo(data.world, target.liege).name} lordu` : 'Henüz bir taca biat etmedi'}
+            {bond.max < 100 && ` · rakip taçların lordlarısınız: ilişki ${bond.rest} başlar, en fazla +${bond.max} olur${d.alliance.minRelation > bond.max ? ', ittifak kurulamaz' : ''}`}
           </p>
         </div>
         <button className="btn icon-only" onClick={() => data.onShow(target.site)} aria-label="Haritada göster">

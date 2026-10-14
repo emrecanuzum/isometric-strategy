@@ -2183,6 +2183,13 @@ small {
   z-index: 3;
 }
 
+/* A lord's crown banner beside its name (CLAUDE.md §7.8). */
+.crown-banner {
+  display: inline-block;
+  vertical-align: -2px;
+  flex: none;
+}
+
 /* Standing trouble (a town with no gate, buildings walled off…) on the right edge, between the top bar and the map
    buttons. */
 .map-alerts {
@@ -3829,6 +3836,12 @@ kbd {
   max-height: 55vh;
   image-rendering: pixelated;
   box-shadow: var(--outline);
+}
+
+/* While the server answers: the dialog is already open, saying what it waits for. */
+.fishing-wait {
+  padding: calc(var(--px) * 16) 0;
+  text-align: center;
 }
 
 .fishing-result {

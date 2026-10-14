@@ -41,6 +41,7 @@ import type React from 'react'
 import { WorldMap } from './game/WorldMap'
 import { ConfirmBuild } from './ui/hud/ConfirmBuild'
 import { PlanBar } from './ui/hud/PlanBar'
+import { cityInfo } from './game/cities'
 import { Minimap } from './game/Minimap'
 import type { MinimapFlag } from './game/Minimap'
 import type { Structure } from './game/chunkPainter'
@@ -76,7 +77,7 @@ import { BuildingSheet } from './ui/hud/BuildingSheet'
 import { MapAlerts } from './ui/hud/MapAlerts'
 import { InnTip, MapTip } from './ui/hud/MapTip'
 import { InnSheet } from './ui/hud/inns'
-import { CitySheet, CityTip } from './ui/hud/cities'
+import { CitySheet, CityTip, CrownBanner } from './ui/hud/cities'
 import type { HudData } from './ui/hud/tabs'
 import { GoodPicker, SitePicker, missingText } from './ui/panels'
 import { Timers } from './ui/hud/Timers'
@@ -211,6 +212,8 @@ function noticeHurts(n: Notice, me: string | undefined) {
 
 // Kingdom colours as numbers for the map.
 const hexOf = (color: string | null | undefined) => KINGDOM_COLORS[color as KingdomColor]?.swatch ?? '#f2d16b'
+// A crown kingdom's banner colour, for the map (CLAUDE.md §7.8).
+const crownColor = (world: World, liege: number) => parseInt(cityInfo(world, liege).color.slice(1), 16)
 const colorOf = (color: string | null | undefined) => parseInt((KINGDOM_COLORS[color as KingdomColor]?.swatch ?? '#f2d16b').slice(1), 16)
 
 // On touch screens there is no hover, so placing takes a tap to preview and a second tap to confirm.
@@ -564,6 +567,7 @@ function App({
         name: r.name,
         color: colorOf(r.color),
         palace: r.buildings.find((b) => b.kind === 'palace'),
+        ...(r.liege != null && view.world.cities[r.liege] && { banner: crownColor(view.world, r.liege) }),
       })),
     )
   }, [view, rivals])
@@ -602,6 +606,7 @@ function App({
       { dock: dockPlot ?? null, trade: plots?.trade?.plot ?? null },
       kingdom?.name,
       kingdom?.buildings.find((b) => b.kind === 'palace'),
+      view && kingdom?.liege !== undefined && view.world.cities[kingdom.liege] ? crownColor(view.world, kingdom.liege) : undefined,
     )
   }, [view, site, stage, plots, kingdom])
 
@@ -1056,9 +1061,9 @@ function App({
   const kingdoms: KingdomInfo[] = useMemo(
     () => [
       ...(kingdom
-        ? [{ id: mine.id, name: kingdom.name ?? 'Krallığın', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null, score: scoreOf(kingdom, now), tradeGood: kingdom.trade.idle ? null : kingdom.trade.good, tradeLedger: kingdom.trade.ledger ?? null, tradeDamaged: !!kingdom.trade.damaged }]
+        ? [{ id: mine.id, name: kingdom.name ?? 'Krallığın', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null, score: scoreOf(kingdom, now), tradeGood: kingdom.trade.idle ? null : kingdom.trade.good, tradeLedger: kingdom.trade.ledger ?? null, tradeDamaged: !!kingdom.trade.damaged, liege: kingdom.liege ?? null }]
         : []),
-      ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings, shieldUntil: r.shield_until, score: r.score ?? null, tradeGood: r.trade_good ?? null, tradeLedger: r.trade_ledger ?? null, tradeDamaged: !!r.trade_damaged })),
+      ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings, shieldUntil: r.shield_until, score: r.score ?? null, tradeGood: r.trade_good ?? null, tradeLedger: r.trade_ledger ?? null, tradeDamaged: !!r.trade_damaged, liege: r.liege ?? null })),
     ],
     // Palace levels only change with the buildings.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1274,6 +1279,7 @@ function App({
           onSelect={setSelectedSite}
           colors={lobbyColors(lobby.max_players)}
           taken={new Set(rivals.map((r) => r.color))}
+          names={rivals.map((r) => r.name)}
           onFound={found}
         />
       )}
@@ -1461,6 +1467,7 @@ function App({
           canPost={kingdom !== null}
           onSend={sendChat}
           kingdoms={kingdoms}
+          banner={(id) => view && <CrownBanner world={view.world} liege={kingdoms.find((k) => k.id === id)?.liege} />}
           onLocate={(site) => view?.centerOn(site)}
           onKingdom={(id) => {
             if (id === mine.id) return

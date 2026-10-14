@@ -1,9 +1,14 @@
+import { relationTerms } from '@game/shared'
 import type { Good, Point, Score, TradeLedger } from '@game/shared'
 import type { Layer } from '../../net/layer'
 import type { Command, IntelReport, Lobby } from '../../net/online'
 
 // What the tabs know of the lobby and how they act on it: the other kingdoms, the layer between them, the player's
 // focus (a kingdom looked at in the diplomacy tab, an army picked on the map), and the commands.
+
+// Where the relation of two kingdoms rests and how high it may go: lords of rival crowns stay cool (CLAUDE.md §7.8).
+export const relationTermsIn = (online: { kingdoms: KingdomInfo[] }, x: number, y: number) =>
+  relationTerms(online.kingdoms.find((k) => k.id === x)?.liege, online.kingdoms.find((k) => k.id === y)?.liege)
 
 export interface KingdomInfo {
   id: number
@@ -25,6 +30,8 @@ export interface KingdomInfo {
   tradeGood?: Good | null
   tradeLedger?: TradeLedger | null
   tradeDamaged?: boolean
+  // The crown kingdom its lord is sworn to (CLAUDE.md §7.8; null when not yet).
+  liege?: number | null
   // Its buildings as seen on the map.
   buildings?: { kind: string; x: number; y: number; size: number; doneAt: number; broken?: boolean }[]
 }

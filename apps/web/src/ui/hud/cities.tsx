@@ -220,3 +220,17 @@ export function Fealty({ world, kingdom, only, onSwear }: { world: World; kingdo
     </Section>
   )
 }
+
+// A lord's crown banner (CLAUDE.md §7.8): a small swallow-tailed flag in the colour of the crown kingdom it is sworn to,
+// beside its name; nothing for a lord not yet sworn.
+export function CrownBanner({ world, liege, size = 14 }: { world: World; liege?: number | null; size?: number }) {
+  if (liege == null || !world.cities[liege]) return null
+  const info = cityInfo(world, liege)
+  return (
+    <svg className="crown-banner" width={size} height={size} viewBox="0 0 14 14" role="img" aria-label={`${info.name} lordu`}>
+      <title>{`${info.name} lordu`}</title>
+      <rect x="1" y="1" width="1.6" height="13" fill="#2a1c10" />
+      <path d="M2.6 1.5 H13 L10.4 4.5 L13 7.5 H2.6 Z" fill={info.color} stroke="#120d0b" strokeWidth="0.8" />
+    </svg>
+  )
+}

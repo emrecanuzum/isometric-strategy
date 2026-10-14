@@ -2,6 +2,10 @@
   "envoySeconds": 60,
   "proposalSeconds": 600,
   "driftPerHour": 2,
+  "crowns": {
+    "rivalRest": -20,
+    "rivalMax": 40
+  },
   "improve": {
     "cost": {
       "gold": 50

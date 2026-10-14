@@ -380,7 +380,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       const to = other(cmd.to)
       if (!ENVOYS.includes(cmd.kind)) refuse('rejected')
       const relation = await relationOf(lobby, me.id, to.id, now)
-      const error = game.proposalError(cmd.kind, relation.value, pacts, me.id, to.id)
+      const error = game.proposalError(cmd.kind, relation.value, pacts, me.id, to.id, false, relation.terms.max)
       if (error) refuse(error)
       // A peace offer carries its terms, which the war score has to bear.
       let terms: unknown = null

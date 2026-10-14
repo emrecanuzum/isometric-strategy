@@ -344,6 +344,9 @@ uzaklık olmalı; kimse tamamen dezavantajlı başlamamalı.
   elle seçemez, sarayı yükseltir. Yükseltme bitince hudut genişler; kare
   merkezini korur. Hudut haritada **kesikli** sarı çizgiyle gösterilir.
 - Krallık kurulurken oyuncu krallığına bir **isim** ve bir **renk** verir.
+  Önerilen isim bir ön ek ile bir yer adı ekinden kurulur (Ulupınar,
+  Gökova, Kartalsuyu… binlerce birleşim) ve lobideki başka bir krallığın
+  adıyla aynı kökü taşımaz; oyuncu kendi adını da yazabilir.
   Lobi, büyüklüğü kadar renk sunar (9 ya da 18; `packages/shared/src/colors.ts`)
   ve **bir renk lobide yalnızca bir krallığındır**: alınmış renk seçilemez. Sarayın
   çatıları bu renkte çizilir. Harita uzaklaştırıldığında (½× ve altı)
@@ -529,6 +532,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   en açık suya bakan kenarından nehre/göle doğru uzanır.
 - **Eğim:** Yokuşa kurulan yapı, en yüksek köşesi hizasında düz bir taş
   kaide üzerinde durur (tarlada toprak set); kaide aşağıdaki zemine iner.
+  Kaidedeki yapının gölgesi kaide yüksekliğinden aşağıdaki zemine düşer
+  (güneşten öteye kayar; `shadows.ts` → `setFootprint`).
 - **Esrarengiz balıkçı kulübesi** (3. seviye saray, bir tane, yalnızca
   hudut içindeki bir **kıyı** karesine kurulur): kendi başına çok az yemek
   ve nehre atılmış altınlardan çok az (tur başına 0,4) getirir. Tıklanınca
@@ -540,7 +545,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   krallık hakkında yavan bir not vardır ("… krallığının 1000'den fazla
   altını var gibi görünüyor"; gerçeğin yaklaşık %70'inin yuvarlanmış hâli).
   Sonuçlar kulübenin **balıkçı günlüğüne** yazılır. Olta 150 saniyede bir
-  atılabilir. Oyun belirlenimcidir: olta atılınca sunucu bir tohum verir,
+  atılabilir. "Oltayı at"a basınca pencere hemen açılır; sunucunun tohumu
+  gelene kadar "Olta suya atılıyor…", sonuç gelene kadar "Olta çekiliyor…"
+  yazar. Oyun belirlenimcidir: olta atılınca sunucu bir tohum verir,
   oyun saniyede 60 sabit adımla oynanır, istemci yalnızca düğmeye basılıp
   bırakılan adımları gönderir; sunucu oyunu aynı tohum ve basışlarla yeniden
   oynayıp tutulup tutulmadığına kendisi karar verir (ve oyunun süresinden
@@ -549,7 +556,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 - **Patikalar:** Her yapının kapısından saraya ve köylülerin evden işe
   yürüdüğü yollar boyunca, yapıların etrafından dolaşan ince toprak
   patikalar zemine işlenir; cetvelle çizilmiş gibi düz değil, hafifçe
-  dalgalanarak uzanırlar (yürüyenler yine aynı yolu izler). Sur ve kapılar patika üretmez. Saraya en yakın
+  dalgalanarak uzanırlar (yürüyenler yine aynı yolu izler). Başka bir
+  patikaya bağlanmayan ucunda patika birden kesilmez: son ~2,5 karoda
+  daralır ve yer yer çimenle kesilerek söner. Sur ve kapılar patika üretmez. Saraya en yakın
   yapıların yolu önce açılır, sonrakiler var olan patikaya katılır (patika
   karosu yürümesi daha ucuzdur); böylece saraydan dallanan birkaç ortak
   patika oluşur, yelpaze gibi açılan düz çizgiler değil. Bir yürüyüşün
@@ -868,6 +877,7 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
 
 ---
 
+
 ### 7.8 Taç krallıkları ve biat (şu an uygulanan)
 
 İki şehir yalnızca ticaret yeri değil, **iki NPC krallığın başkentidir**
@@ -888,8 +898,20 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   büyür. Ama **sarayı 2. seviyeye yükseltmek için biat şarttır**
   (`crown.requiredForPalaceLevel` = 2): biatsız krallığın saray yükseltmesi
   "Önce bir taç krallığına biat et" diye reddedilir (`'liege'` hatası).
-- Etkileri (bonus, vergi, taç savaşları) sonra eklenecek; şimdilik biat
-  bağlılığı ve yükseltme şartını belirler.
+- **Herkes görür:** Bir lordun kime biat ettiği herkese açıktır
+  (`lobby_kingdoms` → `liege`). Tacın renginde küçük bir **sancak**
+  (direk ve çatal uçlu bayrak) lordun adının yanında durur: haritada
+  hududun üstündeki büyük ismin solunda, sohbette (mesajlar, krallıklar ve
+  sıralama) ve diplomasi sekmesinde (liste ve krallık ayrıntısı; ayrıntıda
+  "X Krallığı lordu" yazar).
+- **Rakip taçların lordları:** Farklı taçlara biat etmiş iki lordun
+  ilişkisi **−20'den başlar** ve zamanla oraya döner (0 yerine), **en fazla
+  +40** olabilir (`diplomacy.json` → `crowns.rivalRest`, `rivalMax`). İttifak
+  +50 istediği için rakip taçların lordları müttefik olamaz; tavandaki
+  ilişkiye "ilişki geliştir" elçisi gönderilemez. Aynı taca bağlı ya da
+  henüz biat etmemiş lordlar arasında eski kural geçerlidir (0'dan başlar,
+  en fazla +100). Krallık ayrıntısı bu sınırı yazar.
+- Başka etkileri (bonus, vergi, taç savaşları) sonra eklenecek.
 
 ## 8. Askeri Sistem
 

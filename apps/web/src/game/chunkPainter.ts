@@ -62,16 +62,34 @@ const TRAIL_REACH = 2
 const WANDER = 1.3
 // Within this many tiles of a footpath, the distance to it is measured exactly (see PaintContext.trailNear).
 const NEAR_TRAIL = 0.6
+// A footpath with a loose end (one not joining another path) narrows and breaks up over this many tiles before it.
+const TRAIL_TAPER = 2.5
 
-// Distance from (x, y) to the nearest of the segments ([ax, ay, bx, by] each).
-function segmentDistance(segments: number[], x: number, y: number) {
+// Distance from (x, y) to the nearest of the segments ([ax, ay, bx, by, fromStart, toEnd] each: how far along the
+// path a lies from its loose start, and b from its loose end; Infinity where that end joins another path). Toward a
+// loose end the path is measured as farther away than it is, in patches, so it thins out into the grass.
+const SEGMENT = 6
+function segmentDistance(segments: number[], x: number, y: number, seed: number) {
   let best = Infinity
-  for (let i = 0; i < segments.length; i += 4) {
-    const [ax, ay, bx, by] = [segments[i], segments[i + 1], segments[i + 2], segments[i + 3]]
+  for (let i = 0; i < segments.length; i += SEGMENT) {
+    const ax = segments[i]
+    const ay = segments[i + 1]
+    const bx = segments[i + 2]
+    const by = segments[i + 3]
+    const fromStart = segments[i + 4]
+    const toEnd = segments[i + 5]
     const dx = bx - ax
     const dy = by - ay
-    const t = Math.min(1, Math.max(0, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)))
-    best = Math.min(best, Math.hypot(x - ax - dx * t, y - ay - dy * t))
+    const length = Math.hypot(dx, dy)
+    const t = Math.min(1, Math.max(0, ((x - ax) * dx + (y - ay) * dy) / (length * length || 1)))
+    let d = Math.hypot(x - ax - dx * t, y - ay - dy * t)
+    const along = Math.min(fromStart + t * length, toEnd + (1 - t) * length)
+    if (along < TRAIL_TAPER) {
+      const f = along / TRAIL_TAPER
+      const worn = f * f * (3 - 2 * f)
+      d += TRAIL_HALF * (1 - worn) * (0.55 + valueNoise(x * 2.6, y * 2.6, seed + 99) * 0.9)
+    }
+    best = Math.min(best, d)
   }
   return best
 }
@@ -93,10 +111,33 @@ export function setStructures(context: PaintContext, structures: Structure[], tr
   }
   context.trail = new Float32Array(size * size).fill(TRAIL_REACH + 1)
   context.trailNear = new Map()
+  // An end of a path is loose unless it meets another path there (a branch joining a trunk).
+  const meets = (p: Point, own: Point[]) =>
+    trails.some((other) => {
+      if (other === own) return false
+      for (let i = 1; i < other.length; i++) {
+        const a = other[i - 1]
+        const b = other[i]
+        const dx = b.x - a.x
+        const dy = b.y - a.y
+        const t = Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)))
+        if (Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t) < 0.6) return true
+      }
+      return false
+    })
   for (const line of trails) {
+    if (line.length < 2) continue
+    // How far along the path each point lies from the start and from the end.
+    const run = [0]
+    for (let i = 1; i < line.length; i++) run.push(run[i - 1] + Math.hypot(line[i].x - line[i - 1].x, line[i].y - line[i - 1].y))
+    const total = run[run.length - 1]
+    const startLoose = !meets(line[0], line)
+    const endLoose = !meets(line[line.length - 1], line)
     for (let i = 1; i < line.length; i++) {
       const a = line[i - 1]
       const b = line[i]
+      const fromStart = startLoose ? run[i - 1] : Infinity
+      const toEnd = endLoose ? total - run[i] : Infinity
       const dx = b.x - a.x
       const dy = b.y - a.y
       const lengthSq = dx * dx + dy * dy || 1
@@ -107,8 +148,8 @@ export function setStructures(context: PaintContext, structures: Structure[], tr
           if (d < context.trail[y * size + x]) context.trail[y * size + x] = d
           if (d < NEAR_TRAIL + 0.75 + WANDER / 2) {
             const near = context.trailNear.get(y * size + x)
-            if (near) near.push(a.x, a.y, b.x, b.y)
-            else context.trailNear.set(y * size + x, [a.x, a.y, b.x, b.y])
+            if (near) near.push(a.x, a.y, b.x, b.y, fromStart, toEnd)
+            else context.trailNear.set(y * size + x, [a.x, a.y, b.x, b.y, fromStart, toEnd])
           }
         }
       }
@@ -443,7 +484,7 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       if (foot < NEAR_TRAIL + 0.5 + WANDER / 2) {
         const near = trailNear.get(Math.floor(wy) * size + Math.floor(wx))
         // Measured from a point nudged by a gentle noise, so the path wanders a little instead of running ruler-straight.
-        if (near) foot = segmentDistance(near, wx + (valueNoise(wx * 0.22, wy * 0.22, seed + 91) - 0.5) * WANDER, wy + (valueNoise(wx * 0.22, wy * 0.22, seed + 97) - 0.5) * WANDER)
+        if (near) foot = segmentDistance(near, wx + (valueNoise(wx * 0.22, wy * 0.22, seed + 91) - 0.5) * WANDER, wy + (valueNoise(wx * 0.22, wy * 0.22, seed + 97) - 0.5) * WANDER, seed)
       }
       const depthBelow = levels.lake - e
 

@@ -41,6 +41,8 @@ export interface Rival {
   trade_damaged?: boolean
   // Shielded from sieges until then (ms; null when not).
   shield_until?: number | null
+  // The crown kingdom its lord is sworn to (CLAUDE.md §7.8), null when not yet.
+  liege?: number | null
   // The lobby ranking's breakdown, as the server last worked it out.
   score?: Score | null
   // What its merchant sells now, and all it has sold this season (rounded for others).

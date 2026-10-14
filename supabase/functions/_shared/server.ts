@@ -135,16 +135,31 @@ export async function pactsOf(lobby: string): Promise<any[]> {
   return (data ?? []) as any[]
 }
 
+// The crown kingdoms the kingdoms are sworn to, by id (CLAUDE.md §7.8; none for one not sworn).
+async function liegesOf(filter: { lobby: string } | { ids: number[] }): Promise<Map<number, number | null>> {
+  const query = admin.from('kingdoms').select('id, liege:state->liege')
+  const { data } = await ('lobby' in filter ? query.eq('lobby_id', filter.lobby) : query.in('id', filter.ids))
+  return new Map((data ?? []).map((r: { id: number; liege: number | null }) => [r.id, r.liege ?? null]))
+}
+
+// Where the relation of two kingdoms rests and how high it may go (lords of rival crowns stay cool; see game.relationTerms).
+export async function relationTermsOf(x: number, y: number) {
+  const lieges = await liegesOf({ ids: [x, y] })
+  return game.relationTerms(lieges.get(x), lieges.get(y))
+}
+
 export async function relationOf(lobby: string, x: number, y: number, now: number) {
   const { a, b } = game.pairOf(x, y)
-  const { data } = await admin.from('relations').select('*').eq('a', a).eq('b', b).maybeSingle()
-  return { value: data ? game.relationAt(data.value, ms(data.at), now) : 0, row: data, lobby }
+  const [{ data }, terms] = await Promise.all([admin.from('relations').select('*').eq('a', a).eq('b', b).maybeSingle(), relationTermsOf(x, y)])
+  return { value: data ? game.relationAt(data.value, ms(data.at), now, terms) : terms.rest, row: data, lobby, terms }
 }
 
 // A kingdom's standing with the whole lobby (see game.reputation).
 export async function reputationOf(lobby: string, kingdom: number, now: number) {
-  const { data } = await admin.from('relations').select('*').eq('lobby_id', lobby).or(`a.eq.${kingdom},b.eq.${kingdom}`)
-  return game.reputation((data ?? []).map((r: { value: number; at: string }) => game.relationAt(r.value, ms(r.at), now))) as number
+  const [{ data }, lieges] = await Promise.all([admin.from('relations').select('*').eq('lobby_id', lobby).or(`a.eq.${kingdom},b.eq.${kingdom}`), liegesOf({ lobby })])
+  return game.reputation(
+    (data ?? []).map((r: { a: number; b: number; value: number; at: string }) => game.relationAt(r.value, ms(r.at), now, game.relationTerms(lieges.get(r.a), lieges.get(r.b)))),
+  ) as number
 }
 
 // The counter-espionage a spy of `owner` meets in `target`: the target's own, and its wariness of the owner.
@@ -153,15 +168,15 @@ export async function counterAgainst(lobby: string, owner: number, target: numbe
   return (game.counterOf(state) + game.wariness(value)) as number
 }
 
-// Adds `delta` to the relation of two kingdoms (after its drift up to now).
+// Adds `delta` to the relation of two kingdoms (after its drift up to now), within how high it may go.
 export async function changeRelation(lobby: string, x: number, y: number, delta: number, now: number, improved = false) {
   const { a, b } = game.pairOf(x, y)
-  const { value } = await relationOf(lobby, x, y, now)
+  const { value, terms } = await relationOf(lobby, x, y, now)
   await admin.from('relations').upsert({
     lobby_id: lobby,
     a,
     b,
-    value: game.clampRelation(value + delta),
+    value: game.clampRelation(value + delta, terms),
     at: iso(now),
     ...(improved && { improved_at: iso(now) }),
   })
@@ -169,7 +184,8 @@ export async function changeRelation(lobby: string, x: number, y: number, delta:
 
 export async function setRelation(lobby: string, x: number, y: number, value: number, now: number) {
   const { a, b } = game.pairOf(x, y)
-  await admin.from('relations').upsert({ lobby_id: lobby, a, b, value: game.clampRelation(value), at: iso(now) })
+  const terms = await relationTermsOf(x, y)
+  await admin.from('relations').upsert({ lobby_id: lobby, a, b, value: game.clampRelation(value, terms), at: iso(now) })
 }
 
 // A grievance (casus belli) `holder` may go to war over, for a while.
