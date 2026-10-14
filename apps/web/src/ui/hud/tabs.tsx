@@ -9,6 +9,9 @@ import {
   capOf,
   storageCap,
   goldCap,
+  atFloor,
+  crownAppetite,
+  crownDemand,
   idleFactor,
   plannedHousing,
   palaceLevel,
@@ -47,7 +50,8 @@ import {
   upgradeSpec,
 } from '@game/shared'
 import { TradeShares } from './inns'
-import { Fealty, TradeDestination } from './cities'
+import { CrownBanner, Fealty, TradeDestination } from './cities'
+import { cityInfo } from '../../game/cities'
 import type { BuildingKind, Good, Kingdom, Market, Plot, Point, Resource, TaxLevel, World } from '@game/shared'
 import { useEffect, useRef, useState } from 'react'
 import { STRUCTURE_SPRITES, palaceIn } from '../../game/buildingSprites'
@@ -345,7 +349,7 @@ const MARKET_GOODS: Good[] = ['food', 'materials', 'arms']
 // balance.market.maxBuy units) that goes to the server as one purchase once the clicks stop or the basket is full.
 const BASKET_WAIT_MS = 900
 
-function MarketSection({ kingdom, now, online }: HudData) {
+function MarketSection({ world, kingdom, now, online }: HudData) {
   const [good, setGood] = useState<Good>('food')
   const [units, setUnits] = useState(10)
   const [basket, setBasket] = useState<{ good: Good; units: number } | null>(null)
@@ -392,15 +396,20 @@ function MarketSection({ kingdom, now, online }: HudData) {
         {MARKET_GOODS.map((g) => {
           const price = priceAt(market, g, now)
           const base = balance.economy.trade.price[g]
+          const floor = atFloor(price, g)
           return (
-            <span key={g} className="price" title={`${RESOURCE_NAMES[g]} · taban ${base}`}>
+            <span key={g} className="price" title={`${RESOURCE_NAMES[g]} · olağan fiyatı ${base}${floor ? ' · en dipte' : ''}`}>
               <Icon name={RESOURCE_ICONS[g]} size={16} />
               <b className={price > base * 1.02 ? 'up' : price < base * 0.98 ? 'down' : undefined}>{price.toFixed(2).replace('.', ',')}</b>
-              <small>taban {base}</small>
+              <small>{floor ? 'en dipte' : `olağan ${String(base).replace('.', ',')}`}</small>
             </span>
           )
         })}
       </div>
+      {MARKET_GOODS.some((g) => atFloor(priceAt(market, g, now), g)) && (
+        <p className="hint">En dipteki malın fiyatını satış daha fazla düşürmez; zamanla ve taç krallıkları aldıkça olağan fiyatına doğru toparlanır.</p>
+      )}
+      <CrownBuyers world={world} market={market} now={now} />
       {has ? (
         <>
           <div className="segmented three" role="radiogroup" aria-label="Alınacak mal">
@@ -907,5 +916,30 @@ export function JournalTab({ journal, now, onImportantRead }: HudData) {
         </div>
       )}
     </>
+  )
+}
+
+// What the crown kingdoms buy off the lobby's market now (CLAUDE.md §7.8): each wants one good in each window of the
+// clock and buys less of it as its price nears the usual.
+function CrownBuyers({ world, market, now }: { world: World; market?: Market | null; now: number }) {
+  const buyers = crownDemand(now).filter((d) => world.cities[d.crown])
+  if (buyers.length === 0) return null
+  return (
+    <ul className="pop-lines">
+      {buyers.map((d) => {
+        const info = cityInfo(world, d.crown)
+        const rate = Math.round(d.perMinute * crownAppetite(d.good, priceAt(market, d.good, now)))
+        return (
+          <li key={d.crown}>
+            <span>
+              <CrownBanner world={world} liege={d.crown} /> {info.name} {RESOURCE_NAMES[d.good].toLocaleLowerCase('tr')} alıyor
+            </span>
+            <b className={rate > 0 ? 'up' : undefined}>
+              {rate > 0 ? `dakikada ${rate}` : 'fiyat yüksek, almıyor'} · {Math.max(1, Math.ceil((d.until - now) / 60000))} dk
+            </b>
+          </li>
+        )
+      })}
+    </ul>
   )
 }

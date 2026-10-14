@@ -1,4 +1,4 @@
-import { BUILDINGS, GOODS, balance, constructing, priceAt, tradeUnits } from '@game/shared'
+import { BUILDINGS, GOODS, atFloor, balance, constructing, fortuneEffects, idleFactor, priceAt, researchEffects, tradeLoad, tradePrice } from '@game/shared'
 import type { Cost, Good, Kingdom, Market, Resource, Survey } from '@game/shared'
 import { useState } from 'react'
 import type React from 'react'
@@ -71,23 +71,26 @@ export function GoodChoice({
   market?: Market | null
   now: number
 }) {
-  const units = tradeUnits(kingdom)
+  // A trip's load (bigger to a free city), as much of it as the stores hold, at the price the merchant is paid.
+  const load = tradeLoad(kingdom)
+  const bonus = (1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade) * idleFactor(kingdom, now)
   const idle = selected === null && !!kingdom.trade.idle
   return (
     <div className="goods" role="radiogroup" aria-label="Satılacak mal">
       {GOODS.map((good) => {
-        const price = priceAt(market, good, now)
+        const price = tradePrice(kingdom, good, market, now)
         const base = balance.economy.trade.price[good]
+        const units = Math.min(load, Math.floor(kingdom.stock[good]))
         return (
           <button key={good} role="radio" aria-checked={good === selected} className={good === selected ? 'good active' : 'good'} onClick={() => onGood(good)}>
             <Icon name={RESOURCE_ICONS[good]} size={24} />
             <b>{RESOURCE_NAMES[good]}</b>
             <small>Stok {fmt(kingdom.stock[good])}</small>
             <small className={price < base * 0.98 ? 'down' : price > base * 1.02 ? 'up' : undefined}>
-              Birimi {price.toFixed(2).replace('.', ',')} altın
+              Birimi {price.toFixed(2).replace('.', ',')} altın{atFloor(priceAt(market, good, now), good) ? ' · dipte' : ''}
             </small>
             <small className="up">
-              +{Math.round(units * price)} <Icon name="gold" size={8} /> / sefer
+              +{Math.round(units * price * bonus)} <Icon name="gold" size={8} /> / sefer ({units} birim)
             </small>
           </button>
         )

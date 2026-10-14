@@ -25,7 +25,8 @@ type Measure = 'gold' | Good
 
 const shareOf = (k: KingdomInfo, measure: Measure) => k.tradeLedger?.[measure] ?? 0
 
-const amount = (n: number) => (n >= 1000 ? `~${(n / 1000).toFixed(1).replace('.', ',')}K` : `~${Math.round(n)}`)
+// Others' totals come rounded (the heading says so); no mark of their own, as the digits' font draws ~ like a minus.
+const amount = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace('.', ',')}K` : `${Math.round(n)}`)
 
 export interface Rumour {
   text: string

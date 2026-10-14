@@ -1147,6 +1147,21 @@ mertebesindedir.
   iner (`market.json`). Taban fiyatlar: yemek 1,7, yapı malzemesi 2,5,
   savaş malzemesi 3,4 (`economy.json` → `trade.price`); pazarın alış
   fiyatı lobi fiyatının 1,4 katıdır.
+- Fiyat **olağan fiyatının %30'unun** altına inmez (`minFactor`); oraya inen
+  malın kutusunda "en dipte" yazar ve satış onu daha fazla düşürmez.
+  Arayüzde taban fiyat **"olağan"** fiyat olarak yazar (fiyat onun altına
+  inebildiği için "taban" yanıltıcıdır).
+- **Taç krallıkları alır:** İki taç krallığı her 20 dakikalık pencerede
+  saatten belirlenen birer malı lobi piyasasından alır (iki taç aynı malı da
+  isteyebilir). Tam talep dakikada 120 birimdir; mal ucuzken tamamını, olağan
+  fiyatına yaklaştıkça daha azını alırlar, olağan fiyatın %20 üstünde hiç
+  almazlar (`market.json` → `crowns`). Böylece kimse satmazsa fiyat yaklaşık
+  bir saatte olağan fiyatına toparlanır, dibe kilitlenmez; çok satılan mal
+  yine dipte kalabilir. Alımlar saklanmaz: fiyat, son satıştan bu yana her
+  dakikanın alımı eklenerek saatten hesaplanır (`market.ts` → `priceAt`,
+  `crownDemand`); sunucu ve istemci aynı fiyatı bulur. Lobi fiyatları
+  kutusunun altında hangi tacın neyi dakikada kaç birim aldığı ve pencerenin
+  kaç dakika süreceği yazar.
 - **Pazar** binası (2. seviye saray) altınla hammadde satın almaya yarar;
   alış fiyatı lobi fiyatının biraz üstündedir. Her alınan birim bir
   sonrakinin fiyatını yükseltir; büyük bir alım, aynı malı parça parça almakla
