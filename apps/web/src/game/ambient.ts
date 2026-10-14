@@ -548,6 +548,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
         const sway = Math.sin(seconds * 0.8 + i * 1.7 + c.phase * 9) * 2 * p
         const size = Math.min(puffTextures.length - 1, Math.floor(p * puffTextures.length * 1.1))
         const sprite = smokePool.take(puffTextures[size])
+        sprite.label = 'smoke'
         sprite.anchor.set(0.5, 0.5)
         sprite.position.set(Math.round(c.x + p * p * SMOKE_DRIFT + sway), Math.round(c.y - p * SMOKE_RISE))
         sprite.alpha = 0.7 * Math.min(1, p * 10) * (1 - p) ** 1.3

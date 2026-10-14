@@ -2,6 +2,7 @@ import { CanvasSource, Texture } from 'pixi.js'
 import type { Sprite } from './sprites'
 
 const cache = new Map<Sprite, Texture>()
+const looks = new WeakMap<Texture, Sprite>()
 
 // A generated sprite as a pixel-exact texture, made once per sprite and shared by every scene.
 export function textureOf(sprite: Sprite): Texture {
@@ -14,8 +15,12 @@ export function textureOf(sprite: Sprite): Texture {
   canvas.getContext('2d')!.putImageData(new ImageData(pixels, sprite.width, sprite.height), 0, 0)
   texture = new Texture({ source: new CanvasSource({ resource: canvas, scaleMode: 'nearest' }) })
   cache.set(sprite, texture)
+  looks.set(texture, sprite)
   return texture
 }
+
+// The generated sprite a texture was made from, if it was made by textureOf.
+export const lookOf = (texture: Texture) => looks.get(texture)
 
 
 // Drops the texture of a sprite made for one moment (a masked copy), so it does not linger in the cache.

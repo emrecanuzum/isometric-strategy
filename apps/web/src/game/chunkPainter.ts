@@ -3,8 +3,9 @@ import type { Point, World } from '@game/shared'
 import { structureParts } from './buildingSprites'
 import type { Structure } from './buildingSprites'
 import { innLook } from './innSprites'
-import { BAYER, SPRITES, ramp } from './sprites'
+import { BAYER, SPRITES, castShadow, ramp } from './sprites'
 import type { Sprite } from './sprites'
+import type { SunShadow } from './daylight'
 
 // This module has no DOM dependency: it runs in a worker (and in headless previews) and returns raw pixels.
 
@@ -131,6 +132,9 @@ const PARAPET = 4
 const ABUTMENT = 0.9
 const ARCH_SPAN = 2.2
 const NO_GROUND = -32768
+// The sun painted when none is given (headless previews).
+const NOON: SunShadow = { x: 0.45, y: 0.32, alpha: 0.36 }
+
 // Light climbs this many pixels per tile diagonal; shadows are searched this many diagonals toward the light.
 const SHADOW_RISE = 30
 const SHADOW_STEPS = Math.ceil(MAX_HEIGHT / SHADOW_RISE)
@@ -324,13 +328,31 @@ interface Placed {
   y: number
   row: number
   own: boolean
+  // Casts a shadow into the painting: from its anchor (0) or a footprint of this many tiles; -1 for none (the
+  // player's buildings cast theirs in the shadow layer above the ground).
+  foot: number
+}
+
+// Shadows cast with the sun painted last, per sprite and footprint.
+let castSun: SunShadow | null = null
+const casts = new Map<Sprite, Map<number, Sprite>>()
+function shadowOf(sprite: Sprite, foot: number, sun: SunShadow) {
+  if (castSun?.x !== sun.x || castSun.y !== sun.y) {
+    castSun = sun
+    casts.clear()
+  }
+  let byFoot = casts.get(sprite)
+  if (!byFoot) casts.set(sprite, (byFoot = new Map()))
+  let shadow = byFoot.get(foot)
+  if (!shadow) byFoot.set(foot, (shadow = castShadow(sprite, sun, foot)))
+  return shadow
 }
 
 // Paints one chunk at `k` texture pixels per screen pixel. Each ground point is colored from the continuous
 // elevation and moisture fields and drawn lifted by its height, back to front, so nearer ground covers
 // farther ground. Sprites are then composited against the depth of the ground they stand behind.
 // `lift`: leave the trees out and hand back where they stand instead (see ChunkImage.trees).
-export function paintChunk(context: PaintContext, cx: number, cy: number, k: number, lift = false): ChunkImage {
+export function paintChunk(context: PaintContext, cx: number, cy: number, k: number, lift = false, sun: SunShadow = NOON): ChunkImage {
   const { world, lit, patch, road, bridges, structures, occupied, trail } = context
   const { size, seed, elevation, moisture, height, levels } = world
   const S = balance.map.chunkSize
@@ -551,6 +573,7 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       y: row + pad - Math.round(heightAt(world, tx, ty) * k),
       row,
       own,
+      foot: sprite.shadow > 0 ? 0 : -1,
     })
   }
   const clear = (x: number, y: number) =>
@@ -647,8 +670,8 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
     }
   }
   const buildings = [
-    ...world.inns.map((p) => ({ fx: p.x + 2, fy: p.y + 2, z: heightAt(world, p.x + 1, p.y + 1), sprite: innLook(world, p).sprite })),
-    ...structures.flatMap((s) => structureParts(world, s)),
+    ...world.inns.map((p) => ({ fx: p.x + 2, fy: p.y + 2, z: heightAt(world, p.x + 1, p.y + 1), sprite: innLook(world, p).sprite, foot: 2 })),
+    ...structures.flatMap((s) => structureParts(world, s).map((part) => ({ ...part, foot: -1 }))),
   ]
   for (const p of buildings) {
     // Tall buildings reach into chunks well behind them, so they are culled by their screen box (below).
@@ -665,28 +688,36 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
     const left = x - p.sprite.anchorX * k
     const top = y - p.sprite.anchorY * k
     if (left > width || left + p.sprite.width * k < 0 || top > canvasHeight || top + p.sprite.height * k < 0) continue
-    placed.push({ sprite: p.sprite, x, y, row, own })
+    placed.push({ sprite: p.sprite, x, y, row, own, foot: p.foot })
   }
   placed.sort((p, q) => p.row - q.row || p.x - q.x)
 
-  // Shadows darken the ground once, however many of them overlap.
+  // Shadows darken the ground once, however many of them overlap, and only ground about as far down the screen as the
+  // shadow falls (not a hillside rising in front of it).
   const shaded = new Uint8Array(width * canvasHeight)
-  for (const { sprite, x, y, row } of placed) {
-    if (sprite.shadow === 0) continue
-    const rx = sprite.shadow * k
-    const ry = rx * 0.5
-    const ox = x + Math.round(rx * 0.45)
-    for (let dy = -Math.ceil(ry); dy <= ry; dy++) {
-      const yy = y + dy
+  const dark = [1 - sun.alpha, 1 - sun.alpha * 0.82, 1 - sun.alpha * 0.6]
+  const reach = 6 + 10 * k
+  for (const { sprite, x, y, row, foot } of placed) {
+    if (foot < 0) continue
+    const shadow = shadowOf(sprite, foot, sun)
+    const w = Math.ceil(shadow.width * k)
+    const h = Math.ceil(shadow.height * k)
+    const left = x - Math.round(shadow.anchorX * k)
+    const top = y - Math.round(shadow.anchorY * k)
+    for (let dy = 0; dy < h; dy++) {
+      const yy = top + dy
       if (yy < 0 || yy >= canvasHeight) continue
-      const half = rx * Math.sqrt(Math.max(0, 1 - (dy / ry) ** 2))
-      for (let xx = Math.max(0, Math.ceil(ox - half)); xx <= Math.min(width - 1, ox + half); xx++) {
+      const source = Math.min(shadow.height - 1, Math.floor(dy / k)) * shadow.width
+      const ground = row + (yy - y)
+      for (let dx = 0; dx < w; dx++) {
+        const xx = left + dx
+        if (xx < 0 || xx >= width || shadow.pixels[source + Math.min(shadow.width - 1, Math.floor(dx / k))] === 0) continue
         const o = yy * width + xx
-        if (shaded[o] || depth[o] === NO_GROUND || Math.abs(depth[o] - row) > ry + 3) continue
+        if (shaded[o] || depth[o] === NO_GROUND || Math.abs(depth[o] - ground) > reach) continue
         shaded[o] = 1
-        data[o * 4] *= 0.66
-        data[o * 4 + 1] *= 0.72
-        data[o * 4 + 2] *= 0.8
+        data[o * 4] *= dark[0]
+        data[o * 4 + 1] *= dark[1]
+        data[o * 4 + 2] *= dark[2]
       }
     }
   }

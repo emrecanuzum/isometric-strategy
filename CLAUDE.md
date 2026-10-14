@@ -177,6 +177,20 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
 - Zemine oturan her şey (imleç, hudut çizgisi, ağaç, yapı) **araziye
   giydirilir**: imleç karesi yamaçta eğik görünür. Fare ile karo seçimi de
   yüksekliği hesaba katar.
+- **Gölgeler saate bağlıdır.** Işık sol üstten geldiği için her şey
+  gölgesini sağa ve aşağıya düşürür. Gün boyunca güneşle birlikte gölge
+  döner ve boyu değişir: şafakta uzun ve sağa yatık, öğlen kısa ve
+  koyu, akşam uzun ve sağ alta doğrudur. Gece yalnızca dibinde kısa, soluk
+  bir gölge kalır (`daylight.ts` → `sunShadow`). Gölge sprite'ın kendi
+  silüetinden piksel piksel düşürülür (`sprites.ts` → `castShadow`).
+  Binalarda yükseklik taban karesinin ortasından ölçülür; böylece önündeki
+  avlu ve döşeme gölge atmaz. Binalar, surlar, kuleler, sallanan ağaçlar,
+  yürüyenler, hayvanlar ve ordular gölgelerini ayrı bir katmana çizer
+  (`shadows.ts`). Katman tek seferde saydamlaştırıldığı için üst üste
+  binen gölgeler iki kat koyulaşmaz; gölgelerin yönü oyunun 10 dakikada
+  bir değişir. Zemine boyanmış ağaçların, kayaların ve hanların gölgesi
+  zeminle birlikte boyanır; bunlar oyun saati başına bir kez yeniden
+  boyanır.
 - **Yollar ve nehirler kıvrımlıdır**; uzun dümdüz hatlar izometrik görünümü
   bozduğu için rota üretimi bilerek sapma ekler.
 - **Nehir ve göl aynı sudur**, hepsi aynı su seviyesindedir. Nehir araziyi
@@ -469,8 +483,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   oynayıp tutulup tutulmadığına kendisi karar verir (ve oyunun süresinden
   kısa sürede biten bir atışı kabul etmez). Ödülü de sunucu çeker. Değerler `economy.json` → `fishing`,
   mantık `packages/shared/src/fishing.ts`.
-- **Patikalar:** Her yapının kapısından saraya, yapıların etrafından
-  dolaşan toprak patikalar zemine işlenir.
+- **Patikalar:** Her yapının kapısından saraya ve köylülerin evden işe
+  yürüdüğü yollar boyunca, yapıların etrafından dolaşan ince toprak
+  patikalar zemine işlenir. Sur ve kapılar patika üretmez. Patikalar bütün
+  krallıklarda çizilir (rakiplerinki de herkese görünür).
 - **İnşa menüsü (devam):**
   - **İnşa listesi** saray seviyesine göre 5 sekmedir (1. sv. … 5. sv.): her
     sekmede o seviyede açılan yapılar ve sınırı artan yapılar yazar; henüz

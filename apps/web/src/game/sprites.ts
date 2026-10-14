@@ -1,4 +1,4 @@
-import { hash, mulberry32, valueNoise } from '@game/shared'
+import { TILE_HEIGHT as TILE_H, hash, mulberry32, valueNoise } from '@game/shared'
 
 // Pixel art is generated in code for now: every sprite is a small buffer of palette colors, drawn pixel by pixel.
 // Colors are packed the way an RGBA byte buffer reads them as 32-bit words (alpha in the top byte).
@@ -10,7 +10,7 @@ export interface Sprite {
   anchorX: number
   anchorY: number
   pixels: Uint32Array
-  // Radius of the shadow cast on the ground, in pixels; 0 for none.
+  // Whether it casts a shadow on the ground where it is painted into it (nonzero: yes; see castShadow).
   shadow: number
 }
 
@@ -109,6 +109,45 @@ export function silhouetteOf(sprite: Sprite): Sprite {
   const shape = { ...sprite, pixels, shadow: 0 }
   silhouettes.set(sprite, shape)
   return shape
+}
+
+// The shadow a sprite throws on flat ground, in white (tint it), anchored like the sprite: each solid pixel lands its
+// height times `sun` away from its foot. Things standing on one point (trees, walkers) rise from their anchor row, a
+// building of `size` tiles from the line through its footprint's middle (its walls stand somewhere on the footprint;
+// the paved yard at its front throws nothing). `flip` casts the sprite as drawn mirrored; the shadow itself is never
+// mirrored, the sun does not move.
+export function castShadow(sprite: Sprite, sun: { x: number; y: number }, size = 0, flip = false): Sprite {
+  const { width, height, anchorY, pixels } = sprite
+  const anchorX = flip ? width - sprite.anchorX : sprite.anchorX
+  const foot = size === 0 ? anchorY : anchorY - size * (TILE_H / 2)
+  const steps = Math.ceil(Math.max(sun.x, sun.y, 1) * 2) + 1
+  const points: number[] = []
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (let x = 0; x < width; x++) {
+    const ground = foot
+    const from = flip ? width - 1 - x : x
+    for (let y = 0; y < height && y < ground; y++) {
+      if (pixels[y * width + from] >>> 24 !== 0xff) continue
+      const rise = ground - y
+      for (let s = 0; s < steps; s++) {
+        const h = rise - s / steps
+        const px = Math.floor(x + h * sun.x)
+        const py = Math.floor(ground + h * sun.y)
+        points.push(px, py)
+        if (px < minX) minX = px
+        if (px > maxX) maxX = px
+        if (py < minY) minY = py
+        if (py > maxY) maxY = py
+      }
+    }
+  }
+  if (points.length === 0) return new Canvas(1, 1).sprite(0, 0, 0)
+  const canvas = new Canvas(maxX - minX + 1, maxY - minY + 1)
+  for (let i = 0; i < points.length; i += 2) canvas.pixels[(points[i + 1] - minY) * canvas.width + points[i] - minX] = 0xffffffff
+  return canvas.sprite(anchorX - minX, anchorY - minY, 0)
 }
 
 // A ring two pixels wide around a sprite's silhouette, in white (tint it), anchored like the sprite.
@@ -747,7 +786,7 @@ function crag(seed: number, snow: boolean): Sprite {
     seed,
   )
   shadow(canvas, canvas.width >> 1, canvas.height - 2, width >> 1)
-  return canvas.sprite(canvas.width >> 1, canvas.height - 2, 0)
+  return canvas.sprite(canvas.width >> 1, canvas.height - 2, 1)
 }
 
 // A flat, layered slab tilted out of the ground.
@@ -766,7 +805,7 @@ function slab(seed: number): Sprite {
     false,
     seed,
   )
-  return canvas.sprite(canvas.width >> 1, canvas.height - 2, 0)
+  return canvas.sprite(canvas.width >> 1, canvas.height - 2, 1)
 }
 
 // Rounded stones piled on one another.
@@ -786,7 +825,7 @@ function tor(seed: number): Sprite {
   shadeBlobs(canvas, blobs, STONE, seed, 0.85)
   canvas.rim(STONE[0])
   shadow(canvas, 11, base, 8)
-  return canvas.sprite(11, base, 0)
+  return canvas.sprite(11, base, 1)
 }
 
 // A fan of loose stones at the foot of a slope.
@@ -801,7 +840,7 @@ function scree(seed: number): Sprite {
     canvas.set(x + 1, y, STONE[1])
     if (random() < 0.4) canvas.set(x, y - 1, STONE[4])
   }
-  return canvas.sprite(13, base, 0)
+  return canvas.sprite(13, base, 1)
 }
 
 // A cushion of moss and alpine grass, sometimes with lichen.

@@ -22,7 +22,8 @@ import type { MapArmy, MapBattle } from './armies'
 import { createCaravans } from './caravans'
 import { CHIMNEYS, structureParts } from './buildingSprites'
 import { SPRITES, lightsOf, outlineOf, silhouetteOf } from './sprites'
-import { daylight, nightness } from './daylight'
+import { daylight, nightness, sunShadow } from './daylight'
+import { createShadows } from './shadows'
 import { innLook } from './innSprites'
 import type { Sprite as Sprite_ } from './sprites'
 import { CHUNK_PAD } from './chunkPainter'
@@ -221,6 +222,7 @@ export async function createWorld(
   const ambient = createAmbient(world, caravans.layer)
   const town = createTown(world, caravans.layer)
   const floats = new Container()
+  const shadows = createShadows()
   // Plot names float above their outlines at a fixed screen size.
   const label = (text: string, color: number) =>
     new Text({
@@ -270,7 +272,7 @@ export async function createWorld(
     cursor.clear()
     for (const child of carried.removeChildren()) child.destroy()
   }
-  camera.addChild(ground, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, marks, ambient.sky, cursor, carried, highlight)
+  camera.addChild(ground, shadows.layer, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, marks, ambient.sky, cursor, carried, highlight)
   app.stage.addChild(camera)
   // Day and night: the whole map is multiplied by the colour of the light at this hour of the game day. Lit windows
   // and the labels sit above it, in a layer that follows the camera, so night never dims them.
@@ -304,6 +306,7 @@ export async function createWorld(
     addLight(textureOf(lit), lit.anchorX / lit.width, lit.anchorY / lit.height, (inn.x - inn.y) * (TILE_WIDTH / 2), (inn.x + inn.y + 4) * (TILE_HEIGHT / 2) - heightAt(world, inn.x + 1, inn.y + 1))
   }
   let lightColor = -1
+  let paintedSunHour = Math.floor(gameTime(clock(), 0).hour)
   // Trees sway in the wind close up: each leans a little to and fro about its foot, out of step with its neighbours.
   let detail = true
   app.ticker.add(() => {
@@ -339,6 +342,15 @@ export async function createWorld(
     glow.visible = glow.alpha > 0.02
     halo.alpha = glow.alpha * 0.85
     halo.visible = glow.visible
+    shadows.update(hour, caravans.layer)
+    // Shadows painted into the ground follow the sun an hour at a time: each new hour paints the chunks again.
+    const sunHour = Math.floor(hour)
+    if (sunHour !== paintedSunHour) {
+      paintedSunHour = sunHour
+      version++
+      for (const key of chunks.keys()) staleSince.set(key, version)
+      refresh()
+    }
     const color = daylight(hour)
     if (color === lightColor && light.width === app.screen.width && light.height === app.screen.height) return
     lightColor = color
@@ -454,7 +466,8 @@ export async function createWorld(
       const id = nextJob++
       const lift = detail && lod >= 1
       jobs.set(id, { key, lod, version, lift })
-      const request: PaintRequest = { id, cx: key % chunkCount, cy: Math.floor(key / chunkCount), lod, lift }
+      const sun = sunShadow(paintedSunHour + 0.5)
+      const request: PaintRequest = { id, cx: key % chunkCount, cy: Math.floor(key / chunkCount), lod, lift, sun }
       idle.pop()!.postMessage(request)
     }
   }
@@ -899,6 +912,7 @@ export async function createWorld(
         const sprite = new Sprite(textureOf(look))
         sprite.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
         sprite.label = 'occluder'
+        shadows.setFootprint(sprite, s.size)
         const sx = (part.fx - part.fy) * (TILE_WIDTH / 2)
         const sy = (part.fx + part.fy) * (TILE_HEIGHT / 2) - part.z
         sprite.position.set(sx, sy)
