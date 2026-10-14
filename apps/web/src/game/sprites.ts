@@ -99,6 +99,18 @@ export class Canvas {
   }
 }
 
+// A sprite's silhouette: every solid pixel in white (tint it), anchored like the sprite.
+const silhouettes = new WeakMap<Sprite, Sprite>()
+export function silhouetteOf(sprite: Sprite): Sprite {
+  const cached = silhouettes.get(sprite)
+  if (cached) return cached
+  const pixels = new Uint32Array(sprite.pixels.length)
+  for (let i = 0; i < pixels.length; i++) if (sprite.pixels[i] >>> 24 === 0xff) pixels[i] = 0xffffffff
+  const shape = { ...sprite, pixels, shadow: 0 }
+  silhouettes.set(sprite, shape)
+  return shape
+}
+
 // A ring two pixels wide around a sprite's silhouette, in white (tint it), anchored like the sprite.
 const outlines = new WeakMap<Sprite, Sprite>()
 export function outlineOf(sprite: Sprite): Sprite {

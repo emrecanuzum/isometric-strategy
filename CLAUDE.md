@@ -483,10 +483,16 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     girer, yer boşaldıkça başlar.
   - **Yıkım modu:** Bina menüsündeki "Yık" o binayı plana ekler ve yıkım
     modunu açar: imleç **çekiç** olur, üstüne gelinen bina **kırmızı** dış
-    hatla vurgulanır, tıklanan her bina plana yıkım olarak eklenir (haritada
-    kaybolur). "Bitti" ya da Esc moddan çıkar; plan onaya kadar bekler.
+    hatla vurgulanır, tıklanan her bina plana yıkım olarak eklenir. Bina
+    haritadan kaybolmaz: tıklandığı anda üstüne yarı saydam **kırmızı
+    silüet** ve kırmızı dış hat çizilir, plan onaylanana kadar öyle kalır;
+    işaretli binaya yeniden tıklamak işareti kaldırır. "Bitti" ya da Esc
+    moddan çıkar; plan onaya kadar bekler.
   - **Taşıma editörü:** Bina menüsündeki "Taşı" o binayı eline alır ve
-    taşıma modunu açar (imleç el, vurgu mavi). Yeni yerine tıklayınca
+    taşıma modunu açar (imleç el, vurgu mavi). Eldeki binanın eski yeri
+    soluk mavi silüet ve mavi çerçeveyle işaretlenir; binanın kendisi yarı
+    saydam olarak imleci takip eder (altındaki karo yeşil/kırmızı). Yeni
+    yerine tıklayınca
     taşıma plana eklenir; sonra başka bir binaya tıklayıp onu da alıp
     yerine koyarsın. Eldeyken başka binaya tıklamak eldekini değiştirir;
     planda taşınmış bir binayı yeniden almak eski taşımayı siler. Bütün

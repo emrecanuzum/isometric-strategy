@@ -339,6 +339,12 @@ function App({
     [view, kingdom, stage, plan],
   )
   const shown = planned?.kingdom ?? kingdom
+  // Buildings marked to be torn down stay on the map (under a red silhouette) until the plan is carried out.
+  const demolishing = useMemo(() => new Set(plan.flatMap((s) => (s.type === 'demolish' ? [s.id] : []))), [plan])
+  const mapBuildings = useMemo(
+    () => (!shown ? [] : demolishing.size === 0 ? shown.buildings : [...shown.buildings, ...(kingdom?.buildings.filter((b) => demolishing.has(b.id)) ?? [])]),
+    [shown, kingdom, demolishing],
+  )
   const [selectedSite, setSelectedSite] = useState(0)
 
   // A row from the server replaces what is shown, unless an older answer arrives late.
@@ -558,7 +564,7 @@ function App({
   useEffect(() => {
     if (!view) return
     const time = serverNow()
-    const buildings = shown?.buildings ?? []
+    const buildings = mapBuildings
     const structure = (b: Rival['buildings'][number], color: string | undefined, own: boolean, variant: number, ruined = false): Structure => {
       const done = b.doneAt <= time
       const pier = done && b.kind === 'dock' ? dockPier(view.world, b) : null
@@ -602,7 +608,7 @@ function App({
       return path ? [path.points] : []
     })
     view.setStructures(structures, trails)
-  }, [view, shown, rivals])
+  }, [view, shown, mapBuildings, rivals])
 
   // Villagers walk from their houses to the fields and workshops; the merchant walks to the trade post.
   const buildings = kingdom?.buildings
@@ -651,6 +657,11 @@ function App({
   const placingKind: BuildingKind | null = needsPalace ? 'palace' : placing
   // A building picked up to be moved, waiting for its new spot.
   const [moving, setMoving] = useState<number | null>(null)
+  // Marked on the map: red over those to be torn down, blue over the one in hand.
+  useEffect(
+    () => view?.setMarked([...[...demolishing].map((id) => ({ id, tone: 'demolish' as const })), ...(moving !== null ? [{ id: moving, tone: 'move' as const }] : [])]),
+    [view, demolishing, moving],
+  )
   const movingBuilding = moving !== null ? shown?.buildings.find((b) => b.id === moving) : undefined
   // Tearing down or moving several buildings: a tool in hand until the player is done (see MapTool).
   const [tool, setTool] = useState<MapTool>(null)
@@ -671,6 +682,8 @@ function App({
     if (movingBuilding && shown) {
       view.setPlacement({
         size: movingBuilding.size,
+        // The building itself follows the pointer, see-through.
+        carry: { size: movingBuilding.size, look: movingBuilding.kind, variant: movingBuilding.id, level: movingBuilding.level ?? 1, color: shown.color },
         valid: (origin) => {
           const error = moveError(view.world, shown, stage, movingBuilding.id, origin, serverNow())
           return !error || error === 'queue'
@@ -748,8 +761,10 @@ function App({
     if (tool === 'demolish') {
       if (building === undefined || !current) return
       if (!current.buildings.some((b) => b.id === building)) return setToast('Planlanan yapıyı plan çubuğundaki Geri al ile kaldır')
-      if (!canDemolish(current, building)) return setToast('Saray ve ticaret noktası yıkılamaz')
       play('click')
+      // A second click takes the mark off.
+      if (demolishing.has(building)) return setPlan((steps) => steps.filter((s) => !(s.type === 'demolish' && s.id === building)))
+      if (!canDemolish(current, building)) return setToast('Saray ve ticaret noktası yıkılamaz')
       planDemolish(building)
       return
     }
@@ -847,7 +862,7 @@ function App({
     if (!b) return setToast('Planlanan yapıyı plan çubuğundaki Geri al ile kaldır')
     if (!movable(b)) return setToast('Saray, ticaret noktası, iskele, sur ve kapı taşınamaz')
     if (b.doneAt > serverNow()) return setToast(BUILD_ERRORS.busy)
-    setPlan((steps) => steps.filter((s) => !(s.type === 'move' && s.id === id)))
+    setPlan((steps) => steps.filter((s) => !((s.type === 'move' || s.type === 'demolish') && s.id === id)))
     setMoving(id)
   }
   const startTool = (next: 'demolish' | 'move') => {

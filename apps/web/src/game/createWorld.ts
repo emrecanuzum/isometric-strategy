@@ -21,7 +21,7 @@ import { dashes } from './dashes'
 import type { MapArmy, MapBattle } from './armies'
 import { createCaravans } from './caravans'
 import { CHIMNEYS, structureParts } from './buildingSprites'
-import { SPRITES, lightsOf, outlineOf } from './sprites'
+import { SPRITES, lightsOf, outlineOf, silhouetteOf } from './sprites'
 import { daylight, nightness } from './daylight'
 import { innLook } from './innSprites'
 import type { Sprite as Sprite_ } from './sprites'
@@ -117,6 +117,8 @@ export interface Placement {
   pinnedMany?: Point[]
   // Single tiles that come with the footprint at `origin` (a gate's towers), drawn with it.
   extra?(origin: Point): Point[]
+  // A building carried to a new spot: drawn see-through at the footprint under the pointer.
+  carry?: Omit<Structure, 'x' | 'y'>
 }
 
 export interface WorldHandlers {
@@ -154,6 +156,9 @@ export interface WorldView {
   setPlacement(placement: Placement | null): void
   // The pointer and outline for tearing down (a hammer, red) or moving (blue); buildings stay pickable while moving.
   setTool(tool: MapTool): void
+  // The player's buildings marked in the plan: a red silhouette over those to be torn down, a blue one over the one
+  // picked up to be moved.
+  setMarked(marks: { id: number; tone: 'demolish' | 'move' }[]): void
   setTown(errands: Errand[], merchant: MerchantTrip | null): void
   // Tiles walkers go around: building footprints, except flat ones such as fields.
   blocksWalkers(x: number, y: number): boolean
@@ -259,7 +264,16 @@ export async function createWorld(
   // Trees lifted out of the ground painting to sway, above the ground and below everything that stands on it.
   const treeLayer = new Container()
   treeLayer.sortableChildren = true
-  camera.addChild(ground, treeLayer, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, ambient.sky, cursor, highlight)
+  // Red silhouettes over the buildings marked to be torn down.
+  const marks = new Container()
+  // The building being moved, following the pointer.
+  const carried = new Container()
+  carried.alpha = 0.6
+  const clearCursor = () => {
+    clearCursor()
+    for (const child of carried.removeChildren()) child.destroy()
+  }
+  camera.addChild(ground, treeLayer, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, marks, ambient.sky, cursor, carried, highlight)
   app.stage.addChild(camera)
   // Day and night: the whole map is multiplied by the colour of the light at this hour of the game day. Lit windows
   // and the labels sit above it, in a layer that follows the camera, so night never dims them.
@@ -642,7 +656,7 @@ export async function createWorld(
     camera.x = Math.round(at.x - (at.x - camera.x) * factor)
     camera.y = Math.round(at.y - (at.y - camera.y) * factor)
     camera.scale.set(ZOOMS[index])
-    cursor.clear()
+    clearCursor()
     highlight.visible = false
     onHover(null)
     setTerritory(...claimed)
@@ -658,7 +672,7 @@ export async function createWorld(
     })
     const tile = { x: Math.floor(ground.x), y: Math.floor(ground.y) }
     const inside = tile.x >= 0 && tile.y >= 0 && tile.x < world.size && tile.y < world.size
-    cursor.clear()
+    clearCursor()
     highlight.visible = false
     pickedBuilding = undefined
     if (!inside) return onHover(null)
@@ -688,6 +702,14 @@ export async function createWorld(
       const p = placement
       const ghost = (origin: Point) => {
         const color = p.valid(origin) ? GHOST_OK : GHOST_BAD
+        if (p.carry) {
+          for (const part of structureParts(world, { ...p.carry, ...origin })) {
+            const sprite = new Sprite(textureOf(part.sprite))
+            sprite.anchor.set(part.sprite.anchorX / part.sprite.width, part.sprite.anchorY / part.sprite.height)
+            sprite.position.set((part.fx - part.fy) * (TILE_WIDTH / 2), (part.fx + part.fy) * (TILE_HEIGHT / 2) - part.z)
+            carried.addChild(sprite)
+          }
+        }
         for (const t of [origin, ...(p.extra?.(origin) ?? [])]) {
           cursor
             .poly(square(t.x, t.y, t === origin ? p.size : 1))
@@ -965,6 +987,23 @@ export async function createWorld(
   // The player's buildings as drawn (main sprite and its anchor in world pixels), nearest to the viewer first.
   let hits: { id: number; sprite: Sprite_; sx: number; sy: number }[] = []
   let structureKeys = new Set<string>()
+  let marked = new Map<number, 'demolish' | 'move'>()
+  function placeMarks() {
+    for (const child of marks.removeChildren()) child.destroy()
+    for (const hit of hits) {
+      const tone = marked.get(hit.id)
+      if (!tone) continue
+      // The one picked up to be moved is washed out more: it is leaving.
+      for (const [look, alpha] of [[silhouetteOf(hit.sprite), tone === 'move' ? 0.6 : 0.45], [outlineOf(hit.sprite), 0.95]] as const) {
+        const sprite = new Sprite(textureOf(look))
+        sprite.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
+        sprite.position.set(hit.sx, hit.sy)
+        sprite.tint = tone === 'move' ? MOVE_HIGHLIGHT : DEMOLISH_HIGHLIGHT
+        sprite.alpha = alpha
+        marks.addChild(sprite)
+      }
+    }
+  }
   let trailKey = '[]'
   let trailPoints: Point[] = []
   function setStructures(structures: Structure[], trails: Point[][]) {
@@ -976,6 +1015,7 @@ export async function createWorld(
         return { id: s.id!, sprite: main.sprite, sx: (main.fx - main.fy) * (TILE_WIDTH / 2), sy: (main.fx + main.fy) * (TILE_HEIGHT / 2) - main.z, depth: main.fx + main.fy }
       })
       .sort((a, b) => b.depth - a.depth)
+    placeMarks()
     const keyOf = (s: Structure) => `${s.x},${s.y},${s.size},${s.look},${s.variant},${s.level ?? 1},${JSON.stringify(s.pier ?? null)}`
     const keys = new Set(structures.map(keyOf))
     const changed = [...structures.filter((s) => !structureKeys.has(keyOf(s)))]
@@ -1064,8 +1104,12 @@ export async function createWorld(
     setStructures,
     setPlacement(next) {
       placement = next
-      cursor.clear()
+      clearCursor()
       if (lastPointer) pick(lastPointer)
+    },
+    setMarked(list) {
+      marked = new Map(list.map((m) => [m.id, m.tone]))
+      placeMarks()
     },
     setTool(next) {
       tool = next

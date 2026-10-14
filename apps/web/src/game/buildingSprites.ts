@@ -845,15 +845,96 @@ function spyHouse(level = 1): Sprite {
   return smoky(canvas.sprite(cx, base, 0), [top])
 }
 
-// The watchtower: a timber tower on a stone footing with a roofed lookout platform and a beacon.
+// The watchtower: a battered stone footing, a braced timber shaft, an overhanging railed lookout with a beacon fire,
+// and a steep slate roof with the kingdom's pennant.
 function watchtower(): Sprite {
   const { canvas, cx, base } = footprint(1, 120)
-  const top = tower(canvas, cx, base - 6, 9, 70, DARK_STONE, SLATE)
-  // Lookout ledge just under the roof.
-  for (let x = -12; x <= 12; x++) for (let z = 0; z < 3; z++) canvas.set(cx + x, base - 6 - 70 + z, PLANK[x < 0 ? 4 : 2])
-  for (let x = -12; x <= 12; x += 4) for (let z = 3; z < 8; z++) canvas.set(cx + x, base - 6 - 70 - z + 3, TIMBER[1])
-  finial(canvas, top.x, top.y, 4)
-  banner(canvas, top.x, top.y - 4, 8)
+  // Stone footing, wider at the foot, its top a paved ring.
+  const foot = 12
+  for (let z = 0; z <= foot; z++) {
+    const r = 15 - z * 0.25
+    for (let x = Math.ceil(-r); x <= r; x++) {
+      const f = x / r
+      const curve = Math.sqrt(Math.max(0, 1 - f * f)) * r * 0.5
+      const course = Math.floor(z / 3)
+      const mortar = z % 3 === 0 || (x + (course & 1) * 3) % 6 === 0
+      const tone = 3.4 - (f + 1) * 1.5 - (mortar ? 0.9 : 0) + (hash(x >> 1, course, 17) - 0.5) * 0.6
+      canvas.set(cx + x, Math.round(base - 8 - z + curve), pick(DARK_STONE, tone))
+    }
+  }
+  const top = 12
+  for (let x = -top; x <= top; x++) {
+    const curve = Math.sqrt(Math.max(0, 1 - (x / top) ** 2)) * top * 0.5
+    for (let y = -curve; y <= curve; y++) canvas.set(cx + x, Math.round(base - 8 - foot + y), pick(DARK_STONE, 3.2 - (x / top) * 0.8))
+  }
+  // The timber shaft: a square frame seen corner-on, planked between the posts, braced crosswise on each face.
+  const half = 8
+  const z0 = foot + 2
+  const z1 = 60
+  const at = (x: number, z: number) => Math.round(base - 8 - z + (half - Math.abs(x)) / 2)
+  for (let z = z0; z <= z1; z++) {
+    for (let x = -half; x <= half; x++) {
+      const left = x < 0
+      const seam = Math.abs(x) % 3 === 0
+      canvas.set(cx + x, at(x, z), PLANK[(left ? 3 : 1) - (seam ? 1 : 0)])
+    }
+  }
+  for (const side of [-1, 1]) {
+    // Two crosses of braces up each face.
+    for (let leg = 0; leg < 2; leg++) {
+      const lo = z0 + 2 + leg * 23
+      for (let t = 0; t <= half; t++) {
+        const x = side * t
+        canvas.set(cx + x, at(x, lo + t * 2.4), TIMBER[side < 0 ? 1 : 0])
+        canvas.set(cx + x, at(x, lo + (half - t) * 2.4), TIMBER[side < 0 ? 1 : 0])
+      }
+    }
+    for (let z = z0; z <= z1; z++) canvas.set(cx + side * half, at(side * half, z), TIMBER[0])
+  }
+  for (let z = z0; z <= z1; z++) canvas.set(cx, at(0, z), TIMBER[2])
+  // An arrow slit on the lit face.
+  for (let z = 34; z < 42; z++) canvas.set(cx - 4, at(-4, z), TIMBER[0])
+  // The lookout: an overhanging floor on joists, a railing, and corner posts holding up the roof.
+  const deck = 15
+  const deckAt = (x: number, z: number) => Math.round(base - 8 - z + (deck - Math.abs(x)) / 2)
+  for (let x = -deck; x <= deck; x++) {
+    for (let z = z1; z < z1 + 3; z++) canvas.set(cx + x, deckAt(x, z), PLANK[x < 0 ? 4 : 2])
+    if (Math.abs(x) % 4 === 1) canvas.set(cx + x, deckAt(x, z1 - 1), TIMBER[0])
+  }
+  // The beacon fire burning on the deck, behind the railing.
+  // A brazier bowl with flames licking up out of it.
+  const fireY = Math.round(base - 8 - z1 - 3 + deck / 2 - 7)
+  for (let x = -4; x <= 4; x++) canvas.set(cx + x, fireY, TIMBER[0])
+  for (let x = -3; x <= 3; x++) canvas.set(cx + x, fireY + 1, TIMBER[0])
+  for (let y = 1; y <= 9; y++) {
+    const w = Math.max(0, 4 - Math.floor(y / 2))
+    for (let x = -w; x <= w; x++) {
+      const flicker = hash(x, y, 29) > 0.75 && y > 3
+      if (!flicker) canvas.set(cx + x, fireY - y, EMBER[Math.abs(x) >= w && y < 6 ? 0 : y < 3 ? 1 : y < 7 ? 2 : 1])
+    }
+  }
+  for (let x = -deck; x <= deck; x++) {
+    const post = Math.abs(x) % 5 === 0
+    for (let z = z1 + 3; z < z1 + (post ? 9 : 4); z++) canvas.set(cx + x, deckAt(x, z), TIMBER[x < 0 ? 2 : 1])
+    canvas.set(cx + x, deckAt(x, z1 + 8), TIMBER[x < 0 ? 2 : 1])
+  }
+  const eave = z1 + 18
+  for (const x of [-deck + 1, 0, deck - 1]) for (let z = z1 + 3; z <= eave; z++) canvas.set(cx + x, deckAt(x, z), TIMBER[x < 0 ? 2 : 0])
+  // A steep pyramid roof of slate, its front ridge facing the viewer.
+  const roof = 17
+  const apex = eave + 30
+  for (let x = -roof; x <= roof; x++) {
+    const bottom = Math.round(base - 8 - eave + (roof - Math.abs(x)) / 2)
+    const topY = Math.round(base - 8 - apex + (Math.abs(x) / roof) * (apex - eave))
+    for (let y = topY; y <= bottom; y++) {
+      const shingle = (bottom - y) % 4 === 0
+      canvas.set(cx + x, y, pick(SLATE, (x < 0 ? 3.6 : 1.6) - (shingle ? 0.7 : 0) + (hash(x, y >> 2, 23) - 0.5) * 0.4))
+    }
+    canvas.set(cx + x, bottom + 1, TIMBER[0])
+  }
+  for (let y = base - 8 - apex; y <= base - 8 - eave + roof / 2; y++) canvas.set(cx, y, SLATE[5])
+  finial(canvas, cx, base - 8 - apex, 4)
+  banner(canvas, cx, base - 8 - apex - 4, 9)
   return canvas.sprite(cx, base, 0)
 }
 
@@ -1135,6 +1216,7 @@ export const VILLAGER_SPRITES = [SACK, CLOTH[2], CLOTH[1], CLOTH[3]].map((tunic)
 
 const FOUNDATION = ramp(0x4a4650, 0x625e68, 0x7a7680, 0x928e96, 0xaaa6aa)
 const BANK = ramp(0x3a2818, 0x4e3620, 0x64472a, 0x7a5834, 0x5f8c3a)
+const FOOTING = ramp(0x26242c, 0x34323c, 0x46444e, 0x54525c, 0x5f8c3a)
 // Below this difference between its corners (pixels) a building just sits on the ground.
 const LEVEL_TOLERANCE = 3
 
@@ -1174,7 +1256,9 @@ export function structureParts(world: World, s: Structure): Part[] {
   if (high - low >= LEVEL_TOLERANCE) {
     z = high + 1
     const key = `plinth:${s.size}:${left}:${front}:${right}:${z}:${flat}`
-    const base = once(key, () => plinth(s.size, left, front, right, z, flat ? BANK : FOUNDATION, flat ? 0 : 3))
+    // The watchtower stands on rough stone like its own footing, not on a paved slab.
+    const colors = flat ? BANK : s.look === 'watchtower' ? FOOTING : FOUNDATION
+    const base = once(`${key}:${s.look === 'watchtower'}`, () => plinth(s.size, left, front, right, z, colors, flat || s.look === 'watchtower' ? 0 : 3))
     parts.push({ sprite: base, fx, fy, z: front, solid: !flat })
   }
   parts.push({ sprite: looks[s.variant % looks.length], fx, fy, z, solid: !flat })
