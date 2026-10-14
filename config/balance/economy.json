@@ -26,9 +26,9 @@
     "amountStep": 5,
     "amountCooldownSeconds": 120,
     "price": {
-      "food": 2,
-      "materials": 3,
-      "arms": 4
+      "food": 1.7,
+      "materials": 2.5,
+      "arms": 3.4
     },
     "levels": [
       {
@@ -70,11 +70,11 @@
         },
         {
           "cost": {
-            "gold": 900,
-            "materials": 500,
-            "arms": 120
+            "gold": 1500,
+            "materials": 800,
+            "arms": 200
           },
-          "buildSeconds": 90,
+          "buildSeconds": 150,
           "villagers": 6
         },
         {

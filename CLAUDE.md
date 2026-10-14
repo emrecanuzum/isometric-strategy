@@ -1075,7 +1075,13 @@ mertebesindedir.
 
 - Her lobinin **ortak bir fiyat tablosu** vardır. Ticaret noktası mal
   sattıkça o malın fiyatı lobi genelinde düşer; pazardan alındıkça artar.
-  Fiyatlar zamanla taban değerlerine geri döner.
+  Fiyatlar zamanla taban değerlerine geri döner. **Fiyat yükselmesi
+  düşmesinden zordur:** satılan her birim fiyatı %0,15 düşürür, alınan her
+  birim yalnızca %0,08 yükseltir; tabanın altına düşmüş fiyat yarı yolunu
+  40 dakikada toplar, tabanın üstüne çıkmış fiyat yarı yolunu 15 dakikada
+  iner (`market.json`). Taban fiyatlar: yemek 1,7, yapı malzemesi 2,5,
+  savaş malzemesi 3,4 (`economy.json` → `trade.price`); pazarın alış
+  fiyatı lobi fiyatının 1,4 katıdır.
 - **Pazar** binası (2. seviye saray) altınla hammadde satın almaya yarar;
   alış fiyatı lobi fiyatının biraz üstündedir. Her alınan birim bir
   sonrakinin fiyatını yükseltir; büyük bir alım, aynı malı parça parça almakla
@@ -1291,8 +1297,8 @@ krallıkta birer tane olur ve 3 seviyelidir.
   - Din ve halk: Tıp | Şenlikler (mutluluk +8) → İlahiyat (tapınak imanı
     +%60) | Hayır işleri (vaaz 2 kat uzun) → Kutsal yemin (zar +0,6) | Hac
     yolu (tüccar +%15, mutluluk +5).
-- Saray 3. ve 4. seviye yükseltmeleri pahalıdır (3: 900 altın, 500 malzeme,
-  120 savaş malzemesi; 4: 2600 / 1500 / 500; 5: 5000 / 3000 / 1000).
+- Saray 3. ve 4. seviye yükseltmeleri pahalıdır (3: 1500 altın, 800 malzeme,
+  200 savaş malzemesi, 150 sn; 4: 2600 / 1500 / 500; 5: 5000 / 3000 / 1000).
 - **Hastalık ve hastane:** Köylülerin bir payı hastadır; hasta köylü
   çalışmaz, vergi vermez ve mutluluğu düşürür. Her tur birkaç kişi
   hastalanır (hasta çoksa, açlıkta ve soğukta daha hızlı yayılır) ve
@@ -1376,6 +1382,9 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   (kullanıcı adı ve ayarlar: müzik açık/kapalı, müzik sesi). Ayarlar
   profilde saklanır, cihazdan cihaza taşınır. E-posta onayı şimdilik
   kapalıdır (yerleşik e-posta servisi saatte 2 e-posta ile sınırlı).
+  Sunucu oturumu artık kabul etmezse (veritabanı ya da fonksiyonlar 401
+  dönerse) oyuncunun oturumu kapatılır ve giriş ekranına döner
+  (`apps/web/src/lib/supabase.ts`).
 - **Ana menü:** Giriş sonrası Lobiler / Nasıl oynanır / Ayarlar. Oyun
   içinden Krallık sekmesindeki "Ana menü" ile dönülür. Lobi silinirse
   içindeki oyuncular kendiliğinden ana menüye döner (yayın + dakikalık

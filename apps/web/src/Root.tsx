@@ -36,6 +36,7 @@ const ERRORS: Record<string, string> = {
   tries: 'Çok fazla yanlış şifre denendi; 10 dakika sonra tekrar dene.',
   lobbies: 'Aynı anda en fazla 3 açık lobin olabilir.',
   rejected: 'Lobi bilgileri geçersiz.',
+  auth: 'Oturumun sona erdi; yeniden giriş yap.',
 }
 const explain = (e: unknown) => ERRORS[e instanceof CommandError ? e.message : ''] ?? 'Sunucuya ulaşılamadı; tekrar dene.'
 
