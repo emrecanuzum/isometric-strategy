@@ -386,7 +386,10 @@ uzaklık olmalı; kimse tamamen dezavantajlı başlamamalı.
   karoluk bir ek alan da krallığındır (`territory.json` →
   `dockAnnexTiles`); oraya yalnızca kıyı yapıları (balıkçı kulübesi)
   kurulur. Böylece kendi kıyısı olmayan krallık da kulübesini kurabilir.
-  Ek alan haritada iskele renginde kesikli çizgiyle gösterilir.
+  Ek alan haritada iskele renginde kesikli çizgiyle gösterilir; hudutla
+  iç içe geçtiği yerde çizgi çekilmez, ikisi tek alan gibi birleşik
+  çizilir (hudut ek alana açılan kenarını, ek alan hududun içinde kalan
+  kenarını çizmez).
 - Bu mesafenin kısa kalması için dünya üretimi, haritanın her bölgesinden
   geçen kıvrımlı bir **ana nehir** çizer (§4.2).
 - Başka bir oyuncunun hududu ile çakışma olamaz; sınır anlaşmazlığı
@@ -528,8 +531,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   seçilen maldan bir miktar götürüp satar ve altın getirir. Seviye
   yükseldikçe sefer başına satılan miktar artar. **Ticaret noktası saraydan
   uzaksa sefer uzar:** saray ile ticaret noktası arasındaki ilk 12 karo
-  10 saniyeye dahildir, ötesindeki her karo 0,15 sn ekler (ör. 100 karo ≈
-  23 sn; `economy.json` → `trade.walkFreeTiles`, `walkSecondsPerTile`;
+  10 saniyeye dahildir, ötesindeki her karo 0,07 sn ekler (ör. 100 karo ≈
+  16 sn, 250 karo ≈ 27 sn; `economy.json` → `trade.walkFreeTiles`, `walkSecondsPerTile`;
   `lobbyTripMs`). Serbest şehre sefer ayrıca hesaplanır (§7.7).
   Tüccar haritada devesiyle saraydan ticaret noktasına yürür (uzaklık ne
   olursa olsun; seferi uzadığı için hızı aynı kalır, köprülerden geçer); **başka
@@ -560,8 +563,11 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   ve nehre atılmış altınlardan çok az (tur başına 0,4) getirir. Tıklanınca
   "Oltayı at" ile bir mini oyun açılır: dikey suda düzensiz kaçan bir balık;
   basılı tutunca yükselen, bırakınca düşen yeşil alanı balığın üstünde tutmak
-  gerekir; balık alandayken çubuk dolar, dışındayken boşalır; 25 saniyede
-  dolarsa balık tutulur. Tutunca ya bir **kese** (iki ya da üç maldan
+  gerekir; balık alandayken çubuk dolar, dışındayken boşalır; 30 saniyede
+  dolarsa balık tutulur. Oyun bilerek kolay ve sakindir: balık 1–2 saniyede
+  bir yön değiştirir, nadiren ani kaçar, yeşil alan geniştir, çubuk %40'tan
+  başlar, yavaş dolar ve yavaş boşalır; bir atış 10–15 saniye sürer
+  (`economy.json` → `fishing.game`). Tutunca ya bir **kese** (iki ya da üç maldan
   25–70'er birim, bazen altın) ya da bir **şişe** çıkar: şişede başka bir
   krallık hakkında yavan bir not vardır ("… krallığının 1000'den fazla
   altını var gibi görünüyor"; gerçeğin yaklaşık %70'inin yuvarlanmış hâli).

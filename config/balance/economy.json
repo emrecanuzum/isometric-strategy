@@ -24,7 +24,7 @@
   "trade": {
     "tripSeconds": 10,
     "walkFreeTiles": 12,
-    "walkSecondsPerTile": 0.15,
+    "walkSecondsPerTile": 0.07,
     "amountStep": 5,
     "amountCooldownSeconds": 120,
     "price": {
@@ -624,6 +624,19 @@
       "goldChance": 0.35
     },
     "logSize": 20,
+    "game": {
+      "zone": 56,
+      "limitSeconds": 30,
+      "startProgress": 0.4,
+      "fillPerSecond": 0.12,
+      "drainPerSecond": 0.1,
+      "retargetSeconds": [1, 2.2],
+      "pull": 5,
+      "damping": 3,
+      "dartChance": 0.008,
+      "lift": 380,
+      "sink": 280
+    },
     "bottleShare": 0.7
   }
 }
