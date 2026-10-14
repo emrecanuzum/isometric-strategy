@@ -2191,6 +2191,75 @@ function treasury(variant = 0, level = 1): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
+// The prison (CLAUDE.md §9.7): a squat dark keep with barred slits and an iron-bound door, a yard in front fenced with
+// spiked iron bars. Full, a captive queen stands in the yard behind the bars, her crown still on, a guard by the gate.
+const BARS = ramp(0x16161c, 0x2a2a34, 0x464652, 0x6a6a78)
+const GOWN = ramp(0x3a0a2a, 0x5a1442, 0x7e2060, 0xa4307e)
+const FLESH = ramp(0x6b4630, 0x93633f, 0xb88458, 0xd8a678)
+function prison(variant = 0, full = false): Sprite {
+  const v = variant % 2
+  const { canvas, cx, base, h } = footprint(2, 96)
+  // Flagstones over the yard.
+  for (let y = base - h * 2; y <= base; y++) {
+    for (let x = cx - (h * 2 - 2); x <= cx + (h * 2 - 2); x++) {
+      const a = (x - cx) / (h * 2 - 4)
+      const b = (y - (base - h)) / (h - 2)
+      if (Math.abs(a) + Math.abs(b) > 1) continue
+      const seam = (x + y * 2) % 7 === 0 || (x - y * 2) % 9 === 0
+      canvas.set(x, y, seam ? STONE[1] : pick(STONE, 2 + hash(x >> 2, y >> 1, 211) * 1.5))
+    }
+  }
+  const walls = v ? SHADOW_WALLS : KEEP
+  const hb = base - h + 6
+  const top = hall(canvas, cx + 10, hb, { w: 30, wall: 38, roof: 16, walls, roofs: SLATE, masonry: true, door: true })
+  // Barred slits along both walls.
+  for (const side of [-1, 1]) {
+    for (const t of [8, 16, 24]) {
+      if (side < 0 && t > 16) continue
+      const x0 = cx + 10 + side * (30 - t)
+      const g = hb - 15 + t / 2
+      for (let z = 18; z < 30; z++) for (let d = 0; d < 4; d++) canvas.set(x0 + side * d, g - z + (side * d) / 2 * side, d === 0 || d === 3 ? BARS[0] : z % 3 === 0 ? BARS[2] : BARS[0])
+    }
+  }
+  if (full) {
+    // The queen in the yard, behind the bars drawn next: a long gown, arms at her sides, a gilded crown.
+    const qx = cx - 10
+    const qy = base - 13
+    for (let z = 0; z < 12; z++) {
+      const half = z < 8 ? 4 - Math.floor(z / 3) : 1
+      for (let d = -half; d <= half; d++) canvas.set(qx + d, qy - z, GOWN[d < 0 ? 3 : d === 0 ? 2 : 1])
+    }
+    for (let z = 12; z < 15; z++) for (let d = -1; d <= 1; d++) canvas.set(qx + d, qy - z, FLESH[d < 0 ? 3 : 2])
+    for (let d = -2; d <= 2; d++) canvas.set(qx + d, qy - 15, GOWN[0])
+    for (const d of [-1, 0, 1]) canvas.set(qx + d, qy - 16, BRASS[2])
+    for (const d of [-1, 1]) canvas.set(qx + d, qy - 17, BRASS[3])
+    canvas.set(qx, qy - 17, BRASS[1])
+  }
+  // Iron bars along the two front edges of the yard, spiked at the top, a gate in the middle of the left one.
+  for (const side of [-1, 1]) {
+    for (let t = 4; t < h * 2 - 4; t += 3) {
+      const x = cx + side * t
+      const y = base - 2 - t / 2
+      const gate = side < 0 && t > h - 6 && t < h + 4
+      const tall = gate ? 14 : 12
+      for (let z = 0; z < tall; z++) canvas.set(x, y - z, z === tall - 1 ? BARS[3] : BARS[side < 0 ? 2 : 1])
+      canvas.set(x, y - 5, BARS[0])
+    }
+    for (let t = 4; t < h * 2 - 4; t++) for (const z of [1, 9]) canvas.set(cx + side * t, base - 2 - t / 2 - z, BARS[side < 0 ? 1 : 0])
+  }
+  // A lantern by the door.
+  canvas.set(top.x - 18, hb - 14, EMBER[2])
+  canvas.set(top.x - 18, hb - 13, EMBER[1])
+  if (full) {
+    // Her guard at the gate, a spear on his shoulder.
+    const gx = cx - h - 6
+    const gy = base - h / 2 + 2
+    for (let z = 0; z < 10; z++) for (let d = -1; d <= 1; d++) canvas.set(gx + d, gy - z, z < 4 ? BARS[1] : z < 9 ? CRIMSON[d < 0 ? 3 : 2] : FLESH[2])
+    for (let z = 0; z < 16; z++) canvas.set(gx + 3, gy - z, z > 13 ? BLADE[2] : TIMBER[1])
+  }
+  return smoky(canvas.sprite(cx, base, 0), [top])
+}
+
 // The mysterious fisher's hut: a crooked shack on stilts with a mossy thatch, a net drying on poles, and an odd
 // violet lantern burning by the door.
 const MOSS = ramp(0x2a3a1c, 0x3a4e24, 0x51662e, 0x6a7e3a, 0x86984a, 0xa4b060)
@@ -2257,7 +2326,7 @@ function fisherHut(variant = 0): Sprite {
 const variants = <T>(count: number, make: (i: number) => T) => Array.from({ length: count }, (_, i) => make(i))
 
 // 'jetty': a pier on its own (a free city's harbour), nothing but its `pier`.
-export type StructureLook = BuildingKind | 'scaffold' | 'brokenWall' | 'gateY' | 'towerWall' | 'tradePostRuined' | 'jetty'
+export type StructureLook = BuildingKind | 'scaffold' | 'brokenWall' | 'gateY' | 'towerWall' | 'tradePostRuined' | 'jetty' | 'prisonFull'
 
 // A building as the map draws it; docks carry their jetty (tile rectangle over the water).
 export interface Structure {
@@ -2332,7 +2401,7 @@ export const palaceIn = (color: string | undefined, level = 1): Sprite => {
 export const looksOf = (look: StructureLook, level = 1): Sprite[] =>
   look === 'tradePostRuined'
     ? ruinedTradeAt(Math.max(1, Math.min(3, level)))
-    : look !== 'scaffold' && look !== 'brokenWall' && look !== 'gateY' && look !== 'towerWall' && look !== 'jetty' && level > 1
+    : look !== 'scaffold' && look !== 'brokenWall' && look !== 'gateY' && look !== 'towerWall' && look !== 'jetty' && look !== 'prisonFull' && level > 1
       ? (LEVEL_SPRITES[look]?.[level - 2] ?? STRUCTURE_SPRITES[look])
       : STRUCTURE_SPRITES[look]
 
@@ -2359,6 +2428,8 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   warehouse: variants(2, (v) => warehouse(v)),
   treasury: variants(2, (v) => treasury(v)),
   fisherHut: variants(4, (v) => fisherHut(v)),
+  prison: variants(2, (v) => prison(v)),
+  prisonFull: variants(2, (v) => prison(v, true)),
   brokenWall: [wallLook('brokenWall', 3, 0)],
   scaffold: [scaffold(1), scaffold(2), scaffold(3)],
   jetty: [new Canvas(1, 1).sprite(0, 0, 0)],

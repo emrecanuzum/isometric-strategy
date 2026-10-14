@@ -26,7 +26,7 @@ export type Resource = 'gold' | Good
 export type Stock = Record<Resource, number>
 export type Cost = Partial<Stock>
 
-export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple', 'warehouse', 'treasury', 'fisherHut'] as const
+export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple', 'warehouse', 'treasury', 'fisherHut', 'prison'] as const
 export type BuildingKind = 'palace' | 'tradePost' | (typeof BUILDABLE)[number]
 
 // Weapons are worked from raw goods in the forge and kept in the armory, apart from the tradeable stores.
@@ -200,8 +200,9 @@ export interface Kingdom {
   nightShift?: boolean
   fatigue?: number
   // A queen carried off by another kingdom's spies, the queens this kingdom holds, and a revolt incited until then.
-  queenHeldBy?: { id: number; name: string } | null
-  hostages?: { of: number; name: string }[]
+  // A queen's ransom is set when she is taken (see ransomFor).
+  queenHeldBy?: { id: number; name: string; ransom?: number } | null
+  hostages?: { of: number; name: string; ransom?: number }[]
   revoltUntil?: number
   // Kinds whose free first building has been used (see balance.economy.freeFirst).
   freeUsed?: BuildingKind[]

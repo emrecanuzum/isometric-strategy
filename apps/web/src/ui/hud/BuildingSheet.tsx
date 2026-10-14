@@ -1,4 +1,4 @@
-import { BUILDINGS, movable, moveCost, moveSeconds, buildingOutput, cutOff, goldCap, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
+import { BUILDINGS, balance, movable, moveCost, moveSeconds, buildingOutput, cutOff, goldCap, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
 import type { Building, BuildingKind, Good, Product, Resource } from '@game/shared'
 import { looksOf } from '../../game/buildingSprites'
 import { Icon } from '../icons'
@@ -84,6 +84,7 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
             {!building && b.kind === 'university' && <UniversityPanel data={data} />}
             {!building && b.kind === 'hospital' && <HospitalPanel building={b} data={data} />}
             {!building && b.kind === 'temple' && <TemplePanel data={data} />}
+            {!building && b.kind === 'prison' && <PrisonPanel data={data} />}
             {!building && b.kind === 'fisherHut' && <FisherPanel data={data} />}
             {BUILDINGS[b.kind].products && <Products building={b} data={data} onProduct={commands.onProduct} />}
             {workerSlots(b) > 0 && <Workers building={b} data={data} onWorkers={commands.onWorkers} />}
@@ -297,6 +298,41 @@ function Demolish({ building: b, data, onDemolish }: { building: Building; data:
           Yık
         </button>
       </div>
+    </Section>
+  )
+}
+
+// The prison (CLAUDE.md §9.7): the queens held in it, each with the ransom set when she was taken, and setting one free
+// (which mends the relation with her kingdom).
+function PrisonPanel({ data }: { data: HudData }) {
+  const hostages = data.kingdom.hostages ?? []
+  const fallback = balance.espionage.operations.kidnap.ransom
+  return (
+    <Section title="Mahkûmlar" icon="crown" aside={hostages.length > 0 ? `${hostages.length} kraliçe` : 'boş'}>
+      {hostages.length === 0 ? (
+        <p className="hint">
+          Hapishane boş. Casus operasyonuyla bir krallığın kraliçesini kaçırırsan burada tutulur; fidyesi o krallığın altınının casuslarının tahminine göre
+          %{Math.round(balance.espionage.operations.kidnap.ransomShare * 100)}'ı olur (en az {balance.espionage.operations.kidnap.ransomMin} altın).
+        </p>
+      ) : (
+        <ul className="places">
+          {hostages.map((h) => (
+            <li key={h.of}>
+              <Icon name="crown" size={24} />
+              <span>
+                <b>{h.name} kraliçesi</b>
+                <small>Fidyesi {h.ransom ?? fallback} altın · kurtarılmayı bekliyor</small>
+              </span>
+              <button className="btn small" onClick={() => data.online?.act({ type: 'release', target: h.of })}>
+                Serbest bırak
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {hostages.length > 0 && (
+        <p className="hint">Kraliçesi elinde olan krallığın halkı mutsuzdur. Fidyeyi öderse kraliçe döner ve altın sana gelir; serbest bırakırsan ilişkiniz düzelir.</p>
+      )}
     </Section>
   )
 }

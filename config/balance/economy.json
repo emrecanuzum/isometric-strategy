@@ -567,6 +567,17 @@
         }
       ]
     },
+    "prison": {
+      "size": 2,
+      "requiresPalace": 2,
+      "cost": {
+        "gold": 250,
+        "materials": 150,
+        "arms": 30
+      },
+      "buildSeconds": 40,
+      "unique": true
+    },
     "fisherHut": {
       "size": 1,
       "requiresPalace": 3,

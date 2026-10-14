@@ -134,6 +134,7 @@ const REFUSALS: Record<string, string> = {
   none: 'Yapılacak bir şey yok',
   target: 'Krallık bulunamadı',
   founded: 'Önce krallığını kur',
+  prison: 'Kraliçe kaçırmak için önce hapishane kur (2. seviye saray)',
   sworn: 'Zaten bir taç krallığına biat ettin; sezon boyunca değişmez',
 }
 const refusal = (e: unknown) => {
@@ -729,7 +730,9 @@ function App({
             ? 'gateY'
             : b.kind === 'tradePost' && ruined
               ? 'tradePostRuined'
-              : b.kind
+              : b.kind === 'prison' && own && (shown?.hostages?.length ?? 0) > 0
+                ? 'prisonFull'
+                : b.kind
       // The player's own trade post grows with the trade level (older saves keep no level on the building).
       const level = own && b.kind === 'tradePost' && shown ? shown.trade.level + 1 : (b.level ?? 1)
       // Every building answers to the pointer; another kingdom's is outlined in its colour and only says what it is.

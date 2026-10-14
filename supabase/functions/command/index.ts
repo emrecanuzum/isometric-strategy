@@ -487,7 +487,8 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       const theirs = game.advance(target.state, now).kingdom
       const counter = await counterAgainst(lobby, me.id, target.id, theirs, now)
       const { data: missions } = await admin.from('spy_missions').select('*').eq('owner_id', me.id).eq('target_id', target.id).is('ended_at', null)
-      const strength = game.bestStrength(missions ?? [], me.id, target.id, counter, now, game.networkSpeed(me.state))
+      const speed = game.networkSpeed(me.state)
+      const strength = game.bestStrength(missions ?? [], me.id, target.id, counter, now, speed)
       const error = game.operationError(cmd.op, strength, game.advance(me.state, now).kingdom, theirs)
       if (error) refuse(error)
       const spec = game.operationSpec(cmd.op)
@@ -499,6 +500,18 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         return { ...k, lastOperationAt: now, stock: { ...k.stock, gold: k.stock.gold - (spec.cost.gold ?? 0) } }
       })
       const success = Math.random() < game.operationChance(cmd.op, strength, counter)
+      // The operation spends the network it went through, win or lose: as many points as it needs (see
+      // game.operationNetworkCost). Its missions are counted as begun later, so it grows back from what is left.
+      const spend = async (gone?: number) => {
+        const topic = game.bestTopic(missions ?? [], me.id, target.id, counter, now, speed)
+        const running = (missions ?? []).filter(
+          (m: { id: number; topic: string; caught_at: string | null }) => m.topic === topic && m.id !== gone && (!m.caught_at || Date.parse(m.caught_at) > now),
+        )
+        if (running.length === 0) return
+        const since = game.networkSince(Math.max(0, strength - game.operationNetworkCost(cmd.op)), running.length, counter, now, speed)
+        const moved = running.filter((m: { started_at: string }) => Date.parse(m.started_at) < since).map((m: { id: number }) => m.id)
+        if (moved.length > 0) await admin.from('spy_missions').update({ started_at: iso(since) }).in('id', moved)
+      }
       if (!success) {
         // The spy is taken: the strongest network there loses its spy, and the target learns who sent it.
         const lost = (missions ?? []).sort((a, b) => Date.parse(a.started_at) - Date.parse(b.started_at))[0]
@@ -506,6 +519,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
           await admin.from('spy_missions').update({ ended_at: iso(now), end_reason: 'caught' }).eq('id', lost.id)
           await mutateKingdom(me.id, now, (k) => ({ ...k, spiesAway: Math.max(0, (k.spiesAway ?? 0) - 1) }))
         }
+        await spend(lost?.id)
         await changeRelation(lobby, me.id, target.id, dip.spyCaught, now)
         await grantClaim(lobby, target.id, me.id, 'sabotage', now)
         await notify(lobby, [target.id], 'operation_foiled', { op: cmd.op, by: me.name }, now)
@@ -523,17 +537,22 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
           buildings: k.buildings.map((b: { doneAt: number }) => (b.doneAt > now ? { ...b, doneAt: b.doneAt + (b.doneAt - now) * o.sabotage.delayShare } : b)),
         }))
       } else if (cmd.op === 'kidnap') {
+        // The ransom: a share of the gold our spies on its stores reckon it holds (the same estimate their report
+        // gives), never under the minimum (see game.ransomFor).
+        const stores = Math.round(game.strengthOf(missions ?? [], me.id, target.id, 'stores', counter, now, speed))
+        const ransom = game.ransomFor(game.estimate(theirs.stock.gold, stores, (me.id * 1_000_003 + target.id * 101 + 1) | 0, now))
         await mutateKingdom(target.id, now, (k) =>
           k.queen
-            ? { ...k, queen: false, queenHeldBy: { id: me.id, name: me.name }, happiness: Math.max(0, (k.happiness ?? 60) + o.kidnap.shock) }
+            ? { ...k, queen: false, queenHeldBy: { id: me.id, name: me.name, ransom }, happiness: Math.max(0, (k.happiness ?? 60) + o.kidnap.shock) }
             : refuse('queen'),
         )
-        await mutateKingdom(me.id, now, (k) => ({ ...k, hostages: [...(k.hostages ?? []), { of: target.id, name: target.name }] }))
+        await mutateKingdom(me.id, now, (k) => ({ ...k, hostages: [...(k.hostages ?? []), { of: target.id, name: target.name, ransom }] }))
         // A queen carried off is soon known: the victim may go to war over it.
         await grantClaim(lobby, target.id, me.id, 'kidnap', now)
       } else if (cmd.op === 'revolt') {
         await mutateKingdom(target.id, now, (k) => ({ ...k, revoltUntil: now + o.revolt.seconds * 1000 }))
       }
+      await spend()
       await notify(lobby, [target.id], 'operation_struck', { op: cmd.op, by: cmd.op === 'kidnap' ? me.name : null }, now)
       return { success: true }
     }
@@ -577,11 +596,13 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
     }
     case 'ransom': {
       // Paying for the queen's return; checked and paid in one write, so two requests cannot both pay.
-      const ransom = game.balance.espionage.operations.kidnap.ransom
+      // As set when she was taken (older captures: the plain ransom).
+      let ransom = game.balance.espionage.operations.kidnap.ransom
       let holder: { id: number; name: string } | null = null
       await mutateKingdom(me.id, now, (k) => {
         holder = k.queenHeldBy ?? null
         if (!holder) refuse('none')
+        ransom = k.queenHeldBy.ransom ?? ransom
         if (k.stock.gold < ransom) refuse('cost')
         return { ...k, queen: true, queenHeldBy: null, stock: { ...k.stock, gold: k.stock.gold - ransom } }
       })

@@ -726,7 +726,8 @@ function Society({ kingdom, now, online }: { kingdom: Kingdom; now: number; onli
   const rate = workRate(kingdom, now)
   const fatigue = kingdom.fatigue ?? 0
   const n = balance.society.night
-  const ransom = balance.espionage.operations.kidnap.ransom
+  // Set when she was taken (older captures: the plain ransom).
+  const ransom = kingdom.queenHeldBy?.ransom ?? balance.espionage.operations.kidnap.ransom
   const { villagers, soldiers, cap, housing } = population(kingdom, now)
   const tax = kingdom.tax ?? 'normal'
   const queen = queenError(kingdom, now)

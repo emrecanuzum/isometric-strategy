@@ -1,5 +1,6 @@
 import {
   OPERATIONS,
+  operationNetworkCost,
   UNITS,
   allied,
   raidChance,
@@ -592,19 +593,24 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
       </Section>
       <Section title="Casus operasyonları" icon="eye" aside={intel ? `en güçlü ağın %${Math.round(best)}` : 'önce raporu getir'}>
         {outcome && <p className="alert">{outcome}</p>}
-        <p className="hint">Operasyonlar oradaki en güçlü ağından yapılır. Başarısız olan operasyon casusunu kaybettirir ve kimin yaptığını ortaya çıkarır.</p>
+        <p className="hint">
+          Operasyonlar oradaki en güçlü ağından yapılır ve başarılı da olsa başarısız da olsa o ağdan istediği kadar puan harcar; ağ kalan güçten yeniden büyür. Başarısız
+          olan operasyon ayrıca casusunu kaybettirir ve kimin yaptığını ortaya çıkarır.
+        </p>
         <ul className="places">
           {OPERATIONS.map((op) => {
             const spec = operationSpec(op)
-            const blocked = !intel || best < spec.minStrength || (op === 'kidnap' && !target.queen) || kingdom.stock.gold < (spec.cost.gold ?? 0)
+            const noPrison = op === 'kidnap' && !kingdom.buildings.some((b) => b.kind === 'prison' && b.doneAt <= now)
+            const blocked = !intel || best < spec.minStrength || (op === 'kidnap' && !target.queen) || noPrison || kingdom.stock.gold < (spec.cost.gold ?? 0)
             return (
               <li key={op}>
                 <Icon name={op === 'kidnap' ? 'crown' : op === 'revolt' ? 'unhappy' : 'warn'} size={24} />
                 <span>
                   <b>{OPERATION_NAMES[op]}</b>
                   <small>
-                    {OPERATION_NOTES[op]} · ağ %{spec.minStrength} · {spec.cost.gold} altın
+                    {OPERATION_NOTES[op]} · ağ %{spec.minStrength} ister, ağdan {Math.round(operationNetworkCost(op))} puan harcar · {spec.cost.gold} altın
                     {op === 'kidnap' && !target.queen ? ' · kraliçeleri yok' : ''}
+                    {noPrison ? ' · önce hapishane kur' : ''}
                   </small>
                   <small className={intel?.chances && best >= spec.minStrength ? (intel.chances[op] >= 50 ? 'up' : 'down') : undefined}>
                     {!intel ? 'Başarı şansı: önce raporu getir' : !intel.chances ? 'Başarı şansı: raporu yenile' : best < spec.minStrength ? `Başarı şansı: ağ %${spec.minStrength} olunca` : `Başarı şansı ~%${intel.chances[op]}`}

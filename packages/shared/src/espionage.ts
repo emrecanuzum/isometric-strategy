@@ -47,6 +47,14 @@ export function networkStrength(ms: number, spies: number, counter: number, spee
   return 100 * (1 - Math.exp(-ms / tau))
 }
 
+// When the missions would have had to begin for `spies` of them to stand at `strength` now (the inverse of
+// networkStrength): an operation spends a network by moving its start up to this.
+export function networkSince(strength: number, spies: number, counter: number, now: number, speed = 1) {
+  if (spies <= 0 || strength <= 0) return now
+  const tau = (balance.espionage.networkSeconds * 1000 * (1 + counter)) / (spies * speed)
+  return now - Math.round(-tau * Math.log(1 - Math.min(strength, 99.9) / 100))
+}
+
 // Strength of the owner's network in a target on a topic at `now`, from the missions still running there (`speed`: the
 // owner's, see networkSpeed).
 export function strengthOf(missions: SpyMission[], owner: number, target: number, topic: SpyTopic, counter: number, now: number, speed = 1) {
@@ -101,14 +109,32 @@ export function operationChance(op: Operation, strength: number, counter: number
   return Math.max(o.minChance, Math.min(o.maxChance, chance))
 }
 
-export type OperationError = 'strength' | 'queen' | 'cost'
+export type OperationError = 'strength' | 'queen' | 'cost' | 'prison'
 
 export function operationError(op: Operation, strength: number, owner: Kingdom, target: Kingdom): OperationError | null {
   const spec = operationSpec(op)
   if (strength < spec.minStrength) return 'strength'
   if (op === 'kidnap' && !target.queen) return 'queen'
+  // A queen carried off needs somewhere to be kept: a finished prison.
+  if (op === 'kidnap' && !owner.buildings.some((b) => b.kind === 'prison' && b.doneAt <= owner.settledAt)) return 'prison'
   if (owner.stock.gold < (spec.cost.gold ?? 0)) return 'cost'
   return null
+}
+
+// What an operation spends of the network it is done through (CLAUDE.md §9.7): as many points as it needs, so one
+// needing 70 takes 70 off and the network grows back from what is left.
+export const operationNetworkCost = (op: Operation) => operationSpec(op).minStrength * balance.espionage.operations.networkCostShare
+
+// The topic of the owner's strongest network in the target (the one operations go through).
+export const bestTopic = (missions: SpyMission[], owner: number, target: number, counter: number, now: number, speed = 1): SpyTopic =>
+  SPY_TOPICS.reduce((a, b) => (strengthOf(missions, owner, target, b, counter, now, speed) > strengthOf(missions, owner, target, a, counter, now, speed) ? b : a))
+
+// A taken queen's ransom (CLAUDE.md §9.7): a share of the gold her kingdom holds as the taker's spies judge it (the
+// middle of their estimate), never under the minimum; the minimum alone when they know nothing of its stores.
+export function ransomFor(goldEstimate: Estimate | null) {
+  const k = balance.espionage.operations.kidnap
+  const gold = goldEstimate ? (goldEstimate.lo + goldEstimate.hi) / 2 : 0
+  return Math.max(k.ransomMin, Math.round((gold * k.ransomShare) / 10) * 10)
 }
 
 // The strongest network the owner has in the target, on any topic.

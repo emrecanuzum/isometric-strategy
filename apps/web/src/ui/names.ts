@@ -35,6 +35,7 @@ export const BUILDING_NAMES: Record<BuildingKind, string> = {
   warehouse: 'Ambar',
   treasury: 'Hazine',
   fisherHut: 'Esrarengiz balıkçı kulübesi',
+  prison: 'Hapishane',
 }
 
 export const BUILDING_NOTES: Partial<Record<BuildingKind, string>> = {
@@ -55,6 +56,7 @@ export const BUILDING_NOTES: Partial<Record<BuildingKind, string>> = {
   warehouse: 'Depolara yer açar (yemek, malzeme, savaş malzemesi)',
   treasury: 'Hazineye altın yeri açar',
   fisherHut: 'Kıyıya kurulur; az yemek ve nehirden altın getirir. Tıkla, balık tut',
+  prison: 'Kaçırılan kraliçeler burada tutulur; kraliçe kaçırmak için gerekir',
 }
 
 export const UNIT_NAMES: Record<Unit, string> = {

@@ -695,7 +695,7 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   - **Yapı sınırları** saray seviyesiyle artar (saray 1→5): tarla 3 / 4 /
     6 / 8 / 10, oduncu kampı 2 / 3 / 4 / 5 / 6, silah atölyesi 1 / 2 / 3 /
     3 / 4, gözcü kulesi 2 / 2 / 3 / 4 / 6, sur kapısı 2 / 2 / 3 / 4 / 5;
-    pazar, kışla, casus evi, üniversite, hastane, tapınak ve iskele birer
+    pazar, kışla, casus evi, hapishane, üniversite, hastane, tapınak ve iskele birer
     tane. Sınır İnşa sekmesinde ve Krallık sekmesindeki yapılar listesinde
     "kurulu / sınır" olarak yazar; sınırı aşan eski yapılar yerinde kalır.
   - **Saray 4. ve 5. seviye** çok pahalı ve uzundur (savaş malzemesi de
@@ -1283,12 +1283,23 @@ mertebesindedir.
   düşer. Başarısız operasyon casusu kaybettirir ve kimin yaptığını
   ortaya çıkarır. Casus raporu her operasyonun **başarı şansını** (en
   yakın %5'e yuvarlı) getirir; operasyon listesinde her satırda yazar.
+  **Operasyon ağı harcar:** başarılı da olsa başarısız da olsa, yapıldığı
+  ağdan istediği kadar puan düşer (%70 isteyen kaçırma 70 puan;
+  `operations.networkCostShare` = 1). Ağ kalan güçten yeniden büyür (o
+  konudaki görevler daha geç başlamış sayılır).
   - **%50 sabotaj:** depoları yak (yemek ve yapı malzemesinin dörtte
     biri) ya da süren inşaatları geciktir.
-  - **%70 kraliçeyi kaçır:** kraliçe kaçıranın elinde rehin kalır; kaçırılan
-    krallığın mutluluğu hemen düşer ve rehinlik sürdükçe düşük kalır. Geri
-    almanın yolları: **fidye** ödemek, kaçıranın kendi isteğiyle **serbest
-    bırakması** (+ilişki) ya da kazanılan savaş gerekçesiyle savaş.
+  - **%70 kraliçeyi kaçır:** kaçıranın bitmiş bir **hapishanesi** olmalıdır
+    (2. seviye saray, bir tane). Kraliçe kaçıranın hapishanesinde rehin
+    kalır; hapishane haritada **dolu** görünür (avlusunda parmaklıkların
+    ardında taçlı kraliçe, kapıda muhafız) ve menüsünde içerideki kraliçeler,
+    fidyeleri ve "Serbest bırak" yazar. Kaçırılan krallığın mutluluğu hemen
+    düşer ve rehinlik sürdükçe düşük kalır. Geri almanın yolları: **fidye**
+    ödemek, kaçıranın kendi isteğiyle **serbest bırakması** (+ilişki) ya da
+    kazanılan savaş gerekçesiyle savaş. **Fidye** kaçırma anında sabitlenir:
+    kaçıranın hammadde casuslarının o krallığın altını için tahmininin
+    ortasının **%40'ı**, en az **500 altın** (casus bilgisi yoksa 500;
+    `operations.kidnap.ransomShare`, `ransomMin`).
   - **%90 isyan kışkırt:** on dakika üretim yarıya iner ve mutluluk düşer.
 
 **Ordu**

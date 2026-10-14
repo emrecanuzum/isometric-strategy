@@ -36,7 +36,9 @@
       },
       "happiness": -25,
       "shock": -15,
-      "ransom": 400,
+      "ransom": 500,
+      "ransomShare": 0.4,
+      "ransomMin": 500,
       "release": 10
     },
     "revolt": {
@@ -48,7 +50,8 @@
       "seconds": 600,
       "workRate": 0.5
     },
-    "cooldownSeconds": 30
+    "cooldownSeconds": 30,
+    "networkCostShare": 1
   },
   "warinessCounter": 2
 }
