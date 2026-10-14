@@ -9,6 +9,7 @@ import military from '../../../config/balance/military.json'
 import society from '../../../config/balance/society.json'
 import territory from '../../../config/balance/territory.json'
 import time from '../../../config/balance/time.json'
+import towns from '../../../config/balance/towns.json'
 import world from '../../../config/balance/world.json'
 
-export const balance = { cities, diplomacy, economy, espionage, institutions, map, market, military, society, territory, time, world } as const
+export const balance = { cities, diplomacy, economy, espionage, institutions, map, market, military, society, territory, time, towns, world } as const

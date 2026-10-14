@@ -4,6 +4,7 @@
 
 import * as game from './game.js'
 import { admin, iso, refuse } from './server.ts'
+import { townAt, townsOf } from './towns.ts'
 import type { Kingdom, LobbyWorld, Point, Row } from './server.ts'
 
 export interface ArmyRow {
@@ -19,8 +20,9 @@ export interface ArmyRow {
   depart_at: string
   arrive_at: string
   status: 'idle' | 'moving' | 'battle'
-  // A beaten army falling back home (`retreat`) cannot be caught again before it gets there.
-  goal: { kind: 'move' | 'home' | 'siege'; kingdom?: number; retreat?: boolean }
+  // A beaten army falling back home (`retreat`) cannot be caught again before it gets there. `town`: sent to lay
+  // siege to that town (CLAUDE.md §8.4).
+  goal: { kind: 'move' | 'home' | 'siege' | 'town'; kingdom?: number; town?: number; retreat?: boolean }
   morale: number
   familiarity: number
   camp: Point
@@ -121,6 +123,15 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
     const enemy = kingdoms.find(
       (k) => k.id !== army.kingdom_id && k.state && inTerritory(k.state, target, at) && game.atWar(pacts, army.kingdom_id, k.id),
     )
+    // Sent onto a town it does not hold: it marches to the town's gate to lay siege (see settleTowns).
+    const town = enemy ? undefined : townAt(await townsOf(army.lobby_id), target)
+    if (town && town.owner_id !== army.kingdom_id) {
+      const holdings = kingdoms.map((k) => ({ id: k.id, buildings: k.state?.buildings ?? [] }))
+      const update = march(world, army, owner, at, game.townGate(town), { kind: 'town', town: town.id }, game.buildingBlocker(holdings, army.kingdom_id), undefined, game.buildingBlocker(holdings))
+      if (!update) return 'route'
+      await admin.from('armies').update(update).eq('id', army.id)
+      return null
+    }
     // Sent onto a palace (its own, or one not at war), the army stands at its gate.
     const onPalace = kingdoms.find((k) => k.state?.buildings?.some((b: { kind: string; x: number; y: number; size: number }) => b.kind === 'palace' && inside(b, target)))
     const dest = enemy ? doorOf(enemy.state) ?? target : onPalace ? doorOf(onPalace.state) ?? target : target

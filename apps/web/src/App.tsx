@@ -5,6 +5,8 @@ import {
   TileRule,
   advance,
   balance,
+  townCenter,
+  inTown,
   lobbyTripMs,
   tradeTripMs,
   build,
@@ -45,6 +47,7 @@ import { WorldMap } from './game/WorldMap'
 import { ConfirmBuild } from './ui/hud/ConfirmBuild'
 import { PlanBar } from './ui/hud/PlanBar'
 import { cityInfo } from './game/cities'
+import { townStructures, townTrails } from './game/towns'
 import { Minimap } from './game/Minimap'
 import type { MinimapFlag } from './game/Minimap'
 import type { Structure } from './game/chunkPainter'
@@ -81,6 +84,7 @@ import { MapAlerts } from './ui/hud/MapAlerts'
 import { InnTip, MapTip } from './ui/hud/MapTip'
 import { InnSheet } from './ui/hud/inns'
 import { CitySheet, CityTip, CrownBanner } from './ui/hud/cities'
+import { TownSheet } from './ui/hud/towns'
 import type { HudData } from './ui/hud/tabs'
 import { GoodPicker, SitePicker, missingText } from './ui/panels'
 import { Timers } from './ui/hud/Timers'
@@ -200,6 +204,9 @@ const NOTICE_CUES: Record<string, Cue> = {
   army_threat: 'war',
   trade_raided: 'battle',
   raid_repelled: 'good',
+  town_siege: 'war',
+  town_taken: 'coin',
+  town_held: 'bad',
 }
 
 // News that goes against the player: kept under the journal's "Önemli" tab.
@@ -211,6 +218,10 @@ function noticeHurts(n: Notice, me: string | undefined) {
   if (n.kind === 'battle_end') return !!me && (p.report?.losses?.[me] ?? 0) > 0
   if (n.kind === 'envoy_answer') return p.accepted === false
   if (n.kind === 'envoy_proposal') return p.kind === 'tribute'
+  // A town of the player's besieged or taken by someone else, or a siege of theirs beaten off.
+  const by = (n.payload as { by?: string }).by
+  if (n.kind === 'town_siege' || n.kind === 'town_taken') return by !== me
+  if (n.kind === 'town_held') return true
   return false
 }
 
@@ -709,6 +720,11 @@ function App({
     return () => clearInterval(id)
   }, [view, founded, setKingdom, recordJournal])
 
+  // The towns stand where they stand for the whole season: the ground is painted again only when one appears.
+  const townsRef = useRef(layer.towns)
+  townsRef.current = layer.towns
+  const townPlaces = layer.towns.map((t) => `${t.x},${t.y},${t.kind}`).join(';')
+
   // Buildings into the ground painting; sites under construction show scaffolding.
   useEffect(() => {
     if (!view) return
@@ -741,11 +757,30 @@ function App({
     const structures: Structure[] = [
       ...buildings.map((b) => structure(b, shown?.color, null, b.id, !!shown?.trade.damaged)),
       ...rivals.flatMap((r) => r.buildings.map((b) => structure(b, r.color, r, r.id * 1000 + b.id, !!r.trade_damaged))),
+      ...townsRef.current.flatMap(townStructures),
     ]
     // Footpaths (nothing grows in front of them to stand over the walkers; see paintChunk).
-    const trails = [buildings, ...rivals.map((r) => r.buildings)].flatMap((town) => footpaths(view.world, town, time))
+    const trails = [
+      ...[buildings, ...rivals.map((r) => r.buildings)].flatMap((town) => footpaths(view.world, town, time)),
+      ...townsRef.current.flatMap(townTrails),
+    ]
     view.setStructures(structures, trails)
-  }, [view, shown, mapBuildings, rivals])
+  }, [view, shown, mapBuildings, rivals, townPlaces])
+
+  // The towns' names in their holders' colours, and the sieges under way (CLAUDE.md §8.4).
+  useEffect(() => {
+    if (!view) return
+    const colorFor = (id: number | null) =>
+      id === null ? 0xe8d8b0 : id === mine?.id ? colorOf(shown?.color) : colorOf(rivals.find((r) => r.id === id)?.color)
+    view.setTowns(
+      layer.towns.map((t) => ({
+        at: townCenter(t),
+        name: t.owner === null ? t.name : `${t.name} · ${t.owner === mine?.id ? (shown?.name ?? 'Senin') : (rivals.find((r) => r.id === t.owner)?.name ?? '?')}`,
+        color: colorFor(t.owner),
+        siege: t.siege ? { startedAt: t.siege.startedAt, endsAt: t.siege.endsAt, color: colorFor(t.siege.kingdom) } : null,
+      })),
+    )
+  }, [view, layer.towns, rivals, mine?.id, shown?.color, shown?.name])
 
   // Villagers walk from their houses to the fields and workshops; every kingdom's merchant walks to its trade post.
   const buildings = kingdom?.buildings
@@ -791,10 +826,13 @@ function App({
   const [innOpen, setInnOpen] = useState<number | null>(null)
   // The free city whose sheet is open (its index in world.cities).
   const [cityOpen, setCityOpen] = useState<number | null>(null)
+  // The town whose sheet is open (its id).
+  const [townOpen, setTownOpen] = useState<number | null>(null)
   const toggleTab = useCallback((tab: TabId) => {
     setSelected(null)
     setInnOpen(null)
     setCityOpen(null)
+    setTownOpen(null)
     setPanel((open) => (open === tab ? null : tab))
   }, [])
   const closeTab = useCallback(() => {
@@ -802,6 +840,7 @@ function App({
     setSelected(null)
     setInnOpen(null)
     setCityOpen(null)
+    setTownOpen(null)
   }, [])
   useTabKeys(toggleTab, closeTab)
   useEffect(() => {
@@ -809,8 +848,8 @@ function App({
   }, [panel, journal.unread, markRead])
   // On phones the open sheet covers the map controls; the stylesheet hides them meanwhile.
   useEffect(() => {
-    document.documentElement.dataset.sheet = panel || selected !== null || innOpen !== null || cityOpen !== null ? 'open' : 'closed'
-  }, [panel, selected, innOpen, cityOpen])
+    document.documentElement.dataset.sheet = panel || selected !== null || innOpen !== null || cityOpen !== null || townOpen !== null ? 'open' : 'closed'
+  }, [panel, selected, innOpen, cityOpen, townOpen])
   const [placing, setPlacing] = useState<BuildingKind | null>(null)
   // A gate turned with R (null: it follows the wall around it).
   const [turned, setTurned] = useState<Along | null>(null)
@@ -916,6 +955,8 @@ function App({
     const current = kingdomRef.current
     if (aiming === null && !tool && !placingKind) setInnOpen(inn ?? null)
     if (aiming === null && !tool && !placingKind) setCityOpen(city ?? null)
+    // A town's houses and lanes open its sheet.
+    if (aiming === null && !tool && !placingKind) setTownOpen(townsRef.current.find((t) => inTown(t, tile))?.id ?? null)
     // Choosing where an army marches.
     if (aiming !== null) {
       sendArmy(aiming, tile)
@@ -1377,6 +1418,25 @@ function App({
           onClose={closeTab}
         />
       )}
+      {view && kingdom && mine && !holding && townOpen !== null && !panel && !selectedBuilding && (() => {
+        const town = layer.towns.find((t) => t.id === townOpen)
+        return (
+          town && (
+            <TownSheet
+              town={town}
+              kingdom={kingdom}
+              me={mine.id}
+              names={new Map(rivals.map((r) => [r.id, r.name ?? '?']))}
+              armies={layer.armies}
+              pacts={layer.pacts}
+              now={now}
+              onSend={(army, tile) => sendArmy(army, tile)}
+              onShow={(tile) => view.centerOn(tile)}
+              onClose={closeTab}
+            />
+          )
+        )
+      })()}
       {view && kingdom && !holding && innOpen !== null && !panel && !selectedBuilding && (
         <InnSheet world={view.world} index={innOpen} online={online} now={now} home={kingdom.site} onShow={(tile) => view.centerOn(tile)} onClose={closeTab} />
       )}

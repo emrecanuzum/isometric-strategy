@@ -19,7 +19,7 @@ export interface Army {
   arrive_at: string
   status: 'moving' | 'idle' | 'battle'
   // Where it is heading: a place, home (to rejoin the garrison) or an enemy palace (to lay siege).
-  goal: { kind: 'move' } | { kind: 'home'; retreat?: boolean } | { kind: 'siege'; kingdom: number }
+  goal: { kind: 'move' } | { kind: 'home'; retreat?: boolean } | { kind: 'siege'; kingdom: number } | { kind: 'town'; town: number }
   // Its morale and its knowledge of the ground as they were when it set off on this route, and where it had camped.
   morale: number
   familiarity: number

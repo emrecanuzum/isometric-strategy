@@ -154,6 +154,14 @@ export interface RivalTerritory {
   banner?: number
 }
 
+// A town on the map as drawn: where its name goes (a ground point), its name and colour, and the siege under way.
+export interface TownMark {
+  at: Point
+  name: string
+  color: number
+  siege: { startedAt: number; endsAt: number; color: number } | null
+}
+
 export interface WorldView {
   world: World
   centerOn(tile: Point): void
@@ -177,6 +185,8 @@ export interface WorldView {
   // picked up to be moved.
   setMarked(marks: { id: number; tone: 'demolish' | 'move' }[]): void
   setTown(errands: Errand[], merchants: MerchantTrip[]): void
+  // The towns' names over them (in their holder's colour) and, while one is besieged, how far the siege has come.
+  setTowns(marks: TownMark[]): void
   // Tiles walkers go around: building footprints, except flat ones such as fields.
   blocksWalkers(x: number, y: number): boolean
   // A short message rising from a spot on the ground.
@@ -328,7 +338,8 @@ export async function createWorld(
     return [crisp, soft]
   }
   const above = new Container()
-  above.addChild(halo, glow, plotLabels.dock, plotLabels.trade, rivalLabels, kingdomLabel, armyLabels, floats)
+  const townLayer = new Container()
+  above.addChild(halo, glow, plotLabels.dock, plotLabels.trade, rivalLabels, kingdomLabel, townLayer, armyLabels, floats)
   // Armies stand in the same layer as buildings and walkers, so a wall or a house in front of an army hides it.
   const armies = createArmies(world, caravans.layer, armyRoutes, armyLabels)
   app.stage.addChild(light, above)
@@ -358,6 +369,27 @@ export async function createWorld(
     for (const chunk of chunks.values()) {
       if (!chunk.sprite.visible) continue
       for (const tree of chunk.trees) tree.skew.x = Math.sin(t * 1.4 + tree.x * 0.031 + tree.y * 0.047) * 0.045
+    }
+  })
+  // Town names and siege bars, at a fixed size on screen above each town.
+  let townMarks: { mark: TownMark; text: Text; bar: Graphics }[] = []
+  app.ticker.add(() => {
+    const now = clock()
+    for (const { mark, text, bar } of townMarks) {
+      const top = groundToScreen(world, mark.at)
+      const k = 1 / camera.scale.x
+      text.position.set(top.x, top.y - 70 - 6 * k)
+      text.scale.set(k)
+      bar.clear()
+      if (!mark.siege) continue
+      const f = Math.min(1, Math.max(0, (now - mark.siege.startedAt) / (mark.siege.endsAt - mark.siege.startedAt)))
+      const w = 72
+      bar.rect(-w / 2 - 2, -2, w + 4, 10).fill(0x120d0b)
+      bar.rect(-w / 2, 0, w, 6).fill(0x3a2a20)
+      bar.rect(-w / 2, 0, Math.round(w * f), 6).fill(mark.siege.color)
+      bar.rect(-w / 2, 0, Math.round(w * f), 1).fill({ color: 0xffffff, alpha: 0.35 })
+      bar.position.set(top.x, top.y - 70 + 2 * k)
+      bar.scale.set(k)
     }
   })
   // The camera following something (see follow): it glides onto the target each frame.
@@ -1370,6 +1402,29 @@ export async function createWorld(
         return t === Terrain.Lake || t === Terrain.River || t === Terrain.Mountain
       }, (x, y) => worn.has(y * world.size + x)),
     blocksWalkers: (x, y) => solid.has(y * world.size + x),
+    setTowns(marks) {
+      for (const { text, bar } of townMarks) {
+        text.destroy()
+        bar.destroy()
+      }
+      townMarks = marks.map((mark) => {
+        const text = new Text({
+          text: mark.name,
+          resolution: window.devicePixelRatio * 2,
+          anchor: { x: 0.5, y: 1 },
+          style: {
+            fontFamily: "'Digits', 'Pixelify Sans', ui-monospace, monospace",
+            fontSize: 14,
+            fontWeight: '600',
+            fill: mark.color,
+            stroke: { color: 0x120d0b, width: 4, join: 'round' },
+          },
+        })
+        const bar = new Graphics()
+        townLayer.addChild(text, bar)
+        return { mark, text, bar }
+      })
+    },
     float,
     zoomBy: (step) => zoomTo(zoomIndex + step, { x: app.screen.width / 2, y: app.screen.height / 2 }),
     destroy() {

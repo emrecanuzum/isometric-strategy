@@ -3,6 +3,8 @@ import type { Point } from './iso'
 import { priceAt } from './market'
 import type { Market } from './market'
 import { happinessStep, happinessTarget, isNightAt, popCapFor, recruitTerms, taxSpec } from './society'
+import { townYield } from './towns'
+import type { HeldTown } from './towns'
 import { addUnits, countOf, garrisonOf, unitSpec } from './units'
 import { perSpan } from './span'
 import type { SpanCache } from './span'
@@ -239,6 +241,8 @@ export interface Kingdom {
   fisherLog?: FisherEntry[]
   // Battles and sieges won (kept by the server, for the lobby's ranking).
   record?: { battlesWon?: number; siegesWon?: number }
+  // The towns it holds and what each sends (kept by the server as towns are taken; CLAUDE.md §8.4).
+  towns?: HeldTown[]
 }
 
 // What a cast brought: a bag of goods, a bottle with word of another kingdom, or nothing.
@@ -490,11 +494,13 @@ export function population(kingdom: Kingdom, at: number) {
     return { housing, jobs, cap: popCapFor(palaceLevel(kingdom, at)) }
   })
   const soldiers = soldiersOf(kingdom)
-  const villagers = Math.max(0, Math.min(housing, cap) - soldiers)
+  // Towns that send people add both the room and the folk to fill it.
+  const sent = townYield(kingdom.towns).villagers
+  const villagers = Math.max(0, Math.min(housing + sent, cap + sent) - soldiers)
   // The sick neither work nor pay taxes.
   const healthy = villagers * (1 - (kingdom.sickness ?? 0))
   // When more hands are set to work than there are healthy villagers, every building works at a matching fraction.
-  return { villagers, healthy, sick: villagers - healthy, housing, cap, soldiers, jobs, efficiency: jobs === 0 ? 1 : Math.min(1, healthy / jobs) }
+  return { villagers, healthy, sick: villagers - healthy, housing: housing + sent, cap: cap + sent, soldiers, jobs, efficiency: jobs === 0 ? 1 : Math.min(1, healthy / jobs) }
 }
 
 export const happinessOf = (kingdom: Kingdom) => kingdom.happiness ?? balance.society.happiness.start
@@ -615,6 +621,10 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
     if (per && done(b, at) && !round.cut.has(b.id)) delta.gold = (delta.gold ?? 0) + per * idleFactor(kingdom, at)
   }
   delta.gold = (delta.gold ?? 0) + l.tax - l.soldiersGold + l.tributes.reduce((sum, t) => sum + t.gold, 0)
+  // What the held towns send.
+  const sends = townYield(kingdom.towns)
+  const idle = idleFactor(kingdom, at)
+  for (const r of ['gold', 'food', 'materials', 'arms'] as const) if (sends[r]) delta[r] = (delta[r] ?? 0) + sends[r] * idle
   return { delta, weapons }
 }
 

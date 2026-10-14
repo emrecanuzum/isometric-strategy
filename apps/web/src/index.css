@@ -3995,3 +3995,19 @@ kbd {
   color: var(--muted);
   font-size: 13px;
 }
+
+/* A town's sheet: the player's armies, one row each, with a button to send it. */
+.town-armies {
+  display: grid;
+  gap: calc(var(--px) * 3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.town-armies li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--px) * 4);
+}

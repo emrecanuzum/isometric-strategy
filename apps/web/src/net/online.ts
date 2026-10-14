@@ -1,4 +1,4 @@
-import type { PlanStep, Good, TradeLedger, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units } from '@game/shared'
+import type { PlanStep, Good, TradeLedger, Town, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units } from '@game/shared'
 import { supabase } from '../lib/supabase'
 
 // The lobby as the client sees it: the player's own kingdom in full, the others only as they show on the map, and the
@@ -323,6 +323,12 @@ export async function loadArmies(lobby: string): Promise<Army[]> {
 export async function loadBattles(lobby: string): Promise<Battle[]> {
   const { data } = await supabase.from('battles').select('*').eq('lobby_id', lobby).order('started_at', { ascending: false }).limit(20)
   return (data ?? []) as Battle[]
+}
+
+// The lobby's towns, who holds them and the sieges under way (CLAUDE.md §8.4).
+export async function loadTowns(lobby: string): Promise<Town[]> {
+  const { data } = await supabase.from('lobby_towns').select('id, idx, x, y, kind, name, owner_id, garrison, siege').eq('lobby_id', lobby).order('idx')
+  return (data ?? []).map((t) => ({ id: t.id, idx: t.idx, x: t.x, y: t.y, kind: t.kind, name: t.name, owner: t.owner_id, garrison: t.garrison, siege: t.siege }))
 }
 
 export async function loadNotices(lobby: string): Promise<Notice[]> {

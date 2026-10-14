@@ -8,6 +8,7 @@ import * as game from './game.js'
 import { applyOrder, armiesOf, armyNow, doorOf, march, standing, unitsOf } from './armies.ts'
 import type { ArmyRow, Order } from './armies.ts'
 import { answer, arrive } from './diplomacy.ts'
+import { ensureTowns, settleTowns } from './towns.ts'
 import type { EnvoyRow } from './diplomacy.ts'
 import { admin, changeRelation, grantClaim, iso, loadKingdoms, ms, mutateKingdom, nameOf, notify, pactsOf, worldOf } from './server.ts'
 import type { Kingdom, LobbyWorld, Point, Row } from './server.ts'
@@ -101,6 +102,10 @@ export async function tick(lobby: string, simAt: number, now: number) {
   rows = await loadKingdoms(lobby)
   pacts = await pactsOf(lobby)
   await moveArmies(lobby, world, rows, pacts, Math.max(simAt, now - BEHIND_MS), now)
+
+  // Towns: placed if the lobby has none yet, and their sieges begun, broken off and ended.
+  await ensureTowns(lobby, world, rows)
+  await settleTowns(lobby, await loadKingdoms(lobby), await pactsOf(lobby), now)
 }
 
 // ---- Armies on the move -------------------------------------------------------------------------------------------
@@ -125,7 +130,7 @@ async function moveArmies(lobby: string, world: LobbyWorld, rows: Row[], pacts: 
         return { ...k, units, soldiers: game.countOf(units), fielded: Math.max(0, (k.fielded ?? 0) - a.soldiers) }
       })
       l.engaged = true
-    } else if (a.goal.kind === 'move') {
+    } else if (a.goal.kind === 'move' || a.goal.kind === 'town') {
       await admin.from('armies').update({ status: 'idle' }).eq('id', a.id)
       a.status = 'idle'
     }

@@ -34,6 +34,7 @@ import {
 } from '../_shared/server.ts'
 import type { Kingdom, Point, Row, World } from '../_shared/server.ts'
 import { tickLobby } from '../_shared/tick.ts'
+import { ensureTowns, townsOf } from '../_shared/towns.ts'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -56,9 +57,11 @@ const dip = game.balance.diplomacy
 async function rollSite(world: World, lobby: string, seen: Point[]): Promise<Point> {
   const { data } = await admin.from('kingdoms').select('sites, state').eq('lobby_id', lobby)
   const taken = (data ?? []).flatMap((k) => (k.state ? [k.state.site as Point] : []))
+  // Kept clear of the towns too (CLAUDE.md §8.4).
+  const towns = await townsOf(lobby)
   for (let attempt = 0; attempt < 24; attempt++) {
     const site = game.assignStartSite(world, Math.random)
-    if (site && game.siteIsClear(site, taken) && !seen.some((s) => s.x === site.x && s.y === site.y)) return site
+    if (site && game.siteIsClear(site, taken) && game.siteClearOfTowns(site, towns) && !seen.some((s) => s.x === site.x && s.y === site.y)) return site
   }
   return refuse('full')
 }
@@ -116,8 +119,11 @@ async function openLobby(user: string, cmd: any): Promise<string> {
 
 // deno-lint-ignore no-explicit-any
 async function own(user: string, lobby: string, cmd: any): Promise<Row> {
-  const { world } = await worldOf(lobby)
+  const lobbyWorld = await worldOf(lobby)
+  const { world } = lobbyWorld
   const now = Date.now()
+  // A lobby gets its towns the first time anyone acts in it (older lobbies included; CLAUDE.md §8.4).
+  await ensureTowns(lobby, lobbyWorld)
   const { data: found } = await admin.from('kingdoms').select('*').eq('lobby_id', lobby).eq('user_id', user).maybeSingle()
   const row = found as Row | null
 

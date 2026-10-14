@@ -1,0 +1,20 @@
+{
+  "perPlayers": 0.75,
+  "size": 8,
+  "edgeMargin": 110,
+  "minSpacing": 110,
+  "cityGap": 70,
+  "innGap": 18,
+  "kingdomGap": 24,
+  "roadGap": 2,
+  "garrison": [6, 12],
+  "siegeSeconds": 900,
+  "lossPerDefender": 0.6,
+  "kinds": {
+    "gold": { "perRound": 4 },
+    "food": { "perRound": 3 },
+    "materials": { "perRound": 2.5 },
+    "arms": { "perRound": 2 },
+    "people": { "villagers": 10 }
+  }
+}

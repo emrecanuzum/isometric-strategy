@@ -1,7 +1,7 @@
-import type { Army, Claim, Envoy, Market, Pact, Relation, SpyMission } from '@game/shared'
+import type { Army, Claim, Envoy, Market, Pact, Relation, SpyMission, Town } from '@game/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { serverNow } from './clock'
-import { loadArmies, loadBattles, loadDiplomacy, loadNotices, settle } from './online'
+import { loadArmies, loadBattles, loadDiplomacy, loadNotices, loadTowns, settle } from './online'
 import type { ArmyOrder, Battle, Notice } from './online'
 
 // The layer between kingdoms as the client holds it: relations, pacts, envoys and spies, armies, battles, the
@@ -18,10 +18,11 @@ export interface Layer {
   armies: Army[]
   battles: Battle[]
   notices: Notice[]
+  towns: Town[]
   market: Market | null
 }
 
-type Part = 'diplomacy' | 'armies' | 'battles' | 'notices'
+type Part = 'diplomacy' | 'armies' | 'battles' | 'notices' | 'towns'
 
 const PART_OF: Record<string, Part> = {
   relations: 'diplomacy',
@@ -33,6 +34,7 @@ const PART_OF: Record<string, Part> = {
   armies: 'armies',
   battles: 'battles',
   notices: 'notices',
+  lobby_towns: 'towns',
 }
 
 export function useLayer(lobby: string, initialMarket: Market | null) {
@@ -46,6 +48,7 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
     armies: [],
     battles: [],
     notices: [],
+    towns: [],
     market: initialMarket,
   })
   const timers = useRef(new Map<Part, number>())
@@ -62,6 +65,9 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
       } else if (part === 'battles') {
         const battles = await loadBattles(lobby)
         setLayer((l) => ({ ...l, battles }))
+      } else if (part === 'towns') {
+        const towns = await loadTowns(lobby)
+        setLayer((l) => ({ ...l, towns }))
       } else {
         const notices = await loadNotices(lobby)
         setLayer((l) => ({ ...l, notices }))
@@ -78,7 +84,7 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
     [fetchPart],
   )
   const refreshAll = useCallback(() => {
-    for (const part of ['diplomacy', 'armies', 'battles', 'notices'] as Part[]) refresh(part, 0)
+    for (const part of ['diplomacy', 'armies', 'battles', 'notices', 'towns'] as Part[]) refresh(part, 0)
   }, [refresh])
 
   useEffect(() => {
@@ -112,6 +118,8 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
       ...layer.envoys.filter((e) => e.status === 'pending' && e.expires_at).map((e) => Date.parse(e.expires_at!)),
       ...layer.orders.map((o) => Date.parse(o.effective_at)),
       ...layer.armies.filter((a) => a.status === 'moving' && a.goal.kind !== 'move').map((a) => Date.parse(a.arrive_at)),
+      // A town's siege running its course.
+      ...layer.towns.flatMap((t) => (t.siege ? [t.siege.endsAt] : [])),
     ]
     if (due.length === 0) return
     // Something already past due is nudged again every few seconds until the server has settled it.
@@ -121,7 +129,7 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
       settle(lobby).then(() => refreshAll())
     }, Math.max(0, next - now))
     return () => clearTimeout(id)
-  }, [lobby, layer.battles, layer.envoys, layer.orders, layer.armies, refreshAll])
+  }, [lobby, layer.battles, layer.envoys, layer.orders, layer.armies, layer.towns, refreshAll])
 
   const onMarket = useCallback((market: Market) => setLayer((l) => ({ ...l, market })), [])
   const dropNotices = useCallback((ids: number[]) => setLayer((l) => ({ ...l, notices: l.notices.filter((n) => !ids.includes(n.id)) })), [])

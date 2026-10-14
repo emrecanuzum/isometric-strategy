@@ -1039,6 +1039,45 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
 
 ---
 
+### 8.4 Kasabalar (şu an uygulanan)
+
+Haritada rastgele küçük **kasabalar** vardır; kuşatılıp fethedilir, sahibine
+her tur katkı gönderir ve savaşta olunan başka bir lord tarafından geri
+alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
+`packages/shared/src/towns.ts`; sunucu `supabase/functions/_shared/towns.ts`
+(`lobby_towns` tablosu); çizim `apps/web/src/game/towns.ts`, panel
+`apps/web/src/ui/hud/towns.tsx`.
+
+- **Yer:** Lobi başına oyuncu sayısının ~¾'ü kadar (9 kişilik lobide 7)
+  kasaba, 8×8 karo. Lobi tohumundan, sunucu tarafından **bir kez** yerleşir
+  (ilk komutta; eski lobiler dahil): dağ halkasının içinde, düz kuru arazide,
+  yollardan, hanlardan, taç başkentlerinden, birbirinden ve o ana kadar
+  verilmiş bütün kuruluş yerlerinin son hududundan uzakta. Sonra gelen
+  oyuncuların kuruluş yerleri de kasabalardan uzak seçilir.
+- **Görünüm:** Ortada kasabanın işini gösteren bir yapı (pazar, ambar,
+  oduncu, demirhane, tapınak), çevresinde evler, köşede gözcü kulesi, önünde
+  bir patika. Adı üstünde yazar; sahibi varsa sahibinin renginde ve adıyla.
+- **Türler ve katkı** (tur başına, yokluk cezasına tabi): vergi kasabası
+  +4 altın, tarım +3 yemek, kereste +2,5 yapı malzemesi, demirci +2 savaş
+  malzemesi; kalabalık kasaba **+10 köylü** (nüfus sınırı ve barınak birlikte
+  artar). Türler kasabalar arasında dağıtılır; her tür en az bir kez vardır.
+- **Kuşatma:** Kasabaya tıklayınca panel açılır; "Gönder" ile bir ordu
+  seçilir (ordu "Hareket" ile kasabanın üstüne gönderilerek de aynısı olur).
+  Ordu kasabanın kapısına varınca kuşatma başlar ve **15 dakika** sürer;
+  ilerleme çubuğu kasabanın üstünde, kuşatanın renginde görünür. Ordu orada
+  kalmalıdır: başka yere gönderilirse, yenilirse ya da savaş biterse kuşatma
+  kalkar. Aynı anda bir kasabayı tek ordu kuşatabilir.
+- **Sahipsiz kasaba** kendi garnizonuyla (6–12 asker) savunur: kuşatma
+  bitince ordu garnizonun %60'ı kadar asker kaybeder; ayakta asker kalırsa
+  kasaba onundur, kalmazsa kasaba dayanır (garnizonu azalır).
+- **Sahipli kasaba** yalnız sahibiyle **savaşta** olan biri tarafından
+  kuşatılabilir; garnizonu yoktur, kuşatma bitince el değiştirir. Sahibi
+  ordusunu gönderip kuşatanla meydan muharebesine girerek kuşatmayı kırabilir.
+- Kuşatma başlarken, kalkarken, kasaba alınınca ya da dayanınca elçi iki
+  tarafa da haber getirir. Krallığın elindeki kasabalar durumunda tutulur
+  (`towns`), katkı her üretim turunda eklenir.
+- **İleride:** kasabaya asker yerleştirme, kasaba yükseltme, puan.
+
 ## 9. Krallıklar Arası İlişkiler (Crusader Kings tarzı)
 
 ### 9.1 Hanedan ve karakterler

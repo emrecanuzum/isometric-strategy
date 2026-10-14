@@ -123,7 +123,25 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
     case 'tower_losses':
       return { icon: 'warn', title: 'Gözcü kuleleri ateş açtı', text: `Düşman kuleleri ordundan ${p.killed} askeri vurdu.` }
     case 'order_failed':
+      if (p.why === 'peace') return { icon: 'warn', title: 'Kasaba kuşatılamadı', text: 'Ordun kasabaya vardı ama kasabanın sahibiyle savaşta değilsin; kuşatma yapamaz. Ordu orada bekliyor.' }
       return { icon: 'warn', title: 'Emir yerine getirilemedi', text: 'Elçi orduya ulaştı ama emir uygulanamadı (yol yok ya da ordu savaşta).' }
+    case 'town_siege': {
+      const mine = p.by === me
+      const minutes = Math.round(balance.towns.siegeSeconds / 60)
+      return mine
+        ? { icon: 'swords', title: `${p.name} kuşatılıyor`, text: `Ordun ${p.name} kasabasını kuşattı. Ordu orada kaldıkça kuşatma ${minutes} dakikada biter; ilerlemesi kasabanın üstünde görünür.` }
+        : { icon: 'warn', title: `${p.name} kuşatma altında!`, text: `${p.by} ordusu ${p.name} kasabanı kuşattı. ${minutes} dakika içinde ordunla gelip kuşatmayı kıramazsan kasaba onların olur.` }
+    }
+    case 'town_siege_lifted':
+      return { icon: 'shield', title: `${p.name} kuşatması kalktı`, text: `${p.name} önündeki kuşatma sona erdi: kuşatan ordu gitti, yenildi ya da artık savaşta değilsiniz.` }
+    case 'town_taken': {
+      const mine = p.by === me
+      return mine
+        ? { icon: 'crown', title: `${p.name} artık senin!`, text: `${p.name} kasabası kapılarını açtı${Number(p.lost) > 0 ? `; ${fmt(Number(p.lost))} asker kaybettin` : ''}. Bundan sonra sana katkı gönderecek.` }
+        : { icon: 'warn', title: `${p.name} elden çıktı`, text: `${p.by} ${p.name} kasabanı aldı. Kasabanın katkısı artık onlara gidiyor.` }
+    }
+    case 'town_held':
+      return { icon: 'warn', title: `${p.name} dayandı`, text: `${p.name} garnizonu kuşatmayı püskürttü; ordundan ${fmt(Number(p.lost))} asker düştü, kimse kalmadı.` }
     default:
       return { icon: 'scroll', title: 'Elçiden haber', text: '' }
   }
