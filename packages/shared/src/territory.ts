@@ -27,24 +27,57 @@ export const TileRule = {
 
 const isWater = (terrain: number) => terrain === Terrain.Lake || terrain === Terrain.River
 
+// How many tiles the body of water each water tile belongs to holds (0 on land), worked out once per world. A shore
+// takes a dock only on real water: a pond of a few tiles lost among the trees has no room for a jetty.
+const bodies = new WeakMap<Uint8Array, Int32Array>()
+function waterBodies(world: Pick<World, 'size' | 'terrain'>) {
+  let out = bodies.get(world.terrain)
+  if (out) return out
+  const N = world.size
+  out = new Int32Array(N * N)
+  const members: number[] = []
+  for (let start = 0; start < N * N; start++) {
+    if (out[start] || !isWater(world.terrain[start])) continue
+    members.length = 0
+    out[start] = -1
+    for (let q = [start]; q.length > 0; ) {
+      const c = q.pop()!
+      members.push(c)
+      const x = c % N
+      const y = (c - x) / N
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+        if (nx < 0 || ny < 0 || nx >= N || ny >= N) continue
+        const n = ny * N + nx
+        if (!out[n] && isWater(world.terrain[n])) {
+          out[n] = -1
+          q.push(n)
+        }
+      }
+    }
+    for (const m of members) out[m] = members.length
+  }
+  bodies.set(world.terrain, out)
+  return out
+}
+
 // Shore tiles take only a dock, roadside tiles only a trade post and mountain-foot tiles only a tunnel;
 // water, mountains, roads and inns take nothing.
 export function tileRule(world: World, x: number, y: number): number {
   const i = y * world.size + x
   const terrain = world.terrain[i]
   if (world.feature[i] !== Feature.None || isWater(terrain)) return TileRule.Blocked
-  const touches = (match: (terrain: number, feature: number) => boolean) =>
+  const touches = (match: (terrain: number, feature: number, n: number) => boolean) =>
     [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
       const nx = x + dx
       const ny = y + dy
       if (nx < 0 || ny < 0 || nx >= world.size || ny >= world.size) return false
       const n = ny * world.size + nx
-      return match(world.terrain[n], world.feature[n])
+      return match(world.terrain[n], world.feature[n], n)
     })
   if (terrain === Terrain.Mountain) {
     return touches((t) => t !== Terrain.Mountain && !isWater(t)) ? TileRule.TunnelOnly : TileRule.Blocked
   }
-  if (touches(isWater)) return TileRule.DockOnly
+  if (touches((t, _, n) => isWater(t) && waterBodies(world)[n] >= balance.territory.shoreMinWater)) return TileRule.DockOnly
   return touches((_, f) => f === Feature.Road) ? TileRule.TradePostOnly : TileRule.Free
 }
 

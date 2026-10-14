@@ -370,6 +370,11 @@ uzaklık olmalı; kimse tamamen dezavantajlı başlamamalı.
 
 - İskele **2×2 karo** kaplar; en az bir karosu kıyı olmalı, hiçbiri su/dağ
   olmamalıdır.
+- **Kıyı** yalnızca gerçek suyun kıyısıdır: komşu su karosunun ait olduğu
+  göl ya da nehir en az **20 karo** olmalıdır (`territory.json` →
+  `shoreMinWater`). Ağaçların arasında kalmış birkaç karoluk su birikintisi
+  kıyı sayılmaz (iskele ve balıkçı kulübesi oraya kurulmaz, iskele arsası
+  oraya düşmez); yanındaki kara serbesttir.
 - Ticaret noktası da **2×2 karo** kaplar; en az bir karosu yol kenarı
   olmalıdır.
 - **Arsa hakları (önceden belirli):** Yer atandığı anda her krallığın bir

@@ -10,6 +10,7 @@
   "startMaxBlockedFraction": 0.05,
   "startSearchStep": 8,
   "plotTiles": 2,
+  "shoreMinWater": 20,
   "plotSearchRadius": 400,
   "startEdgeMargin": 48,
   "kingdomGapTiles": 24
