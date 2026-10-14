@@ -2,11 +2,13 @@ import { balance, cutOff, imprisoned } from '@game/shared'
 import type { Kingdom } from '@game/shared'
 import { Icon } from '../icons'
 import type { TabId } from './Hud'
+import type { WarNote } from './war'
 
 // Standing trouble in the kingdom, kept on the right edge of the map between the top bar and the map buttons until it
 // is put right. Tapping one opens the tab where it is dealt with.
-export function MapAlerts({ kingdom, now, onOpen }: { kingdom: Kingdom; now: number; onOpen: (tab: TabId) => void }) {
-  const alerts: { key: string; tab: TabId; text: string }[] = []
+export function MapAlerts({ kingdom, now, war = [], onOpen }: { kingdom: Kingdom; now: number; war?: WarNote[]; onOpen: (tab: TabId) => void }) {
+  // The fighting first: war is what matters most (see warNotes).
+  const alerts: { key: string; tab: TabId; text: string }[] = war.map((n) => ({ key: n.key, tab: 'army', text: n.text }))
   if (imprisoned(kingdom.buildings, kingdom.site, now)) {
     alerts.push({
       key: 'prison',

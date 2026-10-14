@@ -4030,3 +4030,18 @@ kbd {
   justify-content: space-between;
   gap: calc(var(--px) * 4);
 }
+
+/* A newer build is out: said for a moment before the page reloads (src/lib/version.ts). */
+.update-note {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10000;
+  padding: 14px 20px;
+  background: #1c1410;
+  color: #f3e6c8;
+  border: 2px solid #f2d16b;
+  font: 600 16px 'Pixelify Sans', sans-serif;
+  pointer-events: none;
+}

@@ -56,6 +56,14 @@ export function squad(color: string | null, frame: number, figures = 3): Sprite 
   const canvas = new Canvas(52, 58)
   const base = 56
   const ox = 22
+  // How high each pixel stands above the ground under it, so every soldier throws his shadow from his own feet (not
+  // from the bottom of the sprite, which would set the rear ranks' shadows adrift).
+  const lift = new Uint8Array(canvas.width * canvas.height)
+  const raise = (ground: number, draw: () => void) => {
+    const before = canvas.pixels.slice()
+    draw()
+    for (let i = 0; i < before.length; i++) if (canvas.pixels[i] !== before[i]) lift[i] = Math.max(0, ground - Math.floor(i / canvas.width))
+  }
   // The march in four frames: a stride one way, feet together (body up a pixel), a stride the other way, together.
   const STRIDE = [1, 0, -1, 0]
   const LIFT = [0, 1, 0, 1]
@@ -84,14 +92,16 @@ export function squad(color: string | null, frame: number, figures = 3): Sprite 
   }
   // The banner stands behind the rear soldier.
   const bx = ox + 4
-  for (let y = base - 50; y < base - 26; y++) canvas.set(bx, y, TIMBER[1])
-  for (let y = 0; y < 7; y++) {
-    for (let x = 1; x <= 9; x++) {
-      const wave = Math.round(Math.sin(x * 0.7 + frame * 1.5) * 0.8)
-      if (x > 7 && (y === 0 || y === 6)) continue
-      canvas.set(bx + x, base - 50 + y + wave, y === 0 ? tunic[5] : tunic[y < 3 ? 3 : 2])
+  raise(base - 26, () => {
+    for (let y = base - 50; y < base - 26; y++) canvas.set(bx, y, TIMBER[1])
+    for (let y = 0; y < 7; y++) {
+      for (let x = 1; x <= 9; x++) {
+        const wave = Math.round(Math.sin(x * 0.7 + frame * 1.5) * 0.8)
+        if (x > 7 && (y === 0 || y === 6)) continue
+        canvas.set(bx + x, base - 50 + y + wave, y === 0 ? tunic[5] : tunic[y < 3 ? 3 : 2])
+      }
     }
-  }
+  })
   // Ranks of three, back to front, each a little lower and to the side on the iso grid.
   const spots: [number, number][] = []
   for (let i = 0; i < figures; i++) {
@@ -102,9 +112,9 @@ export function squad(color: string | null, frame: number, figures = 3): Sprite 
   }
   spots.sort((a, b) => a[1] - b[1])
   // Neighbours out of step with each other, so the column ripples as it marches.
-  spots.forEach(([x, y], i) => soldier(x, y, frame + (i % 2) * 2))
+  spots.forEach(([x, y], i) => raise(y, () => soldier(x, y, frame + (i % 2) * 2)))
   shadow(canvas, ox, base - 12, 8 + Math.ceil(figures / 4) * 3)
-  return canvas.sprite(ox + 2, base - 10, 0)
+  return { ...canvas.sprite(ox + 2, base - 10, 0), lift }
 }
 
 // A catapult on its wheeled bed, facing right (mirrored to face left): the throwing arm leans back over the bed and the

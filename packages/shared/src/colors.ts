@@ -3,9 +3,9 @@
 
 // Lobbies come in these sizes; the colour picker shows rows of nine.
 export const LOBBY_SIZES = [9, 18] as const
+// Red and blue are the crown kingdoms' (their capitals, patrols and sworn lords' pennants), so no lord may take them.
+export const CROWN_COLOR_IDS = ['crimson', 'royal'] as const
 export const KINGDOM_COLOR_IDS = [
-  'royal',
-  'crimson',
   'emerald',
   'violet',
   'amber',
@@ -22,8 +22,10 @@ export const KINGDOM_COLOR_IDS = [
   'cocoa',
   'orange',
   'pine',
+  'mint',
+  'peach',
 ] as const
-export type KingdomColorId = (typeof KINGDOM_COLOR_IDS)[number]
+export type KingdomColorId = (typeof KINGDOM_COLOR_IDS)[number] | (typeof CROWN_COLOR_IDS)[number]
 
 export const lobbyColors = (maxPlayers: number): KingdomColorId[] =>
   KINGDOM_COLOR_IDS.slice(0, Math.max(1, Math.min(KINGDOM_COLOR_IDS.length, maxPlayers)))

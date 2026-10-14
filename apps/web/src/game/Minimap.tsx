@@ -74,15 +74,16 @@ const POLE = 11
 const CLOTH_W = 7
 const CLOTH_H = 5
 
+// Banners are drawn a little smaller than the other icons, so they do not crowd the map.
+const FLAG = ICON * 0.75
+
 // The minimap is turned 45° and squashed to half height on screen (see .minimap); a banner is drawn through the inverse
 // of that, so it stands upright with its pole on the site.
-function drawFlag(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, own: boolean, lift = 0) {
+function drawFlag(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, own: boolean) {
   ctx.save()
   ctx.translate(x, y)
   ctx.rotate(-Math.PI / 4)
-  ctx.scale(ICON, ICON * 2)
-  // Raised (a crown's banner over its castle).
-  ctx.translate(0, -lift)
+  ctx.scale(FLAG, FLAG * 2)
   const edge = own ? '#f2d16b' : '#120d0b'
   ctx.fillStyle = edge
   ctx.fillRect(-1, -POLE - 1, 3, POLE + 1)
@@ -94,8 +95,8 @@ function drawFlag(ctx: CanvasRenderingContext2D, x: number, y: number, color: st
   ctx.restore()
 }
 
-// A free city's pin: a small castle of pale stone with two towers and a dark gate, standing upright like the banners.
-// Rows from the top, 13 wide: '#' outline, 's' stone, 'l' lit stone, 'g' gate.
+// A crown capital's pin: a small castle with two towers and a dark gate in the crown's colour, standing upright like
+// the banners. Rows from the top, 13 wide: '#' outline, 's' wall, 'l' lit wall, 'g' gate.
 const CASTLE = [
   '#.#.#...#.#.#',
   '#l#s#...#l#s#',
@@ -108,9 +109,15 @@ const CASTLE = [
   '#lsss#ggg#ss#',
   '#############',
 ]
-const CASTLE_COLORS: Record<string, string> = { '#': '#1a120c', s: '#c9b48a', l: '#f2e3b8', g: '#3a2414' }
+// A colour mixed toward white by `share`.
+function lighten(hex: string, share: number) {
+  const v = parseInt(hex.slice(1), 16)
+  const mix = (c: number) => Math.round(c + (255 - c) * share)
+  return `rgb(${mix(v >> 16)}, ${mix((v >> 8) & 255)}, ${mix(v & 255)})`
+}
 
-function drawCastle(ctx: CanvasRenderingContext2D, x: number, y: number) {
+function drawCastle(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {
+  const CASTLE_COLORS: Record<string, string> = { '#': '#1a120c', s: color, l: lighten(color, 0.35), g: '#3a2414' }
   ctx.save()
   ctx.translate(x, y)
   ctx.rotate(-Math.PI / 4)
@@ -199,12 +206,9 @@ export function Minimap({ world, center, flags = [], towns = [], patrols = [], o
       ctx.lineWidth = 3
       ctx.strokeRect(r.x * scale, r.y * scale, r.size * scale, r.size * scale)
     }
-    // The crowns' capitals under the banners, at the middle of each, flying their crown's colour.
+    // The crowns' capitals, at the middle of each, their castles in the crown's colour.
     const half = balance.cities.size / 2
-    world.cities.forEach((c, i) => {
-      drawCastle(ctx, (c.x + half) * scale, (c.y + half) * scale)
-      drawFlag(ctx, (c.x + half) * scale, (c.y + half) * scale - 2, cityInfo(world, i).color, false, 18)
-    })
+    world.cities.forEach((c, i) => drawCastle(ctx, (c.x + half) * scale, (c.y + half) * scale, cityInfo(world, i).color))
     for (const t of towns) drawHouse(ctx, t.at.x * scale, t.at.y * scale, t.color ?? '#b08a3c')
     for (const p of patrols) drawPatrol(ctx, p.at.x * scale, p.at.y * scale, p.color)
     // Back to front on screen (the screen's vertical is x + y), the player's own on top.

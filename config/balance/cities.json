@@ -9,7 +9,7 @@
       "out": 0.4,
       "stay": 0.15,
       "answerSeconds": 300,
-      "tribute": { "share": 0.08, "min": 40, "max": 400 },
+      "tribute": { "share": 0.04, "min": 25, "max": 250 },
       "refuseRelation": -8,
       "tip": 120
     }

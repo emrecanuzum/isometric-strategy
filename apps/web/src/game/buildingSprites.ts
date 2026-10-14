@@ -42,6 +42,8 @@ export const KINGDOM_COLORS = {
   cocoa: tones('Kahve', 0x6a4830),
   orange: tones('Turuncu', 0xf0862a),
   pine: tones('Çam', 0x1e4c3c),
+  mint: tones('Nane', 0x7ed6b0),
+  peach: tones('Şeftali', 0xf2a07a),
 } satisfies Record<KingdomColorId, { name: string; roofs: Uint32Array; swatch: string }>
 export type KingdomColor = KingdomColorId
 const KEEP = ramp(0x6a6672, 0x868290, 0xa8a4ac, 0xc8c4c4, 0xdedad2)

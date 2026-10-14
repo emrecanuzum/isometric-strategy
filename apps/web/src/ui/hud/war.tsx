@@ -44,6 +44,71 @@ export function armyStatus(army: Army, now: number, rest: ReturnType<typeof rest
   return `Bekliyor · ${REST_NAMES[rest(army.path[army.path.length - 1])]}`
 }
 
+// The fighting that concerns the player right now (CLAUDE.md §8): sieges of towns they lay or suffer, battles they
+// fight in, and their armies on the way to a siege. Shown on the map's right edge and at the top of the army tab, since
+// war is what matters most.
+export interface WarNote {
+  key: string
+  text: string
+  // The span it runs over, for a progress bar.
+  from?: number
+  until?: number
+}
+
+export function warNotes(online: Online, now: number): WarNote[] {
+  const notes: WarNote[] = []
+  const me = online.me
+  for (const t of online.towns) {
+    const s = t.siege
+    if (!s || s.endsAt <= now || (s.kingdom !== me && t.owner !== me)) continue
+    notes.push({
+      key: `town${t.id}`,
+      text: s.kingdom === me ? `${t.name} kuşatılıyor · ${clock(s.endsAt - now)} kaldı` : `${kingdomName(online, s.kingdom)}, ${t.name} kasabanı kuşatıyor · ${clock(s.endsAt - now)} kaldı`,
+      from: s.startedAt,
+      until: s.endsAt,
+    })
+  }
+  for (const b of online.battles) {
+    const end = Date.parse(b.ends_at)
+    if ((b.resolved && end <= now) || ![...b.attackers, ...b.defenders].some((f) => f.kingdom === me)) continue
+    const start = Date.parse(b.started_at)
+    const what = b.kind === 'siege' && b.besieged !== null ? `${kingdomName(online, b.besieged)} kuşatması` : 'Meydan muharebesi'
+    notes.push({ key: `battle${b.id}`, text: start > now ? `${what} ${clock(start - now)} sonra başlıyor` : `${what} sürüyor · ${clock(end - now)} kaldı`, from: start, until: end })
+  }
+  for (const a of online.armies) {
+    if (a.kingdom_id !== me || a.status === 'battle') continue
+    const arrive = Date.parse(a.arrive_at)
+    if (arrive <= now) continue
+    const goal = a.goal
+    const where = goal.kind === 'town' ? online.towns.find((t) => t.id === goal.town)?.name : goal.kind === 'siege' ? `${kingdomName(online, goal.kingdom)} sarayı` : null
+    if (where) notes.push({ key: `march${a.id}`, text: `Ordun ${where} kuşatmasına gidiyor · varış ${clock(arrive - now)}`, from: Date.parse(a.depart_at), until: arrive })
+  }
+  return notes
+}
+
+// What is going on: the war notes with how far each has run.
+function WarNow({ online, now }: { online: Online; now: number }) {
+  const notes = warNotes(online, now)
+  if (notes.length === 0) return null
+  return (
+    <Section title="Süren savaş" icon="swords" aside={`${notes.length}`}>
+      <ul className="places">
+        {notes.map((n) => (
+          <li key={n.key}>
+            <Icon name="swords" size={24} />
+            <span>
+              <b>{n.text}</b>
+              {n.from !== undefined && n.until !== undefined && n.until > n.from && (
+                <Meter value={Math.max(0, Math.min(1, (now - n.from) / (n.until - n.from)))} label="İlerleme" segments={12} />
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  )
+}
+
 export function ArmyTab(data: HudData) {
   const { kingdom, now, world, online } = data
   if (!online) return null
@@ -53,6 +118,7 @@ export function ArmyTab(data: HudData) {
   const mine = online.armies.filter((a) => a.kingdom_id === online.me).sort((a, b) => a.id - b.id)
   return (
     <>
+      <WarNow online={online} now={now} />
       {/* The armies first: most orders are given here. */}
       <Section title="Ordularım" icon="swords" aside={`${mine.length} / ${balance.military.maxArmies}`}>
         {mine.length === 0 && <p className="hint">Sahada ordun yok. Garnizondan bir ordu çıkar.</p>}
@@ -230,6 +296,10 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
   const pending = online.orders.filter((o) => o.army_id === army.id)
   const busy = army.status === 'battle'
   const selected = online.army === army.id
+  // A town this army is besieging, or marching to.
+  const siege = online.towns.find((t) => t.siege?.army === army.id && t.siege.endsAt > now)
+  const goal = army.goal
+  const toTown = goal.kind === 'town' ? online.towns.find((t) => t.id === goal.town) : undefined
   return (
     <li className={selected ? 'army-card selected' : 'army-card'}>
       <div className="army-body">
@@ -237,7 +307,7 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
           <b>
             {index}. Ordu · {soldiers} savaşçı
           </b>
-          <small>{armyStatus(army, now, rest, (id) => online.kingdoms.find((k) => k.id === id)?.shieldUntil ?? 0)}</small>
+          <small>{siege ? `${siege.name} kuşatılıyor · ${clock(siege.siege!.endsAt - now)} kaldı` : toTown && Date.parse(army.arrive_at) > now ? `${toTown.name} kuşatmasına gidiyor · varış ${clock(Date.parse(army.arrive_at) - now)}` : armyStatus(army, now, rest, (id) => online.kingdoms.find((k) => k.id === id)?.shieldUntil ?? 0)}</small>
         </div>
         <UnitRow units={army.units ?? { spear: soldiers }} />
         <div className="army-stats">

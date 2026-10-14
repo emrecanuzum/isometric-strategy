@@ -15,7 +15,6 @@ import {
   patrolTarget,
   visitKind,
   capitalGate,
-  findRoute,
   lobbyTripMs,
   tradeTripMs,
   build,
@@ -59,6 +58,7 @@ import { cityInfo } from './game/cities'
 import { townStructures, townTrails } from './game/towns'
 import { Minimap } from './game/Minimap'
 import type { MinimapFlag, MinimapPatrol, MinimapTown } from './game/Minimap'
+import { patrolRoute } from './game/patrolRoutes'
 import type { Structure } from './game/chunkPainter'
 import type { StructureLook } from './game/buildingSprites'
 import { createWorld, footprintOrigin } from './game/createWorld'
@@ -77,7 +77,7 @@ import { DetailSettings, SoundSettings } from './ui/home/SettingsPanel'
 import { WarTargets } from './ui/hud/WarTargets'
 import { EnvoyDialog, describe as describeNotice } from './ui/Envoy'
 import type { KingdomInfo, Online } from './ui/hud/online'
-import { BattleView } from './ui/hud/war'
+import { BattleView, warNotes } from './ui/hud/war'
 import type { Settings } from './net/settings'
 import { Chat } from './ui/Chat'
 import { findPath, tilesAlong } from './game/town'
@@ -231,10 +231,8 @@ function noticeHurts(n: Notice, me: string | undefined) {
   if (n.kind === 'battle_end') return !!me && (p.report?.losses?.[me] ?? 0) > 0
   if (n.kind === 'envoy_answer') return p.accepted === false
   if (n.kind === 'envoy_proposal') return p.kind === 'tribute'
-  // A town of the player's besieged or taken by someone else, or a siege of theirs beaten off.
-  const by = (n.payload as { by?: string }).by
-  if (n.kind === 'town_siege' || n.kind === 'town_taken') return by !== me
-  if (n.kind === 'town_held') return true
+  // Sieges of towns, laid or suffered, lifted, won or beaten off: war is always important.
+  if (n.kind === 'town_siege' || n.kind === 'town_taken' || n.kind === 'town_held' || n.kind === 'town_siege_lifted') return true
   return false
 }
 
@@ -1349,7 +1347,7 @@ function App({
         const key = `${crown}:${p}:${slot}`
         if (!patrolRoutes.current.has(key)) {
           const door = { x: stop.x + stop.size + 0.8, y: stop.y + stop.size + 0.8 }
-          patrolRoutes.current.set(key, findRoute(view.world, capitalGate(city), door))
+          patrolRoutes.current.set(key, patrolRoute(view.world, city, capitalGate(city), door))
         }
         const route = patrolRoutes.current.get(key)
         if (!route || route.length === 0) continue
@@ -1721,6 +1719,7 @@ function App({
         <MapAlerts
           kingdom={kingdom}
           now={now}
+          war={warNotes(online, now)}
           onOpen={(tab) => {
             setSelected(null)
             setPanel(tab)

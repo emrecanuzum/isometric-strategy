@@ -351,7 +351,9 @@ uzaklık olmalı; kimse tamamen dezavantajlı başlamamalı.
   Gökova, Kartalsuyu… binlerce birleşim) ve lobideki başka bir krallığın
   adıyla aynı kökü taşımaz; oyuncu kendi adını da yazabilir.
   Lobi, büyüklüğü kadar renk sunar (9 ya da 18; `packages/shared/src/colors.ts`)
-  ve **bir renk lobide yalnızca bir krallığındır**: alınmış renk seçilemez. Sarayın
+  ve **bir renk lobide yalnızca bir krallığındır**: alınmış renk seçilemez.
+  **Kızıl ve lacivert** taç krallıklarınındır (başkentler, devriyeler); hiçbir
+  lord bu renkleri seçemez. Sarayın
   çatıları bu renkte çizilir. Harita uzaklaştırıldığında (½× ve altı)
   krallığın adı **sarayın üstünde**, haritayı okutacak kadar **büyük** (30
   piksel) yazar (saray yoksa hududun ortasında); taç başkentlerinin adları da.
@@ -689,6 +691,14 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     yapılar, sınırdaki düşman ordusu, ayaklanma) ekranın sağ ortasında, üst
     çubukla harita düğmeleri arasında kırmızı kartlarla durur; dokununca
     ilgili sekme açılır (`apps/web/src/ui/hud/MapAlerts.tsx`).
+    **Savaş en üsttedir:** oyuncunun kuşattığı ya da onun kasabasını kuşatan
+    kasaba kuşatmaları (kalan süreyle), askerinin bulunduğu süren
+    muharebeler ve kuşatmaya yürüyen orduları da birer kart olur; dokununca
+    Ordu sekmesi açılır. Ordu sekmesinin başında aynı liste **Süren savaş**
+    bölümünde ilerleme çubuklarıyla durur; kuşatan ordunun kartında "X
+    kuşatılıyor · N dk kaldı" yazar. Kasaba kuşatmasıyla ilgili bütün
+    haberler (başladı, kalktı, alındı, direndi) günlükte **Önemli** sayılır
+    (`apps/web/src/ui/hud/war.tsx` → `warNotes`).
   - **İlk oduncu kampı, ilk ev ve ilk tarla ücretsizdir** (bir kez), böylece
     bütün malzemesini harcayan oyuncu kilitlenmez.
   - **Ev ve nüfus sınırı:** Evler (ve sarayın kendi odaları) nüfus
@@ -984,6 +994,10 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   çıkarır. Her 15 dakikalık turda her devriye, tohumdan seçilen bir **biat
   etmiş lordun** sarayına gider (turun %40'ı), orada biraz kalır (%15) ve
   geri döner. Bir tacın iki devriyesi aynı turda aynı lordu seçmez.
+  Devriye **ticaret yollarından** gider: başkentin surundaki bir yol ucundan
+  (böylece iç ve dış surun kapılarından) çıkar, yol ağında lorda en yakın
+  noktaya kadar yolu izler, son parçayı araziden yürür. Yol iki katından
+  uzun düşerse doğrudan gider (`apps/web/src/game/patrolRoutes.ts`).
   Devriyeler haritada tacın renginde (kızıl / lacivert), sıradan ordulardan
   iri, **arka arkaya 5 bölüklük bir kol** olarak herkese görünür: bölükler
   aynı yolu biraz arayla izler, her biri kendi yönünü alır; yolun başında
@@ -993,7 +1007,7 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     eğlenir ve **120 altın bahşiş** bırakır. Eğlence merkezi yoksa sarayın
     önüne gelip geçer, bahşiş bırakmaz.
   - **Rakip tacın devriyesi** sarayın kapısına gelip **haraç ister**:
-    hazinenin %8'i (en az 40, en fazla 400 altın); diyalog bunun hazinenin
+    hazinenin %4'ü (en az 25, en fazla 250 altın); diyalog bunun hazinenin
     yüzde kaçı olduğunu da yazar. Elçi diyaloğunda **"Öde"** ya da
     **"Reddet"**. Reddedilirse o tacın bütün lordlarıyla ilişki **−8** düşer.
     5 dakika içinde cevap verilmezse (oyuncu çevrimdışıysa da) devriye
@@ -1477,7 +1491,9 @@ mertebesindedir.
 - Gece yanan pencerelerin çevresinde yumuşak bir **parıltı** vardır (aynı
   ışıklar bulanıklaştırılıp gecenin üstüne eklenir).
 - Ordular (ve devriyeler) köprüden geçerken güvertenin üstünde yürür,
-  suyun hizasında değil (`chunkPainter.ts` → `surfaceHeight`).
+  suyun hizasında değil (`chunkPainter.ts` → `surfaceHeight`). Bölükteki
+  her asker gölgesini kendi ayağından düşürür (arka saflar havada
+  görünmez; `armies.ts` → `squad`, piksel başına `lift`).
 - Ordular binalar, surlar ve yürüyenlerle aynı derinlik sıralamasında
   çizilir: önlerindeki bina ya da sur onları örter, bir kapının içinden
   geçerken kemerin altında gizlenirler; uzak yakınlaştırmada da görünürler.
@@ -1634,11 +1650,11 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   yöne, yukarı-aşağı da kaydırılabilir; yakınlaştırma bakılan yeri ortaya
   getirir.
 - Küçük haritada her krallığın **hududu kendi renginde** yarı saydam bir
-  alan ve çerçeveyle (oyuncununki altın çerçeveli) boyanır; taç başkentlerinin
-  kalesinin üstünde tacın renginde sancak dalgalanır. Simgeler (sancak, kale,
-  kasaba, devriye) büyüktür.
-- Küçük haritada krallıklar renkli sancakla, **serbest şehirler** açık
-  taş renginde küçük bir **kale** simgesiyle (iki kuleli, kapılı),
+  alan ve çerçeveyle (oyuncununki altın çerçeveli) boyanır. Simgeler (kale,
+  kasaba, devriye) büyüktür; krallık sancakları onlardan biraz küçüktür.
+- Küçük haritada krallıklar renkli sancakla, **taç başkentleri**
+  tacın renginde (kızıl / lacivert) küçük bir **kale** simgesiyle (iki
+  kuleli, kapılı; üstünde sancak yok),
   **kasabalar** sahibinin renginde çatılı küçük bir **ev** simgesiyle
   (sahipsizse saman rengi) ve gezen **taç devriyeleri** tacın renginde
   sancaklı birer noktayla (2 saniyede bir yerleri güncellenir) gösterilir;
@@ -1672,6 +1688,10 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
 Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
 `f(zaman)` olarak hesaplanır. Oyuncu çevrimdışıyken hiçbir şey yazılmaz.
 
+- **Güncelleme:** Her derleme bir sürüm kimliği taşır ve yanına
+  `version.json` yazar. Açık sayfa 90 saniyede bir ve sekme geri gelince
+  bu dosyayı okur; yeni bir sürüm yayındaysa "Oyun güncellendi, sayfa
+  yenileniyor…" yazıp kendini yeniler (`apps/web/src/lib/version.ts`).
 - **Sunucu saati:** İstemci girişte sunucu saatini çeker
   (gidiş-dönüş/2 düzeltmeli `offset`), oyun saati `Date.now() + offset`
   ile hesaplanır; birkaç dakikada bir ve sekme geri gelince yeniden
