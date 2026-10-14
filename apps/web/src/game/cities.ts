@@ -39,6 +39,21 @@ export function cityInfo(world: World, index: number): CityInfo {
   }
 }
 
+// The whole ground of a crown capital: its walled core and the outer city round it, out to the outer wall.
+export function cityArea(world: World, index: number) {
+  const c = world.cities[index]
+  return { x: c.x - RING, y: c.y - RING, size: balance.cities.size + RING * 2 }
+}
+
+// The capital whose whole ground (see cityArea) holds the tile, if any.
+export function cityAreaAt(world: World, tile: Point): number | undefined {
+  const index = world.cities.findIndex((_, i) => {
+    const r = cityArea(world, i)
+    return tile.x >= r.x && tile.y >= r.y && tile.x < r.x + r.size && tile.y < r.y + r.size
+  })
+  return index < 0 ? undefined : index
+}
+
 // The free city whose square holds the tile, if any.
 export function cityAt(world: World, tile: Point): number | undefined {
   const S = balance.cities.size

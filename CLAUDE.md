@@ -309,6 +309,9 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   bir kesim tek tür çiçekle kaplıdır. Ayrıca uzun ot tutamları, kırmızı ya
   da mor meyveli böğürtlen çalıları ve otun arasında tek tük taş vardır.
 - Karo ızgarası çizilmez; yalnızca **imlecin altındaki karo** vurgulanır.
+  İmleç bir taç başkentinin (dış suruna kadar, 36×36 karo) ya da bir
+  kasabanın (8×8) üstündeyse, binalarının üstünde de olsa, o yerin **bütün
+  alanı** araziye yatırılmış bir çerçeveyle vurgulanır.
   Hudut içinde parsel çizgileri çok silik gösterilir.
 - Arayüz yazı tipi Pixelify Sans'tır; ondaki 2 ve 5 zor okunduğu için
   **rakamlar Tiny5** ile çizilir (`apps/web/src/fonts.ts`). Büyük sayılar

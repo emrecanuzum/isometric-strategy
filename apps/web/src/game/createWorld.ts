@@ -21,7 +21,7 @@ import { createArmies } from './armies'
 import { dashes } from './dashes'
 import type { MapArmy, MapBattle } from './armies'
 import { createCaravans } from './caravans'
-import { cityAt, cityInfo, cityStructures, cityTrails } from './cities'
+import { cityArea, cityAreaAt, cityAt, cityInfo, cityStructures, cityTrails } from './cities'
 import { CHIMNEYS, linkWalls, structureParts } from './buildingSprites'
 import { openGate } from './wallSprites'
 import { SPRITES, lightsOf, outlineOf, silhouetteOf } from './sprites'
@@ -157,6 +157,8 @@ export interface RivalTerritory {
 // A town on the map as drawn: where its name goes (a ground point), its name and colour, and the siege under way.
 export interface TownMark {
   at: Point
+  // The town's ground, outlined while the pointer is over it.
+  rect?: Rect
   name: string
   color: number
   siege: { startedAt: number; endsAt: number; color: number } | null
@@ -905,7 +907,16 @@ export async function createWorld(
           const py = Math.floor(wy - sy + sprite.anchorY)
           return px >= 0 && py >= 0 && px < sprite.width && py < sprite.height && sprite.pixels[py * sprite.width + px] >>> 24 === 0xff
         })
+    // A capital's or a town's whole ground is outlined while the pointer is anywhere over it, lying on the slope.
+    const outlineArea = (r: Rect) =>
+      cursor
+        .poly(square(r.x, r.y, r.size))
+        .fill({ color: HOVER, alpha: 0.06 })
+        .stroke({ width: 3 / camera.scale.x, color: HOVER, alpha: 0.9 })
+    const townUnder = placement || tool ? undefined : townMarks.find(({ mark: { rect: r } }) => r && tile.x >= r.x && tile.y >= r.y && tile.x < r.x + r.size && tile.y < r.y + r.size)
     if (hit) {
+      if (hit.city) outlineArea(cityArea(world, hit.id))
+      else if (townUnder) outlineArea(townUnder.mark.rect!)
       const ring = outlineOf(hit.sprite)
       highlight.texture = textureOf(ring)
       highlight.anchor.set(ring.anchorX / ring.width, ring.anchorY / ring.height)
@@ -928,13 +939,19 @@ export async function createWorld(
       onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y), building })
       return tile
     }
-    // The streets and yards of a free city name the city too.
-    const city = placement || tool ? undefined : cityAt(world, tile)
+    // The streets and yards of a free city (out to its outer wall) name the city too.
+    const city = placement || tool ? undefined : (cityAt(world, tile) ?? cityAreaAt(world, tile))
     if (city !== undefined) {
+      outlineArea(cityArea(world, city))
       pickedCity = city
       const ground = groundToScreen(world, { x: tile.x + 0.5, y: tile.y + 0.5 })
       const screen = { x: camera.x + ground.x * camera.scale.x, y: camera.y + (ground.y - 24) * camera.scale.y }
       onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y), city: { index: city, screen } })
+      return tile
+    }
+    if (townUnder) {
+      outlineArea(townUnder.mark.rect!)
+      onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y) })
       return tile
     }
     if (placement) {

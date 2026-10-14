@@ -808,6 +808,7 @@ function App({
     view.setTowns(
       layer.towns.map((t) => ({
         at: townCenter(t),
+        rect: { x: t.x, y: t.y, size: balance.towns.size },
         name: t.owner === null ? t.name : `${t.name} · ${t.owner === mine?.id ? (shown?.name ?? 'Senin') : (rivals.find((r) => r.id === t.owner)?.name ?? '?')}`,
         color: colorFor(t.owner),
         siege: t.siege ? { startedAt: t.siege.startedAt, endsAt: t.siege.endsAt, color: colorFor(t.siege.kingdom) } : null,
