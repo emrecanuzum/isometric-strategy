@@ -298,6 +298,27 @@ export const BARK = ramp(0x2e2119, 0x4a3424, 0x6b4c31, 0x8a6841)
 const DEAD = ramp(0x2b2823, 0x464037, 0x655c4d, 0x857a65)
 export const STONE = ramp(0x2e2c3d, 0x474454, 0x64606c, 0x858088, 0xa7a2a1, 0xc6c1b6)
 const REED = ramp(0x34452a, 0x516634, 0x748a42, 0x5a3d26)
+const RUSH = ramp(0x27401f, 0x3e622a, 0x5b8636, 0x82a84a, 0xaac668)
+const CATTAIL = ramp(0x3a2414, 0x5e3a20, 0x7e5430)
+// Fruit: red and yellow apples, pears, plums, apricots (shaded, base, lit).
+const FRUIT = {
+  apple: ramp(0x8a1c1c, 0xc8342a, 0xf07a5a),
+  goldApple: ramp(0x8a7a1a, 0xc8b832, 0xf0e27a),
+  pear: ramp(0x6e7a22, 0xa8b43a, 0xdce07a),
+  plum: ramp(0x2e1a4a, 0x553078, 0x8a62b0),
+  apricot: ramp(0x9a4a14, 0xe0802a, 0xf8b462),
+}
+// Meadow flowers: poppy, daisy (white with a yellow eye), cornflower, buttercup, clover and lavender.
+const MEADOW = [
+  ramp(0x8a1c18, 0xd8302a, 0xf06a50),
+  ramp(0xb8b4a8, 0xf4f2ea, 0xffffff, 0xf2cf4a),
+  ramp(0x23347a, 0x3e5ed0, 0x7a96ea),
+  ramp(0xa07a10, 0xf2cf2a, 0xfff08a),
+  ramp(0x8a3a6a, 0xd06aa0, 0xf0a8cc),
+  ramp(0x4a3a7a, 0x8a72c8, 0xb8a8ea),
+]
+const GRASS_TALL = [ramp(0x2f5a2a, 0x4f8a3a, 0x6aa246, 0xc8c07a), ramp(0x4a5a26, 0x7a8a36, 0x9caa4a, 0xe0d08a)]
+const BERRY = [ramp(0x6a0e1a, 0xc0202e), ramp(0x1a1630, 0x3a3270)]
 export const WALL = ramp(0x6f5a47, 0x8f775c, 0xb39a76, 0xd2bc94, 0xe9d8b4)
 export const ROOF = ramp(0x4f1f24, 0x6f2a2a, 0x933a30, 0xb5503a, 0xd06f4a, 0xe39062)
 export const TIMBER = ramp(0x2a1c16, 0x432c1f, 0x5e4029)
@@ -1005,6 +1026,129 @@ function reeds(seed: number): Sprite {
   return canvas.sprite(6, base, 0)
 }
 
+// A thick stand of rushes at the water's edge: blades of several greens, bent at the top, some carrying the brown
+// heads of bulrushes.
+function rushes(seed: number): Sprite {
+  const random = mulberry32(seed)
+  const canvas = new Canvas(19, 18)
+  const base = canvas.height - 1
+  const blades = 13 + Math.floor(random() * 5)
+  for (let n = 0; n < blades; n++) {
+    // Taller in the middle of the stand; the blades further back are in shade.
+    const x = 2 + random() * 14
+    const tall = Math.round(5 + random() * 6 + (1 - Math.abs(x - 9) / 9) * 5)
+    const lean = (random() - 0.5) * 0.6
+    const head = tall > 11 && random() < 0.3
+    const tone = 1 + Math.floor(random() * 3)
+    for (let s = 0; s < tall; s++) {
+      const bend = s > tall * 0.6 ? (s - tall * 0.6) * lean * 1.6 : 0
+      // Lit toward the tip, dark at the foot.
+      canvas.set(x + s * lean * 0.3 + bend, base - s, RUSH[s < 2 ? 0 : Math.min(4, tone + (s > tall * 0.7 ? 1 : 0))])
+    }
+    // A bulrush head: a short brown cigar, lit on its left, just under the tip.
+    if (head) {
+      for (let s = tall - 4; s < tall - 1; s++) {
+        canvas.set(x + s * lean * 0.3, base - s, CATTAIL[2])
+        canvas.set(x + s * lean * 0.3 + 1, base - s, CATTAIL[s === tall - 4 ? 0 : 1])
+      }
+    }
+  }
+  return canvas.sprite(9, base, 0)
+}
+
+// A broadleaf tree hung with fruit: apples, pears, plums, apricots. More fruit on the lit side, and a few windfalls
+// in the grass at its foot (a hair short of opaque, so they throw no shadow).
+function fruitTree(seed: number, fruit: Uint32Array, leaves: Uint32Array): Sprite {
+  const tree = leafTree(seed, leaves)
+  const canvas = new Canvas(tree.width, tree.height + 3)
+  canvas.pixels.set(tree.pixels)
+  const crown = (x: number, y: number) => {
+    const c = canvas.get(x, y)
+    return c !== 0 && leaves.includes(c)
+  }
+  const random = mulberry32(seed + 1)
+  const count = 18 + Math.floor(random() * 10)
+  for (let n = 0, tries = 0; n < count && tries < 400; tries++) {
+    const x = Math.floor(random() * canvas.width)
+    const y = Math.floor(random() * tree.height)
+    if (!crown(x, y) || !crown(x + 1, y + 1) || !crown(x - 1, y - 1)) continue
+    const lit = leaves.indexOf(canvas.get(x, y))
+    if (lit < 2 && random() < 0.5) continue
+    // Fruit apart from one another.
+    if (!leaves.includes(canvas.get(x + 2, y)) || !leaves.includes(canvas.get(x - 1, y))) continue
+    canvas.set(x, y, fruit[1])
+    canvas.set(x + 1, y, fruit[0])
+    canvas.set(x, y - 1, lit > 2 ? fruit[2] : fruit[1])
+    canvas.set(x + 1, y - 1, fruit[1])
+    n++
+  }
+  const base = tree.anchorY
+  for (let n = 0; n < 4; n++) {
+    const x = Math.round(tree.anchorX + (random() - 0.5) * tree.shadow * 2.2)
+    const y = Math.round(base + 1 + random() * 2)
+    if (!canvas.get(x, y)) canvas.set(x, y, ((fruit[1] & 0x00ffffff) | 0xfe000000) >>> 0)
+  }
+  return canvas.sprite(tree.anchorX, base, tree.shadow)
+}
+
+// A patch of wildflowers in the meadow grass: short stems and bright heads, mostly of one kind.
+function wildflowers(seed: number, petals: Uint32Array): Sprite {
+  const random = mulberry32(seed)
+  const canvas = new Canvas(28, 13)
+  const base = canvas.height - 1
+  const count = 22 + Math.floor(random() * 12)
+  // Back to front, so nearer flowers stand over the ones behind.
+  const spots: [number, number][] = []
+  for (let n = 0; n < count; n++) {
+    // Scattered over a flat ellipse on the ground, thicker in the middle.
+    const a = random() * Math.PI * 2
+    const d = random() ** 0.7
+    spots.push([Math.round(14 + Math.cos(a) * d * 12), Math.round(base - 3 + Math.sin(a) * d * 3.5)])
+  }
+  spots.sort((p, q) => p[1] - q[1])
+  for (const [x, y] of spots) {
+    const stem = 1 + Math.floor(random() * 3)
+    for (let s = 0; s < stem; s++) canvas.set(x, y - s, LEAF[0][s === 0 ? 2 : 3])
+    if (random() < 0.4) canvas.set(x + 1, y, LEAF[0][4])
+    // A head of two or three pixels, lit on its upper left, some with a bright eye.
+    const top = y - stem
+    canvas.set(x, top, petals[1])
+    canvas.set(x + 1, top, petals[0])
+    canvas.set(x, top - 1, petals[2])
+    if (random() < 0.5) canvas.set(x - 1, top, petals[2])
+    if (petals.length > 3 && random() < 0.7) canvas.set(x, top, petals[3])
+  }
+  return canvas.sprite(14, base, 0)
+}
+
+// A clump of tall meadow grass, some of it gone to seed.
+function tallGrass(seed: number, colors: Uint32Array): Sprite {
+  const random = mulberry32(seed)
+  const canvas = new Canvas(14, 11)
+  const base = canvas.height - 1
+  const blades = 8 + Math.floor(random() * 5)
+  for (let n = 0; n < blades; n++) {
+    const x = 2 + random() * 10
+    const tall = Math.round(4 + random() * 5 + (1 - Math.abs(x - 7) / 7) * 2)
+    const lean = (x - 7) * 0.12 + (random() - 0.5) * 0.4
+    for (let s = 0; s < tall; s++) canvas.set(x + s * lean * 0.35, base - s, colors[s === tall - 1 && random() < 0.5 ? 3 : s < 2 ? 0 : 1 + (n & 1)])
+  }
+  return canvas.sprite(7, base, 0)
+}
+
+// A bramble or wild currant bush dotted with berries.
+function berryBush(seed: number, berry: Uint32Array): Sprite {
+  const sprite = bush(seed, LEAF[1])
+  const pixels = sprite.pixels.slice()
+  const { width } = sprite
+  for (let i = 0; i < pixels.length; i++) {
+    const lit = LEAF[1].indexOf(pixels[i])
+    if (lit < 1) continue
+    if (hash(i % width, Math.floor(i / width), seed + 9) < 0.07 + lit * 0.02) pixels[i] = berry[lit > 3 ? 1 : 0]
+  }
+  return { ...sprite, pixels }
+}
+
 // Walkers face screen right (they are mirrored to face left) and come in two stride frames.
 export function shadow(canvas: Canvas, cx: number, base: number, rx: number) {
   for (let x = -rx; x <= rx; x++) {
@@ -1641,6 +1785,20 @@ export const SPRITES = {
   bush: [...variants(3, (s) => bush(s, LEAF[0])), ...variants(2, (s) => bush(s + 1, LEAF[2]))],
   boulder: variants(6, boulder),
   reeds: variants(4, reeds),
+  rushes: variants(5, rushes),
+  // Fruit trees: wild apple, pear, plum and apricot in the woods' clearings and orchards.
+  fruit: [
+    ...variants(2, (s) => fruitTree(s + 61, FRUIT.apple, LEAF[0])),
+    ...variants(2, (s) => fruitTree(s + 62, FRUIT.apple, LEAF[1])),
+    fruitTree(63, FRUIT.goldApple, LEAF[0]),
+    ...variants(2, (s) => fruitTree(s + 64, FRUIT.pear, LEAF[2])),
+    ...variants(2, (s) => fruitTree(s + 65, FRUIT.plum, LEAF[1])),
+    fruitTree(66, FRUIT.apricot, LEAF[0]),
+  ],
+  // wildflowers[kind][variant]
+  wildflowers: MEADOW.map((petals, k) => variants(3, (s) => wildflowers(s + k * 101, petals))),
+  tallGrass: [...variants(3, (s) => tallGrass(s, GRASS_TALL[0])), ...variants(2, (s) => tallGrass(s + 7, GRASS_TALL[1]))],
+  berryBush: [...variants(2, (s) => berryBush(s + 3, BERRY[0])), berryBush(77, BERRY[1])],
   // camel[cloth][load][frame]
   camel: CLOTH.map((cloth) => [0, 1, 2].map((load) => [camel(0, cloth, load), camel(1, cloth, load)])),
   // merchant[robe][frame]

@@ -1,4 +1,4 @@
-import { Terrain } from '@game/shared'
+import { Terrain, balance } from '@game/shared'
 import type { Point, World } from '@game/shared'
 import { useEffect, useMemo, useRef } from 'react'
 import { FEATURE_COLORS, TERRAIN_COLORS } from './createWorld'
@@ -73,6 +73,39 @@ function drawFlag(ctx: CanvasRenderingContext2D, x: number, y: number, color: st
   ctx.restore()
 }
 
+// A free city's pin: a small castle of pale stone with two towers and a dark gate, standing upright like the banners.
+// Rows from the top, 13 wide: '#' outline, 's' stone, 'l' lit stone, 'g' gate.
+const CASTLE = [
+  '#.#.#...#.#.#',
+  '#l#s#...#l#s#',
+  '#lsss#.#llss#',
+  '#lsss###lsss#',
+  '#lsss#l#lsss#',
+  '#lssslssslss#',
+  '#lsssl#g#lss#',
+  '#lsss#ggg#ss#',
+  '#lsss#ggg#ss#',
+  '#############',
+]
+const CASTLE_COLORS: Record<string, string> = { '#': '#1a120c', s: '#c9b48a', l: '#f2e3b8', g: '#3a2414' }
+
+function drawCastle(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(-Math.PI / 4)
+  ctx.scale(1, 2)
+  const w = CASTLE[0].length
+  for (let row = 0; row < CASTLE.length; row++) {
+    for (let col = 0; col < w; col++) {
+      const c = CASTLE[row][col]
+      if (c === '.') continue
+      ctx.fillStyle = CASTLE_COLORS[c]
+      ctx.fillRect(col - (w >> 1), row - CASTLE.length, 1, 1)
+    }
+  }
+  ctx.restore()
+}
+
 export function Minimap({ world, center, flags = [], onJump }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const base = useMemo(() => renderBase(world), [world])
@@ -86,10 +119,13 @@ export function Minimap({ world, center, flags = [], onJump }: Props) {
       ctx.lineWidth = 2
       ctx.strokeRect(center.x * scale - 6, center.y * scale - 6, 12, 12)
     }
+    // Free cities under the banners, at the middle of each city.
+    const half = balance.cities.size / 2
+    for (const c of world.cities) drawCastle(ctx, (c.x + half) * scale, (c.y + half) * scale)
     // Back to front on screen (the screen's vertical is x + y), the player's own on top.
     const order = [...flags].sort((a, b) => Number(a.own) - Number(b.own) || a.site.x + a.site.y - (b.site.x + b.site.y))
     for (const flag of order) drawFlag(ctx, flag.site.x * scale, flag.site.y * scale, flag.color, flag.own)
-  }, [base, center, flags, world.size])
+  }, [base, center, flags, world])
 
   return (
     <div className="minimap">

@@ -293,6 +293,17 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   çim suya iner),
   yüzeyde parıltı çizgileri taşır. Çayırda çimen dokusu ve çiçekler,
   ormanda ağaçlar bulunur.
+- **Sazlıklar:** Nehir ve göl kıyısında sığ suda (ve biraz da kıyıda)
+  kamışlı saz öbekleri durur; kıyının bazı kesimlerinde sık, bazılarında
+  hiç yoktur. Dağ boğazlarında, köprü ve iskele çevresinde çıkmaz.
+- **Meyveli ağaçlar:** Ormanın açıklıklarında öbek öbek yaban elması
+  (kırmızı, sarı), armut, erik ve kayısı ağaçları, aralarında çiçek açmış
+  kirazlar; ormanda ve açık arazide tek tük de bulunur. Dibine birkaç
+  meyve düşmüştür.
+- **Çayır:** Açık çayırda kır çiçeği öbekleri (gelincik, papatya,
+  peygamber çiçeği, düğün çiçeği, yonca, lavanta) serpilir; yer yer bütün
+  bir kesim tek tür çiçekle kaplıdır. Ayrıca uzun ot tutamları, kırmızı ya
+  da mor meyveli böğürtlen çalıları ve otun arasında tek tük taş vardır.
 - Karo ızgarası çizilmez; yalnızca **imlecin altındaki karo** vurgulanır.
   Hudut içinde parsel çizgileri çok silik gösterilir.
 - Arayüz yazı tipi Pixelify Sans'tır; ondaki 2 ve 5 zor okunduğu için
@@ -1353,6 +1364,9 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
 - Dünya haritası (telefonda küçük haritaya dokununca) yakınlaştırılınca her
   yöne, yukarı-aşağı da kaydırılabilir; yakınlaştırma bakılan yeri ortaya
   getirir.
+- Küçük haritada krallıklar renkli sancakla, **serbest şehirler** açık
+  taş renginde küçük bir **kale** simgesiyle (iki kuleli, kapılı)
+  gösterilir; sancaklar kalelerin üstünde çizilir.
 - Harita ekranının sağ üstünde, ayarların altında **ana menüye dön**
   düğmesi (ev ikonu) vardır. Yakınlaştırma düğmelerinin üstündeki **üsse
   dön** düğmesi (konum pini) kamerayı krallığa götürür.

@@ -23,7 +23,7 @@ export interface ChunkImage {
   trees?: LiftedTree[]
 }
 
-export type TreeSet = 'pine' | 'leaf' | 'fir' | 'birch' | 'poplar' | 'autumn' | 'blossom' | 'bigBlossom' | 'oak' | 'giantPine'
+export type TreeSet = 'pine' | 'leaf' | 'fir' | 'birch' | 'poplar' | 'autumn' | 'blossom' | 'bigBlossom' | 'oak' | 'giantPine' | 'fruit'
 
 export interface LiftedTree {
   set: TreeSet
@@ -83,6 +83,12 @@ export function setStructures(context: PaintContext, structures: Structure[], tr
   for (const s of structures) {
     for (let y = Math.max(0, s.y - 1); y < Math.min(size, s.y + s.size + 1); y++) {
       for (let x = Math.max(0, s.x - 1); x < Math.min(size, s.x + s.size + 1); x++) context.occupied[y * size + x] = 1
+    }
+    // A dock's jetty reaches over the water, where rushes would grow through it.
+    const p = s.pier
+    if (!p) continue
+    for (let y = Math.max(0, p.y - 1); y < Math.min(size, p.y + p.h + 1); y++) {
+      for (let x = Math.max(0, p.x - 1); x < Math.min(size, p.x + p.w + 1); x++) context.occupied[y * size + x] = 1
     }
   }
   context.trail = new Float32Array(size * size).fill(TRAIL_REACH + 1)
@@ -642,6 +648,33 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
     for (let dy = -1; dy <= 2; dy++) for (let dx = -1; dx <= 2; dx++) if ((dx || dy) && giantAt(x - dx, y - dy)) return true
     return false
   }
+  // Stretches of bank where rushes grow thick, and stretches where they grow not at all, 0..1.
+  const reedy = (x: number, y: number) => smoothstep(0.4, 0.68, valueNoise(x * 0.09, y * 0.09, seed + 75))
+  // Clearings in the woods where wild fruit trees grow together, 0..1.
+  const fruitful = (x: number, y: number) => smoothstep(0.55, 0.78, valueNoise(x * 0.08, y * 0.08, seed + 73))
+  // Fields of one kind of wildflower in the open meadows, and which kind.
+  const field = (x: number, y: number) => smoothstep(0.5, 0.75, valueNoise(x * 0.05, y * 0.05, seed + 77))
+  const fieldKind = (x: number, y: number) => Math.floor(valueNoise(x * 0.03, y * 0.03, seed + 79) * 12) % SPRITES.wildflowers.length
+  const wet = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= size || y >= size) return false
+    const t = world.terrain[y * size + x]
+    return t === Terrain.Lake || t === Terrain.River
+  }
+  // The direction from a tile toward its neighbours that are (or are not) water; [0, 0] if there are none.
+  const toward = (x: number, y: number, water: boolean) => {
+    let dx = 0
+    let dy = 0
+    for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + ox
+      const ny = y + oy
+      if (nx < 0 || ny < 0 || nx >= size || ny >= size || wet(nx, ny) !== water) continue
+      if (!water && world.terrain[ny * size + nx] === Terrain.Mountain) continue
+      dx += ox
+      dy += oy
+    }
+    const length = Math.hypot(dx, dy)
+    return length ? [dx / length, dy / length] : [0, 0]
+  }
   const lifted: LiftedTree[] = []
   const xEnd = Math.min(size, x0 + S + SPRITE_MARGIN)
   const yEnd = Math.min(size, y0 + S + SPRITE_MARGIN)
@@ -650,11 +683,27 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       const i = y * size + x
       const own = x >= x0 && y >= y0 && x < x0 + S && y < y0 + S
       const terrain = world.terrain[i]
-      if (terrain === Terrain.Lake || terrain === Terrain.River || !clear(x, y)) continue
+      if (!clear(x, y)) continue
       const spot = (n: number) =>
         [x + 0.15 + hash(x, y, seed + 21 + n) * 0.7, y + 0.15 + hash(x, y, seed + 31 + n) * 0.7] as const
       const roll = (n: number) => hash(x, y, seed + 11 + n)
       const kind = hash(x, y, seed + 41)
+      // Rushes stand in the shallows along the banks, thick in some stretches and missing in others, and a few
+      // grow up the bank itself.
+      const rushes = (n: number, water: boolean, chance: number) => {
+        const [dx, dy] = toward(x, y, !water)
+        if ((!dx && !dy) || roll(n) >= reedy(x, y) * chance) return false
+        // Toward the bank from the water, toward the water from the bank.
+        const [sx, sy] = spot(n)
+        const at = [x + 0.5 + (sx - x - 0.5) * 0.5 + dx * 0.3, y + 0.5 + (sy - y - 0.5) * 0.5 + dy * 0.3] as const
+        place(hash(x, y, seed + 81 + n) < 0.7 ? choose(SPRITES.rushes, kind) : choose(SPRITES.reeds, kind), ...at, own)
+        return true
+      }
+      if (terrain === Terrain.Lake || terrain === Terrain.River) {
+        if (rushes(6, true, 1)) rushes(7, true, 0.7)
+        continue
+      }
+      if (terrain !== Terrain.Mountain && terrain !== Terrain.Desert) rushes(8, false, 0.45)
       const variant = hash(x, y, seed + 43)
       const upland = (elevation[i] - levels.lake) / relief
       // Woods thin out over a band of moisture with ragged edges, so the forest has no hard border.
@@ -683,8 +732,13 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
         else if (h < smoothstep(0.55, 0.75, grove) * 0.75) set = 'birch'
         else if (woods < 0.35 && h > 0.93) set = 'poplar'
         // Trees in flower, here and there on open ground and thick in orchard-like patches; now and then a great one.
-        else if (woods < 0.35 && h < 0.12 + bloom(x, y) * 0.55) set = hash(x, y, seed + 57 + n) < 0.07 ? 'bigBlossom' : 'blossom'
-        else if (woods < 0.7 && h > 0.97) set = 'blossom'
+        else if (woods < 0.35 && h < 0.12 + bloom(x, y) * 0.55) {
+          const r = hash(x, y, seed + 57 + n)
+          set = r < 0.07 ? 'bigBlossom' : r < 0.3 ? 'fruit' : 'blossom'
+        }
+        // Wild apples, pears and plums in clearings of the woods, cherries in flower among them.
+        else if (woods >= 0.35 && h < 0.06 + fruitful(x, y) * 0.6) set = hash(x, y, seed + 57 + n) < 0.75 ? 'fruit' : 'blossom'
+        else if (h > (woods < 0.7 ? 0.97 : 0.985)) set = hash(x, y, seed + 57 + n) < 0.5 ? 'fruit' : 'blossom'
         else set = 'leaf'
         grow(set, n, spot(n))
       }
@@ -739,9 +793,22 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
             trees++
           }
         }
-        if (trees === 0 && roll(2) < 0.04 * (1 - woods) + 0.03 * woods * (1 - woods) * 4) {
-          place(choose(SPRITES.bush, variant), ...spot(2), own)
+        if (trees > 0) continue
+        const open = 1 - woods
+        const r = roll(2)
+        const bushes = 0.04 * open + 0.03 * woods * open * 4
+        if (r < bushes) {
+          place(choose(hash(x, y, seed + 83) < 0.3 ? SPRITES.berryBush : SPRITES.bush, variant), ...spot(2), own)
+          continue
         }
+        // Open meadows carry patches of wildflowers (whole fields of one kind here and there) and clumps of tall grass.
+        const flowers = open * (1 - dry) * (0.05 + field(x, y) * 0.45)
+        if (r < bushes + flowers) {
+          const k = field(x, y) > 0.3 ? fieldKind(x, y) : Math.floor(hash(x, y, seed + 85) * SPRITES.wildflowers.length)
+          place(choose(SPRITES.wildflowers[k], variant), ...spot(2), own)
+        } else if (r < bushes + flowers + open * 0.12) place(choose(SPRITES.tallGrass, variant), ...spot(2), own)
+        // Now and then a stone lies in the grass.
+        else if (r < bushes + flowers + open * 0.13) place(choose(SPRITES.pebbles, variant), ...spot(2), own)
       } else if (terrain === Terrain.Swamp) {
         // Living trees reach a little way into the swamp from the woods around it.
         if (roll(2) < woods * 0.5 * (1 - smoothstep(levels.swamp, levels.swamp + 0.025, moisture[i] + edge))) tree(2)
