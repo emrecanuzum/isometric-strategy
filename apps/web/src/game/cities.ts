@@ -1,4 +1,4 @@
-import { Terrain, balance, cityCenter, cityHarbour, hash } from '@game/shared'
+import { Feature, Terrain, balance, cityCenter, cityHarbour, hash } from '@game/shared'
 import type { CitySide, Point, World } from '@game/shared'
 import type { Structure, StructureLook } from './buildingSprites'
 import { SHIP_LENGTH } from './shipSprites'
@@ -11,6 +11,8 @@ const NAMES = ['Altınkapı', 'Sedefhisar', 'Gümüşsu', 'Kervankale', 'Yıldı
 const RULERS = ['Kral Alparslan', 'Kraliçe Nilüfer', 'Kral Orhan', 'Kraliçe Selcan', 'Kral Tuğrul', 'Kraliçe Gevherhan', 'Kral Kılıç Arslan', 'Kraliçe Mahperi']
 // The crowns' banners: the first capital's red, the second's blue.
 const CROWN_COLORS = ['#b23a26', '#2f5d9e']
+// The same colours as roof colours (see KINGDOM_COLORS).
+const CROWN_ROOFS = ['crimson', 'royal']
 
 export interface CityInfo {
   index: number
@@ -191,8 +193,10 @@ function gatesOf(world: World, c: Point): { side: Side; at: number }[] {
 
 // Buildings a free city is made of, the grand ones first; houses fill what is left.
 const PLAN: { look: StructureLook; size: number; level: number }[] = [
+  // The crown's own: a cathedral and a monument no lord may raise.
+  { look: 'cathedral', size: 3, level: 1 },
+  { look: 'monument', size: 2, level: 1 },
   { look: 'market', size: 2, level: 3 },
-  { look: 'temple', size: 2, level: 3 },
   { look: 'warehouse', size: 2, level: 3 },
   { look: 'market', size: 2, level: 2 },
   { look: 'treasury', size: 2, level: 2 },
@@ -264,10 +268,11 @@ function layout(world: World, index: number): Structure[] {
     const steps = S * 4
     for (let k = 0; k <= steps; k++) take(Math.floor(from.x + 0.5 + ((to.x - from.x - 0.5) * k) / steps), Math.floor(from.y + 0.5 + ((to.y - from.y - 0.5) * k) / steps), 1)
   }
-  // The city hall stands in the middle with a square around it.
+  // The royal keep stands in the middle with a square around it: a palace grander than any lord's, roofed in the
+  // crown's colour.
   const hall = Math.floor(S / 2) - 2
-  add(hall, hall, 3, 'palace', 3)
-  take(hall, hall, 3, 1)
+  out.push({ x: c.x + hall, y: c.y + hall, size: 4, look: 'palace', level: 6, variant: 0, city: index, color: CROWN_ROOFS[index % CROWN_ROOFS.length] })
+  take(hall, hall, 4, 1)
 
   // Each building tries the free spots in an order of its own.
   const spots: Point[] = []
@@ -289,12 +294,99 @@ function layout(world: World, index: number): Structure[] {
   return out
 }
 
+// The outer city round a crown capital (drawn only; the capital's own tiles stay its walled core): a second, wider
+// ring of wall with gates where the roads cross it and towers along it, and between the two walls a crowded town of
+// tall houses, markets, stores and temples. The side facing the harbour stays open to the water.
+const RING = 10
+function outskirts(world: World, index: number): Structure[] {
+  const S = balance.cities.size
+  const c = world.cities[index]
+  const { size, terrain, feature } = world
+  const out: Structure[] = []
+  const harbour = harbourOf(world, index)
+  const x0 = c.x - RING
+  const y0 = c.y - RING
+  const N = S + RING * 2
+  const at = (x: number, y: number) => y * size + x
+  const inMap = (x: number, y: number) => x >= 0 && y >= 0 && x < size && y < size
+  const land = (x: number, y: number) => {
+    if (!inMap(x, y)) return false
+    const t = terrain[at(x, y)]
+    return t !== Terrain.Lake && t !== Terrain.River && t !== Terrain.Mountain
+  }
+  const road = (x: number, y: number) => inMap(x, y) && (feature[at(x, y)] === Feature.Road || feature[at(x, y)] === Feature.Bridge)
+  // Toward the harbour: nothing is built past the inner wall on that side.
+  const seaward = (x: number, y: number) => {
+    if (!harbour) return false
+    const side = harbour.gate.side
+    return side === 's' ? y >= c.y + S : side === 'n' ? y < c.y : side === 'e' ? x >= c.x + S : x < c.x
+  }
+  // Tiles the harbour's buildings and lane hold, with a tile round them.
+  const kept = new Set<number>()
+  for (const st of harbour?.structures ?? []) {
+    const rect = st.pier ?? { x: st.x, y: st.y, w: st.size, h: st.size }
+    for (let y = rect.y - 1; y <= rect.y + rect.h; y++) for (let x = rect.x - 1; x <= rect.x + rect.w; x++) kept.add(at(x, y))
+  }
+  const free = (x: number, y: number) => inMap(x, y) && land(x, y) && feature[at(x, y)] === 0 && !kept.has(at(x, y)) && !seaward(x, y)
+
+  // The outer wall.
+  const side = (x: number, y: number) => (y === y0 ? 'n' : y === y0 + N - 1 ? 's' : x === x0 ? 'w' : 'e')
+  const ring: { x: number; y: number; t: number }[] = []
+  for (let t = 0; t < N; t++) ring.push({ x: x0 + t, y: y0, t }, { x: x0 + t, y: y0 + N - 1, t }, { x: x0, y: y0 + t, t }, { x: x0 + N - 1, y: y0 + t, t })
+  const placed = new Set<number>()
+  for (const p of ring) {
+    if (placed.has(at(p.x, p.y)) || seaward(p.x, p.y) || kept.has(at(p.x, p.y))) continue
+    placed.add(at(p.x, p.y))
+    const corner = (p.x === x0 || p.x === x0 + N - 1) && (p.y === y0 || p.y === y0 + N - 1)
+    if (road(p.x, p.y)) {
+      const s = side(p.x, p.y)
+      out.push({ x: p.x, y: p.y, size: 1, look: s === 'n' || s === 's' ? 'gate' : 'gateY', variant: 0, city: index })
+      continue
+    }
+    if (!land(p.x, p.y) || feature[at(p.x, p.y)] !== 0) continue
+    // Towers at the corners, beside the gates and every so often along the wall.
+    const byGate = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => road(p.x + dx, p.y + dy))
+    out.push({ x: p.x, y: p.y, size: 1, look: corner || byGate || p.t % 9 === 4 ? 'towerWall' : 'wall', variant: 0, city: index })
+  }
+
+  // The town between the walls: buildings keep two tiles off both walls and off the roads.
+  const taken = new Set<number>()
+  const roll = (x: number, y: number, n: number) => hash(x * 13 + n, y * 7, world.seed + 2041 + index)
+  const fits = (x: number, y: number, n: number) => {
+    for (let yy = y - 1; yy < y + n + 1; yy++) {
+      for (let xx = x - 1; xx < x + n + 1; xx++) {
+        if (road(xx, yy)) return false
+        if (xx >= x && yy >= y && xx < x + n && yy < y + n && (!free(xx, yy) || taken.has(at(xx, yy)))) return false
+      }
+    }
+    // Not within two tiles of either wall.
+    const inner = x + n > c.x - 2 && x < c.x + S + 2 && y + n > c.y - 2 && y < c.y + S + 2
+    const outer = x < x0 + 3 || y < y0 + 3 || x + n > x0 + N - 3 || y + n > y0 + N - 3
+    return !inner && !outer
+  }
+  const BIG: StructureLook[] = ['market', 'warehouse', 'temple', 'hospital', 'treasury', 'forge']
+  for (let y = y0 + 3; y < y0 + N - 3; y++) {
+    for (let x = x0 + 3; x < x0 + N - 3; x++) {
+      const r = roll(x, y, 1)
+      if (r < 0.06 && fits(x, y, 2)) {
+        out.push({ x, y, size: 2, look: BIG[Math.floor(roll(x, y, 2) * BIG.length)], level: 2 + (roll(x, y, 3) < 0.5 ? 1 : 0), variant: Math.floor(roll(x, y, 4) * 4), city: index })
+        for (let yy = y; yy < y + 2; yy++) for (let xx = x; xx < x + 2; xx++) taken.add(at(xx, yy))
+      } else if (r < 0.72 && fits(x, y, 1)) {
+        const l = roll(x, y, 5)
+        out.push({ x, y, size: 1, look: 'house', level: l < 0.55 ? 3 : 2, variant: Math.floor(l * 97), city: index })
+        taken.add(at(x, y))
+      }
+    }
+  }
+  return out
+}
+
 // Every free city's buildings, made once per world.
 const made = new WeakMap<World, Structure[]>()
 export function cityStructures(world: World): Structure[] {
   let found = made.get(world)
   if (!found) {
-    found = world.cities.flatMap((_, index) => [...layout(world, index), ...(harbourOf(world, index)?.structures ?? [])])
+    found = world.cities.flatMap((_, index) => [...layout(world, index), ...outskirts(world, index), ...(harbourOf(world, index)?.structures ?? [])])
     made.set(world, found)
   }
   return found

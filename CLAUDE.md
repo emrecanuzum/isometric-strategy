@@ -877,9 +877,20 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   Şehre giden yol **surda biter**, orada kapı vardır; şehre gitmeyen yollar
   şehrin çevresinden dolanır. Kervanlar şehir kapısına kadar gelir.
 - **Görünüm:** Krallık yapılarıyla aynı çizimden: çevresinde köşe kuleli
-  sur, her yolun girdiği yerde kuleli kapı; ortada saray (belediye), ardı
-  sıra pazarlar, tapınak, ambarlar, hazine, hastane, atölye ve sıkışık
-  evler; surun iç dibinden dolanan ve kapılardan meydana inen sokaklar.
+  sur, her yolun girdiği yerde kuleli kapı; ortada **kraliyet kalesi**
+  (4×4, tacın renginde çatılı, üç katlı ana kale; sarayın hiçbir lordun
+  ulaşamayacağı 6. "seviyesi"), yanında **katedral** (çan kulesi, sivri
+  külah, gül pencere) ve **anıt** (basamaklı kaide üstünde altın uçlu
+  dikilitaş, köşelerinde mangallar); bu üçü oyunculara kapalıdır. Ardı
+  sıra pazarlar, ambarlar, hazine, hastane, atölye ve sıkışık evler;
+  surun iç dibinden dolanan ve kapılardan meydana inen sokaklar.
+- **Dış şehir** (yalnızca görsel; şehrin kendi karoları iç kaledir): iç
+  surun 10 karo dışından ikinci bir **dış sur** dolanır; köşelerinde, yol
+  kapılarının yanında ve aralıklarla kuleleri, yolların kestiği yerlerde
+  kapıları vardır. İki sur arasında yüksek evler, pazarlar, ambarlar,
+  tapınaklar dolu bir dış şehir uzanır (yollardan ve surlardan uzak,
+  arazinin izin verdiği yerde). Limana bakan taraf suya açık kalır
+  (`apps/web/src/game/cities.ts` → `outskirts`).
   Adı (ör. "Altınkapı Serbest Şehri") 1× ve altında şehrin üstünde, dünya
   haritasında altın renkte yazar. Üstüne gelince adı, tıklanınca paneli
   açılır: yöneten (lonca meclisi, kadı…), şehrin ödediği fiyatlar ve

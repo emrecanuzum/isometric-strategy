@@ -307,12 +307,15 @@ const PALACE_LEVELS = [
   { wall: 16, tower: [9, 46], roofed: true, keep: [48, 38, 22], upper: [24, 22, 30], gatehouse: true },
   { wall: 16, tower: [10, 58], roofed: true, keep: [56, 44, 24], upper: [30, 30, 40], gatehouse: true },
   { wall: 18, tower: [11, 66], roofed: true, keep: [62, 50, 26], upper: [32, 34, 44], gatehouse: true },
+  // Level 6 is no lord's: the royal keep of a crown kingdom's capital, on four tiles (CLAUDE.md §7.8).
+  { wall: 22, tower: [13, 82], roofed: true, keep: [84, 60, 30], upper: [48, 46, 50], gatehouse: true },
 ] as const
 const IVY = ramp(0x1f3a1c, 0x2e5a26, 0x447a32)
 
 function palace(roofs: Uint32Array = ROYAL, level = 1): Sprite {
   const p = PALACE_LEVELS[Math.max(0, Math.min(PALACE_LEVELS.length - 1, level - 1))]
-  const { canvas, cx, base, w, h } = footprint(3, 150 + level * 24)
+  const royal = level >= 6
+  const { canvas, cx, base, w, h } = footprint(royal ? 4 : 3, 150 + level * 24 + (royal ? 90 : 0))
   // Paved courtyard.
   for (let y = base - h * 2; y <= base; y++) {
     for (let x = cx - w; x <= cx + w; x++) {
@@ -342,6 +345,12 @@ function palace(roofs: Uint32Array = ROYAL, level = 1): Sprite {
   if (p.upper) {
     const [uw, uwall, uroof] = p.upper
     crown = hall(canvas, cx, keepBase - kwall - Math.round(kroof * 0.95), { w: uw, wall: uwall, roof: uroof, walls: KEEP, roofs, masonry: true, bay: 10, trim: BRASS[2] })
+    if (royal) {
+      // A third tier: the crown tower, with gilded turrets at its sides.
+      const upperBase = keepBase - kwall - Math.round(kroof * 0.95)
+      for (const side of [-1, 1]) tower(canvas, cx + side * (uw - 6), upperBase - uwall + 4, 6, 26, KEEP, roofs, true)
+      crown = hall(canvas, cx, upperBase - uwall - Math.round(uroof * 0.9), { w: 22, wall: 34, roof: 40, walls: KEEP, roofs, masonry: true, bay: 8, trim: BRASS[2] })
+    }
   }
   if (level >= 5) star(canvas, crown.x, crown.y - 9)
   else finial(canvas, crown.x, crown.y, 6)
@@ -2324,6 +2333,103 @@ function tavern(variant = 0): Sprite {
   return smoky(canvas.sprite(cx, base, 0), [top])
 }
 
+// The crown capital's cathedral (no lord may build one): a long nave of pale stone under slate, a great bell tower at
+// its front with a tall spire, a rose window of coloured glass, gilded crosses on the ridge and spire.
+const ROSE = [ramp(0x7a1822), ramp(0x2a4a8a), ramp(0xe2c058), ramp(0x2a7a48)]
+function cathedral(variant = 0): Sprite {
+  const { canvas, cx, base, h } = footprint(3, 260)
+  // A paved close round it.
+  for (let y = base - h * 2; y <= base; y++) {
+    for (let x = cx - (h * 2 - 2); x <= cx + (h * 2 - 2); x++) {
+      const a = (x - cx) / (h * 2 - 4)
+      const b = (y - (base - h)) / (h - 2)
+      if (Math.abs(a) + Math.abs(b) <= 1) canvas.set(x, y, pick(KEEP, 1.4 + (((x >> 2) + (y >> 1)) % 2) * 0.6))
+    }
+  }
+  const nave = hall(canvas, cx + 10, base - h + 4, { w: 54, wall: 56, roof: 46, walls: KEEP, roofs: variant % 2 ? SLATE : ROOF, masonry: true, bay: 9, glow: true, trim: BRASS[2] })
+  // Flying buttresses along its lit side.
+  for (let i = 0; i < 4; i++) {
+    const t = 10 + i * 12
+    const x0 = cx + 10 - (54 - t)
+    const g = base - h + 4 - 27 + t / 2
+    for (let z = 0; z < 40; z++) for (let d = 0; d < 3; d++) canvas.set(x0 - 4 - d + Math.min(z, 12) / 3, g - z + 2, pick(KEEP, d === 0 ? 3.5 : 2))
+  }
+  // Gilded cross on the ridge.
+  for (let z = 0; z < 10; z++) canvas.set(nave.x, nave.y - z, BRASS[z < 9 ? 2 : 3])
+  for (let d = -3; d <= 3; d++) canvas.set(nave.x + d, nave.y - 6, BRASS[2])
+  // The bell tower in front, square in plan, drawn as a round tower of many courses, and its spire.
+  const bx = cx - 26
+  const by = base - 18
+  const top = tower(canvas, bx, by, 14, 128, KEEP, SLATE, true)
+  // A lantern stage and the long spire.
+  for (let y = 0; y < 40; y++) {
+    const half = Math.max(0.5, 6 - y / 7)
+    for (let x = -Math.floor(half); x <= half; x++) canvas.set(top.x + x, top.y - y, pick(SLATE, x < 0 ? 4 : 2))
+  }
+  for (let z = 0; z < 12; z++) canvas.set(top.x, top.y - 40 - z, BRASS[z < 11 ? 2 : 3])
+  for (let d = -3; d <= 3; d++) canvas.set(top.x + d, top.y - 47, BRASS[2])
+  // The rose window on the tower's face.
+  const rx = bx - 4
+  const ry = by - 84
+  for (let y = -6; y <= 6; y++) {
+    for (let x = -6; x <= 6; x++) {
+      const d = Math.hypot(x, y)
+      if (d > 6) continue
+      const spoke = Math.round(Math.atan2(y, x) / (Math.PI / 4)) & 3
+      canvas.set(rx + x, ry + y, d > 5.2 ? BRASS[0] : d < 1.5 ? BRASS[3] : ROSE[spoke][0])
+    }
+  }
+  // The great doors.
+  for (let x = -4; x <= 4; x++) for (let z = 0; z < 16 - Math.abs(x) * 0.6; z++) canvas.set(bx + x - 1, by - 4 - z, Math.abs(x) === 4 ? BRASS[1] : PLANK[x < 0 ? 3 : 1])
+  return canvas.sprite(cx, base, 0)
+}
+
+// A monument to the crown: a tall obelisk of dark stone on a stepped plinth, gilded at its tip and base, with braziers
+// burning at its corners.
+const BASALT = ramp(0x1c1a22, 0x2c2a36, 0x423e4e, 0x5c5868, 0x7a7686)
+function monument(variant = 0): Sprite {
+  const { canvas, cx, base, h } = footprint(2, 170)
+  // Three steps, each a smaller diamond.
+  for (let step = 0; step < 3; step++) {
+    const half = h * 2 - 6 - step * 9
+    const lift = step * 5
+    for (let y = -half / 2; y <= half / 2; y++) {
+      for (let x = -half; x <= half; x++) {
+        if (Math.abs(x) / half + Math.abs(y) / (half / 2) > 1) continue
+        for (let z = 0; z < 5; z++) canvas.set(cx + x, base - h + y - lift - z, pick(KEEP, z === 4 ? (x < 0 ? 4 : 3) : x < 0 ? 3 : 1.4))
+      }
+    }
+  }
+  const foot = base - h - 15
+  const tall = 120
+  for (let z = 0; z < tall; z++) {
+    const half = 7 - (z / tall) * 4
+    for (let x = -Math.round(half); x <= Math.round(half); x++) {
+      const lit = x < 0
+      const band = z < 4 || (z > 40 && z < 43)
+      canvas.set(cx + x, foot - z, band ? BRASS[lit ? 3 : 1] : pick(BASALT, lit ? 3.2 : 1.4) + (x === 0 ? 0 : 0))
+    }
+  }
+  // The gilded pyramidion.
+  for (let y = 0; y < 9; y++) {
+    const half = Math.round((y / 9) * 3)
+    for (let x = -half; x <= half; x++) canvas.set(cx + x, foot - tall - 9 + y, BRASS[x < 0 ? 3 : 2])
+  }
+  // Carved signs down its face.
+  for (let z = 50; z < 100; z += 7) for (let x = -2; x <= 2; x++) if ((x + z) % 3 === 0) canvas.set(cx + x, foot - z, BASALT[0])
+  // Braziers at the four corners of the top step.
+  for (const [dx, dy] of [[-20, 0], [20, 0], [0, -10], [0, 10]]) {
+    const x = cx + dx
+    const y = base - h + dy - 10
+    for (let z = 0; z < 6; z++) canvas.set(x, y - z, BARS[2])
+    canvas.set(x - 1, y - 6, EMBER[1])
+    canvas.set(x + 1, y - 6, EMBER[1])
+    canvas.set(x, y - 7, EMBER[2])
+    canvas.set(x, y - 8, EMBER[variant % 2 ? 1 : 2])
+  }
+  return canvas.sprite(cx, base, 0)
+}
+
 // The mysterious fisher's hut: a crooked shack on stilts with a mossy thatch, a net drying on poles, and an odd
 // violet lantern burning by the door.
 const MOSS = ramp(0x2a3a1c, 0x3a4e24, 0x51662e, 0x6a7e3a, 0x86984a, 0xa4b060)
@@ -2390,7 +2496,7 @@ function fisherHut(variant = 0): Sprite {
 const variants = <T>(count: number, make: (i: number) => T) => Array.from({ length: count }, (_, i) => make(i))
 
 // 'jetty': a pier on its own (a free city's harbour), nothing but its `pier`.
-export type StructureLook = BuildingKind | 'scaffold' | 'brokenWall' | 'gateY' | 'towerWall' | 'tradePostRuined' | 'jetty' | 'prisonFull'
+export type StructureLook = BuildingKind | 'scaffold' | 'brokenWall' | 'gateY' | 'towerWall' | 'tradePostRuined' | 'jetty' | 'prisonFull' | 'cathedral' | 'monument'
 
 // A building as the map draws it; docks carry their jetty (tile rectangle over the water).
 export interface Structure {
@@ -2465,7 +2571,7 @@ export const palaceIn = (color: string | undefined, level = 1): Sprite => {
 export const looksOf = (look: StructureLook, level = 1): Sprite[] =>
   look === 'tradePostRuined'
     ? ruinedTradeAt(Math.max(1, Math.min(3, level)))
-    : look !== 'scaffold' && look !== 'brokenWall' && look !== 'gateY' && look !== 'towerWall' && look !== 'jetty' && look !== 'prisonFull' && level > 1
+    : look !== 'scaffold' && look !== 'brokenWall' && look !== 'gateY' && look !== 'towerWall' && look !== 'jetty' && look !== 'prisonFull' && look !== 'cathedral' && look !== 'monument' && level > 1
       ? (LEVEL_SPRITES[look]?.[level - 2] ?? STRUCTURE_SPRITES[look])
       : STRUCTURE_SPRITES[look]
 
@@ -2495,6 +2601,9 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   prison: variants(2, (v) => prison(v)),
   prisonFull: variants(2, (v) => prison(v, true)),
   tavern: variants(2, (v) => tavern(v)),
+  // A crown capital's own, never a lord's.
+  cathedral: variants(2, (v) => cathedral(v)),
+  monument: variants(2, (v) => monument(v)),
   brokenWall: [wallLook('brokenWall', 3, 0)],
   scaffold: [scaffold(1), scaffold(2), scaffold(3)],
   jetty: [new Canvas(1, 1).sprite(0, 0, 0)],
