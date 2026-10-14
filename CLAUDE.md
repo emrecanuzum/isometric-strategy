@@ -584,6 +584,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     (ekranın altına doğru, x ya da y yönünde ileride) 2 karo; çünkü öndeki
     yüksek sur aradaki zeminin üstüne yükselir ve 1 karoda binanın avlusunu
     ekranda keserdi (`economy.json` → `wallClearance`).
+    Kural gelmeden önce bir binanın önüne bundan yakın kurulmuş eski sur
+    parçaları kayıtta olduğu gibi kalır, yalnızca **alçak** (bel hizasında,
+    mazgallı) çizilir; böylece ekranda binanın üstüne binmez
+    (`buildingSprites.ts` → `linkWalls`).
   - **Surlar insanları da tutar:** köylüler ve tüccar saraydan yürüyerek
     çıkar; ayakta duran sur parçasından geçemez, yalnızca **sur kapısından**
     (saray 2. seviye, 1 karo) ya da yıkık bir sur kesiminden geçer. Saraydan

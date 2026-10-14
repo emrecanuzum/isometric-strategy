@@ -1,4 +1,4 @@
-import { TILE_HEIGHT, TILE_WIDTH, hash, heightAt } from '@game/shared'
+import { TILE_HEIGHT, TILE_WIDTH, balance, hash, heightAt } from '@game/shared'
 import type { BuildingKind, KingdomColorId, Point, World } from '@game/shared'
 import { BARK, Canvas, CLOTH, GLASS, ROOF, SACK, STONE, TIMBER, WALL, diamondAt, ellipseAt, pick, ramp, rgb, shadeBlobs, shadow } from './sprites'
 import type { Sprite } from './sprites'
@@ -2256,7 +2256,7 @@ function fisherHut(variant = 0): Sprite {
 
 const variants = <T>(count: number, make: (i: number) => T) => Array.from({ length: count }, (_, i) => make(i))
 
-export type StructureLook = BuildingKind | 'scaffold' | 'brokenWall' | 'gateY' | 'towerWall' | 'tradePostRuined'
+export type StructureLook = BuildingKind | 'scaffold' | 'lowWall' | 'brokenWall' | 'gateY' | 'towerWall' | 'tradePostRuined'
 
 // A building as the map draws it; docks carry their jetty (tile rectangle over the water).
 export interface Structure {
@@ -2277,10 +2277,23 @@ export interface Structure {
   links?: number
 }
 
-// Wall pieces joined to the wall pieces beside them, so a run of wall reads as one wall with corners and ends.
+// Wall pieces joined to the wall pieces beside them, so a run of wall reads as one wall with corners and ends. A
+// stretch standing closer in front of a building than walls keep now (raised before the rule) is drawn low, so it
+// does not rise over the building on screen.
 export function linkWalls(structures: Structure[]): Structure[] {
   const links = wallLinks(structures.filter((s) => WALL_KINDS.has(s.look)))
-  return structures.map((s) => (WALL_KINDS.has(s.look) ? { ...s, links: links.get(`${s.x},${s.y}`) ?? 0 } : s))
+  const { front } = balance.economy.wallClearance
+  const buildings = structures.filter((s) => !WALL_KINDS.has(s.look) && s.look !== 'farm')
+  const crowding = (w: Structure) =>
+    buildings.some(
+      (b) =>
+        w.x >= b.x && w.y >= b.y && w.x < b.x + b.size + front && w.y < b.y + b.size + front && (w.x >= b.x + b.size || w.y >= b.y + b.size),
+    )
+  return structures.map((s) => {
+    if (!WALL_KINDS.has(s.look)) return s
+    const look: StructureLook = s.look === 'wall' && crowding(s) ? 'lowWall' : s.look
+    return { ...s, look, links: links.get(`${s.x},${s.y}`) ?? 0 }
+  })
 }
 
 // A wall piece on its own runs along x; a gate along its own run.
@@ -2319,7 +2332,7 @@ export const palaceIn = (color: string | undefined, level = 1): Sprite => {
 export const looksOf = (look: StructureLook, level = 1): Sprite[] =>
   look === 'tradePostRuined'
     ? ruinedTradeAt(Math.max(1, Math.min(3, level)))
-    : look !== 'scaffold' && look !== 'brokenWall' && look !== 'gateY' && look !== 'towerWall' && level > 1
+    : look !== 'scaffold' && look !== 'lowWall' && look !== 'brokenWall' && look !== 'gateY' && look !== 'towerWall' && level > 1
       ? (LEVEL_SPRITES[look]?.[level - 2] ?? STRUCTURE_SPRITES[look])
       : STRUCTURE_SPRITES[look]
 
@@ -2337,6 +2350,7 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   spyHouse: variants(2, (v) => spyHouse(v)),
   watchtower: variants(2, (v) => watchtower(v)),
   wall: [wallLook('wall', 3, 0)],
+  lowWall: [wallLook('lowWall', 3, 0)],
   gate: [wallLook('gate', 3, 0)],
   gateY: [wallLook('gateY', 12, 0)],
   towerWall: [wallLook('towerWall', 3, 0)],
