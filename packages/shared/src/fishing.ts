@@ -59,10 +59,13 @@ export const logCast = (k: Kingdom, entry: FisherEntry) => [entry, ...(k.fisherL
 // player's screen sends back only when the button was pressed and released (as step numbers); the server plays the
 // same game again with the same seed and presses and so decides the catch itself.
 
+// How the game plays (economy.json → fishing.game): the green zone's height, how long a cast lasts, how the bar fills
+// and drains, how restless the fish is and how the zone answers the button.
+const G = F.game
 export const FISH_STEP = 1 / 60
 export const FISH_H = 220
-export const FISH_ZONE = 44
-export const FISH_LIMIT = 25 * 60
+export const FISH_ZONE = G.zone
+export const FISH_LIMIT = G.limitSeconds * 60
 // The most presses and releases a cast may report.
 export const FISH_MAX_TOGGLES = 3000
 
@@ -92,7 +95,7 @@ function seeded(seed: number) {
 
 export function fishGame(seed: number) {
   const random = seeded(seed)
-  const s: FishState = { fish: FISH_H / 2, fishV: 0, target: FISH_H / 2, retarget: 0, zone: FISH_H - FISH_ZONE, zoneV: 0, progress: 0.3, step: 0, inside: false, over: false, caught: false }
+  const s: FishState = { fish: FISH_H / 2, fishV: 0, target: FISH_H / 2, retarget: 0, zone: FISH_H - FISH_ZONE, zoneV: 0, progress: G.startProgress, step: 0, inside: false, over: false, caught: false }
   // One fixed step with the button held or not.
   const advance = (held: boolean) => {
     if (s.over) return s
@@ -101,13 +104,13 @@ export function fishGame(seed: number) {
     s.retarget -= dt
     if (s.retarget <= 0) {
       s.target = 10 + random() * (FISH_H - 20)
-      s.retarget = 0.4 + random() * 0.9
+      s.retarget = G.retargetSeconds[0] + random() * (G.retargetSeconds[1] - G.retargetSeconds[0])
     }
-    const dart = random() < 0.02 ? 6 : 1
-    s.fishV += ((s.target - s.fish) * 9 - s.fishV * 2.5) * dt * dart
+    const dart = random() < G.dartChance ? 6 : 1
+    s.fishV += ((s.target - s.fish) * G.pull - s.fishV * G.damping) * dt * dart
     s.fish = Math.max(6, Math.min(FISH_H - 6, s.fish + s.fishV * dt))
     // The zone: lifted while held, pulled down by its weight, bouncing off the ends.
-    s.zoneV += (held ? -560 : 420) * dt
+    s.zoneV += (held ? -G.lift : G.sink) * dt
     s.zone += s.zoneV * dt
     if (s.zone < 0) {
       s.zone = 0
@@ -118,7 +121,7 @@ export function fishGame(seed: number) {
       s.zoneV *= -0.3
     }
     s.inside = s.fish >= s.zone && s.fish <= s.zone + FISH_ZONE
-    s.progress = Math.max(0, Math.min(1, s.progress + (s.inside ? 0.32 : -0.26) * dt))
+    s.progress = Math.max(0, Math.min(1, s.progress + (s.inside ? G.fillPerSecond : -G.drainPerSecond) * dt))
     s.step++
     if (s.progress >= 1 || s.progress <= 0 || s.step >= FISH_LIMIT) {
       s.over = true
