@@ -11,6 +11,7 @@
   "startSearchStep": 8,
   "plotTiles": 2,
   "shoreMinWater": 20,
+  "dockAnnexTiles": 2,
   "plotSearchRadius": 400,
   "startEdgeMargin": 48,
   "kingdomGapTiles": 24

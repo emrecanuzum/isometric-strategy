@@ -382,6 +382,11 @@ uzaklık olmalı; kimse tamamen dezavantajlı başlamamalı.
   kıyı / yol kenarı varsa arsa oradadır; yoksa hududun dışında **yürüme
   mesafesi en kısa** 2×2 arsa verilir. Yürüme kara ve köprü üzerindendir;
   su ve dağ dolanılır (kuş uçuşu değil).
+- **İskele eki:** İskele arsası hududun dışındaysa arsanın her yanında 2
+  karoluk bir ek alan da krallığındır (`territory.json` →
+  `dockAnnexTiles`); oraya yalnızca kıyı yapıları (balıkçı kulübesi)
+  kurulur. Böylece kendi kıyısı olmayan krallık da kulübesini kurabilir.
+  Ek alan haritada iskele renginde kesikli çizgiyle gösterilir.
 - Bu mesafenin kısa kalması için dünya üretimi, haritanın her bölgesinden
   geçen kıvrımlı bir **ana nehir** çizer (§4.2).
 - Başka bir oyuncunun hududu ile çakışma olamaz; sınır anlaşmazlığı
@@ -551,7 +556,7 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   Kaidedeki yapının gölgesi kaide yüksekliğinden aşağıdaki zemine düşer
   (güneşten öteye kayar; `shadows.ts` → `setFootprint`).
 - **Esrarengiz balıkçı kulübesi** (3. seviye saray, bir tane, yalnızca
-  hudut içindeki bir **kıyı** karesine kurulur): kendi başına çok az yemek
+  hudut içindeki ya da iskele ekindeki bir **kıyı** karesine kurulur): kendi başına çok az yemek
   ve nehre atılmış altınlardan çok az (tur başına 0,4) getirir. Tıklanınca
   "Oltayı at" ile bir mini oyun açılır: dikey suda düzensiz kaçan bir balık;
   basılı tutunca yükselen, bırakınca düşen yeşil alanı balığın üstünde tutmak

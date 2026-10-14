@@ -340,11 +340,23 @@ const clash = (b: Building, spot: Rect, gap: number, kind?: BuildingKind) => {
   return wallish(kind) ? tooClose(b, spot) : tooClose(spot, b)
 }
 
-// Inside the territory, on free land, clear of other buildings by `gap` tiles (one tile between a wall or gate and
-// anything else when `kind` is given).
-export function canPlace(world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'>, stage: number, spot: Rect, gap = 0, kind?: BuildingKind) {
-  const t = territoryRect(kingdom.site, stage)
-  if (spot.x < t.x || spot.y < t.y || spot.x + spot.size > t.x + t.size || spot.y + spot.size > t.y + t.size) return false
+// A dock plot granted outside the territory brings a little ground around it (balance.territory.dockAnnexTiles on
+// every side) where shore buildings may stand too, so a kingdom with no shore of its own can still have its fisher.
+export function dockAnnex(kingdom: Pick<Kingdom, 'site'> & { dockPlot?: Rect | null }, stage: number): Rect | null {
+  const plot = kingdom.dockPlot
+  if (!plot || within(plot, territoryRect(kingdom.site, stage))) return null
+  const m = balance.territory.dockAnnexTiles
+  return { x: plot.x - m, y: plot.y - m, size: plot.size + 2 * m }
+}
+
+const within = (spot: Rect, area: Rect) =>
+  spot.x >= area.x && spot.y >= area.y && spot.x + spot.size <= area.x + area.size && spot.y + spot.size <= area.y + area.size
+
+// Inside the territory (shore buildings also beside a granted dock plot), on free land, clear of other buildings by
+// `gap` tiles (one tile between a wall or gate and anything else when `kind` is given).
+export function canPlace(world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'> & { dockPlot?: Rect | null }, stage: number, spot: Rect, gap = 0, kind?: BuildingKind) {
+  const annex = kind && BUILDINGS[kind].shoreOnly ? dockAnnex(kingdom, stage) : null
+  if (!within(spot, territoryRect(kingdom.site, stage)) && !(annex && within(spot, annex))) return false
   for (let y = spot.y; y < spot.y + spot.size; y++) {
     // Shore buildings stand on shore tiles, everything else on free land.
     for (let x = spot.x; x < spot.x + spot.size; x++) if (tileRule(world, x, y) !== (kind && BUILDINGS[kind].shoreOnly ? TileRule.DockOnly : TileRule.Free)) return false
@@ -381,7 +393,7 @@ export function canPlaceGate(world: World, kingdom: Pick<Kingdom, 'site' | 'buil
 }
 
 // Whether a building of `kind` fits at `spot` (gates by their three tiles).
-export const fits = (world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'>, stage: number, kind: BuildingKind, spot: Point, turned?: Along | null) =>
+export const fits = (world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'> & { dockPlot?: Rect | null }, stage: number, kind: BuildingKind, spot: Point, turned?: Along | null) =>
   kind === 'gate' ? canPlaceGate(world, kingdom, stage, spot, turned) : canPlace(world, kingdom, stage, { ...spot, size: BUILDINGS[kind].size }, 0, kind)
 
 // ---- Founding -----------------------------------------------------------------------------------------------------

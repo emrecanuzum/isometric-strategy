@@ -115,6 +115,8 @@ export interface Hover {
 export interface Plots {
   dock: Rect | null
   trade: Rect | null
+  // The shore ground beside a dock plot granted outside the territory, where the fisher's hut may go.
+  annex?: Rect | null
 }
 
 export interface Placement {
@@ -686,6 +688,10 @@ export async function createWorld(
     territory.stroke({ width: 1 / camera.scale.x, color: 0xffffff, alpha: 0.1 })
     dashed(territory, outline(rect))
     territory.stroke({ width: thick, color: TERRITORY, alpha: 0.5, cap: 'butt' })
+    if (plots.annex) {
+      dashed(territory, outline(plots.annex))
+      territory.stroke({ width: thick, color: DOCK_PLOT, alpha: 0.6, cap: 'butt' })
+    }
     for (const [key, color] of [['dock', DOCK_PLOT], ['trade', TRADE_PLOT]] as const) {
       const plot = plots[key]
       if (!plot) continue

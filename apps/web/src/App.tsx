@@ -11,6 +11,7 @@ import {
   buildError,
   armyAt,
   canPlace,
+  dockAnnex,
   fits,
   scoreOf,
   gateAlong,
@@ -605,7 +606,7 @@ function App({
     const dockPlot = kingdom ? (kingdom.buildings.some((b) => b.kind === 'dock') ? null : kingdom.dockPlot) : plots?.dock?.plot
     view?.setTerritory(
       site ? territoryRect(site, stage) : null,
-      { dock: dockPlot ?? null, trade: plots?.trade?.plot ?? null },
+      { dock: dockPlot ?? null, trade: plots?.trade?.plot ?? null, annex: kingdom ? dockAnnex(kingdom, stage) : null },
       kingdom?.name,
       kingdom?.buildings.find((b) => b.kind === 'palace'),
       view && kingdom?.liege !== undefined && view.world.cities[kingdom.liege] ? crownColor(view.world, kingdom.liege) : undefined,
