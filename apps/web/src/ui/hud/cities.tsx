@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { GOODS, balance, cityCenter, cityPrice, cityTripMs, priceAt, tradeCityReadyAt, tradeUnits } from '@game/shared'
 import type { Kingdom, Market, Point, World } from '@game/shared'
 import { cityInfo } from '../../game/cities'
@@ -60,21 +61,22 @@ export function TradeDestination({ world, kingdom, market, now, onCity }: {
 export function CityTip({ world, index, at }: { world: World; index: number; at: Point }) {
   return (
     <div className="map-tip frame" style={{ left: at.x, top: at.y }} role="tooltip">
-      <b>{cityInfo(world, index).name}</b>
-      <small>Serbest şehir · güvenli bölge</small>
+      <b style={{ color: cityInfo(world, index).color }}>{cityInfo(world, index).name}</b>
+      <small>Taç krallığı, başkent {cityInfo(world, index).capital} · güvenli bölge</small>
       <em>tıkla</em>
     </div>
   )
 }
 
-// A free city's sheet: who rules it, what it buys, and sending the merchant there.
-export function CitySheet({ world, index, kingdom, market, now, onCity, onShow, onClose }: {
+// A crown kingdom's capital (CLAUDE.md §7.8): who rules it, fealty to it, what it buys, and sending the merchant there.
+export function CitySheet({ world, index, kingdom, market, now, onCity, onSwear, onShow, onClose }: {
   world: World
   index: number
   kingdom: Kingdom | null
   market?: Market | null
   now: number
   onCity(city: number | null): void
+  onSwear(city: number): void
   onShow(tile: Point): void
   onClose(): void
 }) {
@@ -91,9 +93,11 @@ export function CitySheet({ world, index, kingdom, market, now, onCity, onShow, 
       <header className="sheet-head">
         <Icon name="crown" size={32} />
         <div>
-          <h2 id="city-title">{info.name}</h2>
+          <h2 id="city-title" style={{ color: info.color }}>
+            {info.name}
+          </h2>
           <small>
-            Serbest şehir · tarafsız{distance !== null && ` · ${distance} karo uzakta`}
+            Başkent {info.capital} · taç krallığı{distance !== null && ` · ${distance} karo uzakta`}
           </small>
         </div>
         <button className="btn icon-only" onClick={() => onShow(middle)} aria-label="Haritada göster" title="Haritada göster">
@@ -109,7 +113,7 @@ export function CitySheet({ world, index, kingdom, market, now, onCity, onShow, 
           <div>
             <b>{info.ruler}</b>
             <small className="hint">
-              Hiçbir krallığa bağlı değildir. Surlarının çevresi güvenli bölgedir: {balance.cities.safeTiles} karo içinde muharebe olmaz. Ordular
+              {info.capital} şehrinden hüküm sürer; lordlar ona biat eder. Surlarının çevresi güvenli bölgedir: {balance.cities.safeTiles} karo içinde muharebe olmaz. Ordular
               yakınında handaki gibi moral toplar.
             </small>
           </div>
@@ -126,6 +130,7 @@ export function CitySheet({ world, index, kingdom, market, now, onCity, onShow, 
           </div>
           <p className="hint">Tüccarın buraya seferde {loadFactor} kat yük getirir; satış lobinin fiyatlarını etkilemez.</p>
         </Section>
+        {kingdom && <Fealty world={world} kingdom={kingdom} only={index} onSwear={onSwear} />}
         {kingdom && (
           <Section title="Tüccarın" icon="trade">
             {here ? (
@@ -149,5 +154,69 @@ export function CitySheet({ world, index, kingdom, market, now, onCity, onShow, 
         )}
       </div>
     </section>
+  )
+}
+
+// Fealty to a crown kingdom (CLAUDE.md §7.8): to whom the lord is sworn, or the crowns to swear to. Not needed to
+// begin with; the palace rises past its first level only once sworn. Swearing asks to be confirmed and holds for the
+// season. `only` shows just that crown (on its capital's sheet).
+export function Fealty({ world, kingdom, only, onSwear }: { world: World; kingdom: Kingdom; only?: number; onSwear(city: number): void }) {
+  const [asking, setAsking] = useState<number | null>(null)
+  if (world.cities.length === 0) return null
+  const level = balance.cities.crown.requiredForPalaceLevel
+  if (kingdom.liege !== undefined && world.cities[kingdom.liege]) {
+    const liege = cityInfo(world, kingdom.liege)
+    if (only !== undefined && only !== kingdom.liege) return (
+      <Section title="Bağlılık" icon="crown">
+        <p className="hint">
+          Sen <b style={{ color: liege.color }}>{liege.name}</b> lordusun; bu tacın lordu değilsin.
+        </p>
+      </Section>
+    )
+    return (
+      <Section title="Bağlılık" icon="crown" aside="sezon boyunca">
+        <p className="hint">
+          <b style={{ color: liege.color }}>{liege.name}</b> lordusun. Hükümdarın {liege.ruler}, başkentin {liege.capital}.
+        </p>
+      </Section>
+    )
+  }
+  const crowns = world.cities.map((_, index) => index).filter((index) => only === undefined || index === only)
+  return (
+    <Section title="Bağlılık" icon="crown" aside="henüz biat etmedin">
+      <p className="hint">
+        Haritadaki iki şehir, iki taç krallığının başkentidir. Birine biat edip lordu olursun; biat sezon boyunca değişmez. Başlamak için gerekmez, ama sarayı{' '}
+        {level}. seviyeye yükseltmek için biat şarttır.
+      </p>
+      <div className={crowns.length === 1 ? 'goods two' : 'goods'} role="group" aria-label="Taç krallıkları">
+        {crowns.map((index) => {
+          const info = cityInfo(world, index)
+          const middle = cityCenter(world.cities[index])
+          const distance = Math.round(Math.hypot(middle.x - kingdom.site.x, middle.y - kingdom.site.y))
+          return (
+            <div key={index} className="good">
+              <Icon name="crown" size={24} />
+              <b style={{ color: info.color }}>{info.name}</b>
+              <small>{info.ruler}</small>
+              <small>başkent {info.capital} · {distance} karo</small>
+              {asking === index ? (
+                <span className="row">
+                  <button className="btn small" onClick={() => onSwear(index)}>
+                    Eminim, biat et
+                  </button>
+                  <button className="btn small" onClick={() => setAsking(null)}>
+                    Vazgeç
+                  </button>
+                </span>
+              ) : (
+                <button className="btn small" onClick={() => setAsking(index)}>
+                  Biat et
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </Section>
   )
 }

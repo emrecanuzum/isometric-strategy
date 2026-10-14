@@ -173,7 +173,7 @@ export function WorldMap({
           ))}
           {world.cities.map((c, index) => (
             <span key={`city${index}`} className="worldmap-name city" style={marker(cityCenter(c))}>
-              {cityInfo(world, index).name.replace(' Serbest Şehri', '')}
+              {cityInfo(world, index).capital}
             </span>
           ))}
           {kingdoms.map((kingdom) => (

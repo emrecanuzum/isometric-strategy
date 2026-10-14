@@ -30,6 +30,7 @@ const UPGRADE_BLOCKED: Record<string, string> = {
   cost: 'Kaynak yetersiz',
   queue: 'İnşaat kuyruğu dolu',
   limit: 'Evler nüfus sınırını dolduruyor: önce sarayı yükselt',
+  liege: 'Önce bir taç krallığına biat et (Krallık sekmesi → Bağlılık)',
 }
 
 const isGood = (v: string): v is Good => v === 'food' || v === 'materials' || v === 'arms'

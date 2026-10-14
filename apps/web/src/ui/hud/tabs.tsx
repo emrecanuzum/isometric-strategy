@@ -46,7 +46,7 @@ import {
   upgradeSpec,
 } from '@game/shared'
 import { TradeShares } from './inns'
-import { TradeDestination } from './cities'
+import { Fealty, TradeDestination } from './cities'
 import type { BuildingKind, Good, Kingdom, Market, Plot, Point, Resource, TaxLevel, World } from '@game/shared'
 import { useEffect, useRef, useState } from 'react'
 import { STRUCTURE_SPRITES, palaceIn } from '../../game/buildingSprites'
@@ -567,6 +567,7 @@ export function KingdomTab(data: HudData) {
           )}
         </div>
       </div>
+      <Fealty world={data.world} kingdom={kingdom} onSwear={(city) => data.online?.act({ type: 'swear', city })} />
       <Section title="Yapılar" icon="build" aside={`${kingdom.buildings.length} toplam`}>
         <ul className="tally">
           {[...counts].map(([kind, n]) => (
@@ -606,6 +607,7 @@ export function KingdomTab(data: HudData) {
                 <CostList cost={upgradeSpec(palace)?.cost} stock={kingdom.stock} />
               </button>
               <Missing cost={upgradeSpec(palace)?.cost} stock={kingdom.stock} />
+              {upgradeError(kingdom, palace.id, now) === 'liege' && <p className="hint down">Önce yukarıdaki Bağlılık bölümünden bir taç krallığına biat et.</p>}
               </>
             )}
           </>

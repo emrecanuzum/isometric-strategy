@@ -138,9 +138,11 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   - Köprü veya geçit noktaları stratejik önemdedir.
 - **Kervan ticaret yolları:** Haritada önceden tanımlı ana yollar
   (bkz. §7). Yola yakınlık ekonomik avantajdır.
-- **Serbest şehirler (NPC):** Haritada **tam 2 tane** surlu şehir (eski
-  lobilerde 1–2); hiçbir krallığa ait değildir, **güvenli bölgedir** (savaş
-  için değil, tüccarların gidip ticaret yaptığı yer). Büyük göllerin
+- **Serbest şehirler / taç krallıkları (NPC):** Haritada **tam 2 tane**
+  surlu şehir (eski lobilerde 1–2); her biri bir **NPC krallığın
+  başkentidir**, oyuncular bunlardan birine bağlı lord olur (§7.8). Hiçbir
+  oyuncuya ait değildir, **güvenli bölgedir** (savaş için değil, tüccarların
+  gidip ticaret yaptığı yer). Büyük göllerin
   kıyısındadır, büyük iskeleleri ve kadırgaları vardır; birbirinden
   olabildiğince uzaktır. Ayrıntı §7.7.
 - **Kaynak noktaları:** Maden ocakları, taş ocakları, zengin ormanlar —
@@ -865,6 +867,29 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   rehine/fidye takası, kara borsa, şehirden mal satın alma.
 
 ---
+
+### 7.8 Taç krallıkları ve biat (şu an uygulanan)
+
+İki şehir yalnızca ticaret yeri değil, **iki NPC krallığın başkentidir**
+(taç krallıkları). Oyuncular bu krallıklardan birine **bağlı lord** olur.
+Değerler `config/balance/cities.json` → `crown`; mantık
+`packages/shared/src/economy.ts` (`swearFealty`, `upgradeError`), adlar ve
+renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
+
+- **Taç krallıkları:** Her şehrin adı "X Krallığı"dır (başkenti X), bir
+  hükümdarı (kral ya da kraliçe) ve bir **sancak rengi** vardır (biri
+  kırmızı, biri mavi). Şehrin üstüne gelince çıkan etiket ve şehir paneli
+  bu adı ve rengi gösterir; dünya haritasında başkentin adı yazar.
+  Şehirlerin ticaret kuralları (§7.7) aynen geçerlidir.
+- **Biat:** Oyuncu Krallık sekmesindeki ya da saray menüsündeki
+  **Bağlılık** bölümünden iki taç krallığından birine biat eder
+  ("Biat et", onay ister). Biat **sezon boyunca kalıcıdır**, değiştirilemez.
+- **Ne zaman:** Başlangıçta zorunlu değildir; krallık biatsız kurulur ve
+  büyür. Ama **sarayı 2. seviyeye yükseltmek için biat şarttır**
+  (`crown.requiredForPalaceLevel` = 2): biatsız krallığın saray yükseltmesi
+  "Önce bir taç krallığına biat et" diye reddedilir (`'liege'` hatası).
+- Etkileri (bonus, vergi, taç savaşları) sonra eklenecek; şimdilik biat
+  bağlılığı ve yükseltme şartını belirler.
 
 ## 8. Askeri Sistem
 

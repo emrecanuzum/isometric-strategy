@@ -130,6 +130,7 @@ const REFUSALS: Record<string, string> = {
   none: 'Yapılacak bir şey yok',
   target: 'Krallık bulunamadı',
   founded: 'Önce krallığını kur',
+  sworn: 'Zaten bir taç krallığına biat ettin; sezon boyunca değişmez',
 }
 const refusal = (e: unknown) => {
   const code = e instanceof CommandError ? e.message : 'server'
@@ -225,6 +226,7 @@ const BUILD_ERRORS: Record<BuildError, string> = {
   busy: 'Bina şu an inşaatta',
   locked: 'Önce sarayı yükselt (bu yapı daha yüksek seviye saray ister)',
   limit: 'Bu yapının sınırı dolu (evlerde nüfus sınırı); sarayı yükselt',
+  liege: 'Sarayı yükseltmek için önce bir taç krallığına biat et (Krallık sekmesi → Bağlılık)',
 }
 
 // Walkers keep to dry land below the mountains.
@@ -1294,6 +1296,7 @@ function App({
           market={online.market}
           now={now}
           onCity={(city) => online.act({ type: 'tradeCity', city })}
+          onSwear={(city) => online.act({ type: 'swear', city })}
           onShow={(tile) => view.centerOn(tile)}
           onClose={closeTab}
         />

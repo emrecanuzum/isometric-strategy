@@ -222,6 +222,9 @@ export interface Kingdom {
   lastSermonAt?: number
   // When the player last gave a command or had the game open (an absent ruler's lands give less, see idleFactor).
   lastSeenAt?: number
+  // The crown kingdom this lord has sworn fealty to (its capital's index in world.cities; CLAUDE.md §7.8), for the
+  // whole season.
+  liege?: number
   // The lobby's number, which seeds the fortunes the whole lobby shares (set by the server; institutions.ts).
   lobbyKey?: number
   // Taken in a siege: no army may lay siege to the palace again until then (CLAUDE.md §8.3).
@@ -714,7 +717,7 @@ export function demolish(kingdom: Kingdom, id: number): Kingdom {
   return { ...kingdom, stock, buildings: kingdom.buildings.filter((x) => x.id !== id) }
 }
 
-export type BuildError = 'palace' | 'unique' | 'cost' | 'queue' | 'spot' | 'top' | 'busy' | 'locked' | 'limit'
+export type BuildError = 'palace' | 'unique' | 'cost' | 'queue' | 'spot' | 'top' | 'busy' | 'locked' | 'limit' | 'liege'
 
 // The homes of every building at the level it is (or is being raised to): what the town will house once built.
 export const plannedHousing = (kingdom: Kingdom) => kingdom.buildings.reduce((n, b) => n + (levelSpec(b.kind, b.level).villagers ?? 0), 0)
@@ -863,11 +866,20 @@ export function upgradeError(kingdom: Kingdom, id: number, now: number): BuildEr
   const up = b && upgradeSpec(b)
   if (!b || !up) return 'top'
   if (!done(b, now)) return 'busy'
+  // A lord swears fealty to a crown kingdom before the palace rises past its first level (CLAUDE.md §7.8).
+  if (b.kind === 'palace' && (b.level ?? 1) + 1 >= balance.cities.crown.requiredForPalaceLevel && kingdom.liege === undefined) return 'liege'
   if (b.kind !== 'palace' && housingFull(kingdom, now, (up.villagers ?? 0) - (levelSpec(b.kind, b.level).villagers ?? 0))) return 'limit'
   if (!affordable(kingdom.stock, up.cost)) return 'cost'
   if (queued(kingdom, now).length >= maxConstructions(kingdom, now)) return 'queue'
   return null
 }
+
+// Fealty to a crown kingdom (CLAUDE.md §7.8): to one of the `crowns` capitals, once for the season.
+export const fealtyError = (kingdom: Kingdom, index: number, crowns: number): 'sworn' | 'rejected' | null =>
+  kingdom.liege !== undefined ? 'sworn' : Number.isInteger(index) && index >= 0 && index < crowns ? null : 'rejected'
+
+export const swearFealty = (kingdom: Kingdom, index: number, crowns: number): Kingdom =>
+  fealtyError(kingdom, index, crowns) ? kingdom : { ...kingdom, liege: index }
 
 // An upgrade takes a construction slot; the building stands as a building site (and makes nothing) until it ends.
 export function upgradeBuilding(kingdom: Kingdom, id: number, now: number): Kingdom {

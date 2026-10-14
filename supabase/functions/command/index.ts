@@ -260,6 +260,16 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       if (!game.TAX_LEVELS.includes(cmd.tax)) refuse('rejected')
       next = { state: game.setTax(need(), cmd.tax) }
       break
+    case 'swear': {
+      // Fealty to a crown kingdom, by its capital's index in the world's cities (CLAUDE.md §7.8); once a season.
+      const k = need()
+      const { cities } = await worldOf(lobby)
+      const index = Number(cmd.city)
+      const error = game.fealtyError(k, index, cities.length)
+      if (error) refuse(error)
+      next = changed(game.swearFealty(k, index, cities.length))
+      break
+    }
     case 'queen': {
       const error = game.queenError(need(), now)
       if (error) refuse(error)

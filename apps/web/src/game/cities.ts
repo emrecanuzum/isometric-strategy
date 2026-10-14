@@ -3,25 +3,34 @@ import type { CitySide, Point, World } from '@game/shared'
 import type { Structure, StructureLook } from './buildingSprites'
 import { SHIP_LENGTH } from './shipSprites'
 
-// The free cities (CLAUDE.md §4.2, §7.6): one or two walled towns that belong to no kingdom. Their name and layout
-// follow from the lobby seed, so every player sees the same city; they are drawn with the kingdoms' own buildings.
+// The free cities (CLAUDE.md §4.2, §7.7): walled towns that belong to no player. Each is the capital of a crown
+// kingdom the players swear fealty to as its lords (§7.8). Their names and layout follow from the lobby seed, so every
+// player sees the same city; they are drawn with the kingdoms' own buildings.
 
 const NAMES = ['Altınkapı', 'Sedefhisar', 'Gümüşsu', 'Kervankale', 'Yıldızlıhan', 'Akkale', 'Mermerli', 'Lalezar', 'Bakırköprü', 'Safranbolu']
-const RULERS = ['Tüccarlar Divanı', 'Loncalar Meclisi', 'Yaşlı Kadı Hüsnü', 'Kervanbaşılar Kurulu', 'Bilge Şehbender Nazlı', 'Kadı Ahmet Efendi']
+const RULERS = ['Kral Alparslan', 'Kraliçe Nilüfer', 'Kral Orhan', 'Kraliçe Selcan', 'Kral Tuğrul', 'Kraliçe Gevherhan', 'Kral Kılıç Arslan', 'Kraliçe Mahperi']
+// The crowns' banners: the first capital's red, the second's blue.
+const CROWN_COLORS = ['#b23a26', '#2f5d9e']
 
 export interface CityInfo {
   index: number
+  // The crown kingdom ("Altınkapı Krallığı") and its capital ("Altınkapı").
   name: string
+  capital: string
   ruler: string
+  color: string
 }
 
 export function cityInfo(world: World, index: number): CityInfo {
   const start = Math.floor(hash(3, 4, world.seed + 2011) * NAMES.length)
   const c = world.cities[index]
+  const capital = NAMES[(start + index * 3) % NAMES.length]
   return {
     index,
-    name: `${NAMES[(start + index * 3) % NAMES.length]} Serbest Şehri`,
+    name: `${capital} Krallığı`,
+    capital,
     ruler: RULERS[Math.floor(hash(c.x, c.y, world.seed + 2017) * RULERS.length)],
+    color: CROWN_COLORS[index % CROWN_COLORS.length],
   }
 }
 
