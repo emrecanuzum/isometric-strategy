@@ -163,13 +163,20 @@ export async function intel(lobby: string, me: number, targetId: number, now: nu
   const state = game.advance(target.state, now, await lobbyMarket(lobby)).kingdom
   const { data: mine } = await admin.from('spy_missions').select('*').eq('owner_id', me).eq('target_id', targetId).is('ended_at', null)
   const counter = await counterAgainst(lobby, me, targetId, state, now)
-  const strength = Object.fromEntries(game.SPY_TOPICS.map((t: string) => [t, Math.round(game.strengthOf(mine ?? [], me, targetId, t, counter, now))]))
+  // Our spy house trains spies that build their networks faster (see game.networkSpeed).
+  const own = rows.find((r) => r.id === me)?.state
+  const speed = own ? game.networkSpeed(own) : 1
+  const exact = Object.fromEntries(game.SPY_TOPICS.map((t: string) => [t, game.strengthOf(mine ?? [], me, targetId, t, counter, now, speed)]))
+  const strength = Object.fromEntries(game.SPY_TOPICS.map((t: string) => [t, Math.round(exact[t])]))
   const est = (value: number, topic: string, salt: number) => game.estimate(value, strength[topic], seedOf(me, targetId, salt), now)
   const { data: armies } = await admin.from('armies').select('soldiers, units').eq('kingdom_id', targetId)
   const fielded = (armies ?? []).reduce((n: number, a: { soldiers: number }) => n + a.soldiers, 0)
   const allUnits = (armies ?? []).reduce((u: Record<string, number>, a: { units: Record<string, number> }) => game.addUnits(u, a.units), game.garrisonOf(state))
   const garrison = (state.soldiers ?? 0) + (state.training ?? []).reduce((n: number, t: { count: number }) => n + t.count, 0)
-  const report: Record<string, unknown> = { strength }
+  // The odds of each operation through the strongest network, as the spies judge them (to the nearest 5%).
+  const best = Math.max(0, ...Object.values(exact) as number[])
+  const chances = Object.fromEntries(game.OPERATIONS.map((op: string) => [op, Math.round(game.operationChance(op, best, counter) * 20) * 5]))
+  const report: Record<string, unknown> = { strength, chances }
   report.stores = {
     gold: est(state.stock.gold, 'stores', 1),
     food: est(state.stock.food, 'stores', 2),

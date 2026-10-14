@@ -487,7 +487,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       const theirs = game.advance(target.state, now).kingdom
       const counter = await counterAgainst(lobby, me.id, target.id, theirs, now)
       const { data: missions } = await admin.from('spy_missions').select('*').eq('owner_id', me.id).eq('target_id', target.id).is('ended_at', null)
-      const strength = game.bestStrength(missions ?? [], me.id, target.id, counter, now)
+      const strength = game.bestStrength(missions ?? [], me.id, target.id, counter, now, game.networkSpeed(me.state))
       const error = game.operationError(cmd.op, strength, game.advance(me.state, now).kingdom, theirs)
       if (error) refuse(error)
       const spec = game.operationSpec(cmd.op)

@@ -9,8 +9,9 @@
     4
   ],
   "networkSeconds": 600,
+  "networkSpeedPerLevel": 0.25,
   "counterPerSpy": 0.5,
-  "counterPerLevel": 0.5,
+  "counterPerLevel": 0.75,
   "catchPerHourPerCounter": 0.25,
   "minStrength": 10,
   "maxError": 0.6,

@@ -33,21 +33,29 @@ export function counterOf(kingdom: Kingdom) {
 // slowly and spies are caught sooner, as if more counter-espionage stood against them.
 export const wariness = (relation: number) => (Math.max(0, -relation) / 100) * balance.espionage.warinessCounter
 
-// Network strength (0..100) after `ms` with `spies` on the topic against `counter`.
-export function networkStrength(ms: number, spies: number, counter: number) {
+// How fast a kingdom's spies build their networks abroad: its spy house trains them better with every level (×1 at
+// the first, networkSpeedPerLevel more with each one above).
+export function networkSpeed(kingdom: Pick<Kingdom, 'buildings'>) {
+  const house = kingdom.buildings.find((b) => b.kind === 'spyHouse')
+  return 1 + Math.max(0, (house?.level ?? 1) - 1) * balance.espionage.networkSpeedPerLevel
+}
+
+// Network strength (0..100) after `ms` with `spies` on the topic against `counter`, built at `speed`.
+export function networkStrength(ms: number, spies: number, counter: number, speed = 1) {
   if (spies <= 0 || ms <= 0) return 0
-  const tau = (balance.espionage.networkSeconds * 1000 * (1 + counter)) / spies
+  const tau = (balance.espionage.networkSeconds * 1000 * (1 + counter)) / (spies * speed)
   return 100 * (1 - Math.exp(-ms / tau))
 }
 
-// Strength of the owner's network in a target on a topic at `now`, from the missions still running there.
-export function strengthOf(missions: SpyMission[], owner: number, target: number, topic: SpyTopic, counter: number, now: number) {
+// Strength of the owner's network in a target on a topic at `now`, from the missions still running there (`speed`: the
+// owner's, see networkSpeed).
+export function strengthOf(missions: SpyMission[], owner: number, target: number, topic: SpyTopic, counter: number, now: number, speed = 1) {
   const running = missions.filter(
     (m) => m.owner_id === owner && m.target_id === target && m.topic === topic && !m.ended_at && (!m.caught_at || Date.parse(m.caught_at) > now),
   )
   if (running.length === 0) return 0
   const since = Math.min(...running.map((m) => Date.parse(m.started_at)))
-  return networkStrength(now - since, running.length, counter)
+  return networkStrength(now - since, running.length, counter, speed)
 }
 
 // When a spy setting out now would be caught, or null if never (no counter-espionage).
@@ -104,5 +112,5 @@ export function operationError(op: Operation, strength: number, owner: Kingdom, 
 }
 
 // The strongest network the owner has in the target, on any topic.
-export const bestStrength = (missions: SpyMission[], owner: number, target: number, counter: number, now: number) =>
-  Math.max(0, ...SPY_TOPICS.map((t) => strengthOf(missions, owner, target, t, counter, now)))
+export const bestStrength = (missions: SpyMission[], owner: number, target: number, counter: number, now: number, speed = 1) =>
+  Math.max(0, ...SPY_TOPICS.map((t) => strengthOf(missions, owner, target, t, counter, now, speed)))

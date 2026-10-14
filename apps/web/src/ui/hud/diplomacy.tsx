@@ -20,7 +20,7 @@ import {
   warScore,
   warThreshold,
 } from '@game/shared'
-import type { BattleRecord, Envoy, Operation, Pact, PeaceTerms, SpyTopic } from '@game/shared'
+import type { BattleRecord, Envoy, Kingdom, Operation, Pact, PeaceTerms, SpyTopic } from '@game/shared'
 import { useState } from 'react'
 import { KINGDOM_COLORS } from '../../game/buildingSprites'
 import type { KingdomColor } from '../../game/buildingSprites'
@@ -606,6 +606,9 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                     {OPERATION_NOTES[op]} · ağ %{spec.minStrength} · {spec.cost.gold} altın
                     {op === 'kidnap' && !target.queen ? ' · kraliçeleri yok' : ''}
                   </small>
+                  <small className={intel?.chances && best >= spec.minStrength ? (intel.chances[op] >= 50 ? 'up' : 'down') : undefined}>
+                    {!intel ? 'Başarı şansı: önce raporu getir' : !intel.chances ? 'Başarı şansı: raporu yenile' : best < spec.minStrength ? `Başarı şansı: ağ %${spec.minStrength} olunca` : `Başarı şansı ~%${intel.chances[op]}`}
+                  </small>
                 </span>
                 <button
                   className="btn small"
@@ -649,6 +652,7 @@ function Spies({ data, online }: { data: HudData; online: Online }) {
       <Section title="Casuslar" icon="eye" aside={`kapasite ${capacity}`}>
         <Stat label="Evde (karşı casusluk)" value={kingdom.spies ?? 0} />
         <Stat label="Görevde" value={kingdom.spiesAway ?? 0} />
+        <SpyHouseEffects kingdom={kingdom} />
         {next !== null && next > 0 && <Stat label="Sıradaki casus" value={`${Math.ceil(next / 1000)} sn`} note={`${balance.espionage.spyCost.gold} altın`} />}
         <p className="hint">Bir krallığa casus göndermek için Krallıklar listesinden krallığı seç.</p>
       </Section>
@@ -733,5 +737,32 @@ function Hostility({ data, online, target }: { data: HudData; online: Online; ta
       </p>
       {outcome && <p className="alert">{outcome}</p>}
     </Section>
+  )
+}
+
+// What the spy house's level does (CLAUDE.md §9.7): our networks abroad grow faster, and others' grow more slowly here
+// and their spies are caught sooner. The next level's figures beside the present ones.
+function SpyHouseEffects({ kingdom }: { kingdom: Kingdom }) {
+  const house = kingdom.buildings.find((b) => b.kind === 'spyHouse')
+  if (!house) return null
+  const e = balance.espionage
+  const level = house.level ?? 1
+  const top = level < e.capacityByLevel.length
+  const speed = (l: number) => 1 + (l - 1) * e.networkSpeedPerLevel
+  const pct = (v: number) => `%${Math.round(v * 100)}`
+  return (
+    <>
+      <Stat label="Ağ kurma hızın" value={`×${speed(level).toFixed(2).replace('.', ',')}`} note={top ? `${level + 1}. sv: ×${speed(level + 1).toFixed(2).replace('.', ',')}` : 'en yüksek seviye'} />
+      <Stat
+        label="Casus evinin karşı casusluğu"
+        value={`+${(level * e.counterPerLevel).toFixed(2).replace('.', ',')}`}
+        note={top ? `${level + 1}. sv: +${((level + 1) * e.counterPerLevel).toFixed(2).replace('.', ',')}` : 'en yüksek seviye'}
+      />
+      <p className="hint">
+        Karşı casusluk, başkalarının sende ağ kurmasını yavaşlatır (her 1 puan kurulma süresine {pct(1)} ekler), casuslarını daha çabuk yakalatır ve
+        operasyonlarının şansını puan başına {pct(e.operations.counterPenalty)} düşürür. Evde bekleyen her casus {String(e.counterPerSpy).replace('.', ',')} puan
+        katar.
+      </p>
+    </>
   )
 }

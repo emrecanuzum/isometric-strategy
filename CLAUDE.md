@@ -1254,8 +1254,14 @@ mertebesindedir.
   **Hammadde**, **Ordu** ya da **Diplomasi**; ya da evde **karşı
   casusluk** için tutulur.
 - Her (hedef, konu) için **ağ gücü** (0–100) casus orada kaldıkça artar;
-  hedefin karşı casusluğu (evdeki casuslar + casus evi seviyesi) artışı
-  yavaşlatır.
+  hedefin karşı casusluğu (evdeki her casus 0,5, casus evinin her seviyesi
+  0,75 puan) artışı yavaşlatır: her karşı casusluk puanı ağın kurulma
+  süresine bir kat daha ekler.
+- **Casus evi seviyesi** iki yönde işler: kendi casuslarının ağ kurma
+  hızını artırır (1. seviye ×1, her seviye +0,25; `networkSpeedPerLevel`)
+  ve karşı casusluğu büyütür (başkalarının sende ağı daha yavaş kurulur,
+  casusları daha çabuk yakalanır, operasyonlarının şansı düşer). Casuslar
+  bölümü bugünkü ve bir sonraki seviyenin değerlerini yazar.
 - Rapor tahminidir: ağ gücü arttıkça hata payı küçülür (ör. "120–180
   yemek"). Diplomasi konusu hedefin yoldaki elçilerini ve casuslarını
   gösterir.
@@ -1270,7 +1276,8 @@ mertebesindedir.
 - **Operasyonlar** (CK gibi), hedefteki en güçlü ağdan yapılır ve altına
   mal olur; başarı şansı ağ gücüyle artar, hedefin karşı casusluğuyla
   düşer. Başarısız operasyon casusu kaybettirir ve kimin yaptığını
-  ortaya çıkarır.
+  ortaya çıkarır. Casus raporu her operasyonun **başarı şansını** (en
+  yakın %5'e yuvarlı) getirir; operasyon listesinde her satırda yazar.
   - **%50 sabotaj:** depoları yak (yemek ve yapı malzemesinin dörtte
     biri) ya da süren inşaatları geciktir.
   - **%70 kraliçeyi kaçır:** kraliçe kaçıranın elinde rehin kalır; kaçırılan

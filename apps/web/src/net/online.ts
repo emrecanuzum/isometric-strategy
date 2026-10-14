@@ -288,6 +288,8 @@ export interface Estimate {
 
 export interface IntelReport {
   strength: Record<SpyTopic, number>
+  // Each operation's odds through the strongest network, as a whole percent (5% steps).
+  chances?: Record<Operation, number>
   stores: Record<'gold' | 'food' | 'materials' | 'arms', Estimate | null>
   army: Record<'garrison' | 'field' | 'might' | 'happiness', Estimate | null> & { units: Record<Unit, Estimate | null> | null }
   diplomacy?: { envoys: { to: string; kind: string; status: string }[]; spies: { target: string; topic: string }[] | null; spyCount: number }
