@@ -293,20 +293,45 @@ function footpaths(world: World, buildings: TownBuilding[], time: number): Point
   const worn = new Set<number>()
   const isWorn = (x: number, y: number) => worn.has(y * world.size + x)
   const blocked = (x: number, y: number) => solid.has(y * world.size + x) || !walkable(world, x, y)
-  return routes.flatMap(({ from, to }) => {
-    if (Math.hypot(to.x - from.x, to.y - from.y) > TRAIL_MAX_TILES) return []
+  const drawn: Point[][] = []
+  for (const { from, to } of routes) {
+    if (Math.hypot(to.x - from.x, to.y - from.y) > TRAIL_MAX_TILES) continue
     const path = findPath(from, to, blocked, isWorn)
-    if (!path) return []
-    const pieces = freshStretches(path, isWorn)
+    if (!path) continue
+    const pieces = freshStretches(path, isWorn, drawn)
     tilesAlong(path.points, (x, y) => {
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) worn.add((y + dy) * world.size + x + dx)
     })
-    return pieces
-  })
+    drawn.push(...pieces)
+  }
+  return drawn
 }
 
-// The stretches of a walk off the paths already worn, each reaching a step onto them so it joins up.
-function freshStretches(path: Path, worn: (x: number, y: number) => boolean): Point[][] {
+// The nearest point on the paths drawn so far: where a new stretch joins them.
+function nearestOn(lines: Point[][], p: Point): Point | null {
+  let best: Point | null = null
+  let bestD = Infinity
+  for (const line of lines) {
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1]
+      const b = line[i]
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const t = Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)))
+      const q = { x: a.x + dx * t, y: a.y + dy * t }
+      const d = Math.hypot(p.x - q.x, p.y - q.y)
+      if (d < bestD) {
+        bestD = d
+        best = q
+      }
+    }
+  }
+  return bestD < 2.5 ? best : null
+}
+
+// The stretches of a walk off the paths already worn. Where a stretch leaves or meets a worn path, its end is carried
+// onto that path's line, so it joins it in a clean fork instead of stopping a tile short of it.
+function freshStretches(path: Path, worn: (x: number, y: number) => boolean, drawn: Point[][]): Point[][] {
   const STEP = 0.25
   const pointAt = (d: number): Point => {
     let i = 1
@@ -330,7 +355,9 @@ function freshStretches(path: Path, worn: (x: number, y: number) => boolean): Po
     const d0 = (path.length * Math.max(0, n - 1)) / count
     const d1 = (path.length * Math.min(count, end + 1)) / count
     const corners = path.points.filter((_, i) => path.at[i] > d0 && path.at[i] < d1)
-    const piece = [pointAt(d0), ...corners, pointAt(d1)]
+    const a = pointAt(d0)
+    const b = pointAt(d1)
+    const piece = [(n > 0 && nearestOn(drawn, a)) || a, ...corners, (d1 < path.length && nearestOn(drawn, b)) || b]
     if (d1 - d0 > STEP) pieces.push(piece)
   }
   return pieces

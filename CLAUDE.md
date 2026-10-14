@@ -596,7 +596,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   patika oluşur, yelpaze gibi açılan düz çizgiler değil. Bir yürüyüşün
   var olan patikanın üstünde (ya da bir karo yanında) kalan kısmı yeniden
   çizilmez; yalnızca yeni açılan kısmı çizilir ve patikaya bağlanır, böylece
-  aynı yere giden yollar örgü gibi yan yana iki çizgi olmaz. Köylüler de
+  aynı yere giden yollar örgü gibi yan yana iki çizgi olmaz. Yeni parçanın
+  ucu var olan patikanın çizgisine taşınır, çatal gibi ona bağlanır; kapıya
+  ya da tarlaya varan uç da gevşek sayılmaz, solmaz. Köylüler de
   patikalardan yürür. Patikalar bütün krallıklarda çizilir (rakiplerinki de
   herkese görünür).
 - **İnşa menüsü (devam):**
