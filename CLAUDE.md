@@ -138,11 +138,11 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   - Köprü veya geçit noktaları stratejik önemdedir.
 - **Kervan ticaret yolları:** Haritada önceden tanımlı ana yollar
   (bkz. §7). Yola yakınlık ekonomik avantajdır.
-- **Serbest şehirler (NPC):** Haritada çok nadir, **1–2 tane** surlu
-  şehir; hiçbir krallığa ait değildir, **güvenli bölgedir** (savaş için
-  değil, tüccarların gidip ticaret yaptığı yer). Büyük göllerin
-  kıyısındadır, limanı ve gemileri vardır; ikiyse birbirinden olabildiğince
-  uzaktır. Ayrıntı §7.7.
+- **Serbest şehirler (NPC):** Haritada **tam 2 tane** surlu şehir (eski
+  lobilerde 1–2); hiçbir krallığa ait değildir, **güvenli bölgedir** (savaş
+  için değil, tüccarların gidip ticaret yaptığı yer). Büyük göllerin
+  kıyısındadır, büyük iskeleleri ve kadırgaları vardır; birbirinden
+  olabildiğince uzaktır. Ayrıntı §7.7.
 - **Kaynak noktaları:** Maden ocakları, taş ocakları, zengin ormanlar —
   sahiplenilmesi için rekabet doğar.
 - **Haydut kampları (opsiyonel PvE):** Ticaret yollarını tehdit eder.
@@ -806,13 +806,20 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   **birbirinden en uzak** iki yer seçilir, tek şehir rastgele bir kıyı
   yerine kurulur. Hiçbir göl kıyısı uymazsa açık arazide en uzak yerler
   seçilir.
+  Dünya sürümü 5'ten itibaren **her zaman 2 şehir** vardır
+  (`cities.json` → `lakesideCount`): kıyı yerlerinden birbirine en uzak
+  iki tanesi, aradaki mesafe ne olursa olsun. Yalnızca bir kıyı yeri
+  varsa ikincisi açık arazide ona en uzak yerdir; hiç yoksa açık arazide en
+  uzak iki yer seçilir. Eski lobiler kendi sürümünde kalır.
 - **Liman** (`cityHarbour` dünya üretiminde, `harbourOf` istemcide; yalnızca
   görsel): Göle bakan surun ortasında bir **liman kapısı**, kapıdan inen
   patika, kıyıdan göle uzanan 3 karo genişliğinde, 12 karoya kadar uzun
   **büyük ahşap iskele**, yer varsa yanında ikinci bir iskele ve kıyıda
-  bir liman evi vardır. İskelelerin yanında **büyük gemiler** yanaşmıştır
-  (iki direkli, kıç kasaralı tüccar gemileri; yelkenleri sarılı, suda
-  hafifçe sallanır); göl genişse biri açıkta demirli bekler, biri de
+  bir liman evi vardır. İskelelerin yanında **büyük kadırgalar** yanaşmıştır
+  (yaklaşık 6,6 karo boyunda, uzun ve alçak; burnunda tunç mahmuz, iki
+  yanında kürek sırası, bordasında kalkanlar, tek direkte çizgili büyük kare
+  yelken, kıçta tenteli kasara ve fener; demirliyken kürekler dik çekili,
+  yelken sarılı, suda hafifçe sallanır); göl genişse biri açıkta demirli bekler, biri de
   yelken açıp açığa gidip geri gelir (`apps/web/src/game/shipSprites.ts`,
   `ambient.ts`). Eski lobilerdeki şehirlerin yanı uygun bir göle bakıyorsa
   onlarda da liman görünür.

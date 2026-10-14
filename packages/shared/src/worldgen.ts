@@ -23,8 +23,10 @@ export const Feature = {
 // was made with. 1: before the free cities. 2: free cities joined into the road network as it is laid out. 3: the
 // world of revision 1 left as it is, with free cities added on open land and a road from each to the nearest road (for
 // lobbies opened before the cities). 4: as 2, but the cities stand on the shore of a big lake (a harbour, see
-// cityHarbour) and as far from one another as the land allows.
-export const WORLD_REV = 4
+// cityHarbour) and as far from one another as the land allows. 5: as 4, but always two cities, the two lakeside spots
+// farthest apart however close that is (one lakeside and the farthest open spot, or two open ones, when the lakes
+// have less room).
+export const WORLD_REV = 5
 
 export interface Polyline {
   points: Point[]
@@ -508,7 +510,8 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
     const town = balance.cities
     const S = town.size
     const draw = mulberry32(seed ^ 0x51c17e5)
-    const wanted = town.count[0] + Math.floor(draw() * (town.count[1] - town.count[0] + 1))
+    const drawn = town.count[0] + Math.floor(draw() * (town.count[1] - town.count[0] + 1))
+    const wanted = rev >= 5 ? town.lakesideCount : drawn
     const fits = (p: Point) => {
       let low = Infinity
       let high = -Infinity
@@ -542,7 +545,10 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
           else open.push(p)
         }
       }
-      cities.push(...farthest(spots.length > 0 ? spots : open, wanted, town.minSpacing, draw))
+      if (rev < 5) cities.push(...farthest(spots.length > 0 ? spots : open, wanted, town.minSpacing, draw))
+      else if (spots.length >= 2) cities.push(...farthest(spots, 2, 0, draw))
+      else if (spots.length === 1) cities.push(spots[0], ...farthestFrom(open, spots[0]))
+      else cities.push(...farthest(open, 2, 0, draw))
     } else {
       for (let attempt = 0; attempt < wanted * 600 && cities.length < wanted; attempt++) {
         const p = {
@@ -831,6 +837,13 @@ function bigLakes(size: number, terrain: Uint8Array, min: number) {
 
 // `count` spots as far apart as possible: one at random, then each time the one farthest from those taken; with two,
 // the pair farthest apart. None closer than `spacing`.
+// The spot farthest from `from` (none when there are none).
+function farthestFrom(spots: Point[], from: Point): Point[] {
+  let best: Point | null = null
+  for (const p of spots) if (!best || Math.hypot(p.x - from.x, p.y - from.y) > Math.hypot(best.x - from.x, best.y - from.y)) best = p
+  return best ? [best] : []
+}
+
 function farthest(spots: Point[], count: number, spacing: number, draw: () => number): Point[] {
   if (spots.length === 0 || count <= 0) return []
   // A fair sample of a long list keeps the pairwise search quick.

@@ -1,6 +1,7 @@
 import { Terrain, balance, cityCenter, cityHarbour, hash } from '@game/shared'
 import type { CitySide, Point, World } from '@game/shared'
 import type { Structure, StructureLook } from './buildingSprites'
+import { SHIP_LENGTH } from './shipSprites'
 
 // The free cities (CLAUDE.md §4.2, §7.6): one or two walled towns that belong to no kingdom. Their name and layout
 // follow from the lobby seed, so every player sees the same city; they are drawn with the kingdoms' own buildings.
@@ -135,7 +136,8 @@ function makeHarbour(world: World, c: Point, index: number): Harbour | null {
   const ships: HarbourShip[] = []
   const moor = (d: number, l: number, n: number) => {
     // The ship's whole length must lie on the lake.
-    for (let k = -2; k <= 2; k++) if (!lake(Math.floor(d + k), Math.floor(l))) return
+    const reach = Math.ceil(SHIP_LENGTH / 2)
+    for (let k = -reach; k <= reach; k++) if (!lake(Math.floor(d + k), Math.floor(l))) return
     ships.push({ at: point(d, l), along, sailing: false, seed: index * 31 + n })
   }
   moor(shore + main / 2 + 0.5, 2.8, 0)
