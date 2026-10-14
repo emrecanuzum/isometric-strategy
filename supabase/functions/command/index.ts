@@ -217,6 +217,15 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       if (cmd.good !== 'none' && !GOODS.includes(cmd.good)) refuse('rejected')
       next = changed(game.setTradeGood(need(), cmd.good === 'none' ? null : cmd.good, now))
       break
+    case 'tradeAmount': {
+      // Units per trip, in steps and once in a while (see game.tradeAmountError).
+      const k = need()
+      const units = whole(cmd.units, 1, 10000)
+      const error = game.tradeAmountError(k, units, now)
+      if (error) refuse(error)
+      next = changed(game.setTradeAmount(k, units, now))
+      break
+    }
     case 'workers': {
       // setWorkers clamps to the building's slots at its level.
       const k = need()
@@ -716,7 +725,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
   }
 }
 
-const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'seen', 'reset'])
+const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'seen', 'reset'])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

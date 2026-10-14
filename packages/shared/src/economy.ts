@@ -165,6 +165,11 @@ export interface Kingdom {
     // Wrecked by raiders: the merchant cannot trade until it is repaired.
     damaged?: boolean
     level: number
+    // Units the player sends on each trip (a multiple of balance.economy.trade.amountStep, at most what the level
+    // allows); absent: as many as the level allows.
+    amount?: number
+    // When the amount was last changed; it can be changed again amountCooldownSeconds later.
+    amountAt?: number
     // The current trip started here and ends one trip length later.
     departedAt: number
   }
@@ -553,7 +558,24 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
 // What one production round adds to (and eats from) the stores.
 export const productionRound = (kingdom: Kingdom, at: number): Partial<Stock> => roundOutcome(kingdom, at).delta
 
-export const tradeUnits = (kingdom: Kingdom) => balance.economy.trade.levels[kingdom.trade.level].units
+// What the merchant can carry at the post's level, and what he takes on each trip: as much as the player set, up to that.
+export const tradeCapacity = (kingdom: Kingdom) => balance.economy.trade.levels[kingdom.trade.level].units
+export const tradeUnits = (kingdom: Kingdom) => Math.min(tradeCapacity(kingdom), kingdom.trade.amount ?? tradeCapacity(kingdom))
+
+// The amount may be changed in steps, once in a while (CLAUDE.md §6.4).
+export const tradeAmountReadyAt = (kingdom: Kingdom) => (kingdom.trade.amountAt ?? -Infinity) + balance.economy.trade.amountCooldownSeconds * 1000
+export function tradeAmountError(kingdom: Kingdom, units: number, now: number): 'step' | 'tradeWait' | null {
+  const step = balance.economy.trade.amountStep
+  if (!Number.isInteger(units) || units < step || units > tradeCapacity(kingdom) || units % step !== 0) return 'step'
+  if (now < tradeAmountReadyAt(kingdom)) return 'tradeWait'
+  return null
+}
+export function setTradeAmount(kingdom: Kingdom, units: number, now: number): Kingdom {
+  if (tradeAmountError(kingdom, units, now) || units === tradeUnits(kingdom)) return kingdom
+  // The whole load is kept as "as many as the level allows", so it grows with the post.
+  const amount = units === tradeCapacity(kingdom) ? undefined : units
+  return { ...kingdom, trade: { ...kingdom.trade, amount, amountAt: now } }
+}
 
 export const hasTradePost = (kingdom: Kingdom) => kingdom.buildings.some((b) => b.kind === 'tradePost')
 
@@ -854,6 +876,7 @@ export function upgradeTrade(kingdom: Kingdom): Kingdom {
   const cost = tradeUpgradeCost(kingdom)
   if (!cost || !affordable(kingdom.stock, cost)) return kingdom
   const level = kingdom.trade.level + 1
+  // A load set below the whole is kept; the whole load (no amount set) grows with the post.
   // The post's own level follows, so other kingdoms see it grow on the map.
   const buildings = kingdom.buildings.map((b) => (b.kind === 'tradePost' ? { ...b, level: level + 1 } : b))
   return { ...kingdom, stock: pay(kingdom.stock, cost), buildings, trade: { ...kingdom.trade, level } }

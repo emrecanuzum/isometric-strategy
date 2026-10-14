@@ -34,6 +34,8 @@ import {
   roundOutcome,
   tradeRepairCost,
   tradeUnits,
+  tradeCapacity,
+  tradeAmountReadyAt,
   tradeUpgradeCost,
   upgradeError,
   upgradeSpec,
@@ -64,6 +66,8 @@ export interface HudData {
   confirmReset: boolean
   onPlace(kind: BuildingKind): void
   onGood(good: Good | null): void
+  // Units the merchant takes on each trip (see TradeAmount).
+  onTradeAmount(units: number): void
   onUpgrade(): void
   // Raises a building a level (the palace's level sets the territory's size).
   onUpgradeBuilding(id: number): void
@@ -418,7 +422,41 @@ function MarketSection({ kingdom, now, online }: HudData) {
   )
 }
 
-function TradePost({ kingdom, now, onGood, onUpgrade, onShow, online }: HudData) {
+// How much the merchant takes on each trip: chosen in steps up to what the post's level allows, and changed only once in
+// a while.
+function TradeAmount({ kingdom, now, onTradeAmount }: HudData) {
+  const { amountStep, amountCooldownSeconds } = balance.economy.trade
+  const cap = tradeCapacity(kingdom)
+  const current = tradeUnits(kingdom)
+  const [units, setUnits] = useState(current)
+  const wait = Math.max(0, Math.ceil((tradeAmountReadyAt(kingdom) - now) / 1000))
+  const shown = Math.min(cap, units)
+  return (
+    <Section title="Sefer başına satış" icon="trade" aside={`${current} / ${cap} birim`}>
+      <div className="stepper">
+        <button className="btn icon-only" disabled={shown <= amountStep} onClick={() => setUnits(Math.max(amountStep, shown - amountStep))} aria-label="Azalt">
+          <Icon name="minus" size={16} />
+        </button>
+        <span className="stepper-value">
+          <b>{shown}</b> birim
+        </span>
+        <button className="btn icon-only" disabled={shown >= cap} onClick={() => setUnits(Math.min(cap, shown + amountStep))} aria-label="Artır">
+          <Icon name="plus" size={16} />
+        </button>
+        <button className="btn small" disabled={shown === current || wait > 0} onClick={() => onTradeAmount(shown)}>
+          {wait > 0 ? `${wait} sn sonra` : 'Uygula'}
+        </button>
+      </div>
+      <p className="hint">
+        Tüccar her seferde bu kadar götürür ({amountStep}'er birim, en fazla seviyenin sınırı {cap}). Değiştirdikten sonra {Math.round(amountCooldownSeconds / 60)} dakika
+        yeniden değiştiremezsin.
+      </p>
+    </Section>
+  )
+}
+
+function TradePost(data: HudData) {
+  const { kingdom, now, onGood, onUpgrade, onShow, online } = data
   const post = kingdom.buildings.find((b) => b.kind === 'tradePost')
   if (!post) return <Placeholder icon="trade" title="Ticaret noktan yok">Ticaret arsası bulunamadı.</Placeholder>
   const { trade } = kingdom
@@ -462,6 +500,7 @@ function TradePost({ kingdom, now, onGood, onUpgrade, onShow, online }: HudData)
           <Icon name="warn" size={16} /> Tüccar surların içinde kaldı: saraydan ticaret noktasına yol yok. Sura bir kapı yap.
         </p>
       )}
+      {trade.good && <TradeAmount {...data} />}
       {trade.good && (
         <Section title="Tüccar yolda" icon="time" aside={`${Math.max(0, Math.ceil((tripMs - (now - trade.departedAt)) / 1000))} sn`}>
           <Meter value={progress} label="Tüccarın yolculuğu" segments={16} />

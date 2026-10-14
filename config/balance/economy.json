@@ -23,6 +23,8 @@
   "maxConstructions": 2,
   "trade": {
     "tripSeconds": 10,
+    "amountStep": 5,
+    "amountCooldownSeconds": 120,
     "price": {
       "food": 2,
       "materials": 3,

@@ -159,6 +159,7 @@ export type Command =
   | { type: 'release'; target: number }
   | { type: 'buy'; good: string; units: number }
   | { type: 'plan'; steps: PlanStep[] }
+  | { type: 'tradeAmount'; units: number }
   | { type: 'repairWalls' }
   | { type: 'envoy'; to: number; kind: Envoy['kind']; gold?: number; terms?: PeaceTerms }
   | { type: 'respond'; envoy: number; accept: boolean }

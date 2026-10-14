@@ -548,7 +548,11 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     eklenir): inşa ve yükseltme maliyetinin yarısı geri döner (ücretsiz ilk
     yapının inşa maliyeti dönmez).
 - **Ticaret noktası:** satılacak mal yerine **hiçbir şey satma** da
-  seçilebilir (tüccar evde bekler). Sefer başına kazanç lobinin anlık
+  seçilebilir (tüccar evde bekler). **Sefer başına satış** miktarı
+  ayarlanabilir: 5'er birimlik adımlarla, en fazla seviyenin sınırı kadar
+  (10 / 20 / 35); değiştirildikten sonra 2 dakika yeniden değiştirilemez
+  (`economy.json` → `trade.amountStep`, `amountCooldownSeconds`). Tam yük
+  seçiliyse ticaret noktası yükselince yük de büyür. Sefer başına kazanç lobinin anlık
   fiyatından gösterilir. Ticaret menüsünde satış seçimi en üsttedir;
   **pazara tıklamak da ticaret menüsünü açar** (fiyatlar ve alım tek
   satırda üç sütun).

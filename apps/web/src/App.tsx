@@ -19,6 +19,7 @@ import {
   hasTradePost,
   lobbyColors,
   setTradeGood,
+  setTradeAmount,
   STROKE_KINDS,
   applyPlan,
   canDemolish,
@@ -101,6 +102,8 @@ const RULE_NAMES: Record<number, string> = {
 
 // What the server answers when it refuses a command (see supabase/functions/command).
 const REFUSALS: Record<string, string> = {
+  step: 'Bu miktar seçilemez',
+  tradeWait: 'Satış miktarı az önce değişti; biraz bekle',
   full: 'Lobide yer kalmadı',
   taken: 'Bu yer artık başka bir krallığa yakın; yeni yer keşfet',
   color: 'Bu renk başka bir krallığın; başka bir renk seç',
@@ -920,6 +923,7 @@ function App({
   }
 
   const chooseGood = (good: Good | null) => kingdom && command({ type: 'tradeGood', good: good ?? 'none' }, setTradeGood(kingdom, good, serverNow()))
+  const chooseTradeAmount = (units: number) => kingdom && command({ type: 'tradeAmount', units }, setTradeAmount(kingdom, units, serverNow()))
   const upgrade = (id: number) => {
     if (!kingdom) return
     const error = upgradeError(kingdom, id, serverNow())
@@ -1082,6 +1086,7 @@ function App({
           confirmReset,
           onPlace: startPlacing,
           onGood: chooseGood,
+          onTradeAmount: chooseTradeAmount,
           onUpgrade: () => (play('start'), command({ type: 'upgradeTrade' }, upgradeTrade(kingdom))),
           onUpgradeBuilding: upgrade,
           onMute: () => setSettingsOpen(true),
