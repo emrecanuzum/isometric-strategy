@@ -709,7 +709,7 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     (varsayılan: tam kadro). Üretim, atanan işçiyle orantılıdır; toplam
     atanan işçi köylü sayısını aşarsa hepsi orantılı yavaşlar.
   - **Ürün seçimi:** Tarla **buğday** (yemek) ya da **keten** (yapı
-    malzemesi, daha düşük oranda) eker. Silah atölyesi **demir dökümü**
+    malzemesi) eker. Silah atölyesi **demir dökümü**
     (savaş malzemesi, arazi çarpanıyla) yapar ya da hammaddeden silah
     işler: **kılıç** (savaş malzemesi), **kalkan** (savaş + yapı
     malzemesi), **yay ve ok** (yapı malzemesi). Silahlar **cephanelikte**

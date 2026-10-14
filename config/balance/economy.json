@@ -136,7 +136,7 @@
       "buildSeconds": 6,
       "workers": 2,
       "produces": "food",
-      "amount": 4,
+      "amount": 2,
       "products": {
         "wheat": {
           "makes": "food",
@@ -144,7 +144,7 @@
         },
         "flax": {
           "makes": "materials",
-          "rate": 0.5,
+          "rate": 1.1,
           "research": "flax"
         }
       },
@@ -156,7 +156,7 @@
           },
           "buildSeconds": 8,
           "workers": 3,
-          "amount": 7
+          "amount": 3
         },
         {
           "cost": {
@@ -165,7 +165,7 @@
           },
           "buildSeconds": 12,
           "workers": 4,
-          "amount": 11
+          "amount": 5
         }
       ],
       "maxByPalaceLevel": [
@@ -223,7 +223,7 @@
       "buildSeconds": 12,
       "workers": 2,
       "produces": "food",
-      "amount": 5,
+      "amount": 2,
       "levels": [
         {
           "cost": {
@@ -232,7 +232,7 @@
           },
           "buildSeconds": 14,
           "workers": 3,
-          "amount": 8
+          "amount": 4
         },
         {
           "cost": {
@@ -241,7 +241,7 @@
           },
           "buildSeconds": 18,
           "workers": 4,
-          "amount": 12
+          "amount": 6
         }
       ]
     },
