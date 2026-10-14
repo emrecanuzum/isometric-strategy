@@ -6,6 +6,8 @@ import {
   advance,
   balance,
   townCenter,
+  cityCenter,
+  townWalled,
   inTown,
   patrolTimes,
   patrolSlotAt,
@@ -61,7 +63,7 @@ import type { Structure } from './game/chunkPainter'
 import type { StructureLook } from './game/buildingSprites'
 import { createWorld, footprintOrigin } from './game/createWorld'
 import type { MapTool } from './game/createWorld'
-import type { Hover, RivalTerritory, WorldView } from './game/createWorld'
+import type { AimMark, Hover, RivalTerritory, WorldView } from './game/createWorld'
 import { KINGDOM_COLORS } from './game/buildingSprites'
 import type { KingdomColor } from './game/buildingSprites'
 import { serverNow } from './net/clock'
@@ -279,6 +281,11 @@ const walkable = (world: World, x: number, y: number) => {
   const t = world.terrain[y * world.size + x]
   return t !== Terrain.Lake && t !== Terrain.River && t !== Terrain.Mountain
 }
+
+// An aimed army snaps to a lord, a crown city or a town this many tiles away or closer; a tap on open ground this
+// close to one of the player's armies picks it.
+const AIM_SNAP_TILES = 8
+const ARMY_PICK_TILES = 2.5
 
 // Footpaths are worn only between buildings closer than this to the palace.
 const TRAIL_MAX_TILES = 40
@@ -783,7 +790,7 @@ function App({
     const structures: Structure[] = [
       ...buildings.map((b) => structure(b, shown?.color, null, b.id, !!shown?.trade.damaged)),
       ...rivals.flatMap((r) => r.buildings.map((b) => structure(b, r.color, r, r.id * 1000 + b.id, !!r.trade_damaged))),
-      ...townsRef.current.flatMap(townStructures),
+      ...townsRef.current.flatMap((t) => townStructures(t, townWalled(view.world.seed, t.idx))),
     ]
     // Footpaths (nothing grows in front of them to stand over the walkers; see paintChunk).
     const trails = [
@@ -968,6 +975,54 @@ function App({
     return () => window.removeEventListener('keydown', onKey)
   }, [placingKind])
 
+  // While an army is being sent, the target the pointer is on or near (CLAUDE.md §8.2.1): another lord's lands, a
+  // crown city or a town, whichever is nearest within AIM_SNAP_TILES; it is outlined, and a tap sends the army there.
+  const aimTarget = useMemo((): (AimMark & { point: Point }) | null => {
+    if (aiming === null || !hover || !view) return null
+    const p = { x: hover.tile.x + 0.5, y: hover.tile.y + 0.5 }
+    const away = (r: { x: number; y: number; size: number }) =>
+      Math.hypot(Math.max(r.x - p.x, 0, p.x - (r.x + r.size)), Math.max(r.y - p.y, 0, p.y - (r.y + r.size)))
+    const t = serverNow()
+    const options: (AimMark & { point: Point })[] = [
+      ...rivals.map((r) => {
+        const palace = r.buildings.find((b) => b.kind === 'palace')
+        return {
+          rect: territoryRect(r.site, territoryStage({ buildings: r.buildings } as Kingdom, t)),
+          color: colorOf(r.color),
+          label: r.name,
+          point: palace ? { x: palace.x + 1, y: palace.y + 1 } : r.site,
+        }
+      }),
+      ...view.world.cities.map((c, i) => ({
+        rect: { x: c.x - 10, y: c.y - 10, size: balance.cities.size + 20 },
+        color: parseInt(cityInfo(view.world, i).color.slice(1), 16),
+        label: cityInfo(view.world, i).name,
+        point: cityCenter(c),
+      })),
+      ...layer.towns.map((tw) => ({
+        rect: { x: tw.x - 1, y: tw.y - 1, size: balance.towns.size + 2 },
+        color: 0xf2d16b,
+        label: tw.name,
+        point: townCenter(tw),
+      })),
+    ]
+    let best: (AimMark & { point: Point }) | null = null
+    let bestD = AIM_SNAP_TILES
+    for (const o of options) {
+      const d = away(o.rect)
+      if (d <= bestD) {
+        bestD = d
+        best = o
+      }
+    }
+    return best
+  }, [aiming, hover?.tile.x, hover?.tile.y, view, rivals, layer.towns])
+  const aimTargetRef = useRef(aimTarget)
+  aimTargetRef.current = aimTarget
+  useEffect(() => {
+    view?.setAimMark(aimTarget ? { rect: aimTarget.rect, color: aimTarget.color, label: aimTarget.label } : null)
+  }, [view, aimTarget])
+
   // Sends the aimed army toward a tile (an enemy's lands mean a siege) and leaves aiming.
   const sendArmy = (army: number, tile: Point) => {
     act({ type: 'army', army, order: { kind: 'move', x: Math.floor(tile.x), y: Math.floor(tile.y) } }).then((r) => {
@@ -977,15 +1032,16 @@ function App({
     setAiming(null)
   }
 
-  tapRef.current = (tile, building, army, inn, city) => {
+  tapRef.current = (tile, building, picked, inn, city) => {
+    let army = picked
     const current = kingdomRef.current
     if (aiming === null && !tool && !placingKind) setInnOpen(inn ?? null)
     if (aiming === null && !tool && !placingKind) setCityOpen(city ?? null)
     // A town's houses and lanes open its sheet.
     if (aiming === null && !tool && !placingKind) setTownOpen(townsRef.current.find((t) => inTown(t, tile))?.id ?? null)
-    // Choosing where an army marches.
+    // Choosing where an army marches: onto the target the pointer has snapped to, if any.
     if (aiming !== null) {
-      sendArmy(aiming, tile)
+      sendArmy(aiming, aimTargetRef.current?.point ?? tile)
       return
     }
     // Tearing down: every building clicked joins the plan.
@@ -1009,6 +1065,18 @@ function App({
       addToPlan([{ type: 'move', id: movingBuilding.id, ...origin }])
       setMoving(null)
       return
+    }
+    // A tap on open ground right by one of the player's armies picks that army, as a tap on it does.
+    if (army === undefined && building === undefined && inn === undefined && city === undefined && !placingKind && !tool) {
+      const t = serverNow()
+      let best: { id: number; d: number } | null = null
+      for (const a of layer.armies) {
+        if (a.kingdom_id !== mine.id) continue
+        const p = armyAt(a, t)
+        const d = Math.hypot(p.x - (tile.x + 0.5), p.y - (tile.y + 0.5))
+        if (d <= ARMY_PICK_TILES && (!best || d < best.d)) best = { id: a.id, d }
+      }
+      if (best) army = best.id
     }
     if (army !== undefined && !placingKind) {
       const owner = layer.armies.find((a) => a.id === army)?.kingdom_id
@@ -1524,6 +1592,7 @@ function App({
           town && (
             <TownSheet
               town={town}
+              walled={townWalled(view.world.seed, town.idx)}
               kingdom={kingdom}
               me={mine.id}
               names={new Map(rivals.map((r) => [r.id, r.name ?? '?']))}

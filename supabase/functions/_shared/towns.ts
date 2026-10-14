@@ -72,6 +72,8 @@ const hold = (k: Kingdom, town: TownRow, held: boolean) => ({
 export async function settleTowns(lobby: string, rows: Row[], pacts: Pact[], now: number) {
   const towns = await townsOf(lobby)
   if (towns.length === 0) return
+  const { data: info } = await admin.from('lobbies').select('seed').eq('id', lobby).single()
+  const walled = (town: TownRow) => !!info && game.townWalled(info.seed, town.idx)
   const { data } = await admin.from('armies').select('*').eq('lobby_id', lobby)
   const armies = (data ?? []) as ArmyRow[]
   const byId = new Map(armies.map((a) => [a.id, a]))
@@ -104,7 +106,7 @@ export async function settleTowns(lobby: string, rows: Row[], pacts: Pact[], now
     }
     if (town.siege) continue
     const at = Math.min(now, Math.max(ms(army.arrive_at), now - 60_000))
-    const siege = { army: army.id, kingdom: army.kingdom_id, startedAt: at, endsAt: at + game.balance.towns.siegeSeconds * 1000 }
+    const siege = { army: army.id, kingdom: army.kingdom_id, startedAt: at, endsAt: at + game.townSiegeMs(walled(town)) }
     // Only one siege at a time: claimed only if no other army laid one meanwhile.
     const { data: claimed } = await admin.from('lobby_towns').update({ siege }).eq('id', town.id).is('siege', null).select('id').maybeSingle()
     if (!claimed) continue
@@ -120,7 +122,7 @@ export async function settleTowns(lobby: string, rows: Row[], pacts: Pact[], now
     if (!s || s.endsAt > now) continue
     const army = byId.get(s.army)
     if (!army || army.status === 'battle') continue
-    const lost = town.owner_id === null ? Math.min(army.soldiers, game.townLosses(town.garrison)) : 0
+    const lost = town.owner_id === null ? Math.min(army.soldiers, game.townLosses(town.garrison, walled(town))) : 0
     const left = army.soldiers - lost
     // Claimed only while this very siege is still on.
     const taking = admin.from('lobby_towns').update(left > 0 ? { siege: null, owner_id: s.kingdom, garrison: 0, taken_at: iso(s.endsAt) } : { siege: null, garrison: Math.max(0, town.garrison - Math.ceil(lost / game.balance.towns.lossPerDefender)) })

@@ -1025,6 +1025,13 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   emrini uygulamaya devam eder. Böylece ordu sistemi tam gerçek zamanlı
   değildir: her ordunun en az 30 dakikalık geleceği önceden bellidir.
 - Kendi yerleşiminde/garnizonunda bekleyen orduya emir anında verilir.
+- **Hedefe yapışma:** Ordu "Hareket" ile gönderilirken fare bir lordun
+  topraklarına, bir taç şehrine (dış suru dahil) ya da bir kasabaya 8
+  karodan yakın gelince en yakını kendiliğinden seçilir: çevresi kesikli
+  çizgiyle (lord kendi renginde, şehir tacın renginde, kasaba altın renginde)
+  ve adıyla gösterilir; tıklayınca ordu oraya gider (lordda sarayına,
+  kasabada kuşatmaya). Kendi ordusunun 2,5 karo yakınındaki boş yere
+  tıklamak o orduyu seçer (ordu sekmesi açılır).
 - **Takip et:** Ordu kartındaki düğme kamerayı orduya kilitler; kamera
   orduyla birlikte kayar. Düğmeye yeniden basınca, alttaki şeritteki
   "Bırak" ile ya da harita sürüklenince takip biter.
@@ -1111,6 +1118,10 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
   ilerleme çubuğu kasabanın üstünde, kuşatanın renginde görünür. Ordu orada
   kalmalıdır: başka yere gönderilirse, yenilirse ya da savaş biterse kuşatma
   kalkar. Aynı anda bir kasabayı tek ordu kuşatabilir.
+- **Tahta surlu kasabalar:** Kasabaların ~%40'ı (tohumdan) kazık çitle
+  çevrilidir; ön ortada geçit açıktır. Taş surdan zayıftır: kuşatma %30
+  uzun sürer, garnizon %35 daha çok kayıp verdirir (`towns.json` →
+  `palisade`, `townWalled`).
 - **Sahipsiz kasaba** kendi garnizonuyla (6–12 asker) savunur: kuşatma
   bitince ordu garnizonun %60'ı kadar asker kaybeder; ayakta asker kalırsa
   kasaba onundur, kalmazsa kasaba dayanır (garnizonu azalır).

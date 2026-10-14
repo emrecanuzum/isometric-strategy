@@ -1,6 +1,7 @@
 import { balance, hash } from '@game/shared'
 import type { Point, Town, TownKind } from '@game/shared'
 import type { Structure, StructureLook } from './buildingSprites'
+import { palisade } from './campSprites'
 
 // The towns on the map (CLAUDE.md §8.4), drawn with the kingdoms' own buildings: a cluster of houses round a building
 // that shows what the town sends (a market for gold, a granary for food, a sawmill, a forge, a temple where people
@@ -31,9 +32,25 @@ export function townGift(kind: TownKind) {
   return `tur başına +${n(spec.perRound)} ${what}`
 }
 
-export function townStructures(town: Town): Structure[] {
+// The wooden palisade some towns stand behind (see townWalled): stakes on the tiles round the town, open where the
+// lane leaves at the front.
+const fences = { x: palisade('x'), y: palisade('y') }
+function townPalisade(town: Town): Structure[] {
   const S = balance.towns.size
   const out: Structure[] = []
+  const stake = (x: number, y: number, along: 'x' | 'y') =>
+    out.push({ x: town.x + x, y: town.y + y, size: 1, look: 'house', variant: 0, sprite: fences[along] })
+  for (let t = -1; t <= S; t++) {
+    stake(t, -1, 'x')
+    if (t < 3 || t > 4) stake(t, S, 'x')
+  }
+  for (let t = 0; t < S; t++) stake(-1, t, 'y'), stake(S, t, 'y')
+  return out
+}
+
+export function townStructures(town: Town, walled = false): Structure[] {
+  const S = balance.towns.size
+  const out: Structure[] = walled ? townPalisade(town) : []
   const roll = (n: number, m = 0) => hash(town.x * 31 + n, town.y * 17 + m, 7717)
   const taken = new Uint8Array(S * S)
   const take = (x: number, y: number, size: number) => {

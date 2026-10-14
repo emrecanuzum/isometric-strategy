@@ -1,7 +1,7 @@
 import { balance } from './balance'
 import type { Point } from './iso'
 import { territoryRect } from './territory'
-import { Feature, Terrain, citiesOf, mulberry32 } from './worldgen'
+import { Feature, Terrain, citiesOf, hash, mulberry32 } from './worldgen'
 
 // Small towns scattered over the map (CLAUDE.md §8.4): each belongs to no one until a kingdom's army takes it in a
 // siege, and from then on sends its lord something every round, until another lord at war with him takes it in turn.
@@ -134,5 +134,13 @@ export function townYield(held: HeldTown[] | undefined) {
   return out
 }
 
-// The soldiers an army loses taking a free town from its garrison.
-export const townLosses = (garrison: number) => Math.ceil(garrison * balance.towns.lossPerDefender)
+// Some towns stand behind a wooden palisade (drawn from the lobby seed): weaker than a kingdom's stone walls, it makes
+// a siege last longer and costs the besiegers more soldiers.
+export const townWalled = (seed: number, idx: number) => hash(idx, 9, seed + 3021) < balance.towns.palisade.share
+
+// The soldiers an army loses taking a free town from its garrison (more behind a palisade).
+export const townLosses = (garrison: number, walled = false) =>
+  Math.ceil(garrison * balance.towns.lossPerDefender * (walled ? balance.towns.palisade.lossFactor : 1))
+
+// How long a siege of the town lasts (ms).
+export const townSiegeMs = (walled: boolean) => balance.towns.siegeSeconds * 1000 * (walled ? balance.towns.palisade.siegeFactor : 1)

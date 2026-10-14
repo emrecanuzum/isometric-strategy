@@ -162,6 +162,13 @@ export interface TownMark {
   siege: { startedAt: number; endsAt: number; color: number } | null
 }
 
+// A target an army is about to be sent to, as drawn while aiming: its square on the map, colour and name.
+export interface AimMark {
+  rect: { x: number; y: number; size: number }
+  color: number
+  label: string
+}
+
 export interface WorldView {
   world: World
   centerOn(tile: Point): void
@@ -187,6 +194,9 @@ export interface WorldView {
   setTown(errands: Errand[], merchants: MerchantTrip[]): void
   // The towns' names over them (in their holder's colour) and, while one is besieged, how far the siege has come.
   setTowns(marks: TownMark[]): void
+  // While an army is being sent: the target the pointer has snapped to (a lord, a crown city or a town), outlined in
+  // dashes with its name over it; null for none.
+  setAimMark(mark: AimMark | null): void
   // Tiles walkers go around: building footprints, except flat ones such as fields.
   blocksWalkers(x: number, y: number): boolean
   // A short message rising from a spot on the ground.
@@ -316,7 +326,9 @@ export async function createWorld(
     cursor.clear()
     for (const child of carried.removeChildren()) child.destroy()
   }
-  camera.addChild(ground, shadows.layer, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, marks, ambient.sky, cursor, carried, highlight)
+  // The target an aimed army has snapped to, outlined over everything on the ground.
+  const aimLines = new Graphics()
+  camera.addChild(ground, shadows.layer, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, marks, ambient.sky, cursor, carried, highlight, aimLines)
   app.stage.addChild(camera)
   // Day and night: the whole map is multiplied by the colour of the light at this hour of the game day. Lit windows
   // and the labels sit above it, in a layer that follows the camera, so night never dims them.
@@ -341,7 +353,15 @@ export async function createWorld(
   }
   const above = new Container()
   const townLayer = new Container()
-  above.addChild(halo, glow, plotLabels.dock, plotLabels.trade, rivalLabels, kingdomLabel, townLayer, armyLabels, floats)
+  // The name over an aimed army's target (see setAimMark).
+  const aimLabel = new Text({
+    text: '',
+    resolution: window.devicePixelRatio * 2,
+    anchor: { x: 0.5, y: 1 },
+    style: { fontFamily: "'Digits', 'Pixelify Sans', ui-monospace, monospace", fontSize: 15, fontWeight: '600', fill: 0xffffff, stroke: { color: 0x120d0b, width: 4, join: 'round' } },
+  })
+  aimLabel.visible = false
+  above.addChild(halo, glow, plotLabels.dock, plotLabels.trade, rivalLabels, kingdomLabel, townLayer, aimLabel, armyLabels, floats)
   // Armies stand in the same layer as buildings and walkers, so a wall or a house in front of an army hides it.
   const armies = createArmies(world, caravans.layer, armyRoutes, armyLabels)
   app.stage.addChild(light, above)
@@ -372,6 +392,26 @@ export async function createWorld(
       if (!chunk.sprite.visible) continue
       for (const tree of chunk.trees) tree.skew.x = Math.sin(t * 1.4 + tree.x * 0.031 + tree.y * 0.047) * 0.045
     }
+  })
+  // The aimed army's target: redrawn when the zoom changes, so its dashes stay the same size on screen.
+  let aim: AimMark | null = null
+  let aimScale = -1
+  app.ticker.add(() => {
+    if (!aim || aimScale === camera.scale.x) return
+    aimScale = camera.scale.x
+    const { rect, color, label } = aim
+    aimLines.clear()
+    const border = square(rect.x, rect.y, rect.size)
+    aimLines.poly(border).fill({ color, alpha: 0.12 })
+    dashed(aimLines, border)
+    aimLines.stroke({ width: 4 / camera.scale.x, color, alpha: 0.95, cap: 'butt' })
+    let top = 1
+    for (let i = 3; i < border.length; i += 2) if (border[i] < border[top]) top = i
+    aimLabel.text = label
+    aimLabel.style.fill = color
+    aimLabel.position.set(border[top - 1], border[top] - 6 / camera.scale.y)
+    aimLabel.scale.set(1 / camera.scale.x)
+    aimLabel.visible = true
   })
   // Town names and siege bars, at a fixed size on screen above each town.
   let townMarks: { mark: TownMark; text: Text; bar: Graphics }[] = []
@@ -1404,6 +1444,14 @@ export async function createWorld(
         return t === Terrain.Lake || t === Terrain.River || t === Terrain.Mountain
       }, (x, y) => worn.has(y * world.size + x)),
     blocksWalkers: (x, y) => solid.has(y * world.size + x),
+    setAimMark(mark) {
+      aim = mark
+      aimScale = -1
+      if (!mark) {
+        aimLines.clear()
+        aimLabel.visible = false
+      }
+    },
     setTowns(marks) {
       for (const { text, bar } of townMarks) {
         text.destroy()

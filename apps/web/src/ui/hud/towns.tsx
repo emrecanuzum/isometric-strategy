@@ -1,4 +1,4 @@
-import { atWar, balance, townCenter } from '@game/shared'
+import { atWar, balance, townCenter, townSiegeMs } from '@game/shared'
 import type { Army, Kingdom, Pact, Point, Town } from '@game/shared'
 import { TOWN_KIND_NAMES, townGift } from '../../game/towns'
 import { Icon } from '../icons'
@@ -12,8 +12,10 @@ const clock = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-export function TownSheet({ town, kingdom, me, names, armies, pacts, now, onSend, onShow, onClose }: {
+export function TownSheet({ town, walled, kingdom, me, names, armies, pacts, now, onSend, onShow, onClose }: {
   town: Town
+  // Behind a wooden palisade (see townWalled).
+  walled: boolean
   kingdom: Kingdom
   me: number
   // Kingdoms' names by id.
@@ -32,7 +34,8 @@ export function TownSheet({ town, kingdom, me, names, armies, pacts, now, onSend
   const lawful = town.owner === null || atWar(pacts, me, town.owner)
   const siege = town.siege
   const own = armies.filter((a) => a.kingdom_id === me && a.status !== 'battle')
-  const minutes = Math.round(balance.towns.siegeSeconds / 60)
+  const minutes = Math.round(townSiegeMs(walled) / 60_000)
+  const p = balance.towns.palisade
   return (
     <section className="sheet frame" aria-labelledby="town-title">
       <header className="sheet-head">
@@ -40,7 +43,8 @@ export function TownSheet({ town, kingdom, me, names, armies, pacts, now, onSend
         <div>
           <h2 id="town-title">{town.name}</h2>
           <small>
-            {TOWN_KIND_NAMES[town.kind]} · {distance} karo uzakta
+            {TOWN_KIND_NAMES[town.kind]}
+            {walled && ' · tahta surlu'} · {distance} karo uzakta
           </small>
         </div>
         <button className="btn icon-only" onClick={() => onShow(middle)} aria-label="Haritada göster" title="Haritada göster">
@@ -60,6 +64,8 @@ export function TownSheet({ town, kingdom, me, names, armies, pacts, now, onSend
               {town.owner === null && ` Kendi garnizonu var: ${town.garrison} asker; kuşatma bitince ordun onlar kadar kayıp verir.`}
               {town.owner !== null && !mine && ' Sahibiyle savaştaysan kuşatıp alabilirsin.'}
               {mine && ' Savaşta olduğun biri kuşatırsa ordunla gelip kuşatmayı kırabilirsin.'}
+              {walled &&
+                ` Tahta bir çitle çevrili: taş surdan zayıftır ama kuşatma %${Math.round((p.siegeFactor - 1) * 100)} uzun sürer ve garnizon %${Math.round((p.lossFactor - 1) * 100)} daha çok kayıp verdirir.`}
             </small>
           </div>
         </div>
