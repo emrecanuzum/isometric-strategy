@@ -853,7 +853,10 @@ export const tradeUpgradeCost = (kingdom: Kingdom): Cost | null =>
 export function upgradeTrade(kingdom: Kingdom): Kingdom {
   const cost = tradeUpgradeCost(kingdom)
   if (!cost || !affordable(kingdom.stock, cost)) return kingdom
-  return { ...kingdom, stock: pay(kingdom.stock, cost), trade: { ...kingdom.trade, level: kingdom.trade.level + 1 } }
+  const level = kingdom.trade.level + 1
+  // The post's own level follows, so other kingdoms see it grow on the map.
+  const buildings = kingdom.buildings.map((b) => (b.kind === 'tradePost' ? { ...b, level: level + 1 } : b))
+  return { ...kingdom, stock: pay(kingdom.stock, cost), buildings, trade: { ...kingdom.trade, level } }
 }
 
 // ---- Time ---------------------------------------------------------------------------------------------------------

@@ -13,7 +13,8 @@ import { RESOURCES, flows } from './tabs'
 // its recent course. The clock at the end tells the game time; one game day passes in one real hour. On touch screens,
 // with no hover, a tap opens the card (and its button leads on to the tab), and a tap anywhere else closes it.
 
-const touchOnly = typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches
+// Asked at each tap, so it follows the device (or a browser switched to a phone view after loading).
+const touchOnly = () => typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches
 
 interface Props {
   kingdom: Kingdom
@@ -22,9 +23,11 @@ interface Props {
   seasonStart: number
   history: Stock[]
   onOpen: (tab: TabId) => void
+  // The last chip of the bar on phones: the menu with the settings and the way back to the main menu.
+  menu?: React.ReactNode
 }
 
-export function TopBar({ kingdom, now, seasonStart, history, onOpen }: Props) {
+export function TopBar({ kingdom, now, seasonStart, history, onOpen, menu }: Props) {
   const flow = flows(kingdom, now)
   const { villagers, jobs } = population(kingdom, now)
   const [open, setOpen] = useState<string | null>(null)
@@ -38,7 +41,7 @@ export function TopBar({ kingdom, now, seasonStart, history, onOpen }: Props) {
     return () => document.removeEventListener('pointerdown', away)
   }, [open])
   // On touch screens a tap shows the card; elsewhere it goes straight to the tab.
-  const tap = (key: string, tab: TabId) => () => (touchOnly ? setOpen((o) => (o === key ? null : key)) : onOpen(tab))
+  const tap = (key: string, tab: TabId) => () => (touchOnly() ? setOpen((o) => (o === key ? null : key)) : onOpen(tab))
   const go = (tab: TabId) => () => {
     setOpen(null)
     onOpen(tab)
@@ -78,6 +81,7 @@ export function TopBar({ kingdom, now, seasonStart, history, onOpen }: Props) {
         </span>
       </Chip>
       <Clock now={now} seasonStart={seasonStart} nextRound={kingdom.nextProductionAt} open={open === 'clock'} onTap={() => setOpen((o) => (o === 'clock' ? null : 'clock'))} />
+      {menu}
     </div>
   )
 }
@@ -100,7 +104,7 @@ function Chip({
 }) {
   return (
     <div className={open ? 'res-wrap open' : 'res-wrap'}>
-      <button className="res" onClick={onClick} aria-label={label} aria-expanded={touchOnly ? open : undefined}>
+      <button className="res" onClick={onClick} aria-label={label} aria-expanded={touchOnly() ? open : undefined}>
         {children}
       </button>
       <div className="pop frame" role="tooltip">
@@ -246,13 +250,19 @@ function Clock({ now, seasonStart, nextRound, open, onTap }: { now: number; seas
   const phase = PHASE_NAMES[dayPhase(t.hour)]
   return (
     <div className={open ? 'res-wrap open' : 'res-wrap'}>
-      <span className="res clock" tabIndex={0} aria-label={`${t.day}. gün, saat ${time}, ${phase}`} onClick={touchOnly ? onTap : undefined}>
+      {/* A button, so a tap reaches it on every phone (iOS ignores taps on plain elements). */}
+      <button
+        className="res clock"
+        aria-label={`${t.day}. gün, saat ${time}, ${phase}`}
+        aria-expanded={touchOnly() ? open : undefined}
+        onClick={() => touchOnly() && onTap()}
+      >
         <Icon name={night ? 'moon' : 'sun'} size={24} />
         <span className="res-value">
           <b>{time}</b>
           <small>{t.day}. gün</small>
         </span>
-      </span>
+      </button>
       <div className="pop frame right" role="tooltip">
         <header className="pop-head">
           <Icon name={night ? 'moon' : 'sun'} size={24} />

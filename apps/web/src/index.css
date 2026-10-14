@@ -2286,18 +2286,23 @@ small {
     display: none;
   }
 
+  /* The last chip of the store bar, its list dropping down under the bar's right end. */
   .map-menu {
-    position: fixed;
-    top: calc(var(--gap) + 52px + var(--px) * 4);
-    right: var(--gap);
-    z-index: 5;
+    position: relative;
+    flex: none;
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: calc(var(--px) * 3);
+    box-shadow: calc(var(--px) * -1) 0 0 0 var(--panel-lo), calc(var(--px) * -2) 0 0 0 var(--panel-hi);
+  }
+
+  .menu-toggle {
+    padding: 0 calc(var(--px) * 3);
   }
 
   .map-menu-list {
+    position: absolute;
+    top: calc(100% + var(--px) * 6);
+    right: calc(var(--px) * -2);
+    z-index: 8;
     display: flex;
     flex-direction: column;
     gap: calc(var(--px) * 2);

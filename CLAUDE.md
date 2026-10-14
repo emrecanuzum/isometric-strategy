@@ -236,8 +236,16 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
 - Arayüz yazı tipi Pixelify Sans'tır; ondaki 2 ve 5 zor okunduğu için
   **rakamlar Tiny5** ile çizilir (`apps/web/src/fonts.ts`). Büyük sayılar
   1,2K / 3,4M diye kısaltılır.
-- Görseller şimdilik **kodla üretilir** (`apps/web/src/game/sprites.ts`);
-  ileride aynı ölçüde çizilmiş sprite'larla değiştirilebilir.
+- Görseller şimdilik **kodla üretilir** (`apps/web/src/game/sprites.ts`,
+  binalar `buildingSprites.ts`); ileride aynı ölçüde çizilmiş sprite'larla
+  değiştirilebilir. Binaların çoğunun **her seviyede birkaç çeşidi** vardır
+  (ev 4, tarla 3 ürün, silah atölyesi ve iskele 3, diğerleri 2, balıkçı
+  kulübesi 4); hangisi olduğu binanın kimliğinden seçilir. Saray her
+  seviyede büyür (1: açık kuleli sur, 5: altın yıldızlı, sarmaşıklı büyük
+  saray). Ticaret noktası görseli ticaret seviyesini izler (yükseltilince
+  binanın seviyesi de yazılır, rakipler de görür); harap hâli o seviyenin ve
+  çeşidin yanmış hâlidir. Oyunda henüz olmayan seviyeler (pazar 2–3, kışla 3,
+  gözcü kulesi 2–3) için görseller hazırdır.
 
 ### 4.3 Harita üretimi
 
@@ -1166,7 +1174,8 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   harita sol alttadır; sohbet düğmesi küçük haritanın, sayaçlar sohbet
   düğmesinin üstünde durur. Üst çubuk ekranın tam genişliğindedir, her
   kartta ikon üstte, sayı altta. Ayarlar ve ana menü tek bir **hamburger**
-  düğmesinde (çubuğun altında, sağda) aşağı açılan menüdedir. Dokunmatik
+  düğmesindedir; bu düğme çubuğun son kartıdır ve menü çubuğun altına doğru
+  açılır. Dokunmatik
   ekranda bir karta dokunmak bilgi kartını açar; kartın altındaki "Depoya
   git" / "Halka git" ilgili sekmeyi açar, başka yere dokunmak kartı kapatır.
 - Dünya haritası (telefonda küçük haritaya dokununca) yakınlaştırılınca her

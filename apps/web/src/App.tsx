@@ -593,7 +593,9 @@ function App({
             : b.kind === 'tradePost' && ruined
               ? 'tradePostRuined'
               : b.kind
-      return { x: b.x, y: b.y, size: b.size, look, variant, level: b.level ?? 1, ...(own && { id: b.id }), color, ...(pier && { pier }) }
+      // The player's own trade post grows with the trade level (older saves keep no level on the building).
+      const level = own && b.kind === 'tradePost' && shown ? shown.trade.level + 1 : (b.level ?? 1)
+      return { x: b.x, y: b.y, size: b.size, look, variant, level, ...(own && { id: b.id }), color, ...(pier && { pier }) }
     }
     const structures: Structure[] = [
       ...buildings.map((b) => structure(b, shown?.color, true, b.id, !!shown?.trade.damaged)),
@@ -1097,7 +1099,42 @@ function App({
     <>
       <div ref={host} style={{ width: '100%', height: '100%' }} />
       <div className="top">
-        {kingdom && <TopBar kingdom={kingdom} now={now} seasonStart={seasonStart} history={journal.history} onOpen={setPanel} />}
+        {kingdom && (
+          <TopBar
+            kingdom={kingdom}
+            now={now}
+            seasonStart={seasonStart}
+            history={journal.history}
+            onOpen={setPanel}
+            menu={
+              <>
+                {/* On phones the settings and the way back to the main menu fold into one menu, the store bar's last chip. */}
+                <div className="map-menu" ref={mapMenu}>
+                  <button className="res menu-toggle" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} aria-label="Menü">
+                    <Icon name={menuOpen ? 'close' : 'menu'} size={16} />
+                  </button>
+                  {menuOpen && (
+                    <div className="map-menu-list frame" role="menu">
+                      <button
+                        className="btn small"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuOpen(false)
+                          setSettingsOpen(true)
+                        }}
+                      >
+                        <Icon name="gear" size={16} /> Ayarlar
+                      </button>
+                      <button className="btn small" role="menuitem" onClick={onExit}>
+                        <Icon name="home" size={16} /> Ana menü
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            }
+          />
+        )}
       </div>
       <button className="btn icon-only exit frame" onClick={onExit} title="Ana menüye dön" aria-label="Ana menüye dön">
         <Icon name="home" size={16} />
@@ -1105,29 +1142,6 @@ function App({
       <button className="btn icon-only music frame" onClick={() => setSettingsOpen(true)} title="Ayarlar" aria-label="Ayarlar">
         <Icon name="gear" size={16} />
       </button>
-      {/* On phones the settings and the way back to the main menu fold into one menu under the store bar. */}
-      <div className="map-menu" ref={mapMenu}>
-        <button className="btn icon-only frame menu-toggle" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} aria-label="Menü">
-          <Icon name={menuOpen ? 'close' : 'menu'} size={16} />
-        </button>
-        {menuOpen && (
-          <div className="map-menu-list frame" role="menu">
-            <button
-              className="btn small"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false)
-                setSettingsOpen(true)
-              }}
-            >
-              <Icon name="gear" size={16} /> Ayarlar
-            </button>
-            <button className="btn small" role="menuitem" onClick={onExit}>
-              <Icon name="home" size={16} /> Ana menü
-            </button>
-          </div>
-        )}
-      </div>
       {settingsOpen && (
         <div className="modal" role="dialog" aria-labelledby="settings-title" onClick={(e) => e.target === e.currentTarget && setSettingsOpen(false)}>
           <section className="dialog frame settings-dialog">
