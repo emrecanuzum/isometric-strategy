@@ -21,6 +21,7 @@ import { dashes } from './dashes'
 import type { MapArmy, MapBattle } from './armies'
 import { createCaravans } from './caravans'
 import { CHIMNEYS, linkWalls, structureParts } from './buildingSprites'
+import { openGate } from './wallSprites'
 import { SPRITES, lightsOf, outlineOf, silhouetteOf } from './sprites'
 import { daylight, nightness, sunShadow } from './daylight'
 import { createShadows } from './shadows'
@@ -901,6 +902,8 @@ export async function createWorld(
     depth: number
     // Walked over (what stands on a field): walkers on it are not hidden.
     walked: boolean
+    // A gate's looks, closed and open; it opens while someone is in or right by its gateway.
+    gate?: { closed: Sprite_; open: Sprite_ }
   }
   let occluders: Occluder[] = []
   // Window lights cut to what the buildings in front leave visible, made anew with the buildings.
@@ -953,7 +956,23 @@ export async function createWorld(
         const lit = part === main ? lightsOf(look) : null
         if (lit) lights.push({ lit, sx, sy, depth })
         const left = sx - look.anchorX
-        return { x: s.x, y: s.y, size: s.size, sx, sy: ground, left, right: left + look.width, top: sy - look.anchorY, lift: main.z, sprite, look, depth, walked: !blocking }
+        const open = part === main ? openGate(look) : null
+        return {
+          x: s.x,
+          y: s.y,
+          size: s.size,
+          sx,
+          sy: ground,
+          left,
+          right: left + look.width,
+          top: sy - look.anchorY,
+          lift: main.z,
+          sprite,
+          look,
+          depth,
+          walked: !blocking,
+          ...(open && { gate: { closed: look, open } }),
+        }
       })
     })
     // Lit windows shine in the glow layer above everything, so the buildings in front of a house would not hide them:
@@ -1001,8 +1020,26 @@ export async function createWorld(
     setTerritory(...claimed)
     setRivals(rivals)
   }
+  // How far from a gate's tile (in tiles) a walker swings it open: a step before the gateway and a step after.
+  const GATE_REACH = 0.9
   function sortWalkers() {
     if (occluders.length === 0) return
+    const walkers = caravans.layer.children.filter((c) => c.visible && c.label !== 'occluder' && c.label !== 'army-ring' && c.label !== 'tree')
+    for (const o of occluders) {
+      if (!o.gate) continue
+      const open = walkers.some(({ position: { x: px, y: py } }) => {
+        const a = px / (TILE_WIDTH / 2)
+        const b = (py + o.lift) / (TILE_HEIGHT / 2)
+        const tx = (a + b) / 2
+        const ty = (b - a) / 2
+        return tx > o.x - GATE_REACH && ty > o.y - GATE_REACH && tx < o.x + o.size + GATE_REACH && ty < o.y + o.size + GATE_REACH
+      })
+      const look = open ? o.gate.open : o.gate.closed
+      if (o.look !== look) {
+        o.look = look
+        o.sprite.texture = textureOf(look)
+      }
+    }
     for (const child of caravans.layer.children) {
       if (!child.visible || child.label === 'occluder' || child.label === 'army-ring' || child.label === 'tree') continue
       const { x: px, y: py } = child.position

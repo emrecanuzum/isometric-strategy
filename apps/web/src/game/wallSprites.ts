@@ -399,8 +399,9 @@ function pennant(sprite: Sprite, z: number) {
 }
 
 // A gate in a wall running along `along`: a gatehouse a little taller than the wall, its arch of dressed voussoirs
-// over an oak door banded with iron, a banner above.
-function gatePiece(along: 'u' | 'v', links: number, variant: number): Sprite {
+// over an oak door banded with iron, a banner above. Open, the doors are swung back against the sides of the passage
+// and the way through shows dark under the arch, the light of the far side on its floor.
+function gatePiece(along: 'u' | 'v', links: number, variant: number, open = false): Sprite {
   const seed = 171 + variant * 7
   const runLinks = along === 'u' ? links | L_U0 | L_U1 : links | L_V0 | L_V1
   const boxes = curtain(runLinks & (along === 'u' ? L_U0 | L_U1 : L_V0 | L_V1), H)
@@ -422,6 +423,13 @@ function gatePiece(along: 'u' | 'v', links: number, variant: number): Sprite {
     if (face !== doorFace) return null
     const d = s - 16
     const crown = SPRING + Math.sqrt(Math.max(0, R * R - d * d))
+    if (Math.abs(d) < R && t < crown && open) {
+      // The leaves, edge on against the jambs.
+      if (Math.abs(d) > R - 1.8) return { colors: WOOD, albedo: Math.abs(t - 3.5) < 0.8 || Math.abs(t - 10) < 0.8 ? 0.25 : 0.42, flat: true }
+      // Daylight from the far end on the floor of the passage, fading in toward the middle of the arch.
+      if (t < 3.2 - Math.abs(d) * 0.25) return { colors: STONE, albedo: 0.32 + (3.2 - t) * 0.05, flat: true }
+      return { colors: DARK, albedo: 0.25 + (t / crown) * 0.35, flat: true }
+    }
     if (Math.abs(d) < R && t < crown) {
       // Iron bands across oak planks; studs on the bands.
       if (Math.abs(t - 3.5) < 0.8 || Math.abs(t - 10) < 0.8) return { colors: IRON, albedo: (Math.round(s) % 3 === 0 ? 0.75 : 0.5), flat: true }
@@ -456,6 +464,15 @@ export const WALL_KINDS = new Set<string>(['wall', 'brokenWall', 'towerWall', 'g
 // Wall pieces are made when first seen: one per kind, links and look (variant).
 const VARIANTS = 4
 const pieces = new Map<string, Sprite>()
+// Each closed gate's open look, made when first needed.
+const gates = new WeakMap<Sprite, { along: 'u' | 'v'; links: number; variant: number; open?: Sprite }>()
+
+// A gate as it stands open while someone walks through (null for anything not a gate).
+export function openGate(closed: Sprite): Sprite | null {
+  const gate = gates.get(closed)
+  if (!gate) return null
+  return (gate.open ??= gatePiece(gate.along, gate.links, gate.variant, true))
+}
 export function wallLook(kind: WallKind, links: number, variant: number): Sprite {
   const v = ((variant % VARIANTS) + VARIANTS) % VARIANTS
   const key = `${kind}:${links}:${v}`
@@ -469,6 +486,7 @@ export function wallLook(kind: WallKind, links: number, variant: number): Sprite
           : kind === 'towerWall'
             ? gateTower(links, v)
             : gatePiece(kind === 'gate' ? 'u' : 'v', links, v)
+    if (kind === 'gate' || kind === 'gateY') gates.set(sprite, { along: kind === 'gate' ? 'u' : 'v', links, variant: v })
     pieces.set(key, sprite)
   }
   return sprite

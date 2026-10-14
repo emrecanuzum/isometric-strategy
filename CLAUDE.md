@@ -567,6 +567,11 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     "Döndür" düğmesiyle çevrilebilir; yerleştirirken üç karonun önizlemesi
     görünür. Var olan sur parçalarının üstüne kurulabilir (onların yerini
     alır).
+    Biri (köylü, tüccar, ordu) kapıdan geçerken kapı **açılır**: kanatlar
+    geçidin yanlarına yaslanır, kemerin altı karanlık bir geçit olur; yürüyen
+    bu geçitte gizlenir ve öbür yandan çıkar. Kapı karosuna yaklaşık bir karo
+    kalınca açılır, uzaklaşınca kapanır (yalnızca görsel,
+    `apps/web/src/game/wallSprites.ts` → `openGate`).
   - **Boşluk:** Sur ve kapılar diğer binalarla arasında boşluk bırakır
     (surlar birbirine bitişik olabilir): binanın arkasında 1 karo, önünde
     (ekranın altına doğru, x ya da y yönünde ileride) 2 karo; çünkü öndeki
