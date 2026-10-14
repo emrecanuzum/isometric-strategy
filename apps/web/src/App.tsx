@@ -56,7 +56,7 @@ import { PlanBar } from './ui/hud/PlanBar'
 import { cityInfo } from './game/cities'
 import { townStructures, townTrails } from './game/towns'
 import { Minimap } from './game/Minimap'
-import type { MinimapFlag } from './game/Minimap'
+import type { MinimapFlag, MinimapPatrol, MinimapTown } from './game/Minimap'
 import type { Structure } from './game/chunkPainter'
 import type { StructureLook } from './game/buildingSprites'
 import { createWorld, footprintOrigin } from './game/createWorld'
@@ -255,6 +255,22 @@ const BUILD_ERRORS: Record<BuildError, string> = {
   locked: 'Önce sarayı yükselt (bu yapı daha yüksek seviye saray ister)',
   limit: 'Bu yapının sınırı dolu (evlerde nüfus sınırı); sarayı yükselt',
   liege: 'Sarayı yükseltmek için önce bir taç krallığına biat et (Krallık sekmesi → Bağlılık)',
+}
+
+// Where something walking a path from `departAt` to `arriveAt` (evenly along its length) is at `t`.
+function pointOnPath(path: Point[], departAt: number, arriveAt: number, t: number): Point {
+  if (path.length < 2 || t <= departAt) return path[0]
+  if (t >= arriveAt) return path[path.length - 1]
+  const lengths = path.slice(1).map((p, i) => Math.hypot(p.x - path[i].x, p.y - path[i].y))
+  let d = ((t - departAt) / (arriveAt - departAt)) * lengths.reduce((a, b) => a + b, 0)
+  for (let i = 0; i < lengths.length; i++) {
+    if (d <= lengths[i]) {
+      const f = lengths[i] ? d / lengths[i] : 0
+      return { x: path[i].x + (path[i + 1].x - path[i].x) * f, y: path[i].y + (path[i + 1].y - path[i].y) * f }
+    }
+    d -= lengths[i]
+  }
+  return path[path.length - 1]
 }
 
 // Walkers keep to dry land below the mountains.
@@ -1362,6 +1378,27 @@ function App({
     [rivals, kingdom?.site, kingdom?.color],
   )
 
+  // The towns on the minimap and the world map, roofed in their holders' colours (CLAUDE.md §8.4).
+  const townMarks = useMemo(
+    (): MinimapTown[] =>
+      layer.towns.map((t) => ({
+        at: townCenter(t),
+        color: t.owner === null ? null : t.owner === mine.id ? hexOf(kingdom?.color) : hexOf(rivals.find((r) => r.id === t.owner)?.color),
+      })),
+    [layer.towns, mine.id, kingdom?.color, rivals],
+  )
+  // Where the crowns' patrols are now, for the minimap and the world map, moved on every couple of seconds.
+  const [patrolDots, setPatrolDots] = useState<MinimapPatrol[]>([])
+  useEffect(() => {
+    const place = () =>
+      setPatrolDots(
+        patrols.map((p) => ({ at: pointOnPath(p.path, p.departAt, p.arriveAt, serverNow()), color: hexOf(p.color) })),
+      )
+    place()
+    const id = window.setInterval(place, 2000)
+    return () => clearInterval(id)
+  }, [patrols])
+
   return (
     <>
       <div ref={host} style={{ width: '100%', height: '100%' }} />
@@ -1627,7 +1664,7 @@ function App({
           </button>
         </div>
       )}
-      {view && <Minimap world={view.world} center={cameraCenter} flags={flags} onJump={(tile) => (touchOnly ? setFullMap(true) : view.centerOn(tile))} />}
+      {view && <Minimap world={view.world} center={cameraCenter} flags={flags} towns={townMarks} patrols={patrolDots} onJump={(tile) => (touchOnly ? setFullMap(true) : view.centerOn(tile))} />}
       {view && fullMap && (
         <WorldMap
           world={view.world}
@@ -1642,6 +1679,8 @@ function App({
             })),
           ]}
           center={cameraCenter}
+          towns={townMarks}
+          patrols={patrolDots}
           onJump={view.centerOn}
           onClose={() => setFullMap(false)}
         />

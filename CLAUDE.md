@@ -1435,8 +1435,10 @@ mertebesindedir.
   eve çekilir ve eve varana kadar yeniden yakalanamaz.
 - Savaştayken elçiler yalnızca barış götürür (ilişki geliştirme, hediye ve
   haraç isteği olmaz).
-- Ordu yolu iki adımda aranır: önce 4×4 karoluk hücreler üzerinde (iki
-  komşu hücre, aralarında yürünebilir bir yol varsa bağlıdır; dar köprüler de
+- Ordu yolu iki adımda aranır: önce 4×4 karoluk hücrelerin **yürünebilir
+  parçaları** üzerinde (bir hücrenin içinde birbirine yürünerek ulaşılan
+  karolar bir parçadır; ortasından sur geçen hücre surun iki yanında iki
+  ayrı parçadır, böylece arama suru delemez ve kapıyı bulur; dar köprüler de
   bulunur), sonra seçilen hücre koridorunda karo karo; yol, arazinin izin
   verdiği yerde düzleştirilir. Böylece ordular nehirleri köprülerden ve en
   kısa yoldan geçer. Binaların (tarla hariç) ve ayakta duran **surların**
@@ -1607,8 +1609,13 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   yöne, yukarı-aşağı da kaydırılabilir; yakınlaştırma bakılan yeri ortaya
   getirir.
 - Küçük haritada krallıklar renkli sancakla, **serbest şehirler** açık
-  taş renginde küçük bir **kale** simgesiyle (iki kuleli, kapılı)
-  gösterilir; sancaklar kalelerin üstünde çizilir.
+  taş renginde küçük bir **kale** simgesiyle (iki kuleli, kapılı),
+  **kasabalar** sahibinin renginde çatılı küçük bir **ev** simgesiyle
+  (sahipsizse saman rengi) ve gezen **taç devriyeleri** tacın renginde
+  sancaklı birer noktayla (2 saniyede bir yerleri güncellenir) gösterilir;
+  sancaklar en üstte çizilir. Dünya haritasında da kasabalar ve devriyeler
+  görünür. Küçük harita 512 piksel çözünürlükle (2 karoya 1 piksel) çizilir
+  ve masaüstünde 320, orta ekranda 200, telefonda 132 piksel karedir.
 - Harita ekranının sağ üstünde, ayarların altında **ana menüye dön**
   düğmesi (ev ikonu) vardır. Yakınlaştırma düğmelerinin üstündeki **üsse
   dön** düğmesi (konum pini) kamerayı krallığa götürür.

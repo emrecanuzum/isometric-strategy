@@ -5,6 +5,7 @@ import type React from 'react'
 import { Icon } from '../ui/icons'
 import { TERRAIN_COLORS } from './createWorld'
 import { cityInfo } from './cities'
+import type { MinimapPatrol, MinimapTown } from './Minimap'
 
 // The whole world on one screen, opened from the minimap on phones: the land in the same isometric angle as the
 // map, shaded by its relief, with the trade routes, rivers, inns and the kingdoms' borders and names on it. A tap
@@ -60,12 +61,17 @@ export function WorldMap({
   world,
   kingdoms,
   center,
+  towns = [],
+  patrols = [],
   onJump,
   onClose,
 }: {
   world: World
   kingdoms: MapKingdom[]
   center: Point | null
+  // The towns (CLAUDE.md §8.4) and the crowns' patrols where they ride now (§7.8).
+  towns?: MinimapTown[]
+  patrols?: MinimapPatrol[]
   onJump: (tile: Point) => void
   onClose: () => void
 }) {
@@ -171,6 +177,14 @@ export function WorldMap({
               <Icon name="inn" size={zoom > 0 ? 16 : 8} />
             </span>
           ))}
+          {towns.map((t, i) => (
+            <span key={`town${i}`} className="worldmap-inn worldmap-town" style={{ ...marker(t.at), color: t.color ?? '#e8d8b0' }} aria-hidden>
+              <Icon name="house" size={zoom > 0 ? 16 : 10} />
+            </span>
+          ))}
+          {patrols.map((p, i) => (
+            <span key={`patrol${i}`} className="worldmap-patrol" style={{ ...marker(p.at), background: p.color }} aria-hidden />
+          ))}
           {world.cities.map((c, index) => (
             <span key={`city${index}`} className="worldmap-name city" style={marker(cityCenter(c))}>
               {cityInfo(world, index).capital}
@@ -198,6 +212,12 @@ export function WorldMap({
         </span>
         <span>
           <Icon name="inn" size={8} /> Han
+        </span>
+        <span>
+          <Icon name="house" size={8} /> Kasaba
+        </span>
+        <span>
+          <i className="patrol" /> Taç devriyesi
         </span>
         <span>
           <i className="here" /> Bakılan yer
