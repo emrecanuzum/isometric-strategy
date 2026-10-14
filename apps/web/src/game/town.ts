@@ -7,8 +7,8 @@ import { SPRITES } from './sprites'
 import type { Sprite } from './sprites'
 import { textureOf } from './textures'
 
-// Life in the player's town: villagers walking between their houses and their work, and the merchant leading a
-// camel to the trade post and back. They walk around buildings, not through them. Like the caravans, positions
+// Life in the player's town: villagers walking between their houses and their work, and the merchants (the player's
+// and every other kingdom's) leading camels to their trade posts and back. They walk around buildings, not through them. Like the caravans, positions
 // follow from the clock and are never stored.
 
 const VILLAGER_SPEED = 0.6
@@ -30,6 +30,8 @@ export interface MerchantTrip {
   market: Point
   departedAt: number
   tripMs: number
+  // The merchant's robe (see SPRITES.merchant); the player's own wears the last.
+  robe?: number
 }
 
 // A walked line: its corner points and the distance along it at each one.
@@ -186,15 +188,14 @@ function walker(layer: Container, pair: Sprite[]): Walker {
 }
 
 export interface Town {
-  set(errands: Errand[], merchant: MerchantTrip | null, blocked: (x: number, y: number) => boolean, worn: (x: number, y: number) => boolean): void
+  set(errands: Errand[], merchants: MerchantTrip[], blocked: (x: number, y: number) => boolean, worn: (x: number, y: number) => boolean): void
   update(now: number, view: { left: number; top: number; right: number; bottom: number }): void
 }
 
 export function createTown(world: World, layer: Container): Town {
   let villagers: (Walker & { path: Path; rest: number; offset: number })[] = []
-  const merchant = walker(layer, SPRITES.merchant[3])
-  const camels = [0, 1, 2].map((load) => walker(layer, SPRITES.camel[3][load]))
-  let trip: (MerchantTrip & { path: Path }) | null = null
+  // Each merchant with the camel he leads (full, half, empty loads), and his walk.
+  let trips: (MerchantTrip & { path: Path; merchant: Walker; camels: Walker[] })[] = []
 
   const draw = ({ sprite, frames }: Walker, at: Point, heading: number, stride: number, view: Parameters<Town['update']>[1]) => {
     const sx = (at.x - at.y) * (TILE_WIDTH / 2)
@@ -224,10 +225,15 @@ export function createTown(world: World, layer: Container): Town {
           },
         ]
       })
-      const far = !next || Math.hypot(next.market.x - next.home.x, next.market.y - next.home.y) > MERCHANT_MAX_TILES
-      // Walls can send the way round by a gate well off the straight line: look wider before giving up.
-      const path = next && !far ? (findPath(next.home, next.market, blocked, worn) ?? findPath(next.home, next.market, blocked, worn, WIDE_MARGIN)) : null
-      trip = next && path ? { ...next, path } : null
+      for (const t of trips) for (const w of [t.merchant, ...t.camels]) w.sprite.destroy()
+      trips = next.flatMap((trip) => {
+        if (Math.hypot(trip.market.x - trip.home.x, trip.market.y - trip.home.y) > MERCHANT_MAX_TILES) return []
+        // Walls can send the way round by a gate well off the straight line: look wider before giving up.
+        const path = findPath(trip.home, trip.market, blocked, worn) ?? findPath(trip.home, trip.market, blocked, worn, WIDE_MARGIN)
+        if (!path) return []
+        const robe = Math.min(SPRITES.merchant.length - 1, trip.robe ?? SPRITES.merchant.length - 1)
+        return [{ ...trip, path, merchant: walker(layer, SPRITES.merchant[robe]), camels: [0, 1, 2].map((load) => walker(layer, SPRITES.camel[robe][load])) }]
+      })
     },
     update(now, view) {
       const seconds = now / 1000
@@ -247,19 +253,19 @@ export function createTown(world: World, layer: Container): Town {
         draw(v, p, out ? p.heading : -p.heading, d, view)
       }
 
-      for (const c of [merchant, ...camels]) c.sprite.visible = false
-      if (!trip) return
-      const { path, departedAt, tripMs } = trip
-      // Out with full loads during the first half of the trip, back with empty ones in the second.
-      const p = ((((now - departedAt) % tripMs) + tripMs) % tripMs) / tripMs
-      const out = p < 0.5
-      const d = (out ? p * 2 : 2 - p * 2) * path.length
-      const lead = along(path, d)
-      draw(merchant, lead, out ? lead.heading : -lead.heading, d, view)
-      // The camel follows a step behind its driver.
-      const behind = d - (out ? 0.9 : -0.9)
-      const camel = along(path, behind)
-      draw(camels[out ? 2 : 0], camel, out ? camel.heading : -camel.heading, behind, view)
+      for (const { path, departedAt, tripMs, merchant, camels } of trips) {
+        for (const c of [merchant, ...camels]) c.sprite.visible = false
+        // Out with full loads during the first half of the trip, back with empty ones in the second.
+        const p = ((((now - departedAt) % tripMs) + tripMs) % tripMs) / tripMs
+        const out = p < 0.5
+        const d = (out ? p * 2 : 2 - p * 2) * path.length
+        const lead = along(path, d)
+        draw(merchant, lead, out ? lead.heading : -lead.heading, d, view)
+        // The camel follows a step behind its driver.
+        const behind = d - (out ? 0.9 : -0.9)
+        const camel = along(path, behind)
+        draw(camels[out ? 2 : 0], camel, out ? camel.heading : -camel.heading, behind, view)
+      }
     },
   }
 }

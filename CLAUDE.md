@@ -522,6 +522,12 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   hammaddeden biri; sonradan değiştirilebilir). Tüccar her **10 saniyede**
   seçilen maldan bir miktar götürüp satar ve altın getirir. Seviye
   yükseldikçe sefer başına satılan miktar artar.
+  Tüccar haritada devesiyle saraydan ticaret noktasına yürür; **başka
+  krallıkların tüccarları da** kendi saraylarıyla ticaret noktaları
+  arasında yürür (bir şey satıyorlarsa ve ticaret noktaları harap
+  değilse). Yola çıkış anları gizli olduğu için her krallığın tüccarı kendi
+  sabit temposuyla yürür; görsel olarak gösterilir, gerçek seferle aynı anda
+  olmayabilir.
 - **İnşa menüsü:** Altın (ve yapı malzemesi) harcanarak ev, tarla, oduncu
   kampı, silah atölyesi kurulur. Yapılar süreyle inşa edilir (iskele
   görünür), aynı anda en fazla 2 inşaat yürür. Yalnızca hudut içinde,

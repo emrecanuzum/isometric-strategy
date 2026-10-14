@@ -174,7 +174,7 @@ export interface WorldView {
   // The player's buildings marked in the plan: a red silhouette over those to be torn down, a blue one over the one
   // picked up to be moved.
   setMarked(marks: { id: number; tone: 'demolish' | 'move' }[]): void
-  setTown(errands: Errand[], merchant: MerchantTrip | null): void
+  setTown(errands: Errand[], merchants: MerchantTrip[]): void
   // Tiles walkers go around: building footprints, except flat ones such as fields.
   blocksWalkers(x: number, y: number): boolean
   // A short message rising from a spot on the ground.
@@ -1314,8 +1314,8 @@ export async function createWorld(
       app.canvas.style.cursor = tool === 'demolish' ? HAMMER_CURSOR : tool === 'move' ? 'grab' : ''
       if (lastPointer) pick(lastPointer)
     },
-    setTown: (errands, merchant) =>
-      town.set(errands, merchant, (x, y) => {
+    setTown: (errands, merchants) =>
+      town.set(errands, merchants, (x, y) => {
         if ((solid.has(y * world.size + x) && !gates.has(y * world.size + x)) || x < 0 || y < 0 || x >= world.size || y >= world.size) return true
         const t = world.terrain[y * world.size + x]
         return t === Terrain.Lake || t === Terrain.River || t === Terrain.Mountain
