@@ -801,8 +801,14 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   başlar; 2 dakika yeniden değiştirilemez (`trade.city`, `setTradeCity`;
   sunucuda `tradeCity` komutu, sefer süresini sunucu hesaplar).
 - **Eski lobiler:** Lobi, dünyasının hangi kuralla üretildiğini saklar
-  (`lobbies.world_rev`, `WORLD_REV`); serbest şehirlerden önce açılmış
-  lobiler (1) şehirsiz kalır, yeniler (2) şehirli açılır.
+  (`lobbies.world_rev`, `WORLD_REV`): 1 şehirsiz, 2 yeni lobiler (şehirler
+  yol ağıyla birlikte kurulur). **3**, şehirlerden önce açılmış bir lobiye
+  şehir eklemek içindir: 1'in dünyası olduğu gibi kalır (yollar, köprüler,
+  arazi), şehirler hiçbir yol/köprü/han karosuna değmeyen boş araziye
+  kurulur ve her biri en yakın yola yeni bir yolla bağlanır. Lobiyi 3'e
+  geçirirken sunucudaki `lobby_worlds` karoları da 3'ün karolarıyla
+  değiştirilir (yalnızca şehir ve yeni yol karoları farklıdır); önce
+  krallıkların hududuna değen karo olmadığı denetlenir.
 - **İleride:** paralı asker kiralama, barış görüşmelerinde arabuluculuk,
   rehine/fidye takası, kara borsa, şehirden mal satın alma.
 

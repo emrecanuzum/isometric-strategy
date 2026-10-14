@@ -20,7 +20,9 @@ export const Feature = {
 } as const
 
 // Worlds are made the same way from the same seed for as long as a lobby lives; a lobby keeps the revision its world
-// was made with. 1: before the free cities.
+// was made with. 1: before the free cities. 2: free cities joined into the road network as it is laid out. 3: the
+// world of revision 1 left as it is, with free cities added on open land and a road from each to the nearest road (for
+// lobbies opened before the cities).
 export const WORLD_REV = 2
 
 export interface Polyline {
@@ -500,7 +502,8 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
   // One or two free cities on wide, level, dry land well inside the mountain ring and away from the inns. They have a
   // random draw of their own, so the rest of the world comes out as it did before them.
   const cities: Point[] = []
-  if (rev >= 2) {
+  // `clear`: whatever else a spot must be (in revision 3, off the roads and bridges already laid).
+  const placeCities = (clear: (p: Point) => boolean) => {
     const town = balance.cities
     const S = town.size
     const draw = mulberry32(seed ^ 0x51c17e5)
@@ -527,7 +530,7 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
         x: town.edgeMargin + Math.floor(draw() * (size - town.edgeMargin * 2 - S)),
         y: town.edgeMargin + Math.floor(draw() * (size - town.edgeMargin * 2 - S)),
       }
-      if (cities.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < town.minSpacing) || !fits(p)) continue
+      if (cities.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < town.minSpacing) || !fits(p) || !clear(p)) continue
       cities.push(p)
     }
     // In the order the server finds them in the tiles (citiesOf), so both name a city by the same index.
@@ -550,6 +553,7 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
       }
     }
   }
+  if (rev === 2) placeCities(() => true)
   // The roads meet at the inns and run into the middle of each city.
   const hubs: Point[] = [...inns, ...cities.map((c) => ({ x: c.x + balance.cities.size / 2, y: c.y + balance.cities.size / 2 }))]
   for (const hub of hubs) pinned.add(toCell(hub))
@@ -588,32 +592,39 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
   const roadCost = [1, 1.6, 9, 3, 1.2, 25, 6]
   // Roads go round a free city unless they lead into it.
   const cityCells = new Int16Array(side * side).fill(-1)
-  cities.forEach((c, k) => {
-    for (let y = Math.floor(c.y / COARSE) - 1; y <= Math.floor((c.y + balance.cities.size) / COARSE); y++) {
-      for (let x = Math.floor(c.x / COARSE) - 1; x <= Math.floor((c.x + balance.cities.size) / COARSE); x++) cityCells[y * side + x] = k
-    }
-  })
-  for (const [a, b] of links) {
-    const goal = toCell(hubs[b])
-    const ends = [a - inns.length, b - inns.length]
-    const path = findPath(side, toCell(hubs[a]), (cell) => cell === goal, (cell) => {
-      if (cityCells[cell] >= 0 && !ends.includes(cityCells[cell])) return 60
-      if (roadCells[cell]) return 0.3
-      const base = riverCells[cell] ? roadCost[Terrain.River] : roadCost[terrain[tileIndex(cell)]]
-      return base * meander(cell) * (0.7 + hash(cell, 3, seed + 71) * 0.6)
+  const markCities = () =>
+    cities.forEach((c, k) => {
+      for (let y = Math.floor(c.y / COARSE) - 1; y <= Math.floor((c.y + balance.cities.size) / COARSE); y++) {
+        for (let x = Math.floor(c.x / COARSE) - 1; x <= Math.floor((c.x + balance.cities.size) / COARSE); x++) cityCells[y * side + x] = k
+      }
     })
+  markCities()
+  const routeCost = (ends: number[]) => (cell: number) => {
+    if (cityCells[cell] >= 0 && !ends.includes(cityCells[cell])) return 60
+    if (roadCells[cell]) return 0.3
+    const base = riverCells[cell] ? roadCost[Terrain.River] : roadCost[terrain[tileIndex(cell)]]
+    return base * meander(cell) * (0.7 + hash(cell, 3, seed + 71) * 0.6)
+  }
+  // `onlyOpen`: a road laid after the rest leaves the tiles that already hold something as they are.
+  const layRoad = (path: number[], onlyOpen = false) => {
     for (const cell of path) roadCells[cell] = 1
     roads.push({ points: path.map(routePoint).map((p) => ({ x: p.x + 0.5, y: p.y + 0.5 })), width: 1 })
     paint(path, (x, y) => {
       const i = y * size + x
+      if (onlyOpen && feature[i] !== Feature.None) return
       const wet = terrain[i] === Terrain.River || terrain[i] === Terrain.Lake
       feature[i] = wet ? Feature.Bridge : Feature.Road
     })
+  }
+  for (const [a, b] of links) {
+    const goal = toCell(hubs[b])
+    layRoad(findPath(side, toCell(hubs[a]), (cell) => cell === goal, routeCost([a - inns.length, b - inns.length])))
   }
 
   // A road into a free city ends at its wall, where the city's gate stands; inside are the city's own streets.
   const S = balance.cities.size
   const within = (c: Point, p: Point) => p.x >= c.x && p.y >= c.y && p.x <= c.x + S && p.y <= c.y + S
+  const endAtWalls = () => {
   for (const road of roads) {
     for (const end of [0, 1]) {
       const line = end === 0 ? road.points : road.points.slice().reverse()
@@ -634,6 +645,8 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
       road.points = end === 0 ? kept : kept.reverse()
     }
   }
+  }
+  endAtWalls()
 
   // Stone bridges cross the rivers here and there away from the trade routes, so both banks can be walked to.
   const crossings: Crossing[] = []
@@ -703,6 +716,25 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
     for (let oy = 0; oy < 2; oy++) {
       for (let ox = 0; ox < 2; ox++) feature[(inn.y + oy) * size + inn.x + ox] = Feature.Inn
     }
+  }
+
+  // Revision 3: the cities come last, on land no road, bridge or inn touches, so nothing laid before them changes;
+  // each is joined by a new road to the nearest road.
+  if (rev >= 3) {
+    const margin = 4
+    placeCities((p) => {
+      for (let y = p.y - margin; y < p.y + S + margin; y++) {
+        for (let x = p.x - margin; x < p.x + S + margin; x++) if (feature[y * size + x] !== Feature.None) return false
+      }
+      return true
+    })
+    markCities()
+    cities.forEach((c, k) => {
+      const from = toCell({ x: c.x + S / 2, y: c.y + S / 2 })
+      pinned.add(from)
+      layRoad(findPath(side, from, (cell) => !!roadCells[cell] && cityCells[cell] < 0, routeCost([k])), true)
+    })
+    endAtWalls()
   }
 
   for (const c of cities) {
