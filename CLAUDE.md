@@ -183,14 +183,30 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   koyu, akşam uzun ve sağ alta doğrudur. Gece yalnızca dibinde kısa, soluk
   bir gölge kalır (`daylight.ts` → `sunShadow`). Gölge sprite'ın kendi
   silüetinden piksel piksel düşürülür (`sprites.ts` → `castShadow`).
-  Binalarda yükseklik taban karesinin ortasından ölçülür; böylece önündeki
-  avlu ve döşeme gölge atmaz. Binalar, surlar, kuleler, sallanan ağaçlar,
+  Her pikselin altındaki yerden yüksekliği bilinir: surlarda modelden
+  tam olarak gelir, diğer binalarda ön duvarın dibinden ölçülür (döşenmiş
+  avlu düz sayılır, gölge atmaz). Böylece gölge binayla aynı genişlikte
+  düşer ve yan yana duran sur parçalarının gölgesi tek parça olur. Binalar, surlar, kuleler, sallanan ağaçlar,
   yürüyenler, hayvanlar ve ordular gölgelerini ayrı bir katmana çizer
   (`shadows.ts`). Katman tek seferde saydamlaştırıldığı için üst üste
   binen gölgeler iki kat koyulaşmaz; gölgelerin yönü oyunun 10 dakikada
   bir değişir. Zemine boyanmış ağaçların, kayaların ve hanların gölgesi
   zeminle birlikte boyanır; bunlar oyun saati başına bir kez yeniden
   boyanır.
+- **Surlar komşularına bağlanır** (`apps/web/src/game/wallSprites.ts`):
+  her sur parçası yanındaki sur karelerine göre düz duvar, köşe, T, kavşak
+  ya da uç olur; tek başına duran parça küçük bir burç gibidir. Duvar
+  ortadan geçen kalın bir perde duvardır: geniş bir taş kaide, üstünde
+  bayraklı yürüyüş yolu ve iki yanında mazgallı korkuluk (mazgal düzeni
+  bütün surda aynı ritimde sürer). Parçalar küçük bir taş kutu modelinden
+  ışıkla boyanır: güneşe bakan yüz aydınlık, öbürü gölgeli; mazgallar
+  yürüyüş yoluna, kule duvara gölge düşürür; köşeler ve duvar dibi
+  koyulaşır. Yüzlerde sıra sıra kesme taş, harç, yontulmuş köşeler,
+  dipte ve yolda yosun, mazgal aralıklarından aşağı kir izi vardır.
+  Kapı kulesi kare ve yüksektir, üstü konsollarla taşar, mazgal
+  pencereleri ve flaması vardır; kapı kemerli, demir kuşaklı meşe kapı ve
+  üstünde sancaklıdır; yıkık sur basamaklı bir kütük ve önüne dökülmüş
+  taşlardır.
 - **Yollar ve nehirler kıvrımlıdır**; uzun dümdüz hatlar izometrik görünümü
   bozduğu için rota üretimi bilerek sapma ekler.
 - **Nehir ve göl aynı sudur**, hepsi aynı su seviyesindedir. Nehir araziyi
@@ -283,8 +299,8 @@ uzaklık olmalı; kimse tamamen dezavantajlı başlamamalı.
 - Krallık kurulurken oyuncu krallığına bir **isim** ve bir **renk** verir.
   Lobi, büyüklüğü kadar renk sunar (9 ya da 18; `packages/shared/src/colors.ts`)
   ve **bir renk lobide yalnızca bir krallığındır**: alınmış renk seçilemez. Sarayın
-  çatıları bu renkte çizilir. İsim, harita
-  uzaklaştırıldığında (½× ve altı) isim hududun üzerinde yazar.
+  çatıları bu renkte çizilir. Harita uzaklaştırıldığında (½× ve altı)
+  krallığın adı **sarayın üstünde** yazar (saray yoksa hududun ortasında).
 - **1 parsel = 4×4 karo** (yani 32×32 karodan 64×64 karoya). Değerler
   `config/balance/territory.json` içindedir.
 - Karenin içinde **yerleşim tamamen oyuncuya aittir**: neyi nereye inşa

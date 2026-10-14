@@ -1,4 +1,4 @@
-import { TILE_HEIGHT as TILE_H, hash, mulberry32, valueNoise } from '@game/shared'
+import { hash, mulberry32, valueNoise } from '@game/shared'
 
 // Pixel art is generated in code for now: every sprite is a small buffer of palette colors, drawn pixel by pixel.
 // Colors are packed the way an RGBA byte buffer reads them as 32-bit words (alpha in the top byte).
@@ -12,6 +12,10 @@ export interface Sprite {
   pixels: Uint32Array
   // Whether it casts a shadow on the ground where it is painted into it (nonzero: yes; see castShadow).
   shadow: number
+  // Per pixel, how high it stands above the ground right under it (screen pixels), when the sprite knows (a model).
+  lift?: Uint8Array
+  // Per pixel, whether it lies flat on the ground (a paved yard); buildings only.
+  flat?: Uint8Array
 }
 
 export const rgb = (hex: number) => (0xff000000 | ((hex & 0xff) << 16) | (hex & 0xff00) | (hex >> 16)) >>> 0
@@ -71,6 +75,9 @@ export class Canvas {
   width: number
   height: number
   pixels: Uint32Array
+  // While set, what is drawn lies flat on the ground (see Sprite.flat); drawing anything else over it lifts it again.
+  paving = false
+  flat: Uint8Array | null = null
   constructor(width: number, height: number) {
     this.width = width
     this.height = height
@@ -79,7 +86,11 @@ export class Canvas {
   set(x: number, y: number, color: number) {
     x = Math.round(x)
     y = Math.round(y)
-    if (x >= 0 && y >= 0 && x < this.width && y < this.height) this.pixels[y * this.width + x] = color
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return
+    const i = y * this.width + x
+    this.pixels[i] = color
+    if (this.paving) (this.flat ??= new Uint8Array(this.pixels.length))[i] = 1
+    else if (this.flat) this.flat[i] = 0
   }
   get(x: number, y: number) {
     return x >= 0 && y >= 0 && x < this.width && y < this.height ? this.pixels[y * this.width + x] : 0
@@ -95,7 +106,7 @@ export class Canvas {
     for (const i of edge) this.pixels[i] = color
   }
   sprite(anchorX: number, anchorY: number, shadow: number): Sprite {
-    return { width: this.width, height: this.height, anchorX, anchorY, pixels: this.pixels, shadow }
+    return { width: this.width, height: this.height, anchorX, anchorY, pixels: this.pixels, shadow, ...(this.flat && { flat: this.flat }) }
   }
 }
 
@@ -111,42 +122,82 @@ export function silhouetteOf(sprite: Sprite): Sprite {
   return shape
 }
 
+// How high each pixel of a building stands above the ground under it, guessed from the picture: a column of the
+// building rises from its lowest pixel (the foot of its front walls), and paved yard lies flat.
+const lifts = new WeakMap<Sprite, Uint8Array>()
+function liftOf(sprite: Sprite): Uint8Array {
+  let lift = lifts.get(sprite)
+  if (lift) return lift
+  const { width, height, pixels, flat } = sprite
+  lift = new Uint8Array(pixels.length)
+  for (let x = 0; x < width; x++) {
+    let foot = -1
+    for (let y = height - 1; y >= 0 && foot < 0; y--) {
+      const i = y * width + x
+      if (pixels[i] >>> 24 === 0xff && !flat?.[i]) foot = y
+    }
+    for (let y = 0; y < foot; y++) lift[y * width + x] = Math.min(255, foot - y)
+  }
+  lifts.set(sprite, lift)
+  return lift
+}
+
 // The shadow a sprite throws on flat ground, in white (tint it), anchored like the sprite: each solid pixel lands its
-// height times `sun` away from its foot. Things standing on one point (trees, walkers) rise from their anchor row, a
-// building of `size` tiles from the line through its footprint's middle (its walls stand somewhere on the footprint;
-// the paved yard at its front throws nothing). `flip` casts the sprite as drawn mirrored; the shadow itself is never
-// mirrored, the sun does not move.
-export function castShadow(sprite: Sprite, sun: { x: number; y: number }, size = 0, flip = false): Sprite {
+// height times `sun` away from the ground under it. A building (`building`) knows each pixel's height (a model's
+// lift) or has it guessed (liftOf); anything else stands on one point, its anchor. `flip` casts the sprite as drawn
+// mirrored; the shadow itself is never mirrored, the sun does not move.
+export function castShadow(sprite: Sprite, sun: { x: number; y: number }, building = false, flip = false): Sprite {
   const { width, height, anchorY, pixels } = sprite
   const anchorX = flip ? width - sprite.anchorX : sprite.anchorX
-  const foot = size === 0 ? anchorY : anchorY - size * (TILE_H / 2)
+  const lift = sprite.lift ?? (building ? liftOf(sprite) : null)
   const steps = Math.ceil(Math.max(sun.x, sun.y, 1) * 2) + 1
   const points: number[] = []
   let minX = Infinity
   let minY = Infinity
   let maxX = -Infinity
   let maxY = -Infinity
+  const add = (px: number, py: number) => {
+    points.push(px, py)
+    if (px < minX) minX = px
+    if (px > maxX) maxX = px
+    if (py < minY) minY = py
+    if (py > maxY) maxY = py
+  }
   for (let x = 0; x < width; x++) {
-    const ground = foot
     const from = flip ? width - 1 - x : x
-    for (let y = 0; y < height && y < ground; y++) {
-      if (pixels[y * width + from] >>> 24 !== 0xff) continue
-      const rise = ground - y
+    for (let y = 0; y < height; y++) {
+      const i = y * width + from
+      if (pixels[i] >>> 24 !== 0xff) continue
+      const rise = lift ? lift[i] : anchorY - y
+      if (rise <= 0) {
+        if (lift) add(x, y)
+        continue
+      }
+      const ground = y + rise
       for (let s = 0; s < steps; s++) {
         const h = rise - s / steps
-        const px = Math.floor(x + h * sun.x)
-        const py = Math.floor(ground + h * sun.y)
-        points.push(px, py)
-        if (px < minX) minX = px
-        if (px > maxX) maxX = px
-        if (py < minY) minY = py
-        if (py > maxY) maxY = py
+        add(Math.floor(x + h * sun.x), Math.floor(ground + h * sun.y))
       }
     }
   }
   if (points.length === 0) return new Canvas(1, 1).sprite(0, 0, 0)
   const canvas = new Canvas(maxX - minX + 1, maxY - minY + 1)
   for (let i = 0; i < points.length; i += 2) canvas.pixels[(points[i + 1] - minY) * canvas.width + points[i] - minX] = 0xffffffff
+  // Pixels the slanting columns stepped over, between two shadowed neighbours, are shadow too: one solid shape.
+  for (let pass = 0; pass < 2; pass++) {
+    const { width: cw, height: ch, pixels: px } = canvas
+    const fill: number[] = []
+    for (let y = 0; y < ch; y++) {
+      for (let x = 0; x < cw; x++) {
+        const o = y * cw + x
+        if (px[o]) continue
+        const across = x > 0 && x < cw - 1 && px[o - 1] && px[o + 1]
+        const down = y > 0 && y < ch - 1 && px[o - cw] && px[o + cw]
+        if (across || down) fill.push(o)
+      }
+    }
+    for (const o of fill) px[o] = 0xffffffff
+  }
   return canvas.sprite(anchorX - minX, anchorY - minY, 0)
 }
 

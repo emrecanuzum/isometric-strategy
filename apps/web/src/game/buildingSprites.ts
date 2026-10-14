@@ -2,6 +2,8 @@ import { TILE_HEIGHT, TILE_WIDTH, hash, heightAt } from '@game/shared'
 import type { BuildingKind, KingdomColorId, Point, World } from '@game/shared'
 import { BARK, Canvas, CLOTH, GLASS, ROOF, SACK, STONE, TIMBER, WALL, pick, ramp, rgb, shadeBlobs, shadow } from './sprites'
 import type { Sprite } from './sprites'
+import { WALL_KINDS, wallLinks, wallLook } from './wallSprites'
+import type { WallKind } from './wallSprites'
 
 // Buildings of the player's town, made the same way as the inn: every sprite stands on the front corner of its
 // footprint (the anchor), its walls run back along the two front edges and a hip roof covers the top.
@@ -1731,6 +1733,7 @@ const VERDIGRIS = ramp(0x1e4a44, 0x2a6a5e, 0x3a8a78, 0x52a690, 0x74c2aa, 0x9adcc
 
 // A flat paved yard over a footprint's diamond.
 function yard(canvas: Canvas, cx: number, base: number, h: number, colors: Uint32Array, seed: number) {
+  canvas.paving = true
   for (let y = base - h * 2; y <= base; y++) {
     for (let x = cx - (h * 2 - 4); x <= cx + (h * 2 - 4); x++) {
       const a = (x - cx) / (h * 2 - 6)
@@ -1738,6 +1741,7 @@ function yard(canvas: Canvas, cx: number, base: number, h: number, colors: Uint3
       if (Math.abs(a) + Math.abs(b) <= 1) canvas.set(x, y, pick(colors, 1.2 + (((x >> 2) + (y >> 1)) % 2) * 0.8 + (hash(x, y, seed) - 0.5)))
     }
   }
+  canvas.paving = false
 }
 
 // The university (CLAUDE.md §9.8): level 1 a stone college under slate with an observatory tower, its green dome
@@ -2235,48 +2239,6 @@ function fisherHut(variant = 0): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
-// A section of wall filling one tile: masonry on the two front faces, a walkway on top and battlements; a broken one
-// is a heap of rubble with a stump of wall.
-// `door`: a gate, with an arched wooden door through both front faces under a banner.
-// `door`: the face the gate's door is on (-1 the left face, for a gate in a wall along x; 1 the right face, along y),
-// 0 for none. `towerWall`: the taller tower beside a gate, with an arrow slit and wider battlements.
-function wall(broken = false, door: -1 | 0 | 1 = 0, towerWall = false): Sprite {
-  const { canvas, cx, base, w, h } = footprint(1, towerWall ? 84 : 50)
-  const tall = broken ? 8 : towerWall ? 56 : door ? 30 : 26
-  for (const side of [-1, 1]) {
-    const lit = side < 0
-    for (let t = 0; t <= w; t++) {
-      const x = cx + side * (w - t)
-      const ground = base - h + t / 2
-      const height = broken ? tall + Math.round(hash(t >> 2, side, 41) * 10) : tall
-      for (let z = 0; z <= height; z++) {
-        const course = Math.floor(z / 4)
-        const mortar = z % 4 === 0 || (t + (course & 1) * 3) % 8 === 0
-        canvas.set(x, ground - z, pick(KEEP, (lit ? 3 : 1.3) - (mortar ? 0.8 : 0) + (hash(t >> 2, course, 17 + side) > 0.85 ? 0.6 : 0)))
-        // The arch: planks with iron bands, rounded at the top.
-        const mid = Math.abs(t - w / 2)
-        if (door === side && mid < 10 && z < 18 + Math.sqrt(Math.max(0, 100 - mid * mid)) * 0.5) {
-          canvas.set(x, ground - z, mid > 8.5 ? TIMBER[0] : z % 6 === 3 ? STONE[1] : PLANK[lit ? (Math.floor(t / 3) % 2 ? 3 : 2) : 1])
-        }
-        // An arrow slit in each face of a tower.
-        if (towerWall && mid < 1.5 && z > tall * 0.45 && z < tall * 0.75) canvas.set(x, ground - z, TIMBER[0])
-      }
-      if (!broken && t % (towerWall ? 6 : 8) < (towerWall ? 3 : 4)) for (let z = height + 1; z <= height + (towerWall ? 7 : 5); z++) canvas.set(x, ground - z, pick(KEEP, lit ? 3.4 : 1.8))
-    }
-  }
-  // The walkway on top.
-  for (let y = base - h * 2; y <= base; y++) {
-    for (let x = cx - w; x <= cx + w; x++) {
-      const a = (x - cx) / w
-      const b = (y - (base - h)) / h
-      if (Math.abs(a) + Math.abs(b) <= 1) canvas.set(x, y - tall, broken ? pick(STONE, 1 + hash(x, y, 43) * 3) : pick(KEEP, 2.2 + hash(x >> 1, y, 47) * 0.8))
-    }
-  }
-  if (broken) shadeBlobs(canvas, [{ x: cx - 18, y: base - 6, r: 5 }, { x: cx + 14, y: base - 4, r: 4 }, { x: cx + 2, y: base - 2, r: 3.5 }], STONE, 4)
-  if (door) banner(canvas, cx, base - h - tall + 2, 8)
-  return canvas.sprite(cx, base, 0)
-}
-
 const variants = <T>(count: number, make: (i: number) => T) => Array.from({ length: count }, (_, i) => make(i))
 
 export type StructureLook = BuildingKind | 'scaffold' | 'brokenWall' | 'gateY' | 'towerWall' | 'tradePostRuined'
@@ -2294,7 +2256,18 @@ export interface Structure {
   // The building it shows, for picking it on the map.
   id?: number
   pier?: { x: number; y: number; w: number; h: number; along: 'x' | 'y' }
+  // Wall pieces: which neighbouring tiles hold wall too (see linkWalls).
+  links?: number
 }
+
+// Wall pieces joined to the wall pieces beside them, so a run of wall reads as one wall with corners and ends.
+export function linkWalls(structures: Structure[]): Structure[] {
+  const links = wallLinks(structures.filter((s) => WALL_KINDS.has(s.look)))
+  return structures.map((s) => (WALL_KINDS.has(s.look) ? { ...s, links: links.get(`${s.x},${s.y}`) ?? 0 } : s))
+}
+
+// A wall piece on its own runs along x; a gate along its own run.
+const lonePiece = (look: WallKind) => (look === 'gateY' ? 12 : 3)
 
 // Variants for each look; a building picks one by its id. Building sites come in one size per footprint tile count.
 // Looks for levels 2 and 3 of the buildings that can be raised; level 1 is STRUCTURE_SPRITES.
@@ -2346,17 +2319,17 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   barracks: variants(2, (v) => barracks(v)),
   spyHouse: variants(2, (v) => spyHouse(v)),
   watchtower: variants(2, (v) => watchtower(v)),
-  wall: [wall()],
-  gate: [wall(false, -1)],
-  gateY: [wall(false, 1)],
-  towerWall: [wall(false, 0, true)],
+  wall: [wallLook('wall', 3, 0)],
+  gate: [wallLook('gate', 3, 0)],
+  gateY: [wallLook('gateY', 12, 0)],
+  towerWall: [wallLook('towerWall', 3, 0)],
   university: [university()],
   hospital: variants(2, (v) => hospital(v)),
   temple: variants(2, (v) => temple(v)),
   warehouse: variants(2, (v) => warehouse(v)),
   treasury: variants(2, (v) => treasury(v)),
   fisherHut: variants(4, (v) => fisherHut(v)),
-  brokenWall: [wall(true)],
+  brokenWall: [wallLook('brokenWall', 3, 0)],
   scaffold: [scaffold(1), scaffold(2), scaffold(3)],
 }
 
@@ -2395,8 +2368,9 @@ export function structureParts(world: World, s: Structure): Part[] {
   const high = Math.max(back, left, front, right)
   const fx = s.x + s.size
   const fy = s.y + s.size
-  const looks =
-    s.look === 'scaffold' ? [STRUCTURE_SPRITES.scaffold[s.size - 1]] : s.look === 'palace' ? [palaceIn(s.color, s.level)] : looksOf(s.look, s.level)
+  const looks = WALL_KINDS.has(s.look)
+    ? [wallLook(s.look as WallKind, s.links ?? lonePiece(s.look as WallKind), s.variant)]
+    : s.look === 'scaffold' ? [STRUCTURE_SPRITES.scaffold[s.size - 1]] : s.look === 'palace' ? [palaceIn(s.color, s.level)] : looksOf(s.look, s.level)
   // Fields are walked over; gates are walked through but stand tall like the wall around them.
   const flat = s.look === 'farm'
   const parts: Part[] = []

@@ -20,7 +20,7 @@ import { createArmies } from './armies'
 import { dashes } from './dashes'
 import type { MapArmy, MapBattle } from './armies'
 import { createCaravans } from './caravans'
-import { CHIMNEYS, structureParts } from './buildingSprites'
+import { CHIMNEYS, linkWalls, structureParts } from './buildingSprites'
 import { SPRITES, lightsOf, outlineOf, silhouetteOf } from './sprites'
 import { daylight, nightness, sunShadow } from './daylight'
 import { createShadows } from './shadows'
@@ -136,6 +136,8 @@ export interface RivalTerritory {
   rect: Rect
   name: string
   color: number
+  // Where its palace stands (a tile on it), for the name over it.
+  palace?: Point
 }
 
 export interface WorldView {
@@ -146,7 +148,7 @@ export interface WorldView {
   // Keeps the camera on whatever `target` says each frame (an army on the march), until null is given or the map is
   // dragged; `onStop` hears when a drag ended it.
   follow(target: (() => Point | null) | null, onStop?: () => void): void
-  setTerritory(rect: Rect | null, plots: Plots, name?: string): void
+  setTerritory(rect: Rect | null, plots: Plots, name?: string, palace?: Point): void
   // The other kingdoms of the lobby: their borders in their own colour, and their names when zoomed out.
   setRivals(rivals: RivalTerritory[]): void
   // Every army in the lobby and the battles being fought (see armies.ts).
@@ -597,17 +599,29 @@ export async function createWorld(
   }
 
   // Overlay lines keep their screen thickness at every zoom level, so they are redrawn when it changes.
-  let claimed: [Rect | null, Plots, string | undefined] = [null, { dock: null, trade: null }, undefined]
-  function setTerritory(rect: Rect | null, plots: Plots, name?: string) {
-    claimed = [rect, plots, name]
+  let claimed: [Rect | null, Plots, string | undefined, Point | undefined] = [null, { dock: null, trade: null }, undefined, undefined]
+  // A kingdom's name stands over its palace, just above the top of the palace as drawn; without a palace yet, over
+  // the middle of its territory.
+  let palaces: { x: number; y: number; size: number; top: number }[] = []
+  const nameAt = (rect: Rect, palace: Point | undefined) => {
+    const p = palace && palaces.find((q) => palace.x >= q.x && palace.y >= q.y && palace.x < q.x + q.size && palace.y < q.y + q.size)
+    if (p) {
+      const middle = groundToScreen(world, { x: p.x + p.size / 2, y: p.y + p.size / 2 })
+      return { x: middle.x, y: p.top - 14 / camera.scale.y }
+    }
+    const middle = groundToScreen(world, { x: rect.x + rect.size / 2, y: rect.y + rect.size / 2 })
+    return { x: middle.x, y: middle.y - 24 / camera.scale.y }
+  }
+  function setTerritory(rect: Rect | null, plots: Plots, name?: string, palace?: Point) {
+    claimed = [rect, plots, name, palace]
     territory.clear()
     for (const text of Object.values(plotLabels)) text.visible = false
     kingdomLabel.visible = false
     if (!rect) return
     if (name && camera.scale.x <= NAME_MAX_ZOOM) {
-      const middle = groundToScreen(world, { x: rect.x + rect.size / 2, y: rect.y + rect.size / 2 })
       kingdomLabel.text = name
-      kingdomLabel.position.set(middle.x, middle.y - 24 / camera.scale.y)
+      const at = nameAt(rect, palace)
+      kingdomLabel.position.set(at.x, at.y)
       kingdomLabel.scale.set(1 / camera.scale.x)
       kingdomLabel.visible = true
     }
@@ -652,9 +666,9 @@ export async function createWorld(
       rivalLines.stroke({ width: thick, color: rival.color, alpha: 0.8, cap: 'butt' })
       if (camera.scale.x > NAME_MAX_ZOOM) continue
       const text = nameLabel(rival.color)
-      const middle = groundToScreen(world, { x: rival.rect.x + rival.rect.size / 2, y: rival.rect.y + rival.rect.size / 2 })
       text.text = rival.name
-      text.position.set(middle.x, middle.y - 24 / camera.scale.y)
+      const at = nameAt(rival.rect, rival.palace)
+      text.position.set(at.x, at.y)
       text.scale.set(1 / camera.scale.x)
       rivalLabels.addChild(text)
     }
@@ -887,6 +901,7 @@ export async function createWorld(
   // Window lights cut to what the buildings in front leave visible, made anew with the buildings.
   let masked: Sprite_[] = []
   const solid = new Set<number>()
+  const gates = new Set<number>()
   // Lit windows of the player's buildings, in the glow layer.
   let windows: Sprite[] = []
   function placeOccluders(structures: Structure[]) {
@@ -898,13 +913,21 @@ export async function createWorld(
     const lights: { lit: Sprite_; sx: number; sy: number; depth: number }[] = []
     let order = 0
     solid.clear()
+    gates.clear()
     const chimneys: { x: number; y: number; depth: number }[] = []
     occluders = structures.flatMap((s) => {
       const parts = structureParts(world, s)
       const solidParts = parts.filter((p) => p.solid || p.stands)
       if (solidParts.length === 0) return []
       const blocking = parts.some((p) => p.solid)
-      if (blocking) for (let y = s.y; y < s.y + s.size; y++) for (let x = s.x; x < s.x + s.size; x++) solid.add(y * world.size + x)
+      // Gates and broken stretches of wall stand in the way of animals but let the townsfolk through.
+      const through = s.look === 'gate' || s.look === 'gateY' || s.look === 'brokenWall'
+      for (let y = s.y; y < s.y + s.size; y++) {
+        for (let x = s.x; x < s.x + s.size; x++) {
+          if (blocking) solid.add(y * world.size + x)
+          if (through) gates.add(y * world.size + x)
+        }
+      }
       // The building itself is the last solid part; a base below it comes first.
       const main = solidParts[solidParts.length - 1]
       return solidParts.map((part) => {
@@ -962,6 +985,16 @@ export async function createWorld(
       windows.push(...addLight(textureOf(shown), shown.anchorX / shown.width, shown.anchorY / shown.height, sx, sy))
     }
     ambient.setChimneys(chimneys)
+    palaces = structures.flatMap((s) => {
+      if (s.look !== 'palace') return []
+      const main = structureParts(world, s).filter((p) => p.solid).pop()
+      if (!main) return []
+      const sy = (main.fx + main.fy) * (TILE_HEIGHT / 2) - main.z
+      return [{ x: s.x, y: s.y, size: s.size, top: sy - main.sprite.anchorY + contentTop(main.sprite) }]
+    })
+    // The names stand over the palaces just found.
+    setTerritory(...claimed)
+    setRivals(rivals)
   }
   function sortWalkers() {
     if (occluders.length === 0) return
@@ -1022,7 +1055,8 @@ export async function createWorld(
   let trailPoints: Point[] = []
   // Tiles on a footpath: the town's walkers keep to them (see findPath).
   let worn = new Set<number>()
-  function setStructures(structures: Structure[], trails: Point[][]) {
+  function setStructures(placed: Structure[], trails: Point[][]) {
+    const structures = linkWalls(placed)
     hits = structures
       .filter((s) => s.id !== undefined)
       .map((s) => {
@@ -1032,7 +1066,7 @@ export async function createWorld(
       })
       .sort((a, b) => b.depth - a.depth)
     placeMarks()
-    const keyOf = (s: Structure) => `${s.x},${s.y},${s.size},${s.look},${s.variant},${s.level ?? 1},${JSON.stringify(s.pier ?? null)}`
+    const keyOf = (s: Structure) => `${s.x},${s.y},${s.size},${s.look},${s.variant},${s.level ?? 1},${JSON.stringify(s.pier ?? null)},${s.links ?? ''}`
     const keys = new Set(structures.map(keyOf))
     const changed = [...structures.filter((s) => !structureKeys.has(keyOf(s)))]
     const removed = [...structureKeys].filter((k) => !keys.has(k)).map((k) => {
@@ -1137,7 +1171,7 @@ export async function createWorld(
     },
     setTown: (errands, merchant) =>
       town.set(errands, merchant, (x, y) => {
-        if (solid.has(y * world.size + x) || x < 0 || y < 0 || x >= world.size || y >= world.size) return true
+        if ((solid.has(y * world.size + x) && !gates.has(y * world.size + x)) || x < 0 || y < 0 || x >= world.size || y >= world.size) return true
         const t = world.terrain[y * world.size + x]
         return t === Terrain.Lake || t === Terrain.River || t === Terrain.Mountain
       }, (x, y) => worn.has(y * world.size + x)),

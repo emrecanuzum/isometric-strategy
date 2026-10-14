@@ -519,6 +519,7 @@ function App({
         rect: territoryRect(r.site, territoryStage({ buildings: r.buildings } as Kingdom, serverNow())),
         name: r.name,
         color: colorOf(r.color),
+        palace: r.buildings.find((b) => b.kind === 'palace'),
       })),
     )
   }, [view, rivals])
@@ -556,6 +557,7 @@ function App({
       site ? territoryRect(site, stage) : null,
       { dock: dockPlot ?? null, trade: plots?.trade?.plot ?? null },
       kingdom?.name,
+      kingdom?.buildings.find((b) => b.kind === 'palace'),
     )
   }, [view, site, stage, plots, kingdom])
 

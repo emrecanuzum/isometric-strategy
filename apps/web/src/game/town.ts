@@ -18,6 +18,7 @@ const STRIDES_PER_TILE = 3
 const MERCHANT_MAX_TILES = 40
 // Paths are searched within this many tiles around the box spanned by their two ends.
 const SEARCH_MARGIN = 12
+const WIDE_MARGIN = 48
 
 export interface Errand {
   from: Point
@@ -45,11 +46,11 @@ const WORN_COST = 0.35
 // Shortest walk over tiles that are not blocked (8 directions, no corner cutting), pulled taut wherever a straight
 // line stays clear. The two ends may stand on blocked tiles (a field, a doorway). With `worn`, tiles on footpaths are
 // cheaper to walk, and the walk is pulled taut only along stretches that stay all on or all off them.
-export function findPath(from: Point, to: Point, blocked: (x: number, y: number) => boolean, worn?: (x: number, y: number) => boolean): Path | null {
-  const x0 = Math.floor(Math.min(from.x, to.x)) - SEARCH_MARGIN
-  const y0 = Math.floor(Math.min(from.y, to.y)) - SEARCH_MARGIN
-  const w = Math.floor(Math.max(from.x, to.x)) + SEARCH_MARGIN - x0 + 1
-  const h = Math.floor(Math.max(from.y, to.y)) + SEARCH_MARGIN - y0 + 1
+export function findPath(from: Point, to: Point, blocked: (x: number, y: number) => boolean, worn?: (x: number, y: number) => boolean, margin = SEARCH_MARGIN): Path | null {
+  const x0 = Math.floor(Math.min(from.x, to.x)) - margin
+  const y0 = Math.floor(Math.min(from.y, to.y)) - margin
+  const w = Math.floor(Math.max(from.x, to.x)) + margin - x0 + 1
+  const h = Math.floor(Math.max(from.y, to.y)) + margin - y0 + 1
   const index = (p: Point) => (Math.floor(p.y) - y0) * w + (Math.floor(p.x) - x0)
   const start = index(from)
   const goal = index(to)
@@ -224,7 +225,8 @@ export function createTown(world: World, layer: Container): Town {
         ]
       })
       const far = !next || Math.hypot(next.market.x - next.home.x, next.market.y - next.home.y) > MERCHANT_MAX_TILES
-      const path = next && !far ? findPath(next.home, next.market, blocked, worn) : null
+      // Walls can send the way round by a gate well off the straight line: look wider before giving up.
+      const path = next && !far ? (findPath(next.home, next.market, blocked, worn) ?? findPath(next.home, next.market, blocked, worn, WIDE_MARGIN)) : null
       trip = next && path ? { ...next, path } : null
     },
     update(now, view) {

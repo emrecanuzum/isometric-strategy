@@ -38,7 +38,7 @@ export function createShadows(): Shadows {
     if (!byLook) cast.set(look, (byLook = new Map()))
     const key = size * 2 + (flip ? 1 : 0)
     let shadow = byLook.get(key)
-    if (!shadow) byLook.set(key, (shadow = castShadow(look, sun, size, flip)))
+    if (!shadow) byLook.set(key, (shadow = castShadow(look, sun, size > 0, flip)))
     return shadow
   }
 

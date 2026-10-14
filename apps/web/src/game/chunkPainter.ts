@@ -344,7 +344,7 @@ function shadowOf(sprite: Sprite, foot: number, sun: SunShadow) {
   let byFoot = casts.get(sprite)
   if (!byFoot) casts.set(sprite, (byFoot = new Map()))
   let shadow = byFoot.get(foot)
-  if (!shadow) byFoot.set(foot, (shadow = castShadow(sprite, sun, foot)))
+  if (!shadow) byFoot.set(foot, (shadow = castShadow(sprite, sun, foot > 0)))
   return shadow
 }
 
