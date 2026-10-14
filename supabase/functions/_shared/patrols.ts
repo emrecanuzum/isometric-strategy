@@ -46,7 +46,10 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
         if (target === null) continue
         const row = rows.find((r) => r.id === target)
         if (!row?.state) continue
-        const kind = game.visitKind(crown, row.state.liege)
+        // A demand whose time to answer had already run out when it was first seen (the server was away) is let go: the
+        // lord never had the chance to answer it.
+        const late = arrive + spec.answerSeconds * 1000 <= now
+        const kind = late && game.visitKind(crown, row.state.liege) === 'tribute' ? 'visit' : game.visitKind(crown, row.state.liege)
         const settled = game.advance(row.state, arrive).kingdom
         const tip = kind === 'tip' && hasTavern(settled, arrive)
         const amount = kind === 'tribute' ? game.tributeDemand(settled.stock?.gold ?? 0) : tip ? spec.tip : 0
