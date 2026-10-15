@@ -138,8 +138,9 @@ export interface WorldHandlers {
   onHover(hover: Hover | null): void
   onCamera(center: Point): void
   onLoading(loading: boolean): void
-  // A tap or click that did not drag the map, and the player's building or the army drawn under it, if any.
-  onTap(tile: Point, building?: number, army?: number, inn?: number, city?: number): void
+  // A tap or click that did not drag the map, and the player's building or the army drawn under it, if any; or a
+  // lord's ship (whose, and its fleet).
+  onTap(tile: Point, building?: number, army?: number, inn?: number, city?: number, ship?: { lord: number; fleet?: number }): void
   // A row of footprints drawn by dragging while placing a stroke kind (see Placement.stroke).
   onStroke?(spots: Point[]): void
 }
@@ -1109,8 +1110,11 @@ export async function createWorld(
     }
     if (press && !press.moved && e.type === 'pointerup') {
       const tile = pick({ x: e.global.x, y: e.global.y })
-      const army = placement ? undefined : armies.pick({ x: (e.global.x - camera.x) / camera.scale.x, y: (e.global.y - camera.y) / camera.scale.y })
-      if (tile) onTap(tile, army === undefined ? pickedBuilding : undefined, army, army === undefined ? pickedInn : undefined, army === undefined ? pickedCity : undefined)
+      const at = { x: (e.global.x - camera.x) / camera.scale.x, y: (e.global.y - camera.y) / camera.scale.y }
+      const army = placement ? undefined : armies.pick(at)
+      // A ship is picked only off the buildings and armies (it lies on the water, under nothing else of the player's).
+      const ship = placement || army !== undefined || pickedBuilding !== undefined ? null : ambient.pickShip(at)
+      if (tile) onTap(tile, army === undefined ? pickedBuilding : undefined, army, army === undefined ? pickedInn : undefined, army === undefined ? pickedCity : undefined, ship ?? undefined)
     }
     press = null
   }

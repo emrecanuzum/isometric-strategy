@@ -214,7 +214,7 @@ function missionStatus(data: HudData, f: Fleet) {
     case 'hunt':
       return 'Korsanların peşinde · yakalanan her korsan için ödül'
     default:
-      return 'iskeleyi savunur; haritada iskelenin açığında demirli'
+      return f.sail ? 'gönderildiği yerde demirli' : 'iskeleyi savunur; iskelenin açığında demirli'
   }
 }
 
@@ -251,11 +251,15 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
         <p className="hint">
           <b>{MISSION_NAMES[fleet.mission.kind]}</b> · {missionStatus(data, fleet)}
         </p>
+        {fleet.sail && fleet.sail.arriveAt > now && <p className="hint">Suda yol alıyor · varış {clock(fleet.sail.arriveAt - now)}</p>}
         {fleet.mission.kind === 'trade' && (
           <p className="hint">Korsan saldırısı olasılığı her seferde {pct(pirateChance(kingdom, fleet, now))}. Savaş gemileri eskort eder; başka bir filo korsan avındaysa olasılık yarıya iner.</p>
         )}
         {home && (
           <div className="army-actions">
+            <button className="btn small" disabled={fleet.mission.kind === 'trade'} title={fleet.mission.kind === 'trade' ? 'Ticaretteki filo yerinden oynamaz' : 'Haritada bir nehre ya da göle tıkla'} onClick={() => online.sail(fleet.id)}>
+              <Icon name="ship" size={16} /> Hareket et
+            </button>
             <button className="btn small" aria-pressed={fleet.mission.kind === 'port'} disabled={!!simple('port')} onClick={() => mission({ kind: 'port' })}>
               <Icon name="anchor" size={16} /> Limanda bekle
             </button>

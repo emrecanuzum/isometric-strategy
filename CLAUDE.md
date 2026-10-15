@@ -1530,10 +1530,19 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
   3. seviyede küpeşteye kadar kaplanmış, su hattının altı ziftli, ambarı
   kemereli, direği dikilmiş ve flamalı bir gövde.
   Kızak sayısı (aynı anda yapılan parti) 1 / 2 / 3, limanın gemi sınırı
-  6 / 10 / 16. Lordların gemileri haritada taç limanlarının kadırgasının
-  küçültülmüş hâlidir (2,6 karo boyunda; genişliği, direği, kürekleri ve
-  tentesi de boyla birlikte küçülür, `shipSprites.ts` → `ship`), dar nehre de
-  sığar.
+  6 / 10 / 16. Lordların gemileri haritada türüne göre çizilir
+  (`shipSprites.ts` → `ship`, `kind`): **kadırga** taç limanlarının
+  kadırgasının küçültülmüşü (2,4 karo; mahmuz, kalkanlar, kürekler, tente,
+  çizgili kare yelken), **koka** geniş, karnı yuvarlak, iki ucunda yüksek
+  kasaralı, küreksiz bir yük gemisi (2 karo; düz kare yelken), **çektiri**
+  ince, az kürekli, uzun eğik serende üçgen latin yelkenli bir akıncı (2
+  karo). Gövde boyla birlikte bütünüyle küçülür (genişlik, direk, kürek).
+  Her gemi yalnız gövdesinin tamamını alan açık suya yerleşir
+  (`fleetShips.ts` → `berth`): istenen yere en yakın uygun yer aranır, dar
+  nehirde gemi nehrin yönüne döner, iskeleye ve başka gemilere binmez; yer
+  yoksa çizilmez. **Gemiye tıklamak** kendi gemindeyse Ordu → Donanma'yı
+  açar (filodaysa Filolar, limandaysa Liman bölümü), başkasınınkindeyse o
+  lordu Diplomasi'de açar (`ambient.ts` → `pickShip`).
 - **Gemiler:**
   - **Kadırga** (savaş): güç 3, eskort 2, yük 24, 4 denizci; çektirileri yener.
   - **Koka** (yük): güç 0,6, yük 80, balıkta iyi, 2 denizci.
@@ -1595,12 +1604,28 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
   korsanları yenerse yük güvende ve 35 altın ödül; yenemezse yük gider ve
   bir gemi batabilir (eskortsuz %20, eskortlu %15).
   Seferler, saldırılar, av ve dönüşler günlükte yazar.
-- **Herkes görür:** lobi her lordun filolarını haritada görür: limandaki
-  gemiler iskelenin yanına yanaşmış (en çok 4), limanda bekleyen bir filo
-  iskelenin açığında ayrı bir öbek olarak demirli (en çok 3 gemi), ticaretteki filonun gemisi
-  iskeleden açığa çıkıp gözden kaybolur ve sefer sonunda döner, korsan avı ve
-  balık filoları açıkta gezinir, abluka eden filonun kadırgaları hedefin
-  iskelesinin önünde demirler. Başkalarının gemi sayısı çifte yuvarlanır
+- **Hareket et** (`seaways.ts`; sunucuda `fleet` komutu, `sail` eylemi):
+  evdeki bir filo (ticarette değilse) ordu gibi haritada bir yere
+  gönderilir: "Hareket et" deyip bir nehre ya da göle tıklanır. **Karaya
+  tıklanamaz** ("Gemiler yalnız suda yüzer"), aynı suya bağlı olmayan yere
+  gidilemez ("Oraya su yolu yok"). Yol karo karo su üstünde aranır (A*,
+  karadan köşe kesmeden), sonra suyun izin verdiği yerde düzleştirilir;
+  filo karo başına 0,5 sn'de yol alır (`navy.json` → `sail`) ve vardığı
+  yerde demirler. Emir elçisiz, hemen gider. Seyir filonun `sail` alanında
+  yol, kalkış ve varış anı olarak saklanır, konum bunlardan hesaplanır;
+  bölünen filonun yeni parçası aynı yoldan gider. Görevler (balık, korsan
+  avı, ticaret) eskisi gibi işler; seyir yalnız filonun nerede durduğunu
+  belirler.
+- **Herkes görür:** lobi her lordun filolarını haritada görür
+  (`lobby_kingdoms` → `navy.fleets[].sail`): limandaki gemiler iskelenin
+  yanına yanaşmış (en çok 4); limanda bekleyen filo iskelenin açığında ya da
+  gönderildiği yerde demirli, yoldaysa suda yol alıyor (gemileri ilkinin
+  ardından aynı yolda sıra hâlinde, en çok 3); **balık avındaki** filo
+  durduğu yerin çevresinde (5 karo) ağır ağır, **korsan avındaki** daha
+  geniş (12 karo) dolaşır; **ticaretteki** filo her seferde suda en uzağa
+  (26 karoya kadar) açılıp döner; hiçbiri gözden kaybolmaz. Abluka eden
+  filonun kadırgaları hedefin iskelesinin önünde demirler; akına giden ve
+  dönen filolar görünmez. Başkalarının gemi sayısı çifte yuvarlanır
   (`lobby_kingdoms` → `navy`, `blockade`). Abluka ve yoldaki filolar harita
   uyarılarında ve sayaçlarda görünür.
 - **Puan:** gemilerin gücü ordu puanına asker gibi sayılır.

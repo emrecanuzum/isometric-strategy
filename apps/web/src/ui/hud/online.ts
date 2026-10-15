@@ -64,6 +64,8 @@ export interface Online extends Layer {
   act<T = unknown>(command: Command): Promise<T | undefined>
   // Picks a destination on the map for an army.
   target(army: number): void
+  // Picks a spot on the water for a fleet to sail to.
+  sail(fleet: number): void
   // Opens the battle view.
   watch(battle: number): void
   // Opens the watch over a town's siege.

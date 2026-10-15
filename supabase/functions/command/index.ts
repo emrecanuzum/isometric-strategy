@@ -441,6 +441,14 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
           next = changed(game.mergeFleets(k, id, cmd.other))
           break
         }
+        case 'sail': {
+          // Sent somewhere on the water (CLAUDE.md §8.5): over rivers and lakes only, from where it is now.
+          const to = { x: Number(cmd.x), y: Number(cmd.y) }
+          const sailed = game.sailFleet(lobbyWorld.world, k, id, to, now)
+          if (sailed === k) refuse(game.sailError(lobbyWorld.world, k, id, to, now) ?? 'rejected')
+          next = changed(sailed)
+          break
+        }
         case 'dock': {
           const error = game.dockFleetError(k, id)
           if (error) refuse(error)

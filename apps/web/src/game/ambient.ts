@@ -1,4 +1,4 @@
-import { Feature, MAX_HEIGHT, TILE_HEIGHT, TILE_WIDTH, Terrain, balance, hash, heightAt } from '@game/shared'
+import { Feature, MAX_HEIGHT, TILE_HEIGHT, TILE_WIDTH, Terrain, alongPath, balance, hash, heightAt, pathLength } from '@game/shared'
 import type { Point, World } from '@game/shared'
 import { Container, Sprite as PixiSprite } from 'pixi.js'
 import type { Texture } from 'pixi.js'
@@ -6,6 +6,7 @@ import { ROUTE_STEP, resampleRoute } from './chunkPainter'
 import { SMOKE_PUFFS, innLook } from './innSprites'
 import { harbourOf } from './cities'
 import { SHIP_LENGTH, ship } from './shipSprites'
+import type { ShipKind } from './shipSprites'
 import { SPRITES, cloudShapes } from './sprites'
 import type { Sprite } from './sprites'
 import { textureOf } from './textures'
@@ -267,21 +268,27 @@ export interface Ambient {
   setChimneys(points: { x: number; y: number; depth: number }[]): void
   // The lords' ships (CLAUDE.md §8.5; see fleetShips.ts).
   setFleets(ships: FleetShip[]): void
+  // The lord's ship drawn at this world point (screen space before the camera), if any: whose, and which fleet.
+  pickShip(p: Point): { lord: number; fleet?: number } | null
 }
 
-// A lord's ship on the map: moored at `at`, or under way from `at` to `to` and back once every `period` ms from
-// `start` (server time), out of sight at sea for the `away` share of it.
+// A lord's ship on the map: moored at `at`; or sailing the fleet's `route` (server time) and riding at anchor at its
+// end; or going round `loop` once every `period` ms from `start` (after the route, if both). A fleet's later ships
+// keep `behind` tiles back along the way of the first.
 export interface FleetShip {
   key: string
   at: Point
-  to?: Point
-  start?: number
-  period?: number
-  away?: number
+  route?: { path: Point[]; departAt: number; arriveAt: number }
+  loop?: { path: Point[]; start: number; period: number }
+  behind?: number
   along: 'x' | 'y'
   reverse: boolean
   seed: number
   length: number
+  kind: ShipKind
+  // Whose ship it is, and the fleet it sails in (none: moored in the harbour).
+  lord: number
+  fleet?: number
 }
 
 export function createAmbient(world: World, actors: Container): Ambient {
@@ -633,17 +640,19 @@ export function createAmbient(world: World, actors: Container): Ambient {
   })
   const shipLooks = new Map<string, { sprite: Sprite; texture: Texture }>()
   let fleets: FleetShip[] = []
-  const shipLook = (along: 'x' | 'y', sailing: boolean, seed: number, reverse: boolean, length = SHIP_LENGTH) => {
-    const key = `${along}:${sailing}:${seed % 3}:${reverse}:${length}`
+  const shipLook = (along: 'x' | 'y', sailing: boolean, seed: number, reverse: boolean, length = SHIP_LENGTH, kind: ShipKind = 'galley') => {
+    const key = `${along}:${sailing}:${seed % 3}:${reverse}:${length}:${kind}`
     let look = shipLooks.get(key)
     if (!look) {
-      const sprite = ship(along, sailing, seed % 3, reverse, length)
+      const sprite = ship(along, sailing, seed % 3, reverse, length, kind)
       look = { sprite, texture: textureOf(sprite) }
       shipLooks.set(key, look)
     }
     return look
   }
   const shipPool = new Pool(actors)
+  // The lords' ships as last drawn, for picking them.
+  let drawnShips: { x: number; y: number; z: number; look: Sprite; ship: FleetShip }[] = []
 
   function updateShips(seconds: number, view: View) {
     for (const s of ships) {
@@ -671,33 +680,44 @@ export function createAmbient(world: World, actors: Container): Ambient {
     }
     // The lords' ships: moored ones rock at their docks, ships under way sail out of sight and come back.
     const ms = seconds * 1000
+    drawnShips = []
     for (const s of fleets) {
       let { x, y } = s.at
+      let along = s.along
       let reverse = s.reverse
       let sailing = false
-      if (s.to && s.period) {
-        const u = ((((ms - (s.start ?? 0)) % s.period) + s.period) % s.period) / s.period
-        const away = s.away ?? 0
-        const leg = (1 - away) / 2
-        // Out of sight at sea in the middle of the voyage.
-        if (u > leg && u < 1 - leg) continue
-        const outward = u <= leg
-        const f = outward ? u / leg : (1 - u) / leg
-        const e = f * f * (3 - 2 * f)
-        x += (s.to.x - x) * e
-        y += (s.to.y - y) * e
-        if (!outward) reverse = !reverse
+      const behind = s.behind ?? 0
+      // Heading the way it goes, along the nearer tile axis (the ships are drawn along one).
+      const head = (p: { at: Point; dir: Point }) => {
+        x = p.at.x
+        y = p.at.y
+        if (p.dir.x || p.dir.y) {
+          along = Math.abs(p.dir.x) >= Math.abs(p.dir.y) ? 'x' : 'y'
+          reverse = (along === 'x' ? p.dir.x : p.dir.y) < 0
+        }
+      }
+      const route = s.route
+      if (route && (ms < route.arriveAt || !s.loop)) {
+        const total = pathLength(route.path)
+        const f = route.arriveAt > route.departAt ? Math.min(1, Math.max(0, (ms - route.departAt) / (route.arriveAt - route.departAt))) : 1
+        head(alongPath(route.path, f * total - behind))
+        sailing = f < 1
+      } else if (s.loop) {
+        const total = pathLength(s.loop.path)
+        const u = ((((ms - s.loop.start) % s.loop.period) + s.loop.period) % s.loop.period) / s.loop.period
+        head(alongPath(s.loop.path, (((u * total - behind) % total) + total) % total))
         sailing = true
       }
       const screen = toScreen(x, y, 0)
       if (!inView(view, screen.x, screen.y, 160)) continue
-      const look = shipLook(s.along, sailing, s.seed, reverse, s.length)
+      const look = shipLook(along, sailing, s.seed, reverse, s.length, s.kind)
       const sprite = shipPool.take(look.texture)
       sprite.label = 'ship'
       anchored(sprite, look.sprite)
       const bob = Math.round(Math.sin(seconds * 1.3 + s.seed) * 1)
       sprite.position.set(Math.round(screen.x), Math.round(screen.y) + bob)
       sprite.zIndex = screen.y
+      drawnShips.push({ x: sprite.position.x, y: sprite.position.y, z: screen.y, look: look.sprite, ship: s })
     }
     shipPool.finish()
   }
@@ -763,6 +783,24 @@ export function createAmbient(world: World, actors: Container): Ambient {
     },
     setFleets(list) {
       fleets = list
+    },
+    pickShip(p) {
+      // The nearest ship whose drawn pixels are under the point (or within a pixel or two of them).
+      let best: (typeof drawnShips)[number] | null = null
+      for (const d of drawnShips) {
+        const lx = Math.round(p.x - d.x + d.look.anchorX)
+        const ly = Math.round(p.y - d.y + d.look.anchorY)
+        let hit = false
+        for (let dy = -2; dy <= 2 && !hit; dy++) {
+          for (let dx = -2; dx <= 2 && !hit; dx++) {
+            const x = lx + dx
+            const y = ly + dy
+            if (x >= 0 && y >= 0 && x < d.look.width && y < d.look.height && d.look.pixels[y * d.look.width + x] >>> 24) hit = true
+          }
+        }
+        if (hit && (!best || d.z > best.z)) best = d
+      }
+      return best ? { lord: best.ship.lord, ...(best.ship.fleet !== undefined && { fleet: best.ship.fleet }) } : null
     },
     setChimneys(points) {
       chimneys = [...innChimneys, ...points.map((c, i) => ({ ...c, phase: hash(i, Math.round(c.x), seed + 953) }))]

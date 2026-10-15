@@ -54,6 +54,15 @@ export interface Fleet {
   id: number
   ships: Ships
   mission: FleetMission
+  // Where it was last sent over the water (see seaways.ts); without one it lies off the dock.
+  sail?: Sail
+}
+
+// A fleet's way over the water: the points it passes (tiles), when it set out and when it arrives.
+export interface Sail {
+  path: Point[]
+  departAt: number
+  arriveAt: number
 }
 
 export interface Navy {
@@ -239,7 +248,9 @@ export function splitFleet(k: Kingdom, id: number, ships: Ships): Kingdom {
   if (splitFleetError(k, id, ships)) return k
   const n = navyOf(k)
   const fleets = n.fleets.map((f) => (f.id === id ? { ...f, ships: subShips(f.ships, ships) } : f))
-  return { ...k, navy: { ...n, fleets: [...fleets, { id: n.nextFleetId, ships, mission: { kind: 'port' } }], nextFleetId: n.nextFleetId + 1 } }
+  // The new fleet goes where the old one is going.
+  const sail = fleetOf(k, id)!.sail
+  return { ...k, navy: { ...n, fleets: [...fleets, { id: n.nextFleetId, ships, mission: { kind: 'port' }, ...(sail && { sail }) }], nextFleetId: n.nextFleetId + 1 } }
 }
 
 // Two fleets at home become one (the first keeps its mission).
@@ -596,5 +607,5 @@ export function nextVoyage(k: Pick<Kingdom, 'navy'>): { fleet: Fleet; end: numbe
 // How the lobby sees a lord's navy (lobby_kingdoms): its fleets' missions and rough sizes.
 export interface NavyLook {
   harbour: number
-  fleets: { id: number; ships: number; galleys: number; mission: MissionKind; target?: number; arriveAt?: number; departedAt?: number; tripMs?: number }[]
+  fleets: { id: number; ships: number; galleys: boolean; mission: MissionKind; target?: number; arriveAt?: number; departedAt?: number; tripMs?: number; sail?: Sail | null }[]
 }

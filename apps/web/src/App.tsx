@@ -49,10 +49,10 @@ import {
   upgradeError,
   upgradeSpec,
   upgradeTrade,
-  countShips,
   clogsOf,
+  sailError,
 } from '@game/shared'
-import type { Along, Lord, BuildError, BuildingKind, Good, Kingdom, PlanStep, Point, World } from '@game/shared'
+import type { Along, Lord, BuildError, BuildingKind, Good, Kingdom, PlanStep, Point, Ships, World } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { WorldMap } from './game/WorldMap'
@@ -67,6 +67,7 @@ import type { Structure } from './game/chunkPainter'
 import type { StructureLook } from './game/buildingSprites'
 import { fleetShips } from './game/fleetShips'
 import type { NavyOnMap } from './game/fleetShips'
+import type { ShipKind } from './game/shipSprites'
 import { createWorld, footprintOrigin } from './game/createWorld'
 import type { MapTool } from './game/createWorld'
 import type { AimMark, Hover, RivalTerritory, WorldView } from './game/createWorld'
@@ -89,7 +90,8 @@ import type { FortuneEvent } from './ui/FortuneDialog'
 import { HouseDialog, allKnown, houseNews, readKnown, writeKnown } from './ui/hud/dynasty'
 import type { HouseNews } from './ui/hud/dynasty'
 import type { KingdomInfo, Online } from './ui/hud/online'
-import { BattleView, TownSiegeView, warNotes } from './ui/hud/war'
+import { BattleView, TownSiegeView, showArmyPart, warNotes } from './ui/hud/war'
+import { showPart } from './ui/hud/Subtabs'
 import type { Settings } from './net/settings'
 import { Chat } from './ui/Chat'
 import { findPath, tilesAlong } from './game/town'
@@ -465,7 +467,7 @@ function App({
   // The first view is held back until the ground around the kingdom (or the sites to choose from) is painted: the
   // camera has moved there and no chunk on screen is missing for a moment.
   const [ready, setReady] = useState(false)
-  const tapRef = useRef<(tile: Point, building?: number, army?: number, inn?: number, city?: number) => void>(() => {})
+  const tapRef = useRef<(tile: Point, building?: number, army?: number, inn?: number, city?: number, ship?: { lord: number; fleet?: number }) => void>(() => {})
   const strokeRef = useRef<(spots: Point[]) => void>(() => {})
 
   useEffect(() => {
@@ -478,7 +480,7 @@ function App({
         onHover: setHover,
         onCamera: setCameraCenter,
         onLoading: setLoading,
-        onTap: (tile, building, army, inn, city) => tapRef.current(tile, building, army, inn, city),
+        onTap: (tile, building, army, inn, city, ship) => tapRef.current(tile, building, army, inn, city, ship),
         onStroke: (spots) => strokeRef.current(spots),
       },
       serverNow,
@@ -639,6 +641,8 @@ function App({
   const [focus, setFocus] = useState<number | null>(null)
   const [armyFocus, setArmyFocus] = useState<number | null>(null)
   const [aiming, setAiming] = useState<number | null>(null)
+  // A fleet whose destination on the water is being picked (CLAUDE.md §8.5).
+  const [sailing, setSailing] = useState<number | null>(null)
   const [following, setFollowing] = useState<number | null>(null)
   const [watching, setWatching] = useState<number | null>(null)
   // A town whose siege is being watched.
@@ -1000,6 +1004,7 @@ function App({
   // The whole-world map, opened from the minimap on phones.
   const [fullMap, setFullMap] = useState(false)
   const cancelPlacing = () => {
+    setSailing(null)
     setTool(null)
     setMoving(null)
     setTurned(null)
@@ -1087,9 +1092,42 @@ function App({
     setAiming(null)
   }
 
-  tapRef.current = (tile, building, picked, inn, city) => {
+  tapRef.current = (tile, building, picked, inn, city, ship) => {
     let army = picked
     const current = kingdomRef.current
+    // Sending a fleet: onto water only, and water that joins where it is.
+    if (sailing !== null) {
+      if (!view || !current) return
+      const to = { x: tile.x + 0.5, y: tile.y + 0.5 }
+      const why = sailError(view.world, current, sailing, to, serverNow())
+      if (why === 'land') return setToast('Gemiler yalnız suda yüzer: bir nehre ya da göle tıkla')
+      if (why === 'route') return setToast('Oraya su yolu yok')
+      if (why) {
+        setSailing(null)
+        return setToast(why === 'away' ? 'Filo bir görevde; önce limana çağır' : 'Filo gönderilemedi')
+      }
+      play('click')
+      act({ type: 'fleet', action: 'sail', fleet: sailing, x: to.x, y: to.y })
+      setSailing(null)
+      return
+    }
+    // A lord's ship: one's own opens the navy at its fleets (or harbour), another's opens that lord in diplomacy.
+    if (ship && aiming === null && !tool && !placingKind) {
+      setInnOpen(null)
+      setCityOpen(null)
+      setTownOpen(null)
+      setSelected(null)
+      play('click')
+      if (ship.lord === mine.id) {
+        showArmyPart('sea')
+        showPart('navy', ship.fleet !== undefined ? 'fleets' : 'harbour')
+        setPanel('army')
+      } else {
+        setFocus(ship.lord)
+        setPanel('diplomacy')
+      }
+      return
+    }
     if (aiming === null && !tool && !placingKind) setInnOpen(inn ?? null)
     if (aiming === null && !tool && !placingKind) setCityOpen(city ?? null)
     // A town's houses and lanes open its sheet.
@@ -1345,6 +1383,11 @@ function App({
       setPanel(null)
       setSelected(null)
     },
+    sail: (fleet) => {
+      setSailing(fleet)
+      setPanel(null)
+      setSelected(null)
+    },
     watch: setWatching,
     watchTown: setWatchingTown,
     openCrown: (index) => {
@@ -1452,8 +1495,9 @@ function App({
     )
   }, [view, layer.armies, layer.battles, kingdoms, mine.id, armyFocus, patrols])
 
-  // The lords' ships at their docks and at sea (CLAUDE.md §8.5).
-  const fleetKey = JSON.stringify([kingdom?.navy?.harbour, kingdom?.navy?.fleets.map((f) => [f.id, f.mission.kind, f.mission.kind === 'trade' ? f.mission.departedAt : 0]), kingdom?.blockade?.by, rivals.map((r) => [r.id, r.navy, r.blockade?.by])])
+  // The lords' ships at their docks and at sea (CLAUDE.md §8.5): each drawn as its type, warships first.
+  const kindsOf = (ships: Ships | null | undefined): ShipKind[] => (['galley', 'corsair', 'cog'] as const).flatMap((x) => Array.from({ length: Math.min(4, ships?.[x] ?? 0) }, () => x)).slice(0, 4)
+  const fleetKey = JSON.stringify([kingdom?.navy?.harbour, kingdom?.navy?.fleets.map((f) => [f.id, f.ships, f.mission.kind, f.mission.kind === 'trade' ? f.mission.departedAt : 0, f.sail?.departAt]), kingdom?.blockade?.by, rivals.map((r) => [r.id, r.navy, r.blockade?.by])])
   useEffect(() => {
     if (!view) return
     const lords: NavyOnMap[] = []
@@ -1465,8 +1509,8 @@ function App({
         lords.push({
           id: mine.id,
           dock: { x: dock.x, y: dock.y, size: dock.size },
-          harbour: countShips(navy?.harbour),
-          fleets: (navy?.fleets ?? []).map((f) => ({ id: f.id, ships: countShips(f.ships), mission: f.mission.kind, ...(f.mission.kind === 'trade' && { departedAt: f.mission.departedAt, tripMs: f.mission.tripMs }) })),
+          harbour: kindsOf(navy?.harbour),
+          fleets: (navy?.fleets ?? []).map((f) => ({ id: f.id, kinds: kindsOf(f.ships), mission: f.mission.kind, sail: f.sail, ...(f.mission.kind === 'trade' && { departedAt: f.mission.departedAt, tripMs: f.mission.tripMs }) })),
           blockade: kingdom.blockade,
         })
       }
@@ -1477,8 +1521,9 @@ function App({
       lords.push({
         id: r.id,
         dock: { x: dock.x, y: dock.y, size: dock.size },
-        harbour: r.navy?.harbour ?? 0,
-        fleets: (r.navy?.fleets ?? []).map((f) => ({ id: f.id, ships: f.ships, mission: f.mission, departedAt: f.departedAt, tripMs: f.tripMs })),
+        // Others' harbours come as a count only; their fleets with how many galleys.
+        harbour: Array.from({ length: Math.min(4, r.navy?.harbour ?? 0) }, () => 'cog' as const),
+        fleets: (r.navy?.fleets ?? []).map((f) => ({ id: f.id, kinds: Array.from({ length: Math.min(3, f.ships) }, (_, i) => (i === 0 && f.galleys ? 'galley' : 'cog') as ShipKind), mission: f.mission, departedAt: f.departedAt, tripMs: f.tripMs, sail: f.sail })),
         blockade: r.blockade,
       })
     }
@@ -1903,6 +1948,17 @@ function App({
           </span>
           <button className="btn small" onClick={() => setFollowing(null)}>
             Bırak
+          </button>
+        </div>
+      )}
+      {sailing !== null && (
+        <div className="placing frame" role="status">
+          <Icon name="ship" size={24} />
+          <span>
+            <b>Filonun gideceği yer</b> · {touchOnly ? 'Bir nehre ya da göle dokun' : 'Bir nehre ya da göle tıkla'} (gemiler karaya çıkamaz)
+          </span>
+          <button className="btn small" onClick={() => setSailing(null)}>
+            İptal
           </button>
         </div>
       )}
