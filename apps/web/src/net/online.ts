@@ -166,6 +166,7 @@ export type Command =
   | { type: 'seen' }
   | { type: 'operation'; target: number; op: Operation; town?: number }
   | { type: 'townUpkeep'; town: number; level: number }
+  | { type: 'releaseTown'; town: number }
   | { type: 'raid'; target: number }
   | { type: 'cast' }
   | { type: 'fish'; toggles: number[] }

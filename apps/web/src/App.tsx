@@ -186,6 +186,7 @@ const REFUSALS: Record<string, string> = {
   city: 'Bir liman seç',
   good: 'Taşınacak malı seç',
   engaged: 'Filo vardı, çarpışma başlamak üzere; şimdi geri çağrılamaz',
+  besieged: 'Kuşatma altındaki kasaba serbest bırakılamaz',
 }
 const refusal = (e: unknown) => {
   const code = e instanceof CommandError ? e.message : 'server'
@@ -1707,6 +1708,7 @@ function App({
               onShow={(tile) => view.centerOn(tile)}
               onWatch={() => setWatchingTown(town.id)}
               onUpkeep={(level) => online?.act({ type: 'townUpkeep', town: town.id, level })}
+              onRelease={() => online?.act({ type: 'releaseTown', town: town.id }).then(closeTab)}
               onClose={closeTab}
             />
           )

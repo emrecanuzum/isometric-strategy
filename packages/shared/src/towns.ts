@@ -399,6 +399,16 @@ export function setTownUpkeep<K extends { towns?: HeldTown[] }>(kingdom: K, town
   return { ...kingdom, towns: held.map((t) => (t.id === town ? { ...t, upkeep: level } : t)) }
 }
 
+// A lord lets a town go of his own accord (CLAUDE.md §8.4): it goes back to no one (the server frees it in the lobby,
+// see releaseTown in the command). Not while it is besieged.
+export const releaseTownError = (kingdom: { towns?: HeldTown[] }, town: number, besieged: boolean): 'town' | 'besieged' | null =>
+  !(kingdom.towns ?? []).some((h) => h.id === town) ? 'town' : besieged ? 'besieged' : null
+
+export function releaseTown<K extends { towns?: HeldTown[] }>(kingdom: K, town: number): K {
+  if (!(kingdom.towns ?? []).some((h) => h.id === town)) return kingdom
+  return { ...kingdom, towns: (kingdom.towns ?? []).filter((h) => h.id !== town) }
+}
+
 // Spies stir a town up against its lord (CLAUDE.md §8.4, §9.7): its loyalty falls at once. When (`at`) is kept so the
 // town's sheet can tell its lord.
 export function inciteTown<K extends { towns?: HeldTown[] }>(kingdom: K, town: number, at?: number): K {

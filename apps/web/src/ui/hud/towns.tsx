@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   atWar,
   balance,
@@ -43,7 +44,7 @@ const clock = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-export function TownSheet({ world, town, walled, kingdom, me, names, armies, pacts, now, onSend, onShow, onWatch, onUpkeep, onClose }: {
+export function TownSheet({ world, town, walled, kingdom, me, names, armies, pacts, now, onSend, onShow, onWatch, onUpkeep, onRelease, onClose }: {
   world: World
   town: Town
   // Behind a wooden palisade (see townWalled).
@@ -60,6 +61,8 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
   onWatch(): void
   // Sets the upkeep paid to a town of the player's (an index into balance.towns.upkeep.goldPerRound).
   onUpkeep(level: number): void
+  // Lets a town of the player's go (it goes back to no one).
+  onRelease(): void
   onClose(): void
 }) {
   const middle = townCenter(town)
@@ -104,7 +107,7 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
             </small>
           </div>
         </div>
-        {mine && <Holding world={world} kingdom={kingdom} held={kingdom.towns?.find((h) => h.id === town.id) ?? heldTown(town, now)} now={now} onUpkeep={onUpkeep} />}
+        {mine && <Holding world={world} kingdom={kingdom} held={kingdom.towns?.find((h) => h.id === town.id) ?? heldTown(town, now)} now={now} onUpkeep={onUpkeep} besieged={!!siege} onRelease={onRelease} />}
         {siege && (
           <Section title="Kuşatma" icon="swords" aside={`${clock(siege.endsAt - now)} kaldı`}>
             <p className="hint">{siege.kingdom === me ? 'Ordun kasabayı kuşatıyor.' : `${names.get(siege.kingdom) ?? '?'} ordusu kasabayı kuşatıyor.`}</p>
@@ -146,7 +149,8 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
 }
 
 // A town of the player's: its loyalty and what moves it, the upkeep, what it has sent, and the strength it lends.
-function Holding({ world, kingdom, held, now, onUpkeep }: { world: World; kingdom: Kingdom; held: HeldTown; now: number; onUpkeep(level: number): void }) {
+function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease }: { world: World; kingdom: Kingdom; held: HeldTown; now: number; onUpkeep(level: number): void; besieged: boolean; onRelease(): void }) {
+  const [sure, setSure] = useState(false)
   const t = balance.towns
   const loyalty = townLoyalty(held)
   // How many towns the lord holds (this one among them): over-expansion weighs on all of them.
@@ -217,6 +221,21 @@ function Holding({ world, kingdom, held, now, onUpkeep }: { world: World; kingdo
           />
         ))}
         {cost > 0 && <Stat label="Bakıma giden" value={`tur başına −${amount(cost)} altın`} tone="down" />}
+      </Section>
+      <Section title="Serbest bırak" icon="banner">
+        <p className="hint">
+          Kasabayı bırakırsan sahipsiz kalır ve {t.revolt.garrison[0]}–{t.revolt.garrison[1]} askerlik küçük bir garnizonla kendini korur. Bakımı, katkısı ve kattığı
+          puan biter; {count > 1 ? `elindeki kasaba ${count - 1}'e iner ve aşırı büyüme cezası hemen hafifler` : 'sonra yeniden kuşatıp alabilirsin'}.
+        </p>
+        <button
+          className={sure ? 'btn small danger' : 'btn small'}
+          disabled={besieged}
+          title={besieged ? 'Kuşatma altındaki kasaba bırakılamaz' : undefined}
+          onClick={() => (sure ? (setSure(false), onRelease()) : setSure(true))}
+          onBlur={() => setSure(false)}
+        >
+          {besieged ? 'Kuşatma sürerken bırakılamaz' : sure ? `Emin misin? ${held.name ?? 'Kasabayı'} serbest bırak` : 'Serbest bırak'}
+        </button>
       </Section>
       <Section title="Sana kattığı güç" icon="crown" aside={`+${points} puan`}>
         <p className="hint">
@@ -398,7 +417,7 @@ function Overreach({ held, taking = false }: { held: number; taking?: boolean })
       ) : (
         <p className={now.tier >= tiers.length - 1 ? 'alert' : 'hint'}>
           Bir lord aynı anda ancak bu kadar kasabaya söz geçirebilir. {held} kasaba elinde: {overreachText(held)}.
-          {now.tier >= tiers.length - 1 && ' Kasabaların sadakati ayaklanma çizgisini aşamaz: hepsi ayaklanacak. Birini bırakmak için bakımını kes; kopunca ötekiler rahatlar.'}
+          {now.tier >= tiers.length - 1 && ' Kasabaların sadakati kopma çizgisinin altında kalır: hepsi ayaklanıp kopacak. Birini paneldeki "Serbest bırak" ile bırakırsan ötekiler rahatlar.'}
         </p>
       )}
       <div className="overreach-ladder" role="table" aria-label="Kasaba sayısına göre aşırı büyüme">

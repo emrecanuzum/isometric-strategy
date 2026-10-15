@@ -308,6 +308,23 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
     case 'nightShift':
       next = { state: game.setNightShift(need(), cmd.on === true) }
       break
+    case 'releaseTown': {
+      // Letting a held town go (CLAUDE.md §8.4): freed in the lobby first (only by its owner, not while besieged), then
+      // dropped from the lord's holdings; a retry after the town was already freed only drops it.
+      const k = need()
+      const id = Number(cmd.town)
+      const { data: town } = await admin.from('lobby_towns').select('*').eq('lobby_id', lobby).eq('id', id).maybeSingle()
+      const error = game.releaseTownError(k, id, !!town?.siege)
+      if (error) refuse(error)
+      if (town && town.owner_id === row.id) {
+        const [low, high] = game.balance.towns.revolt.garrison
+        const garrison = low + Math.floor(game.hash(town.idx, 11, Math.floor(now / 1000)) * (high - low + 1))
+        const { data: freed } = await admin.from('lobby_towns').update({ owner_id: null, garrison }).eq('id', id).eq('owner_id', row.id).is('siege', null).select('id').maybeSingle()
+        if (!freed) refuse('besieged')
+      } else if (town && town.owner_id !== null) refuse('town')
+      next = changed(game.releaseTown(k, id))
+      break
+    }
     case 'townUpkeep':
       // The upkeep paid a town held, for its loyalty (CLAUDE.md §8.4).
       next = changed(game.setTownUpkeep(need(), Number(cmd.town), Number(cmd.level)))
@@ -1015,7 +1032,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
   }
 }
 
-const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'townUpkeep', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'nameChild', 'educate', 'crisis', 'choose', 'seen', 'reset', 'ships', 'fleet', 'order'])
+const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'townUpkeep', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'nameChild', 'educate', 'crisis', 'choose', 'seen', 'reset', 'ships', 'fleet', 'order', 'releaseTown'])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

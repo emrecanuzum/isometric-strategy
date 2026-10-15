@@ -1451,8 +1451,9 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
     4 ve üstünde sadakat hedefi kopma çizgisinin (%12) altında bir tavana
     takıldığı için cömert bakım, mutlu halk ve iyi hükümdarla bile **bütün
     kasabalar ayaklanır ve sonunda kopar**. **Ayaklanan kasabaya bakım
-    ödenmez** (bir şey göndermez, bir şey almaz). Bir kasabayı bırakmanın yolu
-    bakımını kesmektir; kopunca ötekiler rahatlar. Ölçülen (altın kasabaları,
+    ödenmez** (bir şey göndermez, bir şey almaz). Bir kasabayı bırakmak için
+    paneldeki **"Serbest bırak"** kullanılır (aşağıda); kopunca ya da
+    bırakılınca ötekiler rahatlar. Ölçülen (altın kasabaları,
     Orta bakım, %75 mutluluk): 1 kasaba +382/sa, 2 kasaba +667, 3 kasaba +319,
     4 kasaba −695 ve hepsi kopar (önce 4+ kasaba sadakat 15'te takılıp sonsuza
     dek ayaklanıyor ve saatte ~1.900 altın bakım ödüyordu). Sunucunun ayaklanma işleyişi değişmez; ayaklanmalar sadakatten
@@ -1461,6 +1462,13 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
     Sahipsiz/başkasının kasabasının panelinde ve kendi kuşatmanın başladığı,
     kasabayı aldığın elçi haberinde, bir kasaba daha almanın aşırı büyümeyi
     nasıl artıracağı yazar.
+  - **Serbest bırak** (`releaseTown` komutu; `towns.ts` → `releaseTownError`,
+    `releaseTown`): lord elindeki bir kasabayı kendi isteğiyle bırakabilir
+    (panelin sonunda, "Emin misin?" onayıyla). Kasaba sahipsiz olur ve kopan
+    kasaba gibi 3–6 askerlik küçük bir garnizonla kendini korur; bakımı ve
+    katkısı, kattığı puan biter, aşırı büyüme basamağı hemen düşer. Kuşatma
+    altındaki kasaba bırakılamaz (`'besieged'`). Bir bedeli yoktur: aşırı
+    büyümeden kurtulmanın, ayaklanmayı beklemeden yolu budur.
   - **Kasaba paneli** (kendi kasaban): sadakat çubuğu, yönü ve hedefi neyin
     belirlediği, ayaklanma uyarısı; **huzursuzluğun kaynakları** (bakım tabanı,
     halkın mutluluğu, hükümdar, aşırı büyüme ve tavanı, gittiği yer ve şu an

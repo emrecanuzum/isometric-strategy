@@ -74,7 +74,7 @@ export function MapAlerts({
       town: restless.id,
       mild: over.tier === 0,
       text: last
-        ? `Aşırı büyüme! ${held.length} kasaba elinde: hepsi ayaklanıyor${rising > 0 ? ` (${rising} kasaba ayaklanmada)` : ''}; ${effects}. Birinin bakımını kesip bırak.`
+        ? `Aşırı büyüme! ${held.length} kasaba elinde: hepsi ayaklanıyor${rising > 0 ? ` (${rising} kasaba ayaklanmada)` : ''}; ${effects}. Birini serbest bırak (kasaba paneli).`
         : `Aşırı büyüme: ${held.length} kasaba elinde; ${effects}.${rising > 0 ? ` ${rising} kasaba ayaklanmada.` : ''} Bir kasaba daha alırsan ceza ağırlaşır.`,
     })
   }
