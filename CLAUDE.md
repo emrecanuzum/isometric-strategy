@@ -877,7 +877,13 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   tapınak, vaaz) / Kraliçe; **Ticaret** → Tüccar / Pazar / Siparişler /
   Hâkimler; **Depo** → Mallar / Hazine (gelir-gider, sezonun defteri) /
   Cephanelik; **Ordu** → Ordular (ve garnizon) / Kışla / Savaşlar /
-  Donanma; **Diplomasi** → Lordlar / Casusluk. Uyarılar (günün olayı,
+  Donanma; **Diplomasi** → Lordlar / Casusluk. Bir lordun sayfası da
+  bölümlere ayrılır (`usePart` anahtarı `lord`): **İlişki** (seninle ilişkisi,
+  savaş puanı, gerekçeler, dış ilişkileri), **Elçi** (ilişki geliştir, hediye,
+  haraç iste, ittifak, barış; yoldaki elçi sayısı), **Anlaşmalar** (haracı
+  bağışla/kes, ittifakı boz, savaş ilanı; savaştayken nokta), **Düşmanlık**
+  (hakaret, ticaret yolu yağması) ve **Casusluk** (istihbarat, casus gönder,
+  operasyonlar; oradaki casus sayısı). Uyarılar (günün olayı,
   korku, hapishane, ayaklanma, yıkık surlar; süren savaş) alt sekmelerin
   üstünde durur.
 - Tarlanın 2. seviyede saman yığınları ve korkuluğu, 3. seviyede küçük

@@ -24,6 +24,7 @@ import {
 import type { BattleRecord, Envoy, Kingdom, Operation, Pact, PeaceTerms, SpyTopic } from '@game/shared'
 import { useState } from 'react'
 import { Subtabs, usePart } from './Subtabs'
+import type { Part } from './Subtabs'
 import { KINGDOM_COLORS } from '../../game/buildingSprites'
 import type { KingdomColor } from '../../game/buildingSprites'
 import { INN_KIND_NAMES, innInfo } from '../../game/innInfo'
@@ -258,6 +259,9 @@ function Range({ label, value, unit }: { label: string; value: Estimate | null |
   return <Stat label={label} value={value ? `${fmt(value.lo)}–${fmt(value.hi)}${unit ?? ''}` : '?'} />
 }
 
+type LordPart = 'relation' | 'envoy' | 'pacts' | 'hostile' | 'spies'
+const LORD_PARTS: LordPart[] = ['relation', 'envoy', 'pacts', 'hostile', 'spies']
+
 function KingdomDetail({ data, online, target }: { data: HudData; online: Online; target: KingdomInfo }) {
   const { now, kingdom } = data
   const [gift, setGift] = useState(50)
@@ -266,6 +270,8 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
   const [terms, setTerms] = useState<PeaceTerms['kind']>('white')
   const [termsGold, setTermsGold] = useState(100)
   const [outcome, setOutcome] = useState<string | null>(null)
+  // What is done to a lord, in parts (the last one looked at remembered, like the other menus).
+  const [part, setPart] = usePart<LordPart>('lord', LORD_PARTS, 'relation')
   // The town to stir up (townRevolt): one of the target's.
   const theirTowns = (data.towns ?? []).filter((t) => t.owner === target.id)
   const [townPick, setTownPick] = useState<number | null>(null)
@@ -304,6 +310,14 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
   const peaceTerms: PeaceTerms = terms === 'white' ? { kind: 'white' } : { kind: terms, gold: termsGold }
   const termsWhy = peaceTermsError(peaceTerms, score)
   const best = intel ? Math.max(...Object.values(intel.strength)) : 0
+  const spiesThere = online.missions.filter((m) => m.owner_id === me && m.target_id === target.id && !m.ended_at).length
+  const parts: Part<LordPart>[] = [
+    { id: 'relation', name: 'İlişki', icon: 'banner' },
+    { id: 'envoy', name: 'Elçi', icon: 'scroll', count: travelling.length || undefined },
+    { id: 'pacts', name: 'Anlaşmalar', icon: 'crown', dot: war },
+    { id: 'hostile', name: 'Düşmanlık', icon: 'swords' },
+    { id: 'spies', name: 'Casusluk', icon: 'eye', count: spiesThere || undefined },
+  ]
   return (
     <>
       <button className="btn small back" onClick={() => online.setFocus(null)}>
@@ -327,338 +341,363 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
           <Icon name="pin" size={16} />
         </button>
       </div>
-      <Section title="Seninle ilişkisi" icon="banner">
-        <RelationBar value={relation} />
-        {(target.shieldUntil ?? 0) > now && (
-          <p className="hint">
-            <Icon name="shield" size={16} /> Yakın zamanda kuşatıldı: sonraki kuşatmaya {Math.ceil(((target.shieldUntil ?? 0) - now) / 60000)} dk var.
-          </p>
-        )}
-        {warPact && (
-          <div className="sign">
-            <span>Savaş puanı</span>
-            <Meter value={(score + 100) / 200} tone={score > 0 ? 'up' : score < 0 ? 'down' : 'gold'} label="Savaş puanı" segments={10} />
-            <b className={score > 0 ? 'up' : score < 0 ? 'down' : undefined}>{signedInt(score)}</b>
-          </div>
-        )}
-        {myClaims.map((c) => (
-          <p key={c.expires_at + c.reason} className="hint">
-            <Icon name="swords" size={16} /> Savaş gerekçen var: {CLAIM_NAMES[c.reason] ?? c.reason} ({Math.ceil((Date.parse(c.expires_at) - now) / 60000)} dk)
-          </p>
-        ))}
-        {theirClaim && <p className="hint">Onların da sana karşı bir savaş gerekçesi var.</p>}
-        <span className="chips">
-          {stateChips(online, target.id).map((c) => (
-            <span key={c.label} className={`chip ${c.tone ?? ''}`}>
-              {c.label}
-            </span>
+      <Subtabs label={`${target.name} ile`} parts={parts} part={part} onPart={setPart} />
+      {part === 'relation' && (
+        <>
+        <Section title="Seninle ilişkisi" icon="banner">
+          <RelationBar value={relation} />
+          {(target.shieldUntil ?? 0) > now && (
+            <p className="hint">
+              <Icon name="shield" size={16} /> Yakın zamanda kuşatıldı: sonraki kuşatmaya {Math.ceil(((target.shieldUntil ?? 0) - now) / 60000)} dk var.
+            </p>
+          )}
+          {warPact && (
+            <div className="sign">
+              <span>Savaş puanı</span>
+              <Meter value={(score + 100) / 200} tone={score > 0 ? 'up' : score < 0 ? 'down' : 'gold'} label="Savaş puanı" segments={10} />
+              <b className={score > 0 ? 'up' : score < 0 ? 'down' : undefined}>{signedInt(score)}</b>
+            </div>
+          )}
+          {myClaims.map((c) => (
+            <p key={c.expires_at + c.reason} className="hint">
+              <Icon name="swords" size={16} /> Savaş gerekçen var: {CLAIM_NAMES[c.reason] ?? c.reason} ({Math.ceil((Date.parse(c.expires_at) - now) / 60000)} dk)
+            </p>
           ))}
-        </span>
-        <p className="hint">
-          İttifak için en az +{d.alliance.minRelation} gerekir. Savaş ilanı için ilişki en fazla {d.war.maxRelation} olmalı; savaş gerekçen varsa{' '}
-          {d.casusBelli.maxRelation} yeter. Gerekçesiz savaş açan, diğer bütün lordlarla {d.casusBelli.infamy} ilişki kaybeder.
-        </p>
-      </Section>
-      <Hostility data={data} online={online} target={target} />
-      <Section title="Elçi gönder" icon="scroll" aside={`${d.envoySeconds} sn yol`}>
-        {war && <p className="hint">Savaştayken elçiler yalnızca barış götürür.</p>}
-        {standing < 0.995 && (
-          <p className="hint">
-            <Icon name="warn" size={16} /> İtibarın %{Math.round(standing * 100)}: başka lordlarla aran kötü olduğu için ilişki geliştirme ve hediyeler daha az
-            etkili.
-          </p>
-        )}
-        {relation < 0 && (
-          <p className="hint">Sana kötü gözle baktıkları için buradaki casus ağın daha yavaş kurulur ve casusların daha çabuk yakalanır.</p>
-        )}
-        <div className="actions">
-          {!war && (
-          <button
-            className="btn small"
-            disabled={sending('improve') || cooling > 0 || kingdom.stock.gold < d.improve.cost.gold}
-            onClick={() => envoy('improve')}
-            title={cooling > 0 ? `${Math.ceil(cooling / 1000)} sn sonra yeniden` : undefined}
-          >
-            İlişki geliştir · {d.improve.cost.gold} altın (+{Math.round(d.improve.gain * standing)})
-          </button>
-          )}
-          {!war && (
-          <span className="stepper">
-            <button className="btn icon-only" disabled={gift <= d.gift.minGold} onClick={() => setGift(Math.max(d.gift.minGold, gift - 10))} aria-label="Azalt">
-              <Icon name="minus" size={16} />
-            </button>
-            <span className="stepper-value">
-              <b>{gift}</b> altın
-            </span>
-            <button className="btn icon-only" onClick={() => setGift(gift + 10)} aria-label="Artır">
-              <Icon name="plus" size={16} />
-            </button>
-            <button className="btn small" disabled={kingdom.stock.gold < gift || sending('gift')} onClick={() => envoy('gift', { gold: gift })}>
-              Hediye (+{Math.min(d.gift.maxGain, Math.round(gift * d.gift.relationPerGold))})
-            </button>
+          {theirClaim && <p className="hint">Onların da sana karşı bir savaş gerekçesi var.</p>}
+          <span className="chips">
+            {stateChips(online, target.id).map((c) => (
+              <span key={c.label} className={`chip ${c.tone ?? ''}`}>
+                {c.label}
+              </span>
+            ))}
           </span>
+          <p className="hint">
+            İttifak için en az +{d.alliance.minRelation} gerekir. Savaş ilanı için ilişki en fazla {d.war.maxRelation} olmalı; savaş gerekçen varsa{' '}
+            {d.casusBelli.maxRelation} yeter. Gerekçesiz savaş açan, diğer bütün lordlarla {d.casusBelli.infamy} ilişki kaybeder.
+          </p>
+        </Section>
+        </>
+      )}
+      {part === 'hostile' && (
+        <>
+        <Hostility data={data} online={online} target={target} />
+        </>
+      )}
+      {part === 'envoy' && (
+        <>
+        <Section title="Elçi gönder" icon="scroll" aside={`${d.envoySeconds} sn yol`}>
+          {war && <p className="hint">Savaştayken elçiler yalnızca barış götürür.</p>}
+          {standing < 0.995 && (
+            <p className="hint">
+              <Icon name="warn" size={16} /> İtibarın %{Math.round(standing * 100)}: başka lordlarla aran kötü olduğu için ilişki geliştirme ve hediyeler daha az
+              etkili.
+            </p>
           )}
-          {!war && !ally && !theyPay && (
+          {relation < 0 && (
+            <p className="hint">Sana kötü gözle baktıkları için buradaki casus ağın daha yavaş kurulur ve casusların daha çabuk yakalanır.</p>
+          )}
+          <div className="actions">
+            {!war && (
+            <button
+              className="btn small"
+              disabled={sending('improve') || cooling > 0 || kingdom.stock.gold < d.improve.cost.gold}
+              onClick={() => envoy('improve')}
+              title={cooling > 0 ? `${Math.ceil(cooling / 1000)} sn sonra yeniden` : undefined}
+            >
+              İlişki geliştir · {d.improve.cost.gold} altın (+{Math.round(d.improve.gain * standing)})
+            </button>
+            )}
+            {!war && (
             <span className="stepper">
-              <button className="btn icon-only" disabled={tribute <= d.tribute.minGold} onClick={() => setTribute(tribute - 1)} aria-label="Azalt">
+              <button className="btn icon-only" disabled={gift <= d.gift.minGold} onClick={() => setGift(Math.max(d.gift.minGold, gift - 10))} aria-label="Azalt">
                 <Icon name="minus" size={16} />
               </button>
               <span className="stepper-value">
-                <b>{tribute}</b> altın/tur
+                <b>{gift}</b> altın
               </span>
-              <button className="btn icon-only" disabled={tribute >= d.tribute.maxGold} onClick={() => setTribute(tribute + 1)} aria-label="Artır">
+              <button className="btn icon-only" onClick={() => setGift(gift + 10)} aria-label="Artır">
                 <Icon name="plus" size={16} />
               </button>
-              <button className="btn small" disabled={sending('tribute')} onClick={() => envoy('tribute', { gold: tribute })}>
-                Haraç iste
+              <button className="btn small" disabled={kingdom.stock.gold < gift || sending('gift')} onClick={() => envoy('gift', { gold: gift })}>
+                Hediye (+{Math.min(d.gift.maxGain, Math.round(gift * d.gift.relationPerGold))})
               </button>
             </span>
-          )}
-          {!ally && !war && (
-            <button className="btn small" disabled={relation < d.alliance.minRelation || sending('alliance')} onClick={() => envoy('alliance')}>
-              İttifak teklif et {relation < d.alliance.minRelation ? `(+${d.alliance.minRelation} gerekir)` : ''}
-            </button>
-          )}
-          {war && (
-            <div className="peace">
-              <div className="segmented" role="radiogroup" aria-label="Barış şartları">
-                {(Object.keys(TERMS_NAMES) as PeaceTerms['kind'][]).map((k) => (
-                  <button key={k} className="btn small" role="radio" aria-checked={terms === k} onClick={() => setTerms(k)}>
-                    {TERMS_NAMES[k]}
-                  </button>
-                ))}
-              </div>
-              {terms !== 'white' && (
-                <span className="stepper">
-                  <button className="btn icon-only" disabled={termsGold <= (terms === 'tribute' ? 1 : 10)} onClick={() => setTermsGold(Math.max(1, termsGold - (terms === 'tribute' ? 1 : 50)))} aria-label="Azalt">
-                    <Icon name="minus" size={16} />
-                  </button>
-                  <span className="stepper-value">
-                    <b>{termsGold}</b> {terms === 'tribute' ? 'altın/tur' : 'altın'}
-                  </span>
-                  <button className="btn icon-only" onClick={() => setTermsGold(termsGold + (terms === 'tribute' ? 1 : 50))} aria-label="Artır">
-                    <Icon name="plus" size={16} />
-                  </button>
-                </span>
-              )}
-              <p className="hint">
-                {terms === 'gold'
-                  ? `Her ${balance.diplomacy.peace.goldPerScore} altın 1 savaş puanı ister.`
-                  : terms === 'tribute'
-                    ? `Haraç için en az ${balance.diplomacy.peace.tributeMinScore} savaş puanı gerekir.`
-                    : terms === 'offer'
-                      ? 'Altını sen ödersin; kabul etmeleri kolaylaşır.'
-                      : 'Kimse bir şey ödemez.'}{' '}
-                Savaş puanın {balance.diplomacy.peace.enforceScore} olursa teklifin kabul edilmek zorundadır.
-              </p>
-              <button className="btn small" disabled={sending('peace') || !!termsWhy} onClick={() => envoy('peace', { terms: peaceTerms })}>
-                Barış teklif et {termsWhy === 'score' ? '(savaş puanı yetmiyor)' : ''}
-              </button>
-            </div>
-          )}
-        </div>
-        {travelling.length > 0 && (
-          <ul className="places">
-            {travelling.map((e) => (
-              <li key={e.id}>
-                <Icon name="time" size={16} />
-                <span>
-                  <small>
-                    {ENVOY_NAMES[e.kind]} · {e.status === 'traveling' ? `yolda, ${Math.max(0, Math.ceil((Date.parse(e.arrive_at) - now) / 1000))} sn` : 'cevap bekliyor'}
-                  </small>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-      <Section title="Anlaşmalar" icon="crown">
-        <div className="actions">
-          {theyPay && (
-            <button className="btn small" onClick={() => online.act({ type: 'endTribute', pact: theyPay.id })}>
-              Haracı bağışla (+{d.tribute.release})
-            </button>
-          )}
-          {wePay && (
-            <button className="btn small danger" onClick={() => online.act({ type: 'endTribute', pact: wePay.id })}>
-              Haracı kes ({d.tribute.renege} ilişki)
-            </button>
-          )}
-          {alliance && (
-            <button className="btn small danger" onClick={() => online.act({ type: 'breakAlliance', pact: alliance.id })}>
-              İttifakı boz ({d.alliance.break} ilişki)
-            </button>
-          )}
-          {!war && !ally && (
-            <button
-              className={confirmWar ? 'btn small danger' : 'btn small'}
-              disabled={relation > threshold}
-              onClick={() => (confirmWar ? (setConfirmWar(false), online.act({ type: 'declareWar', to: target.id })) : setConfirmWar(true))}
-            >
-              <Icon name="swords" size={16} />{' '}
-              {confirmWar
-                ? claim
-                  ? 'Emin misin? Savaş ilan et'
-                  : `Emin misin? Gerekçesiz savaş (herkesle ${d.casusBelli.infamy})`
-                : relation > threshold
-                  ? `Savaş ilanı (${threshold} gerekir)`
-                  : 'Savaş ilan et'}
-            </button>
-          )}
-          {!theyPay && !wePay && !alliance && (war || ally) ? null : null}
-        </div>
-        {!theyPay && !wePay && !alliance && !war && <p className="hint">Aranızda anlaşma yok.</p>}
-      </Section>
-      <Section title="Dış ilişkileri" icon="banner" aside="herkese açık">
-        <Stat label="Müttefikleri" value={theirAllies.length ? theirAllies.map((id) => kingdomName(online, id)).join(', ') : 'yok'} />
-        <Stat label="Savaşta olduğu" value={theirWars.length ? theirWars.map((id) => kingdomName(online, id)).join(', ') : 'yok'} />
-        {theirTributes.map((p) => (
-          <Stat key={p.id} label="Haraç" value={`${kingdomName(online, p.to_id)} → ${kingdomName(online, p.from_id)} · ${p.gold}/tur`} />
-        ))}
-        {theirRelations.length > 0 && (
-          <ul className="places compact">
-            {theirRelations.map((r) => (
-              <li key={r.other}>
-                <Dot color={online.kingdoms.find((k) => k.id === r.other)?.color} />
-                <span>
-                  <small>{kingdomName(online, r.other)}</small>
-                </span>
-                <RelationBar value={r.value} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-      <Section title="İstihbarat" icon="eye" aside={intel ? 'casus ağından' : undefined}>
-        {intel === undefined ? (
-          <button className="btn small" onClick={() => online.loadIntel(target.id)}>
-            Casus raporunu getir
-          </button>
-        ) : intel === null ? (
-          <p className="hint">Rapor alınamadı.</p>
-        ) : (
-          <>
-            {(Object.keys(TOPIC_NAMES) as SpyTopic[]).map((t) => (
-              <span key={t} className="sign">
-                <span>{TOPIC_NAMES[t]}</span>
-                <Meter value={intel.strength[t] / 100} tone="water" label={`${TOPIC_NAMES[t]} ağı`} segments={10} />
-                <small>%{intel.strength[t]}</small>
-              </span>
-            ))}
-            {intel.strength.stores >= balance.espionage.minStrength && (
-              <>
-                {(['gold', 'food', 'materials', 'arms'] as const).map((r) => (
-                  <Range key={r} label={RESOURCE_NAMES[r]} value={intel.stores[r]} />
-                ))}
-              </>
             )}
-            {intel.strength.army >= balance.espionage.minStrength && (
-              <>
-                {intel.army.units &&
-                  UNITS.map((u) => (
-                    <Range key={u} label={`${UNIT_NAMES[u]}`} value={intel.army.units![u]} />
-                  ))}
-                <Range label="Garnizon" value={intel.army.garrison} />
-                <Range label="Sahadaki asker" value={intel.army.field} />
-                <Range label="Savaş gücü" value={intel.army.might} />
-                <Range label="Halkın mutluluğu" value={intel.army.happiness} unit="%" />
-              </>
-            )}
-            {intel.diplomacy && (
-              <>
-                {intel.diplomacy.envoys.map((e, i) => (
-                  <Stat key={i} label="Elçisi" value={`${e.to} · ${ENVOY_NAMES[e.kind as Envoy['kind']] ?? e.kind}`} />
-                ))}
-                <Stat
-                  label="Casusları"
-                  value={intel.diplomacy.spies ? intel.diplomacy.spies.map((s) => `${s.target} (${TOPIC_NAMES[s.topic as SpyTopic]})`).join(', ') || 'yok' : `${intel.diplomacy.spyCount} casus (ağ %50 olunca hedefleri görünür)`}
-                />
-              </>
-            )}
-            {Object.values(intel.strength).every((s) => s < balance.espionage.minStrength) && <p className="hint">Ağın henüz zayıf; casusların orada kaldıkça rapor netleşir.</p>}
-            <button className="btn small" onClick={() => online.loadIntel(target.id)}>
-              Raporu yenile
-            </button>
-          </>
-        )}
-        <ul className="spy-topics">
-          {(Object.keys(TOPIC_NAMES) as SpyTopic[]).map((t) => {
-            // The player's spy already at work on this topic (one per kingdom and topic).
-            const there = online.missions.filter((m) => m.owner_id === me && m.target_id === target.id && m.topic === t && !m.ended_at).length
-            return (
-              <li key={t}>
-                <span>
-                  <b>{TOPIC_NAMES[t]}</b>
-                  <small>{there > 0 ? `ağ %${intel ? Math.round(intel.strength[t] ?? 0) : '?'}` : 'casusun yok'}</small>
-                </span>
-                {there > 0 ? (
-                  <span className="chip up">Casusun orada</span>
-                ) : (
-                  <button className="btn small" disabled={spiesHome < 1} onClick={() => online.act({ type: 'spy', target: target.id, topic: t })}>
-                    <Icon name="eye" size={16} /> Casus gönder
-                  </button>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-        <p className="hint">Bir lordun her konusuna bir casus gönderilebilir.</p>
-        {spiesHome < 1 && <p className="hint">Evde casusun yok. Casus evi zamanla casus yetiştirir.</p>}
-      </Section>
-      <Section title="Casus operasyonları" icon="eye" aside={intel ? `en güçlü ağın %${Math.round(best)}` : 'önce raporu getir'}>
-        {outcome && <p className="alert">{outcome}</p>}
-        <p className="hint">
-          Operasyonlar oradaki en güçlü ağından yapılır ve başarılı da olsa başarısız da olsa o ağdan istediği kadar puan harcar; ağ kalan güçten yeniden büyür. Başarısız
-          olan operasyon ayrıca casusunu kaybettirir ve kimin yaptığını ortaya çıkarır.
-        </p>
-        <ul className="places">
-          {OPERATIONS.map((op) => {
-            const spec = operationSpec(op)
-            const noPrison = op === 'kidnap' && !kingdom.buildings.some((b) => b.kind === 'prison' && b.doneAt <= now)
-            const noTown = op === 'townRevolt' && !picked
-            const blocked = !intel || best < spec.minStrength || (op === 'kidnap' && !target.queen) || noPrison || noTown || kingdom.stock.gold < (spec.cost.gold ?? 0)
-            return (
-              <li key={op}>
-                <Icon name={op === 'kidnap' ? 'crown' : op === 'revolt' || op === 'townRevolt' ? 'unhappy' : 'warn'} size={24} />
-                <span>
-                  <b>{OPERATION_NAMES[op]}</b>
-                  <small>
-                    {OPERATION_NOTES[op]} · ağ %{spec.minStrength} ister, ağdan {Math.round(operationNetworkCost(op))} puan harcar · {spec.cost.gold} altın
-                    {op === 'kidnap' && !target.queen ? ' · kraliçeleri yok' : ''}
-                    {noPrison ? ' · önce hapishane kur' : ''}
-                    {noTown ? ' · elinde kasaba yok' : ''}
-                  </small>
-                  {op === 'townRevolt' && theirTowns.length > 1 && (
-                    <select value={picked?.id} onChange={(e) => setTownPick(Number(e.target.value))} aria-label="Kışkırtılacak kasaba">
-                      {theirTowns.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  {op === 'townRevolt' && theirTowns.length === 1 && <small>Kasaba: {picked!.name}</small>}
-                  <small className={intel?.chances && best >= spec.minStrength ? (intel.chances[op] >= 50 ? 'up' : 'down') : undefined}>
-                    {!intel ? 'Başarı şansı: önce raporu getir' : !intel.chances ? 'Başarı şansı: raporu yenile' : best < spec.minStrength ? `Başarı şansı: ağ %${spec.minStrength} olunca` : `Başarı şansı ~%${intel.chances[op]}`}
-                  </small>
-                </span>
-                <button
-                  className="btn small"
-                  disabled={blocked}
-                  onClick={() =>
-                    online.act<{ success: boolean }>({ type: 'operation', target: target.id, op, ...(op === 'townRevolt' && picked && { town: picked.id }) }).then((r) => {
-                      if (r) setOutcome(r.success ? `${OPERATION_NAMES[op]}: başarılı.` : `${OPERATION_NAMES[op]}: başarısız, casusun yakalandı.`)
-                      online.loadIntel(target.id)
-                    })
-                  }
-                >
-                  Dene
+            {!war && !ally && !theyPay && (
+              <span className="stepper">
+                <button className="btn icon-only" disabled={tribute <= d.tribute.minGold} onClick={() => setTribute(tribute - 1)} aria-label="Azalt">
+                  <Icon name="minus" size={16} />
                 </button>
-              </li>
-            )
-          })}
-        </ul>
-      </Section>
+                <span className="stepper-value">
+                  <b>{tribute}</b> altın/tur
+                </span>
+                <button className="btn icon-only" disabled={tribute >= d.tribute.maxGold} onClick={() => setTribute(tribute + 1)} aria-label="Artır">
+                  <Icon name="plus" size={16} />
+                </button>
+                <button className="btn small" disabled={sending('tribute')} onClick={() => envoy('tribute', { gold: tribute })}>
+                  Haraç iste
+                </button>
+              </span>
+            )}
+            {!ally && !war && (
+              <button className="btn small" disabled={relation < d.alliance.minRelation || sending('alliance')} onClick={() => envoy('alliance')}>
+                İttifak teklif et {relation < d.alliance.minRelation ? `(+${d.alliance.minRelation} gerekir)` : ''}
+              </button>
+            )}
+            {war && (
+              <div className="peace">
+                <div className="segmented" role="radiogroup" aria-label="Barış şartları">
+                  {(Object.keys(TERMS_NAMES) as PeaceTerms['kind'][]).map((k) => (
+                    <button key={k} className="btn small" role="radio" aria-checked={terms === k} onClick={() => setTerms(k)}>
+                      {TERMS_NAMES[k]}
+                    </button>
+                  ))}
+                </div>
+                {terms !== 'white' && (
+                  <span className="stepper">
+                    <button className="btn icon-only" disabled={termsGold <= (terms === 'tribute' ? 1 : 10)} onClick={() => setTermsGold(Math.max(1, termsGold - (terms === 'tribute' ? 1 : 50)))} aria-label="Azalt">
+                      <Icon name="minus" size={16} />
+                    </button>
+                    <span className="stepper-value">
+                      <b>{termsGold}</b> {terms === 'tribute' ? 'altın/tur' : 'altın'}
+                    </span>
+                    <button className="btn icon-only" onClick={() => setTermsGold(termsGold + (terms === 'tribute' ? 1 : 50))} aria-label="Artır">
+                      <Icon name="plus" size={16} />
+                    </button>
+                  </span>
+                )}
+                <p className="hint">
+                  {terms === 'gold'
+                    ? `Her ${balance.diplomacy.peace.goldPerScore} altın 1 savaş puanı ister.`
+                    : terms === 'tribute'
+                      ? `Haraç için en az ${balance.diplomacy.peace.tributeMinScore} savaş puanı gerekir.`
+                      : terms === 'offer'
+                        ? 'Altını sen ödersin; kabul etmeleri kolaylaşır.'
+                        : 'Kimse bir şey ödemez.'}{' '}
+                  Savaş puanın {balance.diplomacy.peace.enforceScore} olursa teklifin kabul edilmek zorundadır.
+                </p>
+                <button className="btn small" disabled={sending('peace') || !!termsWhy} onClick={() => envoy('peace', { terms: peaceTerms })}>
+                  Barış teklif et {termsWhy === 'score' ? '(savaş puanı yetmiyor)' : ''}
+                </button>
+              </div>
+            )}
+          </div>
+          {travelling.length > 0 && (
+            <ul className="places">
+              {travelling.map((e) => (
+                <li key={e.id}>
+                  <Icon name="time" size={16} />
+                  <span>
+                    <small>
+                      {ENVOY_NAMES[e.kind]} · {e.status === 'traveling' ? `yolda, ${Math.max(0, Math.ceil((Date.parse(e.arrive_at) - now) / 1000))} sn` : 'cevap bekliyor'}
+                    </small>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+        </>
+      )}
+      {part === 'pacts' && (
+        <>
+        <Section title="Anlaşmalar" icon="crown">
+          <div className="actions">
+            {theyPay && (
+              <button className="btn small" onClick={() => online.act({ type: 'endTribute', pact: theyPay.id })}>
+                Haracı bağışla (+{d.tribute.release})
+              </button>
+            )}
+            {wePay && (
+              <button className="btn small danger" onClick={() => online.act({ type: 'endTribute', pact: wePay.id })}>
+                Haracı kes ({d.tribute.renege} ilişki)
+              </button>
+            )}
+            {alliance && (
+              <button className="btn small danger" onClick={() => online.act({ type: 'breakAlliance', pact: alliance.id })}>
+                İttifakı boz ({d.alliance.break} ilişki)
+              </button>
+            )}
+            {!war && !ally && (
+              <button
+                className={confirmWar ? 'btn small danger' : 'btn small'}
+                disabled={relation > threshold}
+                onClick={() => (confirmWar ? (setConfirmWar(false), online.act({ type: 'declareWar', to: target.id })) : setConfirmWar(true))}
+              >
+                <Icon name="swords" size={16} />{' '}
+                {confirmWar
+                  ? claim
+                    ? 'Emin misin? Savaş ilan et'
+                    : `Emin misin? Gerekçesiz savaş (herkesle ${d.casusBelli.infamy})`
+                  : relation > threshold
+                    ? `Savaş ilanı (${threshold} gerekir)`
+                    : 'Savaş ilan et'}
+              </button>
+            )}
+            {!theyPay && !wePay && !alliance && (war || ally) ? null : null}
+          </div>
+          {!theyPay && !wePay && !alliance && !war && <p className="hint">Aranızda anlaşma yok.</p>}
+        </Section>
+        </>
+      )}
+      {part === 'relation' && (
+        <>
+        <Section title="Dış ilişkileri" icon="banner" aside="herkese açık">
+          <Stat label="Müttefikleri" value={theirAllies.length ? theirAllies.map((id) => kingdomName(online, id)).join(', ') : 'yok'} />
+          <Stat label="Savaşta olduğu" value={theirWars.length ? theirWars.map((id) => kingdomName(online, id)).join(', ') : 'yok'} />
+          {theirTributes.map((p) => (
+            <Stat key={p.id} label="Haraç" value={`${kingdomName(online, p.to_id)} → ${kingdomName(online, p.from_id)} · ${p.gold}/tur`} />
+          ))}
+          {theirRelations.length > 0 && (
+            <ul className="places compact">
+              {theirRelations.map((r) => (
+                <li key={r.other}>
+                  <Dot color={online.kingdoms.find((k) => k.id === r.other)?.color} />
+                  <span>
+                    <small>{kingdomName(online, r.other)}</small>
+                  </span>
+                  <RelationBar value={r.value} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+        </>
+      )}
+      {part === 'spies' && (
+        <>
+        <Section title="İstihbarat" icon="eye" aside={intel ? 'casus ağından' : undefined}>
+          {intel === undefined ? (
+            <button className="btn small" onClick={() => online.loadIntel(target.id)}>
+              Casus raporunu getir
+            </button>
+          ) : intel === null ? (
+            <p className="hint">Rapor alınamadı.</p>
+          ) : (
+            <>
+              {(Object.keys(TOPIC_NAMES) as SpyTopic[]).map((t) => (
+                <span key={t} className="sign">
+                  <span>{TOPIC_NAMES[t]}</span>
+                  <Meter value={intel.strength[t] / 100} tone="water" label={`${TOPIC_NAMES[t]} ağı`} segments={10} />
+                  <small>%{intel.strength[t]}</small>
+                </span>
+              ))}
+              {intel.strength.stores >= balance.espionage.minStrength && (
+                <>
+                  {(['gold', 'food', 'materials', 'arms'] as const).map((r) => (
+                    <Range key={r} label={RESOURCE_NAMES[r]} value={intel.stores[r]} />
+                  ))}
+                </>
+              )}
+              {intel.strength.army >= balance.espionage.minStrength && (
+                <>
+                  {intel.army.units &&
+                    UNITS.map((u) => (
+                      <Range key={u} label={`${UNIT_NAMES[u]}`} value={intel.army.units![u]} />
+                    ))}
+                  <Range label="Garnizon" value={intel.army.garrison} />
+                  <Range label="Sahadaki asker" value={intel.army.field} />
+                  <Range label="Savaş gücü" value={intel.army.might} />
+                  <Range label="Halkın mutluluğu" value={intel.army.happiness} unit="%" />
+                </>
+              )}
+              {intel.diplomacy && (
+                <>
+                  {intel.diplomacy.envoys.map((e, i) => (
+                    <Stat key={i} label="Elçisi" value={`${e.to} · ${ENVOY_NAMES[e.kind as Envoy['kind']] ?? e.kind}`} />
+                  ))}
+                  <Stat
+                    label="Casusları"
+                    value={intel.diplomacy.spies ? intel.diplomacy.spies.map((s) => `${s.target} (${TOPIC_NAMES[s.topic as SpyTopic]})`).join(', ') || 'yok' : `${intel.diplomacy.spyCount} casus (ağ %50 olunca hedefleri görünür)`}
+                  />
+                </>
+              )}
+              {Object.values(intel.strength).every((s) => s < balance.espionage.minStrength) && <p className="hint">Ağın henüz zayıf; casusların orada kaldıkça rapor netleşir.</p>}
+              <button className="btn small" onClick={() => online.loadIntel(target.id)}>
+                Raporu yenile
+              </button>
+            </>
+          )}
+          <ul className="spy-topics">
+            {(Object.keys(TOPIC_NAMES) as SpyTopic[]).map((t) => {
+              // The player's spy already at work on this topic (one per kingdom and topic).
+              const there = online.missions.filter((m) => m.owner_id === me && m.target_id === target.id && m.topic === t && !m.ended_at).length
+              return (
+                <li key={t}>
+                  <span>
+                    <b>{TOPIC_NAMES[t]}</b>
+                    <small>{there > 0 ? `ağ %${intel ? Math.round(intel.strength[t] ?? 0) : '?'}` : 'casusun yok'}</small>
+                  </span>
+                  {there > 0 ? (
+                    <span className="chip up">Casusun orada</span>
+                  ) : (
+                    <button className="btn small" disabled={spiesHome < 1} onClick={() => online.act({ type: 'spy', target: target.id, topic: t })}>
+                      <Icon name="eye" size={16} /> Casus gönder
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+          <p className="hint">Bir lordun her konusuna bir casus gönderilebilir.</p>
+          {spiesHome < 1 && <p className="hint">Evde casusun yok. Casus evi zamanla casus yetiştirir.</p>}
+        </Section>
+        <Section title="Casus operasyonları" icon="eye" aside={intel ? `en güçlü ağın %${Math.round(best)}` : 'önce raporu getir'}>
+          {outcome && <p className="alert">{outcome}</p>}
+          <p className="hint">
+            Operasyonlar oradaki en güçlü ağından yapılır ve başarılı da olsa başarısız da olsa o ağdan istediği kadar puan harcar; ağ kalan güçten yeniden büyür. Başarısız
+            olan operasyon ayrıca casusunu kaybettirir ve kimin yaptığını ortaya çıkarır.
+          </p>
+          <ul className="places">
+            {OPERATIONS.map((op) => {
+              const spec = operationSpec(op)
+              const noPrison = op === 'kidnap' && !kingdom.buildings.some((b) => b.kind === 'prison' && b.doneAt <= now)
+              const noTown = op === 'townRevolt' && !picked
+              const blocked = !intel || best < spec.minStrength || (op === 'kidnap' && !target.queen) || noPrison || noTown || kingdom.stock.gold < (spec.cost.gold ?? 0)
+              return (
+                <li key={op}>
+                  <Icon name={op === 'kidnap' ? 'crown' : op === 'revolt' || op === 'townRevolt' ? 'unhappy' : 'warn'} size={24} />
+                  <span>
+                    <b>{OPERATION_NAMES[op]}</b>
+                    <small>
+                      {OPERATION_NOTES[op]} · ağ %{spec.minStrength} ister, ağdan {Math.round(operationNetworkCost(op))} puan harcar · {spec.cost.gold} altın
+                      {op === 'kidnap' && !target.queen ? ' · kraliçeleri yok' : ''}
+                      {noPrison ? ' · önce hapishane kur' : ''}
+                      {noTown ? ' · elinde kasaba yok' : ''}
+                    </small>
+                    {op === 'townRevolt' && theirTowns.length > 1 && (
+                      <select value={picked?.id} onChange={(e) => setTownPick(Number(e.target.value))} aria-label="Kışkırtılacak kasaba">
+                        {theirTowns.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {op === 'townRevolt' && theirTowns.length === 1 && <small>Kasaba: {picked!.name}</small>}
+                    <small className={intel?.chances && best >= spec.minStrength ? (intel.chances[op] >= 50 ? 'up' : 'down') : undefined}>
+                      {!intel ? 'Başarı şansı: önce raporu getir' : !intel.chances ? 'Başarı şansı: raporu yenile' : best < spec.minStrength ? `Başarı şansı: ağ %${spec.minStrength} olunca` : `Başarı şansı ~%${intel.chances[op]}`}
+                    </small>
+                  </span>
+                  <button
+                    className="btn small"
+                    disabled={blocked}
+                    onClick={() =>
+                      online.act<{ success: boolean }>({ type: 'operation', target: target.id, op, ...(op === 'townRevolt' && picked && { town: picked.id }) }).then((r) => {
+                        if (r) setOutcome(r.success ? `${OPERATION_NAMES[op]}: başarılı.` : `${OPERATION_NAMES[op]}: başarısız, casusun yakalandı.`)
+                        online.loadIntel(target.id)
+                      })
+                    }
+                  >
+                    Dene
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </Section>
+        </>
+      )}
     </>
   )
 }
