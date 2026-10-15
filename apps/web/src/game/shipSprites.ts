@@ -27,10 +27,12 @@ export const SHIP_LENGTH = 6.6
 // (`sailing`) its oars are out in the water and its sail is set; moored, the oars are shipped upright and the sail is
 // furled on the yard. Anchored on the water at its middle.
 export function ship(along: 'x' | 'y', sailing: boolean, seed: number, reverse = false, length = SHIP_LENGTH): Sprite {
-  const beam = 1.15
-  const deck = 11
-  const mastHeight = 66
-  const reach = 1.25
+  // A shorter ship is scaled down whole (beam, freeboard, mast, oars), not just cut shorter.
+  const k = Math.sqrt(Math.min(1, length / SHIP_LENGTH))
+  const beam = 1.15 * k
+  const deck = Math.round(11 * k)
+  const mastHeight = Math.round(66 * k)
+  const reach = 1.25 * k
   const width = Math.ceil((length + (beam + reach) * 2) * (TILE_WIDTH / 2)) + 24
   const height = Math.ceil((length + (beam + reach) * 2) * (TILE_HEIGHT / 2)) + mastHeight + deck + 34
   const canvas = new Canvas(width, height)
@@ -59,13 +61,13 @@ export function ship(along: 'x' | 'y', sailing: boolean, seed: number, reverse =
   // Half the beam along the keel: a rounded stern, long straight sides, a fine bow.
   const half = (t: number) => (beam / 2) * (t < 0.1 ? 0.55 + t * 4.5 : t > 0.8 ? Math.sqrt(Math.max(0, 1 - ((t - 0.8) / 0.2) ** 2)) : 1)
   // The deck sweeps up into a tall curled sternpost and a little toward the bow.
-  const top = (t: number) => deck + (t < 0.16 ? 7 * Math.min(1, (0.16 - t) / 0.05) : 0) + (t > 0.9 ? (t - 0.9) * 50 : 0)
+  const top = (t: number) => deck + (t < 0.16 ? 7 * k * Math.min(1, (0.16 - t) / 0.05) : 0) + (t > 0.9 ? (t - 0.9) * 50 * k : 0)
   // Which way a side faces the light: from the upper left, so the side facing +y is lit and the side facing +x is not.
   const lit = (side: number) => ((along === 'x') === reverse ? side < 0 : side > 0)
 
   const step = 1 / 64
   // The hull's sides, with a painted band under the rail and a row of oar ports in it.
-  const oars = 13
+  const oars = Math.max(5, Math.round(13 * k * k))
   const oarAt = (i: number) => length * (0.2 + (0.58 * i) / (oars - 1))
   for (let a = 0; a <= length; a += step) {
     const t = a / length
@@ -75,8 +77,8 @@ export function ship(along: 'x' | 'y', sailing: boolean, seed: number, reverse =
       for (let z = 0; z <= h; z += 0.5) {
         const w = half(t) * (0.7 + 0.3 * Math.min(1, z / deck))
         const tone = (lit(side) ? 2 : 0.6) + (z < 2.5 ? -1 : 0) + (z > h - 1.5 ? 1.5 : 0) + (Math.floor(z) % 3 === 0 ? -0.7 : 0)
-        const band = z > deck - 5 && z < deck - 1.5 && t > 0.12 && t < 0.86
-        const color = band ? (port && z > deck - 4.2 && z < deck - 2.3 ? HULL[0] : stripe[lit(side) ? 2 : 0]) : HULL[Math.max(0, Math.min(4, Math.round(tone)))]
+        const band = z > deck - 5 * k && z < deck - 1.5 * k && t > 0.12 && t < 0.86
+        const color = band ? (port && z > deck - 4.2 * k && z < deck - 2.3 * k ? HULL[0] : stripe[lit(side) ? 2 : 0]) : HULL[Math.max(0, Math.min(4, Math.round(tone)))]
         put(a, side * w, z, color)
       }
     }
@@ -86,9 +88,9 @@ export function ship(along: 'x' | 'y', sailing: boolean, seed: number, reverse =
     }
   }
   // The ram: a bronze beak at the waterline, reaching forward of the bow.
-  for (let k = 0; k <= 0.8; k += step) {
-    const r = 0.14 * (1 - k / 0.8) + 0.03
-    for (let c = -r; c <= r; c += step) for (let z = 0.5; z <= 3.5 - k * 2; z += 0.5) put(length + k - 0.1, c, z, BRONZE[z > 2.5 ? 3 : (c > 0) === (along === 'x') ? 1 : 2])
+  for (let r0 = 0; r0 <= 0.8 * k; r0 += step) {
+    const r = (0.14 * (1 - r0 / (0.8 * k)) + 0.03) * k
+    for (let c = -r; c <= r; c += step) for (let z = 0.5; z <= (3.5 - (r0 / k) * 2) * k; z += 0.5) put(length + r0 - 0.1, c, z, BRONZE[z > 2.5 ? 3 : (c > 0) === (along === 'x') ? 1 : 2])
   }
   // The deck planks, a rail along the edge, and the rowers' benches across it.
   for (let a = 0; a <= length; a += step) {
@@ -108,12 +110,12 @@ export function ship(along: 'x' | 'y', sailing: boolean, seed: number, reverse =
     for (let c = -w; c <= w; c += step) put(a + 0.12, c, deck + 1, HULL[2])
   }
   // Shields hung along both rails, each a small round boss.
-  for (let a = length * 0.2; a <= length * 0.8; a += 0.36) {
+  for (let a = length * 0.2; a <= length * 0.8; a += 0.36 * k) {
     for (const side of [-1, 1]) {
       const w = half(a / length) + 0.04
-      for (let da = -0.13; da <= 0.13; da += step) {
-        for (let dz = -2.5; dz <= 2.5; dz += 0.5) {
-          const r = Math.hypot(da / 0.13, dz / 2.5)
+      for (let da = -0.13 * k; da <= 0.13 * k; da += step) {
+        for (let dz = -2.5 * k; dz <= 2.5 * k; dz += 0.5) {
+          const r = Math.hypot(da / (0.13 * k), dz / (2.5 * k))
           if (r > 1) continue
           put(a + da, side * w, deck + 0.5 + dz, r < 0.35 ? BRONZE[3] : r > 0.8 ? shields[0] : shields[lit(side) ? 2 : 1])
         }
@@ -125,25 +127,26 @@ export function ship(along: 'x' | 'y', sailing: boolean, seed: number, reverse =
     const a0 = oarAt(i)
     for (const side of [-1, 1]) {
       const w = half(a0 / length)
-      for (let k = 0; k <= 1; k += step / 2) {
+      for (let f = 0; f <= 1; f += step / 2) {
         if (sailing) {
-          const c = side * (w + k * reach)
-          const z = deck - 3 - k * (deck - 3)
-          const a = a0 - k * 0.28
-          put(a, c, z, k > 0.82 ? OAR[2] : OAR[lit(side) ? 1 : 0])
+          const c = side * (w + f * reach)
+          const z = deck - 3 * k - f * (deck - 3 * k)
+          const a = a0 - f * 0.28 * k
+          put(a, c, z, f > 0.82 ? OAR[2] : OAR[lit(side) ? 1 : 0])
         } else {
-          put(a0, side * (w - 0.05), deck + k * 22, k > 0.85 ? OAR[2] : OAR[lit(side) ? 1 : 0])
+          put(a0, side * (w - 0.05), deck + f * 22 * k, f > 0.85 ? OAR[2] : OAR[lit(side) ? 1 : 0])
         }
       }
     }
   }
   // The stern: a raised quarterdeck under a striped awning on four posts, a lantern on the sternpost.
   const aft = length * 0.16
-  for (const [pa, pc] of [[0.25, -0.38], [0.25, 0.38], [aft, -0.4], [aft, 0.4]]) for (let z = top(pa / length); z <= deck + 20; z += 0.5) put(pa, pc, z, MAST[1])
-  for (let a = 0.2; a <= aft + 0.05; a += step) {
-    for (let c = -0.48; c <= 0.48; c += step) {
-      const sag = 1.5 * (1 - (2 * c) ** 2)
-      put(a, c, deck + 20 + sag, stripe[Math.floor((c + 0.48) * 6) % 2 === 0 ? 2 : 0])
+  const awning = deck + 20 * k
+  for (const [pa, pc] of [[0.25 * k, -0.38 * k], [0.25 * k, 0.38 * k], [aft, -0.4 * k], [aft, 0.4 * k]]) for (let z = top(pa / length); z <= awning; z += 0.5) put(pa, pc, z, MAST[1])
+  for (let a = 0.2 * k; a <= aft + 0.05; a += step) {
+    for (let c = -0.48 * k; c <= 0.48 * k; c += step) {
+      const sag = 1.5 * k * (1 - (2 * c / k) ** 2)
+      put(a, c, awning + sag, stripe[Math.floor((c / k + 0.48) * 6) % 2 === 0 ? 2 : 0])
     }
   }
   for (let z = 0; z <= 6; z += 0.5) put(0.02, 0, top(0) + z, MAST[2])
@@ -156,11 +159,11 @@ export function ship(along: 'x' | 'y', sailing: boolean, seed: number, reverse =
     put(ma + 0.03, along === 'x' ? 0.03 : -0.03, z, MAST[2])
     put(ma - 0.03, along === 'x' ? -0.03 : 0.03, z, MAST[0])
   }
-  const yard = base + mastHeight - 6
+  const yard = base + mastHeight - 6 * k
   const span = beam * 1.25
   for (let c = -span; c <= span; c += step) put(ma + 0.02, c, yard, MAST[0])
   if (sailing) {
-    const foot = base + 14
+    const foot = base + 14 * k
     for (let z = foot; z <= yard - 1; z += 0.5) {
       const f = (z - foot) / (yard - foot)
       const w = span * (0.9 + 0.1 * f)
@@ -177,7 +180,7 @@ export function ship(along: 'x' | 'y', sailing: boolean, seed: number, reverse =
     for (let c = -span * 0.92; c <= span * 0.92; c += step) for (let dz = -3; dz <= 0; dz += 0.5) put(ma + 0.04, c, yard + dz, SAIL[dz < -2 ? 1 : 2])
   }
   // A long pennant at the masthead, streaming aft.
-  for (let k = 0; k < 14; k++) for (let dz = 0; dz <= (k < 9 ? 1.5 : 0.5); dz += 0.5) put(ma - k * 0.07, 0, base + mastHeight - 1 - dz + k * 0.12, FLAG[k % 3 === 0 ? 0 : 1])
+  for (let f = 0; f < Math.round(14 * k); f++) for (let dz = 0; dz <= (f < 9 * k ? 1.5 : 0.5); dz += 0.5) put(ma - f * 0.07, 0, base + mastHeight - 1 - dz + f * 0.12, FLAG[f % 3 === 0 ? 0 : 1])
   // Foam where the hull meets the water, at the ram, and round the oar blades under way.
   const foam = (u: number, v: number, chance: number, key: number) => {
     const x = Math.round(ax + (u - v) * (TILE_WIDTH / 2))
@@ -198,10 +201,10 @@ export function ship(along: 'x' | 'y', sailing: boolean, seed: number, reverse =
   if (sailing) {
     for (let i = 0; i < oars; i++) {
       for (const side of [-1, 1]) {
-        for (let k = 0; k < 6; k++) {
-          const a = oarAt(i) - 0.28 + (hash(i, k, seed + side) - 0.5) * 0.3
-          const c = side * (half(oarAt(i) / length) + reach + (hash(k, i, seed + side) - 0.5) * 0.2)
-          foam(...ground(a, c), 0.8, i * 97 + k * 7 + side)
+        for (let j = 0; j < 6; j++) {
+          const a = oarAt(i) - 0.28 + (hash(i, j, seed + side) - 0.5) * 0.3
+          const c = side * (half(oarAt(i) / length) + reach + (hash(j, i, seed + side) - 0.5) * 0.2)
+          foam(...ground(a, c), 0.8, i * 97 + j * 7 + side)
         }
       }
     }

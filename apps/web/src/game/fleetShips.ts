@@ -38,7 +38,7 @@ function lane(world: World, dock: Rect) {
   return { pier, mid, dir, tip, reach }
 }
 
-const SHIP = 3.2
+const SHIP = 2.6
 
 export function fleetShips(world: World, lords: NavyOnMap[]): FleetShip[] {
   const out: FleetShip[] = []
@@ -49,11 +49,10 @@ export function fleetShips(world: World, lords: NavyOnMap[]): FleetShip[] {
     const along = pier.along
     const across = along === 'x' ? { x: 0, y: 1 } : { x: 1, y: 0 }
     const reverse = (along === 'x' ? dir.x : dir.y) < 0
-    // Moored: alongside the jetty, both sides in turn, further out each pair.
-    const home = lord.harbour + lord.fleets.filter((f) => f.mission === 'port' || f.mission === 'fish').reduce((n, f) => n + f.ships, 0)
-    const moored = Math.min(4, Math.ceil(home / 2))
+    // The harbour's ships, moored alongside the jetty, both sides in turn, further out each pair.
+    const moored = Math.min(4, Math.ceil(lord.harbour / 2))
     for (let i = 0; i < moored; i++) {
-      const side = i % 2 === 0 ? 1.1 : -1.1
+      const side = i % 2 === 0 ? 0.9 : -0.9
       const out1 = Math.min(Math.max(0, reach - 1), Math.floor(i / 2) * 1.2)
       out.push({
         key: `m${lord.id}:${i}`,
@@ -63,6 +62,16 @@ export function fleetShips(world: World, lords: NavyOnMap[]): FleetShip[] {
         seed: lord.id * 7 + i,
         length: SHIP,
       })
+    }
+    // A fleet waiting in port rides at anchor off the jetty's tip, apart from the harbour, a few ships in a knot.
+    for (const [n, f] of lord.fleets.filter((f) => f.mission === 'port').entries()) {
+      const d = Math.min(Math.max(1.5, reach - 1), 3 + n * 2.5)
+      const side = n % 2 === 0 ? 2.2 : -2.2
+      for (let i = 0; i < Math.min(3, Math.ceil(f.ships / 2)); i++) {
+        const e = d + (i === 1 ? 1.4 : 0)
+        const c = side + (i === 2 ? 1.3 : 0) * Math.sign(side)
+        out.push({ key: `p${lord.id}:${f.id}:${i}`, at: { x: tip.x + dir.x * e + across.x * c, y: tip.y + dir.y * e + across.y * c }, along, reverse, seed: lord.id * 7 + f.id * 3 + i, length: SHIP })
+      }
     }
     if (reach < 4) continue
     const far: Point = { x: tip.x + dir.x * reach, y: tip.y + dir.y * reach }

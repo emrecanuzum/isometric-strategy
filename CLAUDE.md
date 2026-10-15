@@ -1515,6 +1515,10 @@ mantık `packages/shared/src/navy.ts` (komutlar `realm.ts` → `shipsError`,
 `orderShips`); sunucuda gemi buluşmaları `supabase/functions/_shared/navy.ts`
 (`settleNavy`, tick'te); arayüz `apps/web/src/ui/hud/navy.tsx` (Ordu sekmesi →
 **Donanma**; tersaneye tıklamak da açar), haritada `apps/web/src/game/fleetShips.ts`.
+Donanma paneli alt sekmelere bölünür (`usePart` anahtarı `navy`): **Filolar**
+(filo kartları, ordu kartları gibi tam genişlikte; görev düğmeleri üçlü
+sütunlarda), **Liman** (limandaki gemiler, filo çıkarma), **Tersane** (gemi
+türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
 
 - **Tersane** (**4. seviye saray**, bir tane, 3 seviye): 2×2, **suyun kıyısına**
   kurulur: karolarından en az biri kıyı, gerisi serbest kara olmalıdır (iskele
@@ -1526,7 +1530,10 @@ mantık `packages/shared/src/navy.ts` (komutlar `realm.ts` → `shipsError`,
   3. seviyede küpeşteye kadar kaplanmış, su hattının altı ziftli, ambarı
   kemereli, direği dikilmiş ve flamalı bir gövde.
   Kızak sayısı (aynı anda yapılan parti) 1 / 2 / 3, limanın gemi sınırı
-  6 / 10 / 16.
+  6 / 10 / 16. Lordların gemileri haritada taç limanlarının kadırgasının
+  küçültülmüş hâlidir (2,6 karo boyunda; genişliği, direği, kürekleri ve
+  tentesi de boyla birlikte küçülür, `shipSprites.ts` → `ship`), dar nehre de
+  sığar.
 - **Gemiler:**
   - **Kadırga** (savaş): güç 3, eskort 2, yük 24, 4 denizci; çektirileri yener.
   - **Koka** (yük): güç 0,6, yük 80, balıkta iyi, 2 denizci.
@@ -1588,8 +1595,9 @@ mantık `packages/shared/src/navy.ts` (komutlar `realm.ts` → `shipsError`,
   korsanları yenerse yük güvende ve 35 altın ödül; yenemezse yük gider ve
   bir gemi batabilir (eskortsuz %20, eskortlu %15).
   Seferler, saldırılar, av ve dönüşler günlükte yazar.
-- **Herkes görür:** lobi her lordun filolarını haritada görür: limanda bekleyen
-  gemiler iskelenin yanında demirli (en çok 4), ticaretteki filonun gemisi
+- **Herkes görür:** lobi her lordun filolarını haritada görür: limandaki
+  gemiler iskelenin yanına yanaşmış (en çok 4), limanda bekleyen bir filo
+  iskelenin açığında ayrı bir öbek olarak demirli (en çok 3 gemi), ticaretteki filonun gemisi
   iskeleden açığa çıkıp gözden kaybolur ve sefer sonunda döner, korsan avı ve
   balık filoları açıkta gezinir, abluka eden filonun kadırgaları hedefin
   iskelesinin önünde demirler. Başkalarının gemi sayısı çifte yuvarlanır
