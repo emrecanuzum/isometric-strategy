@@ -1,0 +1,95 @@
+{
+  "maxFleets": 2,
+  "ships": {
+    "galley": {
+      "cost": { "gold": 140, "materials": 90, "arms": 40 },
+      "buildSeconds": 90,
+      "crew": 4,
+      "might": 3,
+      "escort": 2,
+      "cargo": 10,
+      "fish": 0.3,
+      "upkeep": 0.06,
+      "shipyardLevel": 1
+    },
+    "cog": {
+      "cost": { "gold": 90, "materials": 110 },
+      "buildSeconds": 60,
+      "crew": 2,
+      "might": 0.6,
+      "escort": 0,
+      "cargo": 30,
+      "fish": 0.9,
+      "upkeep": 0.03,
+      "shipyardLevel": 1
+    },
+    "corsair": {
+      "cost": { "gold": 80, "materials": 60, "arms": 20 },
+      "buildSeconds": 45,
+      "crew": 3,
+      "might": 1.8,
+      "escort": 1.5,
+      "cargo": 15,
+      "fish": 0.5,
+      "upkeep": 0.04,
+      "shipyardLevel": 2
+    }
+  },
+  "counters": {
+    "galley": ["corsair"],
+    "corsair": ["cog"],
+    "cog": []
+  },
+  "counterBonus": 0.25,
+  "yardSlotsByLevel": [1, 2, 3],
+  "harbourCapByLevel": [6, 10, 16],
+  "speedSecondsPerTile": 0.15,
+  "minVoyageSeconds": 45,
+  "trade": {
+    "baseSeconds": 70,
+    "secondsPerTile": 0.18,
+    "priceFactor": 1.0,
+    "marketImpact": 0.5,
+    "crownRelation": 0.6,
+    "goodCooldownSeconds": 120
+  },
+  "pirates": {
+    "chance": 0.16,
+    "escortCut": 0.13,
+    "minShare": 0.15,
+    "huntCut": 0.5,
+    "stormFactor": 1.8,
+    "might": [2, 9],
+    "bounty": 35,
+    "sinkChance": { "escorted": 0.35, "alone": 0.25 }
+  },
+  "hunt": {
+    "catchPerRoundPerMight": 0.012,
+    "bounty": 30,
+    "lossChance": 0.08
+  },
+  "fishing": {
+    "foodFactorFromYield": true
+  },
+  "battle": {
+    "dice": 10,
+    "lossShare": [0.15, 0.4],
+    "winnerLossShare": [0.05, 0.2],
+    "harbourBonus": 0.15
+  },
+  "blockade": {
+    "dockFood": 0,
+    "happiness": -6,
+    "warScore": 15
+  },
+  "raid": {
+    "stealShare": 0.12,
+    "cooldownSeconds": 600
+  },
+  "sortieSeconds": 30,
+  "upkeepFoodPerCrew": 0.25,
+  "seaWeather": {
+    "storm": 1.8,
+    "fog": 0.7
+  }
+}
