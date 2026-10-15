@@ -237,6 +237,8 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
     return { cities: world.cities, atWar: true, target: { id, name: k.name, dockPlot: dock ? { x: dock.x, y: dock.y, size: dock.size } : null, hasDock: !!dock, blockadedBy: k.blockade?.by ?? null } }
   }
   const merge = others.find((o) => !mergeFleetsError(kingdom, fleet.id, o.id))
+  // The mission the fleet is on shows lit and is not sent again (trade still opens its goods and harbours).
+  const on = (kind: Fleet['mission']['kind']) => (fleet.mission.kind === kind ? 'btn small active current' : 'btn small')
   return (
     <li className={online.fleet === fleet.id ? 'army-card selected' : 'army-card'}>
       <div className="army-body">
@@ -264,16 +266,16 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
             <button className="btn small" disabled={fleet.mission.kind === 'trade'} title={fleet.mission.kind === 'trade' ? 'Ticaretteki filo yerinden oynamaz' : 'Haritada bir nehre ya da göle tıkla'} onClick={() => online.sail(fleet.id)}>
               <Icon name="ship" size={16} /> Hareket et
             </button>
-            <button className="btn small" aria-pressed={fleet.mission.kind === 'port'} disabled={!!simple('port')} onClick={() => mission({ kind: 'port' })}>
+            <button className={on('port')} aria-pressed={fleet.mission.kind === 'port'} disabled={!!simple('port')} onClick={() => fleet.mission.kind !== 'port' && mission({ kind: 'port' })}>
               <Icon name="anchor" size={16} /> Limanda bekle
             </button>
-            <button className="btn small" aria-pressed={picking === 'trade' || fleet.mission.kind === 'trade'} onClick={() => setPicking(picking === 'trade' ? null : 'trade')}>
+            <button className={on('trade')} aria-pressed={picking === 'trade' || fleet.mission.kind === 'trade'} onClick={() => setPicking(picking === 'trade' ? null : 'trade')}>
               <Icon name="trade" size={16} /> Deniz ticareti
             </button>
-            <button className="btn small" aria-pressed={fleet.mission.kind === 'fish'} disabled={!!simple('fish')} title={WHY[simple('fish') as NavyError]} onClick={() => mission({ kind: 'fish' })}>
+            <button className={on('fish')} aria-pressed={fleet.mission.kind === 'fish'} disabled={!!simple('fish')} title={WHY[simple('fish') as NavyError]} onClick={() => fleet.mission.kind !== 'fish' && mission({ kind: 'fish' })}>
               <Icon name="food" size={16} /> Balık avı
             </button>
-            <button className="btn small" aria-pressed={fleet.mission.kind === 'hunt'} disabled={!!simple('hunt')} title={WHY[simple('hunt') as NavyError]} onClick={() => mission({ kind: 'hunt' })}>
+            <button className={on('hunt')} aria-pressed={fleet.mission.kind === 'hunt'} disabled={!!simple('hunt')} title={WHY[simple('hunt') as NavyError]} onClick={() => fleet.mission.kind !== 'hunt' && mission({ kind: 'hunt' })}>
               <Icon name="eye" size={16} /> Korsan avı
             </button>
             <button className="btn small" aria-pressed={picking === 'blockade'} disabled={enemies.length === 0} title={enemies.length === 0 ? 'Savaşta olduğun, iskelesi olan bir lord yok' : undefined} onClick={() => setPicking(picking === 'blockade' ? null : 'blockade')}>
@@ -324,13 +326,13 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
                 const per = trip ? (cargoOf(fleet.ships) * price * 3_600_000) / trip : 0
                 const why = missionError(kingdom, fleet.id, { kind: 'trade', good, city: i }, now, { cities: world.cities })
                 return (
-                  <li key={i} className="queue-item">
+                  <li key={i} className="port-item">
                     <b style={{ color: info.color }}>{info.capital} limanı</b>
                     <small>
-                      sefer {trip ? clock(trip) : '—'} · birimi {price.toFixed(2)} · saatte ~{fmt(per)} altın
+                      sefer {trip ? clock(trip) : '—'} · birimi {price.toFixed(2)} · saatte yaklaşık {fmt(per)} altın
                     </small>
                     <button className="btn small" disabled={!!why} title={why ? WHY[why] : undefined} onClick={() => mission({ kind: 'trade', good, city: i })}>
-                      Yelken aç
+                      <Icon name="ship" size={16} /> {fleet.mission.kind === 'trade' && fleet.mission.city === i && fleet.mission.good === good ? 'Bu sefer sürüyor' : 'Yelken aç'}
                     </button>
                   </li>
                 )

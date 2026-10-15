@@ -4903,3 +4903,25 @@ input:not([type='range']):focus-visible {
 .fleet-head small {
   grid-column: 1 / -1;
 }
+
+/* The mission a fleet is on: lit, and not sent again. */
+.army-actions .btn.current {
+  cursor: default;
+}
+
+/* A crown's harbour to trade with by sea: its name and the voyage, the button under them at full width. */
+.port-item {
+  display: grid;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 3) 0;
+  border-bottom: var(--px) solid var(--line, #3a2a1e);
+}
+
+.port-item small {
+  color: var(--muted);
+}
+
+.port-item .btn {
+  width: 100%;
+  justify-content: center;
+}
