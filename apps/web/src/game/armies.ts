@@ -3,7 +3,7 @@ import type { Point, World } from '@game/shared'
 import { Container, Graphics, Sprite as PixiSprite, Text } from 'pixi.js'
 import { KINGDOM_COLORS } from './buildingSprites'
 import type { KingdomColor } from './buildingSprites'
-import { Canvas, STONE, TIMBER, ramp, rgb, shadow } from './sprites'
+import { Canvas, NO_SHADOW, STONE, TIMBER, ramp, rgb, shadow } from './sprites'
 import type { Sprite } from './sprites'
 import { dashes } from './dashes'
 import { textureOf } from './textures'
@@ -59,10 +59,12 @@ export function squad(color: string | null, frame: number, figures = 3): Sprite 
   // How high each pixel stands above the ground under it, so every soldier throws his shadow from his own feet (not
   // from the bottom of the sprite, which would set the rear ranks' shadows adrift).
   const lift = new Uint8Array(canvas.width * canvas.height)
-  const raise = (ground: number, draw: () => void) => {
+  const raise = (ground: number, draw: () => void, shadowless = false) => {
     const before = canvas.pixels.slice()
     draw()
-    for (let i = 0; i < before.length; i++) if (canvas.pixels[i] !== before[i]) lift[i] = Math.max(0, ground - Math.floor(i / canvas.width))
+    for (let i = 0; i < before.length; i++) {
+      if (canvas.pixels[i] !== before[i]) lift[i] = shadowless ? NO_SHADOW : Math.min(NO_SHADOW - 1, Math.max(0, ground - Math.floor(i / canvas.width)))
+    }
   }
   // The march in four frames: a stride one way, feet together (body up a pixel), a stride the other way, together.
   const STRIDE = [1, 0, -1, 0]
@@ -92,6 +94,7 @@ export function squad(color: string | null, frame: number, figures = 3): Sprite 
   }
   // The banner stands behind the rear soldier.
   const bx = ox + 4
+  // The banner throws no shadow: its long one, cast from high up, read as the squad floating over the ground.
   raise(base - 26, () => {
     for (let y = base - 50; y < base - 26; y++) canvas.set(bx, y, TIMBER[1])
     for (let y = 0; y < 7; y++) {
@@ -101,7 +104,7 @@ export function squad(color: string | null, frame: number, figures = 3): Sprite 
         canvas.set(bx + x, base - 50 + y + wave, y === 0 ? tunic[5] : tunic[y < 3 ? 3 : 2])
       }
     }
-  })
+  }, true)
   // Ranks of three, back to front, each a little lower and to the side on the iso grid.
   const spots: [number, number][] = []
   for (let i = 0; i < figures; i++) {

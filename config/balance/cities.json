@@ -4,7 +4,7 @@
   "crown": {
     "requiredForPalaceLevel": 2,
     "patrol": {
-      "perCrown": 2,
+      "perCrown": 1,
       "slotSeconds": 900,
       "out": 0.4,
       "stay": 0.15,

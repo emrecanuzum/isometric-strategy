@@ -63,6 +63,8 @@ export interface Online extends Layer {
   target(army: number): void
   // Opens the battle view.
   watch(battle: number): void
+  // Opens the watch over a town's siege.
+  watchTown(town: number): void
   // The army the camera is locked onto, if any.
   following: number | null
   follow(army: number | null): void

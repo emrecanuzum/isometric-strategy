@@ -152,6 +152,8 @@ export function walkTiles(a: Point, b: Point, visit: (x: number, y: number) => b
       y += sy
       ty += tdy
     }
+    // Stepped past the end (a corner taken right at the last tile): the walk is over.
+    if ((sx > 0 && x > ex) || (sx < 0 && x < ex) || (sy > 0 && y > ey) || (sy < 0 && y < ey)) break
     if (!visit(x, y)) return false
   }
   return true

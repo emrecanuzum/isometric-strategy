@@ -4045,3 +4045,72 @@ kbd {
   font: 600 16px 'Pixelify Sans', sans-serif;
   pointer-events: none;
 }
+
+/* ---- While you were away (src/ui/AwayReport.tsx) ---- */
+.away {
+  width: min(560px, calc(100vw - var(--gap) * 2));
+}
+
+.away-scene {
+  display: block;
+  width: calc(100% - var(--px) * 12);
+  aspect-ratio: 320 / 128;
+  image-rendering: pixelated;
+  border: calc(var(--px) * 2) solid var(--ink);
+  box-shadow: inset 0 0 0 var(--px) var(--panel-hi);
+}
+
+.away-title {
+  margin-block: 0;
+  color: var(--gold);
+  font-size: 18px;
+}
+
+.away-lines {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 3);
+  margin-block: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.away-lines li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: calc(var(--px) * 4);
+  align-items: start;
+  padding: calc(var(--px) * 3) calc(var(--px) * 4);
+  background: var(--slot);
+  line-height: 1.35;
+}
+
+.away-lines li.up span {
+  color: var(--up);
+}
+
+.away-lines li.down span {
+  color: var(--down);
+}
+
+.away-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--px) * 4);
+}
+
+.away-dots {
+  display: flex;
+  gap: calc(var(--px) * 3);
+}
+
+.away-dots i {
+  width: calc(var(--px) * 4);
+  height: calc(var(--px) * 4);
+  background: var(--panel-hi);
+}
+
+.away-dots i.on {
+  background: var(--gold);
+}

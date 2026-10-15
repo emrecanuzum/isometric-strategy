@@ -20,7 +20,7 @@ export interface TownRow {
   name: string
   owner_id: number | null
   garrison: number
-  siege: { army: number; kingdom: number; startedAt: number; endsAt: number } | null
+  siege: { army: number; kingdom: number; startedAt: number; endsAt: number; soldiers?: number; lost?: number } | null
 }
 
 export async function townsOf(lobby: string): Promise<TownRow[]> {
@@ -106,7 +106,7 @@ export async function settleTowns(lobby: string, rows: Row[], pacts: Pact[], now
     }
     if (town.siege) continue
     const at = Math.min(now, Math.max(ms(army.arrive_at), now - 60_000))
-    const siege = { army: army.id, kingdom: army.kingdom_id, startedAt: at, endsAt: at + game.townSiegeMs(walled(town)) }
+    const siege = { army: army.id, kingdom: army.kingdom_id, startedAt: at, endsAt: at + game.townSiegeMs(walled(town)), soldiers: army.soldiers, lost: 0 }
     // Only one siege at a time: claimed only if no other army laid one meanwhile.
     const { data: claimed } = await admin.from('lobby_towns').update({ siege }).eq('id', town.id).is('siege', null).select('id').maybeSingle()
     if (!claimed) continue
@@ -115,32 +115,48 @@ export async function settleTowns(lobby: string, rows: Row[], pacts: Pact[], now
     await notify(lobby, [army.kingdom_id, ...(town.owner_id ? [town.owner_id] : [])], 'town_siege', { town: town.id, name: town.name, by: nameOf(rows, army.kingdom_id) }, at)
   }
 
-  // Sieges that have run their course: a free town's garrison costs the besiegers some soldiers; if any are left, the
-  // town is theirs.
+  // Sieges going on and over: round by round a free town's garrison brings down some of the besiegers (and loses some of
+  // its own); when the siege has run its course with soldiers left, the town is theirs. Besiegers all fallen before
+  // then, the town holds.
   for (const town of towns) {
     const s = town.siege
-    if (!s || s.endsAt > now) continue
+    if (!s || s.startedAt > now) continue
     const army = byId.get(s.army)
     if (!army || army.status === 'battle') continue
-    const lost = town.owner_id === null ? Math.min(army.soldiers, game.townLosses(town.garrison, walled(town))) : 0
+    const rounds = game.townSiegeRounds({ id: town.id, owner: town.owner_id, garrison: town.garrison }, s, s.soldiers ?? army.soldiers + (s.lost ?? 0), walled(town))
+    const done = game.townRoundsDone(s, now, rounds.length)
+    const due = done > 0 ? Math.min(army.soldiers + (s.lost ?? 0), rounds[done - 1].lost) : 0
+    const lost = Math.max(0, due - (s.lost ?? 0))
     const left = army.soldiers - lost
-    // Claimed only while this very siege is still on.
-    const taking = admin.from('lobby_towns').update(left > 0 ? { siege: null, owner_id: s.kingdom, garrison: 0, taken_at: iso(s.endsAt) } : { siege: null, garrison: Math.max(0, town.garrison - Math.ceil(lost / game.balance.towns.lossPerDefender)) })
-    const { data: claimed } = await taking.eq('id', town.id).eq('siege->>army', String(s.army)).eq('siege->>endsAt', String(s.endsAt)).select('id').maybeSingle()
+    const over = s.endsAt <= now || left <= 0
+    if (!over && lost === 0) continue
+    const at = over ? Math.min(now, s.endsAt) : now
+    const killed = done > 0 ? rounds[done - 1].killed : 0
+    // Claimed only while this very siege is still on, at the losses written so far.
+    const change = !over
+      ? { siege: { ...s, soldiers: s.soldiers ?? army.soldiers + (s.lost ?? 0), lost: (s.lost ?? 0) + lost } }
+      : left > 0
+        ? { siege: null, owner_id: s.kingdom, garrison: 0, taken_at: iso(at) }
+        : { siege: null, garrison: Math.max(0, town.garrison - killed) }
+    let claim = admin.from('lobby_towns').update(change).eq('id', town.id).eq('siege->>army', String(s.army)).eq('siege->>endsAt', String(s.endsAt))
+    claim = s.lost === undefined ? claim.is('siege->lost', null) : claim.eq('siege->>lost', String(s.lost))
+    const { data: claimed } = await claim.select('id').maybeSingle()
     if (!claimed) continue
     if (lost > 0) {
-      await mutateKingdom(s.kingdom, s.endsAt, (k) => ({ ...k, fielded: Math.max(0, (k.fielded ?? 0) - lost) }))
+      await mutateKingdom(s.kingdom, at, (k) => ({ ...k, fielded: Math.max(0, (k.fielded ?? 0) - lost) }))
       if (left <= 0) await admin.from('armies').delete().eq('id', army.id)
       else await admin.from('armies').update({ soldiers: left, units: game.takeShare(unitsOf(army), lost).left }).eq('id', army.id)
     }
+    if (!over) continue
+    const total = (s.lost ?? 0) + lost
     if (left <= 0) {
-      await notify(lobby, [s.kingdom], 'town_held', { town: town.id, name: town.name, lost }, s.endsAt)
+      await notify(lobby, [s.kingdom], 'town_held', { town: town.id, name: town.name, lost: total }, at)
       continue
     }
     await admin.from('armies').update({ goal: { kind: 'move' } }).eq('id', army.id)
     const before = town.owner_id
-    await mutateKingdom(s.kingdom, s.endsAt, (k) => hold(k, town, true))
-    if (before !== null) await mutateKingdom(before, s.endsAt, (k) => hold(k, town, false))
-    await notify(lobby, [s.kingdom, ...(before !== null ? [before] : [])], 'town_taken', { town: town.id, name: town.name, kind: town.kind, by: nameOf(rows, s.kingdom), from: before !== null ? nameOf(rows, before) : null, lost }, s.endsAt)
+    await mutateKingdom(s.kingdom, at, (k) => hold(k, town, true))
+    if (before !== null) await mutateKingdom(before, at, (k) => hold(k, town, false))
+    await notify(lobby, [s.kingdom, ...(before !== null ? [before] : [])], 'town_taken', { town: town.id, name: town.name, kind: town.kind, by: nameOf(rows, s.kingdom), from: before !== null ? nameOf(rows, before) : null, lost: total }, at)
   }
 }

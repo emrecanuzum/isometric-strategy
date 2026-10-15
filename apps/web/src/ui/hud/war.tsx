@@ -1,8 +1,8 @@
 import { BattleScene } from './BattleScene'
 import { startBattleMusic } from '../../audio/sfx'
 import { duckMusic } from '../../net/settings'
-import { UNITS, armoryOf, armyAt, nearCity, balance, countOf, familiarityAt, familiarityBonus, garrisonOf, moraleAt, nearInn, recruitment, territoryRect, territoryStage, trainError, unitSpec } from '@game/shared'
-import type { Army, Kingdom, Point, Unit, Units, World } from '@game/shared'
+import { UNITS, armoryOf, armyAt, nearCity, townSiegeRounds, townRoundsDone, townRoundMs, balance, countOf, familiarityAt, familiarityBonus, garrisonOf, moraleAt, nearInn, recruitment, territoryRect, territoryStage, trainError, unitSpec } from '@game/shared'
+import type { Army, Kingdom, Point, Town, Unit, Units, World } from '@game/shared'
 import { useEffect, useState } from 'react'
 import { KINGDOM_COLORS } from '../../game/buildingSprites'
 import type { KingdomColor } from '../../game/buildingSprites'
@@ -53,6 +53,8 @@ export interface WarNote {
   // The span it runs over, for a progress bar.
   from?: number
   until?: number
+  // What to watch: a battle, or a town's siege.
+  watch?: { battle: number } | { town: number }
 }
 
 export function warNotes(online: Online, now: number): WarNote[] {
@@ -66,6 +68,7 @@ export function warNotes(online: Online, now: number): WarNote[] {
       text: s.kingdom === me ? `${t.name} kuşatılıyor · ${clock(s.endsAt - now)} kaldı` : `${kingdomName(online, s.kingdom)}, ${t.name} kasabanı kuşatıyor · ${clock(s.endsAt - now)} kaldı`,
       from: s.startedAt,
       until: s.endsAt,
+      watch: { town: t.id },
     })
   }
   for (const b of online.battles) {
@@ -73,7 +76,7 @@ export function warNotes(online: Online, now: number): WarNote[] {
     if ((b.resolved && end <= now) || ![...b.attackers, ...b.defenders].some((f) => f.kingdom === me)) continue
     const start = Date.parse(b.started_at)
     const what = b.kind === 'siege' && b.besieged !== null ? `${kingdomName(online, b.besieged)} kuşatması` : 'Meydan muharebesi'
-    notes.push({ key: `battle${b.id}`, text: start > now ? `${what} ${clock(start - now)} sonra başlıyor` : `${what} sürüyor · ${clock(end - now)} kaldı`, from: start, until: end })
+    notes.push({ key: `battle${b.id}`, text: start > now ? `${what} ${clock(start - now)} sonra başlıyor` : `${what} sürüyor · ${clock(end - now)} kaldı`, from: start, until: end, watch: { battle: b.id } })
   }
   for (const a of online.armies) {
     if (a.kingdom_id !== me || a.status === 'battle') continue
@@ -88,6 +91,7 @@ export function warNotes(online: Online, now: number): WarNote[] {
 
 // What is going on: the war notes with how far each has run.
 function WarNow({ online, now }: { online: Online; now: number }) {
+  const watch = (w: NonNullable<WarNote['watch']>) => ('battle' in w ? online.watch(w.battle) : online.watchTown(w.town))
   const notes = warNotes(online, now)
   if (notes.length === 0) return null
   return (
@@ -102,6 +106,11 @@ function WarNow({ online, now }: { online: Online; now: number }) {
                 <Meter value={Math.max(0, Math.min(1, (now - n.from) / (n.until - n.from)))} label="İlerleme" segments={12} />
               )}
             </span>
+            {n.watch && (
+              <button className="btn small" onClick={() => watch(n.watch!)}>
+                İzle
+              </button>
+            )}
           </li>
         ))}
       </ul>
@@ -550,6 +559,101 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
               .map(([r, v]) => `${fmt(v)} ${RESOURCE_NAMES[r as keyof typeof RESOURCE_NAMES].toLowerCase()}`)
               .join(', ')}
           </p>
+        )}
+      </section>
+    </div>
+  )
+}
+
+// A town's siege watched like a battle (CLAUDE.md §8.4): the besiegers before the town's walls (a palisade, or the
+// houses of a town without one), round by round, with what each side has lost.
+export function TownSiegeView({ town, army, walled, online, now, onClose }: { town: Town; army: Army | null; walled: boolean; online: Online; now: number; onClose: () => void }) {
+  const s = town.siege
+  // Kept as it was when the siege ended, so the view does not empty out at its close.
+  const [held] = useState(() => s)
+  const siege = s ?? held
+  const over = !s || now >= (siege?.endsAt ?? 0)
+  useEffect(() => {
+    if (over) return
+    duckMusic(true)
+    const stop = startBattleMusic()
+    return () => {
+      stop()
+      duckMusic(false)
+    }
+  }, [over])
+  if (!siege) return null
+  const soldiers = siege.soldiers ?? (army?.soldiers ?? 0) + (siege.lost ?? 0)
+  const rounds = townSiegeRounds(town, siege, soldiers, walled)
+  const done = townRoundsDone(siege, now, rounds.length)
+  const last = done > 0 ? rounds[done - 1] : null
+  const garrison = town.owner === null ? town.garrison : 0
+  const left = last?.attackers ?? soldiers
+  const defenders = last?.defenders ?? garrison
+  const besieger = online.kingdoms.find((k) => k.id === siege.kingdom)
+  const holder = town.owner !== null ? online.kingdoms.find((k) => k.id === town.owner) : null
+  const swatch = (c: string | null | undefined, fallback: string) => KINGDOM_COLORS[c as KingdomColor]?.swatch ?? fallback
+  const units = army?.units ?? null
+  const next = siege.startedAt + (done + 1) * townRoundMs()
+  return (
+    <div className="modal" role="dialog" aria-labelledby="siege-title" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <section className="dialog frame battle-view">
+        <header className="sheet-head">
+          <Icon name="swords" size={32} />
+          <div>
+            <h2 id="siege-title">{town.name} kuşatması</h2>
+            <small>
+              {over ? 'Bitti' : `Tur ${Math.min(rounds.length, done + 1)} / ${rounds.length} · sonraki tur ${clock(Math.max(0, Math.min(next, siege.endsAt) - now))} sonra · ${clock(siege.endsAt - now)} kaldı`}
+            </small>
+          </div>
+          <button className="btn icon-only" onClick={onClose} aria-label="Kapat">
+            <Icon name="close" size={16} />
+          </button>
+        </header>
+        <BattleScene
+          attackers={{ soldiers: left, start: soldiers, color: swatch(besieger?.color, '#a8a4ac'), archers: (units?.archer ?? 0) > 0, catapults: (units?.catapult ?? 0) > 0 }}
+          defenders={{ soldiers: Math.max(defenders, town.owner !== null ? 3 : 0), start: Math.max(garrison, town.owner !== null ? 3 : 0), color: swatch(holder?.color, '#b08a3c'), archers: true, catapults: false }}
+          siege
+          round={done}
+          over={over}
+          winner={left > 0 ? 'attackers' : 'defenders'}
+        />
+        <div className="battle-sides">
+          <div className="battle-side">
+            <small>Kuşatan</small>
+            <b>
+              <Dot color={besieger?.color} />
+              {kingdomName(online, siege.kingdom)}
+            </b>
+            <Stat label="Asker" value={`${fmt(left)} / ${fmt(soldiers)}`} />
+            {units && <UnitRow units={units} />}
+          </div>
+          <div className="battle-side">
+            <small>Savunan</small>
+            <b>
+              {holder ? <Dot color={holder.color} /> : null}
+              {holder ? `${holder.name} · ${town.name}` : `${town.name} garnizonu`}
+            </b>
+            <Stat label="Asker" value={town.owner === null ? `${fmt(defenders)} / ${fmt(garrison)}` : 'Kasaba halkı'} />
+            <Stat label="Sur" value={walled ? 'Kazık çit' : 'Yok'} />
+          </div>
+        </div>
+        <p className="hint">
+          Kuşatma {Math.round(balance.towns.siegeRoundSeconds / 60)} dakikalık turlarla sürer. Her tur savunanlar kuşatanlardan birkaç asker düşürür
+          {town.owner === null ? ', garnizon da kendi askerlerinden kaybeder' : ' (sahipli kasabanın halkı da direnir)'}; kazık çit kayıpları artırır. Kuşatma bittiğinde ayakta asker kalırsa kasaba kuşatanın olur.
+        </p>
+        {done > 0 && (
+          <ol className="battle-log">
+            {rounds.slice(0, done).map((r, i) => (
+              <li key={i}>
+                <b>{i + 1}.</b> kuşatan −{r.lost - (i > 0 ? rounds[i - 1].lost : 0)}
+                {town.owner === null ? ` · garnizon −${r.killed - (i > 0 ? rounds[i - 1].killed : 0)}` : ''}
+                <small>
+                  {fmt(r.attackers)} / {town.owner === null ? fmt(r.defenders) : '—'} asker
+                </small>
+              </li>
+            ))}
+          </ol>
         )}
       </section>
     </div>

@@ -990,19 +990,24 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   en fazla +100). Krallık ayrıntısı bu sınırı yazar.
 - **Devriyeler** (`cities.json` → `crown.patrol`; mantık
   `packages/shared/src/patrols.ts`, sunucu `supabase/functions/_shared/patrols.ts`,
-  `patrol_visits` tablosu): her taç krallığı başkentinden **2 atlı devriye**
-  çıkarır. Her 15 dakikalık turda her devriye, tohumdan seçilen bir **biat
-  etmiş lordun** sarayına gider (turun %40'ı), orada biraz kalır (%15) ve
-  geri döner. Bir tacın iki devriyesi aynı turda aynı lordu seçmez.
+  `patrol_visits` tablosu): her taç krallığı başkentinden **tek, büyük bir
+  devriye** çıkarır (`perCrown` = 1). Her 15 dakikalık turda devriye,
+  tohumdan seçilen bir **biat etmiş lordun** sarayına gider (turun %40'ı),
+  orada biraz kalır (%15) ve geri döner.
   Devriye **ticaret yollarından** gider: başkentin surundaki bir yol ucundan
   (böylece iç ve dış surun kapılarından) çıkar, yol ağında lorda en yakın
   noktaya kadar yolu izler, son parçayı araziden yürür. Yol iki katından
   uzun düşerse doğrudan gider (`apps/web/src/game/patrolRoutes.ts`).
+  Devriye surların ve binaların içinden geçmez: başkentlerin (dış şehir
+  dahil) sur, kule ve evlerini, lordların binalarını ve ayakta duran
+  surlarını dolanır; başkentin de lordların da **kapılarından geçer**
+  (`patrolBlocker`).
   Devriyeler haritada tacın renginde (kızıl / lacivert), sıradan ordulardan
   iri, **arka arkaya 5 bölüklük bir kol** olarak herkese görünür: bölükler
   aynı yolu biraz arayla izler, her biri kendi yönünü alır; yolun başında
   ve sonunda öndekinin çevresinde toplanırlar. Konumları saatten
-  hesaplanır.
+  hesaplanır. Ordu sancakları gölge düşürmez (yüksekten düşen uzun gölge
+  bölüğü havadaymış gibi gösteriyordu; `sprites.ts` → `NO_SHADOW`).
   - **Kendi tacının devriyesi** lordun **eğlence merkezine** uğrar, içer,
     eğlenir ve **120 altın bahşiş** bırakır. Eğlence merkezi yoksa sarayın
     önüne gelip geçer, bahşiş bırakmaz.
@@ -1138,7 +1143,14 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
 - **Kuşatma:** Kasabaya tıklayınca panel açılır; "Gönder" ile bir ordu
   seçilir (ordu "Hareket" ile kasabanın üstüne gönderilerek de aynısı olur).
   Ordu kasabanın kapısına varınca kuşatma başlar ve **15 dakika** sürer;
-  ilerleme çubuğu kasabanın üstünde, kuşatanın renginde görünür. Ordu orada
+  ilerleme çubuğu kasabanın üstünde, kuşatanın renginde görünür.
+  Kuşatma **5 dakikalık turlarla** işler (`siegeRoundSeconds`): her turda
+  kuşatan **en az 1 asker** kaybeder (sahipli kasabada da; halk direnir),
+  sahipsiz kasabada garnizon da kendi askerlerinden kaybeder. Turlar kasaba
+  ve kuşatmanın başlangıcından belirlenir (`townSiegeRounds`); sunucu her
+  dakika o ana kadarki kaybı orduya işler (`siege.lost`). Kuşatma, savaş
+  gibi **izlenebilir**: Ordu sekmesindeki "Süren savaş" satırında ve kasaba
+  panelinde "İzle" düğmesi açar (iki taraf, turlar, kayıplar, canlandırma). Ordu orada
   kalmalıdır: başka yere gönderilirse, yenilirse ya da savaş biterse kuşatma
   kalkar. Aynı anda bir kasabayı tek ordu kuşatabilir.
 - **Tahta surlu kasabalar:** Kasabaların ~%40'ı (tohumdan) kazık çitle
@@ -1146,8 +1158,9 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
   uzun sürer, garnizon %35 daha çok kayıp verdirir (`towns.json` →
   `palisade`, `townWalled`).
 - **Sahipsiz kasaba** kendi garnizonuyla (6–12 asker) savunur: kuşatma
-  bitince ordu garnizonun %60'ı kadar asker kaybeder; ayakta asker kalırsa
-  kasaba onundur, kalmazsa kasaba dayanır (garnizonu azalır).
+  boyunca ordu garnizonun %60'ı kadar asker kaybeder (turlara yayılmış);
+  bitince ayakta asker kalırsa kasaba onundur, kuşatanlar daha önce
+  tükenirse kasaba dayanır (garnizonu azalır).
 - **Sahipli kasaba** yalnız sahibiyle **savaşta** olan biri tarafından
   kuşatılabilir; garnizonu yoktur, kuşatma bitince el değiştirir. Sahibi
   ordusunu gönderip kuşatanla meydan muharebesine girerek kuşatmayı kırabilir.
@@ -1578,6 +1591,21 @@ krallıkta birer tane olur ve 3 seviyelidir.
   isteği, yerine getirilemeyen emirler, ambar boşalıyor uyarıları. Önemli
   kayıtlar diğerlerinden daha uzun saklanır ve kırmızı kenarlıdır. Sekmedeki
   rozet okunmamış önemli kayıt sayısıdır; sekme açılınca sıfırlanır.
+- **Sen yokken:** Oyuncu en az 20 dakika sonra döndüğünde (sunucunun
+  kaydettiği son görülme anından) önce sayfa sayfa bir rapor açılır; her
+  sayfada oyunun kendi sprite'larından kurulmuş küçük bir piksel çizim
+  vardır (`apps/web/src/ui/AwayReport.tsx`):
+  **Mali rapor** (yokluk süresi, hazine ve depoların öncesi/sonrası,
+  tüccarın sattıkları, yaklaşık vergi ve asker maaşı, nüfus ve mutluluk,
+  yokluk cezası), **Askeri rapor** (muharebeler, kuşatmalar, kasabalar,
+  kuleler, sınırdaki ordular, asker sayısı), **Haraçlar** (devriyelerin
+  aldığı ya da bıraktığı, lordlar arası ödenen/alınan haraç), **Elçiler ve
+  casuslar** ve **Dünyada olanlar** (kim kime savaş açtı, hangi savaş
+  bitti, kim kiminle çarpıştı ve kim kazandı, kim hangi kasabayı fethetti).
+  Öncesi/sonrası için krallığın bir kopyası tarayıcıda tutulur (dakikada
+  bir ve sayfadan ayrılırken); başka cihazda yalnız sunucudan bilinenler
+  yazılır. Rapor açıkken elçi pencereleri beklemez; kapatınca rapordaki
+  haberler okunmuş sayılır (günlükte yine durur).
 - **Sohbet bildirimleri:** Sohbet kapalıyken gelen yeni mesaj, sayaçların
   yerinde (sohbet düğmesinin üstünde) birkaç saniye görünen bir önizlemeyle
   ve kısa bir sesle bildirilir; tıklanınca sohbet açılır. Sohbet başlığındaki

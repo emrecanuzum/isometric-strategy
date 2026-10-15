@@ -1,6 +1,7 @@
 import { balance, findRoute, routeLength } from '@game/shared'
-import type { Point, World } from '@game/shared'
+import type { Blocked, Point, World } from '@game/shared'
 import { roundRoute } from './chunkPainter'
+import { cityStructures } from './cities'
 
 // The crowns' patrols ride the trade routes (CLAUDE.md §7.8): out of the capital by a road's gate (so through the
 // gates of both walls), along the roads to the point nearest the lord, and across country only for the last stretch.
@@ -13,6 +14,8 @@ interface Graph {
 }
 
 const BUCKET = 16
+// How far the capitals' outer wall stands outside their own tiles (see cities.ts).
+const OUTER = 10
 // Points of different roads closer than this are joined (where roads meet at an inn or a city).
 const JOIN = 1.5
 
@@ -30,11 +33,19 @@ function graphOf(world: World): Graph {
     edges[a].push({ to: b, length })
     edges[b].push({ to: a, length })
   }
+  // Inside a capital's outer wall the roads run close by its towers and houses: patrols find their own way there.
+  const S = balance.cities.size
+  const walledIn = (p: Point) => world.cities.some((c) => p.x > c.x - OUTER - 1 && p.y > c.y - OUTER - 1 && p.x < c.x + S + OUTER + 1 && p.y < c.y + S + OUTER + 1)
   for (const road of world.roads) {
     const line = roundRoute(road.points)
     const first = points.length
     let last = -1
     for (const p of line) {
+      // A road through a capital is cut there, so nothing joins its two sides across the walls.
+      if (walledIn(p)) {
+        last = -1
+        continue
+      }
       const i = points.length
       points.push(p)
       edges.push([])
@@ -84,18 +95,48 @@ function nearest(graph: Graph, p: Point, reach = 6): number {
   return best
 }
 
+// What a patrol rides round: the crown capitals' walls and buildings (the outer town is drawn only, so the ground knows
+// nothing of it) and the lords' buildings and standing walls; it goes through any gate, the crowns' and the lords'.
+type Holding = { buildings: { kind: string; x: number; y: number; size: number; broken?: boolean }[] }
+const cityBlocks = new WeakMap<World, Set<number>>()
+export function patrolBlocker(world: World, lords: Holding[]): Blocked {
+  let city = cityBlocks.get(world)
+  if (!city) {
+    city = new Set()
+    for (const st of cityStructures(world)) {
+      if (st.look === 'gate' || st.look === 'gateY' || st.pier) continue
+      for (let y = st.y; y < st.y + st.size; y++) for (let x = st.x; x < st.x + st.size; x++) city.add(y * 65536 + x)
+    }
+    cityBlocks.set(world, city)
+  }
+  const taken = new Set(city)
+  for (const lord of lords) {
+    for (const b of lord.buildings) {
+      if (b.kind === 'farm' || b.kind === 'gate' || (b.kind === 'wall' && b.broken)) continue
+      for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) taken.add(y * 65536 + x)
+    }
+  }
+  return (x, y) => taken.has(y * 65536 + x)
+}
+
 // A patrol's ride from crown capital `city` (its corner tile) to `door`: by the roads where they lead the way, or
 // straight across country from the capital's front gate when there are none.
-export function patrolRoute(world: World, city: Point, gate: Point, door: Point): Point[] | null {
+export function patrolRoute(world: World, city: Point, gate: Point, door: Point, blocked?: Blocked): Point[] | null {
   const graph = graphOf(world)
   const S = balance.cities.size
-  // The roads' ends at the capital's walls.
+  // The roads just outside the capital's outer wall: inside it the patrol finds its own way, round the houses and out
+  // through a gate, since the roads there run close by the towers.
+  const lo = -OUTER - 4
+  const hi = S + OUTER + 4
   const sources: number[] = []
   graph.points.forEach((p, i) => {
-    if (p.x > city.x - 2 && p.y > city.y - 2 && p.x < city.x + S + 2 && p.y < city.y + S + 2) sources.push(i)
+    const x = p.x - city.x
+    const y = p.y - city.y
+    const outside = x < -OUTER - 1 || y < -OUTER - 1 || x > S + OUTER + 1 || y > S + OUTER + 1
+    if (outside && x > lo && y > lo && x < hi && y < hi) sources.push(i)
   })
   const end = nearest(graph, door)
-  if (sources.length === 0 || end < 0) return findRoute(world, gate, door)
+  if (sources.length === 0 || end < 0) return findRoute(world, gate, door, blocked)
   // Shortest way along the roads (Dijkstra; the graph is small).
   const dist = new Float64Array(graph.points.length).fill(Infinity)
   const came = new Int32Array(graph.points.length).fill(-1)
@@ -121,15 +162,16 @@ export function patrolRoute(world: World, city: Point, gate: Point, door: Point)
       open.push(to)
     }
   }
-  if (!Number.isFinite(dist[end])) return findRoute(world, gate, door)
+  if (!Number.isFinite(dist[end])) return findRoute(world, gate, door, blocked)
   const road: Point[] = []
   for (let i = end; i >= 0; i = came[i]) road.push(graph.points[i])
   road.reverse()
-  const last = findRoute(world, road[road.length - 1], door)
-  if (!last) return findRoute(world, gate, door)
-  const route = [...road, ...last.slice(1)]
+  const out = findRoute(world, gate, road[0], blocked)
+  const last = findRoute(world, road[road.length - 1], door, blocked)
+  if (!out || !last) return findRoute(world, gate, door, blocked)
+  const route = [...out, ...road.slice(1), ...last.slice(1)]
   // The roads only when they do not lead far out of the way.
-  const direct = findRoute(world, gate, door)
+  const direct = findRoute(world, gate, door, blocked)
   if (direct && routeLength(route) > routeLength(direct) * 2) return direct
   return route
 }

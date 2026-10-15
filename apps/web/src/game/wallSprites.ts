@@ -398,7 +398,7 @@ function pennant(sprite: Sprite, z: number) {
       if (px >= sprite.width || py < 0) continue
       sprite.pixels[py * sprite.width + px] = CLOTH[y < 0 ? 4 : y < 1 ? 3 : 2]
       // Hung from the pole: as high over the ground as the pole's top, less how far down it hangs.
-      if (sprite.lift) sprite.lift[py * sprite.width + px] = Math.max(0, z - (py - y0))
+      if (sprite.lift) sprite.lift[py * sprite.width + px] = Math.min(254, Math.max(0, z - (py - y0)))
     }
   }
 }

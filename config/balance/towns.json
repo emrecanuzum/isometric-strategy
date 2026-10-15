@@ -9,6 +9,7 @@
   "roadGap": 2,
   "garrison": [6, 12],
   "siegeSeconds": 900,
+  "siegeRoundSeconds": 300,
   "lossPerDefender": 0.6,
   "palisade": {
     "share": 0.4,

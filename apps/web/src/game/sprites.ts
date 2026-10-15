@@ -1,5 +1,8 @@
 import { hash, mulberry32, valueNoise } from '@game/shared'
 
+// A `lift` value for pixels that throw no shadow.
+export const NO_SHADOW = 255
+
 // Pixel art is generated in code for now: every sprite is a small buffer of palette colors, drawn pixel by pixel.
 // Colors are packed the way an RGBA byte buffer reads them as 32-bit words (alpha in the top byte).
 
@@ -266,7 +269,7 @@ export function solidLiftOf(sprite: Sprite): Uint8Array | null {
           }
         }
       }
-      if (best > 0) lift[i] = Math.min(255, Math.round(best))
+      if (best > 0) lift[i] = Math.min(NO_SHADOW - 1, Math.round(best))
     }
   }
   solidLifts.set(sprite, lift)
@@ -461,6 +464,8 @@ export function castShadow(sprite: Sprite, sun: { x: number; y: number }, buildi
     for (let y = 0; y < height; y++) {
       const i = y * width + from
       if (pixels[i] >>> 24 !== 0xff) continue
+      // Marked as throwing no shadow at all (a banner's cloth and pole).
+      if (lift && lift[i] === NO_SHADOW) continue
       const rise = lift ? lift[i] : anchorY - y
       if (rise <= 0) {
         if (lift) add(x, y)

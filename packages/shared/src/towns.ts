@@ -32,6 +32,10 @@ export interface TownSiege {
   // Milliseconds.
   startedAt: number
   endsAt: number
+  // The besiegers when it began, and the soldiers they have lost to the garrison so far (sieges laid before these were
+  // kept lack them).
+  soldiers?: number
+  lost?: number
 }
 
 // What a kingdom holds, kept on its state for the round's sums: each town's id and what it sends.
@@ -144,3 +148,44 @@ export const townLosses = (garrison: number, walled = false) =>
 
 // How long a siege of the town lasts (ms).
 export const townSiegeMs = (walled: boolean) => balance.towns.siegeSeconds * 1000 * (walled ? balance.towns.palisade.siegeFactor : 1)
+
+// A siege of a town is fought in rounds (CLAUDE.md §8.4): every round the defenders bring down a few besiegers (at
+// least one, even at a held town, whose townsfolk fight back) and a free town's garrison loses a few of its own, so the
+// losses come over the whole siege, not all at its end. Drawn from the town and the
+// siege's start, so the server and every screen work out the same rounds. Each round gives what has been lost so far.
+export interface TownRound {
+  // Besiegers and defenders left after the round, and how many each side has lost so far.
+  attackers: number
+  defenders: number
+  lost: number
+  killed: number
+}
+
+export const townRoundMs = () => balance.towns.siegeRoundSeconds * 1000
+
+export function townSiegeRounds(town: Pick<Town, 'id' | 'owner' | 'garrison'>, siege: Pick<TownSiege, 'startedAt' | 'endsAt'>, soldiers: number, walled: boolean): TownRound[] {
+  const count = Math.max(1, Math.ceil((siege.endsAt - siege.startedAt) / townRoundMs()))
+  const garrison = town.owner === null ? town.garrison : 0
+  const losses = Math.min(soldiers, town.owner === null ? townLosses(garrison, walled) : 0)
+  const salt = siege.startedAt % 1_000_003
+  const weights = (n: number) => Array.from({ length: count }, (_, r) => 0.4 + hash(town.id * 31 + n, r, salt))
+  const share = (w: number[]) => {
+    const total = w.reduce((a, b) => a + b, 0)
+    let sum = 0
+    return w.map((v) => (sum += v) / total)
+  }
+  const hurt = share(weights(1))
+  const hit = share(weights(2))
+  const rounds: TownRound[] = []
+  let lost = 0
+  for (let r = 0; r < count; r++) {
+    lost = Math.min(soldiers, Math.max(lost + 1, Math.round(losses * hurt[r])))
+    const killed = Math.round(garrison * hit[r])
+    rounds.push({ attackers: soldiers - lost, defenders: garrison - killed, lost, killed })
+  }
+  return rounds
+}
+
+// Rounds of the siege fought by `at` (0 before the first is over, all of them once it has ended).
+export const townRoundsDone = (siege: Pick<TownSiege, 'startedAt' | 'endsAt'>, at: number, count: number) =>
+  at >= siege.endsAt ? count : Math.max(0, Math.min(count, Math.floor((at - siege.startedAt) / townRoundMs())))

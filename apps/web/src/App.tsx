@@ -58,7 +58,7 @@ import { cityInfo } from './game/cities'
 import { townStructures, townTrails } from './game/towns'
 import { Minimap } from './game/Minimap'
 import type { MinimapFlag, MinimapPatrol, MinimapTown } from './game/Minimap'
-import { patrolRoute } from './game/patrolRoutes'
+import { patrolBlocker, patrolRoute } from './game/patrolRoutes'
 import type { Structure } from './game/chunkPainter'
 import type { StructureLook } from './game/buildingSprites'
 import { createWorld, footprintOrigin } from './game/createWorld'
@@ -76,8 +76,9 @@ import type { Cue } from './audio/sfx'
 import { DetailSettings, SoundSettings } from './ui/home/SettingsPanel'
 import { WarTargets } from './ui/hud/WarTargets'
 import { EnvoyDialog, describe as describeNotice } from './ui/Envoy'
+import { AwayReport, awaySince, useAwaySnapshot } from './ui/AwayReport'
 import type { KingdomInfo, Online } from './ui/hud/online'
-import { BattleView, warNotes } from './ui/hud/war'
+import { BattleView, TownSiegeView, warNotes } from './ui/hud/war'
 import type { Settings } from './net/settings'
 import { Chat } from './ui/Chat'
 import { findPath, tilesAlong } from './game/town'
@@ -513,6 +514,10 @@ function App({
   const mineRef = useRef(mine)
   const [kingdom, setKingdomState] = useState<Kingdom | null>(() => initial.state && advance(initial.state, serverNow(), lobby.market).kingdom)
   const kingdomRef = useRef(kingdom)
+  // Back after a while: what happened meanwhile, told before anything else (CLAUDE.md §11). The server's record of
+  // when the ruler was last here, read before this visit's first command updates it.
+  const [away, setAway] = useState(() => awaySince(lobby.id, initial.id, initial.state?.lastSeenAt, serverNow()))
+  useAwaySnapshot(lobby.id, initial.id, kingdom, serverNow)
   const setKingdom = useCallback((next: Kingdom | null) => {
     kingdomRef.current = next
     setKingdomState(next)
@@ -610,6 +615,8 @@ function App({
   const [aiming, setAiming] = useState<number | null>(null)
   const [following, setFollowing] = useState<number | null>(null)
   const [watching, setWatching] = useState<number | null>(null)
+  // A town whose siege is being watched.
+  const [watchingTown, setWatchingTown] = useState<number | null>(null)
   const [intel, setIntel] = useState<Record<number, IntelReport | null | undefined>>({})
   useEffect(() => {
     let live = true
@@ -1291,6 +1298,7 @@ function App({
       setSelected(null)
     },
     watch: setWatching,
+    watchTown: setWatchingTown,
     following,
     follow: setFollowing,
     crowns: view ? view.world.cities.map((_, i) => cityInfo(view.world, i).name) : [],
@@ -1347,7 +1355,8 @@ function App({
         const key = `${crown}:${p}:${slot}`
         if (!patrolRoutes.current.has(key)) {
           const door = { x: stop.x + stop.size + 0.8, y: stop.y + stop.size + 0.8 }
-          patrolRoutes.current.set(key, patrolRoute(view.world, city, capitalGate(city), door))
+          const blocked = patrolBlocker(view.world, [...towns.values()].map((buildings) => ({ buildings })))
+          patrolRoutes.current.set(key, patrolRoute(view.world, city, capitalGate(city), door, blocked) ?? patrolRoute(view.world, city, capitalGate(city), door))
         }
         const route = patrolRoutes.current.get(key)
         if (!route || route.length === 0) continue
@@ -1408,6 +1417,7 @@ function App({
     dropNotices([notice.id])
   }
   const watchedBattle = layer.battles.find((b) => b.id === watching) ?? null
+  const watchedTown = layer.towns.find((t) => t.id === watchingTown) ?? null
 
   // What the tabs and building menus read, and the commands they give.
   const hudData: HudData | null =
@@ -1601,6 +1611,7 @@ function App({
               now={now}
               onSend={(army, tile) => sendArmy(army, tile)}
               onShow={(tile) => view.centerOn(tile)}
+              onWatch={() => setWatchingTown(town.id)}
               onClose={closeTab}
             />
           )
@@ -1818,9 +1829,37 @@ function App({
           onShow={(tile) => view?.centerOn(tile)}
         />
       )}
-      {notice && kingdom && <EnvoyDialog notice={notice} online={online} onClose={closeNotice} />}
+      {away && kingdom && (
+        <AwayReport
+          lobby={lobby.id}
+          me={mine.id}
+          since={away.since}
+          before={away.before}
+          kingdom={kingdom}
+          online={online}
+          now={now}
+          onClose={(ids) => {
+            setAway(null)
+            if (ids.length > 0) {
+              markSeen(ids)
+              dropNotices(ids)
+            }
+          }}
+        />
+      )}
+      {notice && kingdom && !away && <EnvoyDialog notice={notice} online={online} onClose={closeNotice} />}
       {!notice && kingdom && fortunes[0] && <FortuneDialog event={fortunes[0]} now={now} onClose={() => setFortunes((list) => list.slice(1))} />}
       {watchedBattle && <BattleView battle={watchedBattle} online={online} now={now} onClose={() => setWatching(null)} />}
+      {watchedTown && view && (
+        <TownSiegeView
+          town={watchedTown}
+          army={layer.armies.find((a) => a.id === watchedTown.siege?.army) ?? null}
+          walled={townWalled(view.world.seed, watchedTown.idx)}
+          online={online}
+          now={now}
+          onClose={() => setWatchingTown(null)}
+        />
+      )}
     </>
   )
 }

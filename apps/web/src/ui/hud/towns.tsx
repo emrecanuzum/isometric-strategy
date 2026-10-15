@@ -12,7 +12,7 @@ const clock = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-export function TownSheet({ town, walled, kingdom, me, names, armies, pacts, now, onSend, onShow, onClose }: {
+export function TownSheet({ town, walled, kingdom, me, names, armies, pacts, now, onSend, onShow, onWatch, onClose }: {
   town: Town
   // Behind a wooden palisade (see townWalled).
   walled: boolean
@@ -25,6 +25,7 @@ export function TownSheet({ town, walled, kingdom, me, names, armies, pacts, now
   now: number
   onSend(army: number, tile: Point): void
   onShow(tile: Point): void
+  onWatch(): void
   onClose(): void
 }) {
   const middle = townCenter(town)
@@ -73,6 +74,9 @@ export function TownSheet({ town, walled, kingdom, me, names, armies, pacts, now
           <Section title="Kuşatma" icon="swords" aside={`${clock(siege.endsAt - now)} kaldı`}>
             <p className="hint">{siege.kingdom === me ? 'Ordun kasabayı kuşatıyor.' : `${names.get(siege.kingdom) ?? '?'} ordusu kasabayı kuşatıyor.`}</p>
             <Meter value={(now - siege.startedAt) / (siege.endsAt - siege.startedAt)} tone={siege.kingdom === me ? 'up' : 'down'} label="Kuşatma ilerlemesi" segments={12} />
+            <button className="btn small" onClick={onWatch}>
+              İzle
+            </button>
           </Section>
         )}
         {!mine && (
