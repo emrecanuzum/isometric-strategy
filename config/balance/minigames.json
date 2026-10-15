@@ -1,5 +1,6 @@
 {
   "cooldownSeconds": 600,
+  "hall": "tavern",
   "runTimeoutSeconds": 90,
   "slackMs": 3000,
   "maxToggles": 3000,

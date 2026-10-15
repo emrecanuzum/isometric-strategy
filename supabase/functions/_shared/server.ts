@@ -224,3 +224,31 @@ export async function notify(lobby: string, kingdoms: number[], kind: string, pa
 }
 
 export const nameOf = (rows: Row[], id: number) => rows.find((r) => r.id === id)?.name ?? '?'
+
+// ---- The world's people -------------------------------------------------------------------------------------------
+
+// Food's usual price follows the lobby's people (CLAUDE.md §9.7): written only when it moves a step.
+export async function settleFoodDemand(lobby: string, rows: Row[], now: number) {
+  let people = 0
+  for (const r of rows) {
+    if (!r.state) continue
+    const p = game.population(r.state, now)
+    people += p.villagers + p.soldiers + p.sailors
+  }
+  const demand = game.foodDemandFor(people) as number
+  const market = await lobbyMarket(lobby)
+  if (Math.abs((market?.foodDemand ?? 1) - demand) < 1e-6) return
+  await admin.from('lobbies').update({ market: game.withFoodDemand(market, demand, now) }).eq('id', lobby)
+}
+
+// Marks which lords are at war (their people grow slower, CLAUDE.md §5.2): written only where it changed. `only`
+// limits it to some kingdoms.
+export async function syncWarFlags(lobby: string, now: number, only?: number[]) {
+  const [rows, pacts] = await Promise.all([loadKingdoms(lobby), pactsOf(lobby)])
+  for (const r of rows) {
+    if (!r.state || (only && !only.includes(r.id))) continue
+    const atWar = pacts.some((p) => p.kind === 'war' && (p.from_id === r.id || p.to_id === r.id))
+    if (!!r.state.atWar === atWar) continue
+    await mutateKingdom(r.id, now, (k) => (!!k.atWar === atWar ? null : { ...k, atWar }))
+  }
+}

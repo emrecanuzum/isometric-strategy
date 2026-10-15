@@ -1,5 +1,5 @@
 import { balance } from './balance'
-import type { Kingdom, Stock } from './economy'
+import type { BuildingKind, Kingdom, Stock } from './economy'
 import { FISH_LIMIT } from './fishing'
 
 // The mini-games (CLAUDE.md §6.5): the archery butts at the barracks, the anvil at the forge and the caravan road at the
@@ -339,13 +339,17 @@ export const isArcadeGame = (v: unknown): v is ArcadeGame => (ARCADE_GAMES as re
 
 export const gameBuilding = (game: ArcadeGame) => M[game].building as 'barracks' | 'forge' | 'tradePost'
 
+// The entertainment hall (CLAUDE.md §7.8) has every game: each one is played there too, as well as at its own building.
+export const GAME_HALL = M.hall as 'tavern'
+export const gameBuildings = (game: MiniGame): BuildingKind[] => [game === 'fishing' ? 'fisherHut' : gameBuilding(game), GAME_HALL]
+
 export const gameReadyAt = (k: Kingdom, game: ArcadeGame) => (k.minigames?.[game]?.lastAt ?? -Infinity) + M.cooldownSeconds * 1000
 
 export type GameError = 'building' | 'busy'
 
 export function gameError(k: Kingdom, game: ArcadeGame, at: number): GameError | null {
-  const kind = gameBuilding(game)
-  if (!k.buildings.some((b) => b.kind === kind && b.doneAt <= at)) return 'building'
+  const kinds = gameBuildings(game)
+  if (!k.buildings.some((b) => kinds.includes(b.kind) && b.doneAt <= at)) return 'building'
   if (gameReadyAt(k, game) > at) return 'busy'
   return null
 }

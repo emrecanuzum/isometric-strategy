@@ -15,5 +15,11 @@
     "upToFactor": 1.2,
     "stepSeconds": 60,
     "catchUpHours": 12
+  },
+  "foodDemand": {
+    "fromPeople": 200,
+    "toPeople": 1600,
+    "maxRise": 0.3,
+    "step": 0.01
   }
 }

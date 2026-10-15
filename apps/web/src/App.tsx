@@ -196,6 +196,7 @@ const NOTICE_CUES: Record<string, Cue> = {
   battle_end: 'battle',
   war_declared: 'war',
   tower_losses: 'bad',
+  siege_people: 'bad',
   operation_struck: 'bad',
   spy_caught: 'bad',
   spy_lost: 'bad',
@@ -225,7 +226,7 @@ const NOTICE_CUES: Record<string, Cue> = {
 }
 
 // News that goes against the player: kept under the journal's "Önemli" tab.
-const HURTFUL = new Set(['fleet_turned', 'town_revolt', 'town_lost_revolt', 'patrol_tribute', 'patrol_ignored', 'patrol_taken', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
+const HURTFUL = new Set(['siege_people', 'fleet_turned', 'town_revolt', 'town_lost_revolt', 'patrol_tribute', 'patrol_ignored', 'patrol_taken', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
 function noticeHurts(n: Notice, me: string | undefined) {
   if (HURTFUL.has(n.kind)) return true
   const p = n.payload as { kind?: string; accepted?: boolean; report?: { losses?: Record<string, number> } }
@@ -1821,6 +1822,12 @@ function App({
           now={now}
           war={warNotes(online, now)}
           onQueen={() => online.act({ type: 'queen' })}
+          onTown={(id) => {
+            const town = layer.towns.find((t) => t.id === id)
+            closeTab()
+            setTownOpen(id)
+            if (town && view) view.centerOn(townCenter(town))
+          }}
           onOpen={(tab) => {
             setSelected(null)
             setPanel(tab)

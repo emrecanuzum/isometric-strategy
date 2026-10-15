@@ -1,4 +1,4 @@
-import { balance } from '@game/shared'
+import { balance, overreachOf } from '@game/shared'
 import type { Envoy as EnvoyRow, Operation, PeaceTerms, SpyTopic } from '@game/shared'
 import type { Notice } from '../net/online'
 import { Icon } from './icons'
@@ -24,6 +24,15 @@ const INSULTS = [
   'Efendim der ki: surlarınızı çocuklar bile kumdan daha sağlam yapar.',
 ]
 
+
+// Over-expansion (CLAUDE.md §8.4) as a town is besieged or taken: what holding `more` towns beyond those held now costs.
+function overreachNote(online: Online, more: number) {
+  const held = online.towns.filter((t) => t.owner === online.me).length + more
+  const o = overreachOf(held)
+  if (o.tier < 0) return ''
+  const last = o.tier >= balance.towns.overreach.tiers.length - 1
+  return ` ${more > 0 ? 'Alırsan' : 'Artık'} elinde ${held} kasaba ${more > 0 ? 'olur' : 'var'}: aşırı büyüme her kasabanın sadakatini ${o.loyalty}${o.loyaltyCap < 100 ? ` düşürür ve %${o.loyaltyCap}'in üstüne çıkmasına izin vermez` : ' düşürür'}, halkının mutluluğu ${o.happiness}, bakım ×${String(o.upkeepFactor).replace('.', ',')}.${last ? ' Bu kadar kasabada ayaklanmalar kesindir.' : ''}`
+}
 
 export function describe(n: Notice, online: Online): { icon: IconName; title: string; text: string } {
   const p = n.payload as Record<string, never>
@@ -174,6 +183,10 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       const loot = report.loot ? ` Yağma: ${Object.entries(report.loot).map(([r, v]) => `${fmt(v)} ${RESOURCE_NAMES[r as keyof typeof RESOURCE_NAMES].toLowerCase()}`).join(', ')}.` : ''
       return { icon: 'swords', title: `${p.kind === 'siege' ? 'Kuşatma' : 'Savaş'} bitti: ${p.winner === 'attackers' ? 'saldıranlar' : 'savunanlar'} kazandı`, text: `Kayıplar: ${losses}.${loot}` }
     }
+    case 'siege_people':
+      return p.taken
+        ? { icon: 'unhappy', title: 'Halk sarayı terk ediyor', text: `${p.by} sarayını düşürdü; korkuya kapılan ${fmt(Number(p.lost))} köylü lordluğunu terk etti. Evler boş kaldı, halk ancak zamanla geri gelir.` }
+        : { icon: 'unhappy', title: 'Kuşatma halkı kaçırıyor', text: `${p.by} ordusu sarayını kuşattı; ${fmt(Number(p.lost))} köylü canını kurtarmak için kaçtı. Kuşatma sürdükçe kaçanlar artacak, halk büyümeyecek.` }
     case 'tower_losses':
       return { icon: 'warn', title: 'Gözcü kuleleri ateş açtı', text: `Düşman kuleleri ordundan ${p.killed} askeri vurdu.` }
     case 'order_failed':
@@ -183,7 +196,7 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       const mine = p.by === me
       const minutes = Math.round(balance.towns.siegeSeconds / 60)
       return mine
-        ? { icon: 'swords', title: `${p.name} kuşatılıyor`, text: `Ordun ${p.name} kasabasını kuşattı. Ordu orada kaldıkça kuşatma ${minutes} dakikada biter; ilerlemesi kasabanın üstünde görünür.` }
+        ? { icon: 'swords', title: `${p.name} kuşatılıyor`, text: `Ordun ${p.name} kasabasını kuşattı. Ordu orada kaldıkça kuşatma ${minutes} dakikada biter; ilerlemesi kasabanın üstünde görünür.${overreachNote(online, 1)}` }
         : { icon: 'warn', title: `${p.name} kuşatma altında!`, text: `${p.by} ordusu ${p.name} kasabanı kuşattı. ${minutes} dakika içinde ordunla gelip kuşatmayı kıramazsan kasaba onların olur.` }
     }
     case 'town_siege_lifted':
@@ -191,7 +204,7 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
     case 'town_taken': {
       const mine = p.by === me
       return mine
-        ? { icon: 'crown', title: `${p.name} artık senin!`, text: `${p.name} kasabası kapılarını açtı${Number(p.lost) > 0 ? `; ${fmt(Number(p.lost))} asker kaybettin` : ''}. Bundan sonra sana katkı gönderecek.` }
+        ? { icon: 'crown', title: `${p.name} artık senin!`, text: `${p.name} kasabası kapılarını açtı${Number(p.lost) > 0 ? `; ${fmt(Number(p.lost))} asker kaybettin` : ''}. Bundan sonra sana katkı gönderecek.${overreachNote(online, 0)}` }
         : { icon: 'warn', title: `${p.name} elden çıktı`, text: `${p.by} ${p.name} kasabanı aldı. Kasabanın katkısı artık onlara gidiyor.` }
     }
     case 'patrol_tribute': {

@@ -27,7 +27,8 @@ export function describeCatch(e: FisherEntry) {
 
 const secs = (ms: number) => (ms >= 60_000 ? `${Math.floor(ms / 60_000)} dk ${Math.ceil((ms % 60_000) / 1000)} sn` : `${Math.ceil(ms / 1000)} sn`)
 
-export function FisherPanel({ data }: { data: HudData }) {
+// `hall`: shown in the entertainment hall, which keeps a pond and the same strange fisher (CLAUDE.md §6.5).
+export function FisherPanel({ data, hall = false }: { data: HudData; hall?: boolean }) {
   const { kingdom, now, online } = data
   // The seed the server drew for this cast (the game is played from it), while the cast is on.
   const [seed, setSeed] = useState<number | null>(null)
@@ -66,7 +67,7 @@ export function FisherPanel({ data }: { data: HudData }) {
     <>
       <Section title="Balık tut" icon="food">
         <p className="hint">
-          Kulübedeki tuhaf balıkçı oltasını sana veriyor. Basılı tut (fare, dokunma ya da boşluk tuşu) ve yeşil alanı kaçan balığın üstünde tut;
+          {hall ? 'Eğlence merkezinin havuz başındaki tuhaf balıkçı' : 'Kulübedeki tuhaf balıkçı'} oltasını sana veriyor. Basılı tut (fare, dokunma ya da boşluk tuşu) ve yeşil alanı kaçan balığın üstünde tut;
           çubuk dolarsa tutarsın. Bazen bir kese mal, bazen de bir şişe içinde başka bir lord hakkında bir not çıkar.
         </p>
         <div className="minigame-actions">

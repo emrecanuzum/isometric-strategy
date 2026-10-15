@@ -423,6 +423,34 @@ uzaklık olmalı; kimse tamamen dezavantajlı başlamamalı.
   havuzu** (manpower, EU4 benzeri).
 - Gıda açığı veya düşük moral → nüfus azalır, göç olur.
 
+**Şu an uygulanan (nüfus artışı):** Evler, saray ve köylü gönderen
+kasabalar yalnızca **yer** verir; köylüler o yere her üretim turunda
+yavaş yavaş gelir (`Kingdom.people`, `economy.ts` → `growthTerms`,
+değerler `society.json` → `growth`). Tur başına gelen: (0,08 + boş yerin
+%0,6'sı) × büyüme çarpanı; boş yer çoksa daha hızlı gelirler.
+
+- **Mutluluk** çarpanı belirler: %0 → −1, %25 → 0, %50 → 0,7, %75 → 1,
+  %100 → 1,3 (aradakiler doğrusal). Sıfırın altında halk göç eder: tur
+  başına halkın %0,2'si × |çarpan|.
+- **Açlık** (ambarda yemek yok) çarpanı en fazla −0,6, **kuşatma** (saray
+  kuşatılırken) en fazla −1 yapar: halk gider.
+- Büyüme varken **savaş** ×0,5, **hastalık** ×(1 − hasta payı),
+  **kraliçe** ×1,1, **tapınak** seviye başına +%5 çarpar.
+- Ev yıkılır ya da sınır düşerse yeri kalmayan köylüler **hemen** gider.
+  Asker eğitmek ve gemi mürettebatı köylüden düşer; terhis edilen asker
+  köylüye döner. Ölen askerin yeri boşalır, halk zamanla doldurur.
+- Ayar: 100 kişilik bir lordluk %50'den mutlu (%60, kraliçesiz) ve barışta
+  ~50 dakikada, %75 mutlulukta ~43 dakikada dolar; savaşta iki katı sürer,
+  %30 mutlulukta ~5 saat.
+- Eski kayıtlar ilk turda yerleri kadar köylüyle başlar (hiçbir şey
+  sıçramaz); yeni lordluk sarayın hizmetlileriyle başlar.
+- Halk sekmesindeki **Nüfus** bölümü (`apps/web/src/ui/hud/population.tsx`
+  → `PopulationPanel`) köylü / yer, tur ve saat başına büyümeyi, her
+  çarpanı nedeniyle ve dolmaya kalan süreyi gösterir.
+- Sunucu, savaşta olan lordları (`atWar`) savaş ilanında, barışta ve her
+  tick'te işaretler; kuşatılan sarayın `besiegedUntil` değeri kuşatma
+  başlayınca yazılır.
+
 ### 5.3 Zamana dayalı inşaat (AoE tarzı)
 
 - Her yapının **maliyeti** (para + hammadde), **inşaat süresi** ve
@@ -571,8 +599,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   kampı, silah atölyesi kurulur. Yapılar süreyle inşa edilir (iskele
   görünür), aynı anda en fazla 2 inşaat yürür. Yalnızca hudut içinde,
   serbest karoya kurulur; altındaki ağaçlar temizlenir.
-- **Nüfus:** Evler köylü verir, üretim binaları işçi ister; köylü yetmezse
-  binalar orantılı daha az üretir. Köylüler her üretim turunda yemek yer.
+- **Nüfus:** Evler köylüye yer verir, köylüler o yere zamanla gelir (§5.2);
+  üretim binaları işçi ister; köylü yetmezse binalar orantılı daha az
+  üretir. Köylüler her üretim turunda yemek yer.
 - **Biyom çarpanları:** Yerin çevresindeki araziye göre üretim çarpanı:
   nehir/göl (balık) ve çayır (tarım) → yemek; orman → yapı malzemesi;
   dağ → savaş malzemesi; bataklık hepsini biraz düşürür, kurak yemeği
@@ -792,8 +821,30 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     malzemesi), **yay ve ok** (yapı malzemesi). Silahlar **cephanelikte**
     birikir (Depo sekmesinde görünür) ve ileride ordu eğitiminde
     kullanılacaktır. Hammadde yetmezse yetebildiği kadar işlenir.
-  - Ticaret noktası menüsü ticaret ayarlarını, saray menüsü krallık
-    özetini açar.
+  - Ticaret noktası menüsü ticaret ayarlarını (Tüccar sekmesinde), pazar
+    menüsü Pazar sekmesinde, saray menüsü krallık özetini açar.
+  - **Hapishane** menüsünde gece hapishane avlusunun çizimi (gardiyanlar,
+    kraliçe tutuluyorsa dolu hapishane), mahkûm kraliçeler ve fidyeleri,
+    ve **gardiyanların fısıltıları** vardır: her lordun kraliçesi var mı,
+    zaten bizim elimizde mi, orada casusumuz var mı ve son casus raporuna
+    göre en güçlü ağımız kaçırmaya (%70) yetiyor mu ("Ölç" raporu yeniler).
+  - **Casus evi** menüsü Diplomasi → Casusluk bölümünün aynısıdır: evdeki,
+    görevdeki casuslar, kapasite, sıradaki casus, karşı casusluk, görevler
+    (son rapora göre ağ gücü, geri çağırma) ve günlükten casus haberleri.
+  - **Hazine** menüsünde hazinenin doluluğu (altın / sınır çubuğu), sınırın
+    nereden geldiği (saray + her hazine), hazinenin seviyelere göre altın
+    yeri, tur başına gelir-gider ve **sezonun defteri** (`booksOf`: vergi,
+    tüccar, haraç, devriyeler, maaşlar, kasaba bakımı; boşa giden altın).
+- **Alt sekmeler:** Uzun sekmeler Saray'daki gibi alt sekmelere bölünür
+  (`apps/web/src/ui/hud/Subtabs.tsx`; son bakılan bölüm tarayıcıda
+  hatırlanır, kırmızı nokta bekleyen bir şeyi gösterir): **Halk** → Nüfus /
+  Mutluluk (vergi, gece mesaisi) / Sağlık ve din (hastalık, şifahane,
+  tapınak, vaaz) / Kraliçe; **Ticaret** → Tüccar / Pazar / Siparişler /
+  Hâkimler; **Depo** → Mallar / Hazine (gelir-gider, sezonun defteri) /
+  Cephanelik; **Ordu** → Ordular (ve garnizon) / Kışla / Savaşlar /
+  Donanma; **Diplomasi** → Lordlar / Casusluk. Uyarılar (günün olayı,
+  korku, hapishane, ayaklanma, yıkık surlar; süren savaş) alt sekmelerin
+  üstünde durur.
 - Tarlanın 2. seviyede saman yığınları ve korkuluğu, 3. seviyede küçük
   ambarı vardır; bunlar düz tarladan ayrı, binalarla aynı derinlik
   sırasında çizilir (arkadaki bina onları örtmez), üstlerinden yine
@@ -832,7 +883,10 @@ küçüktür, oyuncu gelirine aktif oynayana küçük bir ek olur.
 Değerler `config/balance/minigames.json`, mantık
 `packages/shared/src/minigames.ts`, arayüz
 `apps/web/src/ui/hud/MiniGames.tsx`; sunucuda `play` (tohum) ve `played`
-(basışlar) komutları.
+(basışlar) komutları. **Bütün mini oyunlar (balık tutma dahil) eğlence
+merkezinde de oynanır** (`minigames.json` → `hall`; `gameBuildings`,
+`fishError`): her oyun kendi binasında ya da eğlence merkezinde açılır,
+bekleme süresi ikisinde ortaktır.
 
 - **Okçuluk** (kışla, atış meydanı): nişangâh saman hedefin üstünde
   gezinir. Basılı tutunca yay gerilir, nişan 1,6 saniye sakinleşir (yavaş
@@ -1128,6 +1182,9 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
 - **Eğlence merkezi** (4. seviye saray, krallıkta bir tane; 1200 altın, 700
   yapı malzemesi, 120 sn): bayraklı, fenerli, küçük sahneli iki katlı bir
   salon. Bağlı olunan tacın devriyeleri buraya gelip bahşiş bırakır.
+  Menüsünde bir çizim, devriyelerin bahşişi ve oyun sekmeleri (balık tutma,
+  okçuluk, örs, kervan yolu; oynanabilir olanda kırmızı nokta) vardır; her
+  oyunun sıralama düğmesi de oradadır (§6.5).
 - **Taçla ilişki** (`packages/shared/src/crowns.ts`, `cities.json` →
   `crown.relation`): her lordun iki taçla ayrı ayrı −100…+100 ilişkisi
   vardır (`crownRelations`). Zamanla dinlenme değerine döner: kendi tacıyla
@@ -1331,8 +1388,35 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
     kışkırt"** operasyonuyla (120 altın) seçtiği kasabanın sadakatini bir anda
     **35** düşürür (`espionage.json` → `operations.townRevolt`); diğer
     operasyonlar gibi başarı şansı, ağ harcaması ve yakalanma vardır.
+  - **Aşırı büyüme** (`towns.json` → `overreach.tiers`; `overreachOf`,
+    `townLoyaltyParts`): bir lord aynı anda birden çok kasaba tutarsa elindeki
+    kasaba sayısına göre bütün kasabalarına ve kendi halkına ceza işler:
+
+    | Kasaba | Sadakat hedefi | Lordluğun mutluluğu | Bakım | Katkı |
+    | --- | --- | --- | --- | --- |
+    | 2 (hafif) | −5 | −2 | ×1,25 | ×0,95 |
+    | 3 (ağır) | −25 | −6 | ×1,6 | ×0,8 |
+    | 4+ (isyan) | −40, **en fazla %15** | −12 | ×2 | ×0,6 |
+
+    4 ve üstünde sadakat hedefi ayaklanma çizgisinin (%25) altında bir tavana
+    takıldığı için cömert bakım, mutlu halk ve iyi hükümdarla bile **bütün
+    kasabalar ayaklanır** (%50'den ~38 dakikada); bakımı ödenmeyen kasaba kopar.
+    Bir kasabayı bırakmanın yolu bakımını kesmektir; kopunca ötekiler rahatlar.
+    2 kasaba rahatça, 3 kasaba ancak Orta/Cömert bakımla tutulur (Az'da ~1 saatte
+    ayaklanır). Sunucunun ayaklanma işleyişi değişmez; ayaklanmalar sadakatten
+    çıkar. Haritanın sağındaki uyarı kartlarında "Aşırı büyüme" kartı çıkar (2
+    kasabada sarı, 3+ kırmızı; dokununca en huzursuz kasabanın paneli açılır).
+    Sahipsiz/başkasının kasabasının panelinde ve kendi kuşatmanın başladığı,
+    kasabayı aldığın elçi haberinde, bir kasaba daha almanın aşırı büyümeyi
+    nasıl artıracağı yazar.
   - **Kasaba paneli** (kendi kasaban): sadakat çubuğu, yönü ve hedefi neyin
-    belirlediği, ayaklanma uyarısı; bakım seçimi (tur ve saat başına altın);
+    belirlediği, ayaklanma uyarısı; **huzursuzluğun kaynakları** (bakım tabanı,
+    halkın mutluluğu, hükümdar, aşırı büyüme ve tavanı, gittiği yer ve şu an
+    0–100 ölçeğinde şelale çubuklarıyla, %25 ayaklanma ve %12 kopma çizgileri;
+    son 2 yarı ömürde casus kışkırttıysa ne kadar ve ne zaman (`incitedAt`);
+    ayaklanma riski çubuğu (düşük / orta / yüksek / kesin, kesinse kaç dakika
+    kaldığı) ve önümüzdeki saatte sadakat eğrisi); aşırı büyüme basamakları
+    (1, 2, 3, 4+ kasaba, lordun basamağı işaretli); bakım seçimi (tur ve saat başına altın);
     alındığından beri gönderdiklerinin toplamı (mal mal) ve şu anki tur başına
     katkısı; ve **kattığı güç**: lordun puanına (Zafer kalemi) kasaba başına 40 ×
     sadakat çarpanı (ayaklanmada yarısı); bu puan bağlı olunan taç krallığının
@@ -1564,7 +1648,8 @@ mertebesindedir.
 
 - Sarayın her seviyesi bir **nüfus sınırı** verir: 24 / 48 / 72 / 96 / 120
   (seviye × 24; `society.json` → `popCapPerPalaceLevel`). Köylü + asker bu sınırı aşamaz; evler sınırın üstünde
-  köylü vermez.
+  köylüye yer vermez. Yer bir anda dolmaz: halk mutluluğa, yemeğe, savaşa
+  ve kuşatmaya göre her tur büyür ya da göç eder (§5.2).
 - **2. seviye saray** şunları açar: kışla, casus evi, gözcü kulesi, sur,
   pazar ve kraliçe.
 
@@ -1623,6 +1708,13 @@ mertebesindedir.
   malın kutusunda "en dipte" yazar ve satış onu daha fazla düşürmez.
   Arayüzde taban fiyat **"olağan"** fiyat olarak yazar (fiyat onun altına
   inebildiği için "taban" yanıltıcıdır).
+- **Dünya nüfusu yemeği pahalandırır:** lobideki bütün lordların nüfusu
+  (köylü + asker + denizci) 200'ü geçtikçe yemeğin olağan fiyatı artar,
+  1600'de en fazla +%30 (%1'lik adımlarla; `market.json` → `foodDemand`).
+  Sunucu her tick'te hesaplayıp lobinin pazarına `foodDemand` olarak yazar
+  (o anki fiyat korunur, yalnızca döndüğü olağan fiyat değişir; alan yoksa
+  1). Lobi fiyatları kutusunda "Dünya nüfusu yemeği pahalandırıyor: +%N"
+  yazar.
 - **Taç krallıkları alır:** İki taç krallığı her 20 dakikalık pencerede
   saatten belirlenen birer malı lobi piyasasından alır (iki taç aynı malı da
   isteyebilir). Tam talep dakikada 480 birimdir; mal ucuzken tamamını, olağan
@@ -1777,7 +1869,10 @@ mertebesindedir.
   geçenlere de) ve **surlar** (savunmayı güçlendirir, kuşatmada hasar alır,
   yıkılan sur onarılmalıdır) savunur. Kazanan saldıran depolardan yağma
   alır: her depodan %15, ama toplamda hayatta kalan asker başına en fazla
-  12 birim (askerlerin taşıyabildiği kadar). Düşen saray **15 dakika kuşatma kalkanı** kazanır: bu sürede kapıya
+  12 birim (askerlerin taşıyabildiği kadar). **Kuşatma halkı kaçırır:**
+  kuşatma başlayınca köylülerin %4'ü kaçar, kuşatma sürdükçe halk göç eder
+  (§5.2), saray düşerse %10'u daha kaçar (`society.json` →
+  `growth.siege`); elçi haber getirir (`siege_people`). Düşen saray **15 dakika kuşatma kalkanı** kazanır: bu sürede kapıya
   varan ordu savaşmadan bekler, kalkan bitince kuşatma kendiliğinden
   başlar. Kalan süre Krallıklar sekmesinde, ordu kartında ve sayaçlarda
   görünür.
@@ -1833,8 +1928,8 @@ mertebesindedir.
   kapıdaysa yanındaki en yakın boş kareye kayar.
 - Ordular 1× ve üstü yakınlaştırmada yürürken adım atar (4 kareli yürüyüş,
   komşu askerler farklı adımda); uzaktayken durağan çizilir.
-- **Ordu sekmesi** sırası: Ordularım (çoğu emir burada verilir), Garnizon,
-  Kışla, Savaşlar. Ordu kartları tam genişlikte, grid düzenindedir: birlik
+- **Ordu sekmesi** alt sekmeleri: Ordular (Ordularım, çoğu emir burada
+  verilir, ve Garnizon), Kışla, Savaşlar, Donanma. Ordu kartları tam genişlikte, grid düzenindedir: birlik
   türleri tek satırda, moral ve saha bilgisi yan yana, emir düğmeleri üçlü
   sütunlarda.
 - Haritada ordular krallığın sancağıyla görünür; görünen asker sayısı

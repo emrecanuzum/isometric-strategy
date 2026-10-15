@@ -4119,6 +4119,208 @@ kbd {
   gap: calc(var(--px) * 4);
 }
 
+/* What moves a town's loyalty (CLAUDE.md §8.4): a waterfall on the 0–100 scale, one row per cause, the revolt and
+   break-away lines running through every track. */
+.unrest-chart {
+  display: grid;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 3);
+  background: var(--slot);
+}
+
+.unrest-row {
+  display: grid;
+  grid-template-columns: 13ch 1fr 5ch;
+  align-items: center;
+  gap: 0 calc(var(--px) * 4);
+  font-size: 13px;
+}
+
+.unrest-row > span:first-child {
+  color: var(--muted);
+}
+
+.unrest-row b {
+  text-align: right;
+  font-weight: 600;
+}
+
+.unrest-row small {
+  grid-column: 2 / -1;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.unrest-row.total > span:first-child {
+  color: var(--text);
+}
+
+.unrest-row.spy {
+  padding: calc(var(--px) * 3);
+  background: #2e1310;
+}
+
+.unrest-track {
+  position: relative;
+  height: calc(var(--px) * 5);
+  background: #3a2a20;
+  box-shadow: 0 0 0 var(--px) var(--ink);
+}
+
+.unrest-track .bar,
+.overreach-bar i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--gold);
+  box-shadow: inset 0 var(--px) 0 0 rgb(255 255 255 / 25%);
+}
+
+.unrest-track .bar.up,
+.overreach-bar i.up {
+  background: var(--up);
+}
+
+.unrest-track .bar.down,
+.overreach-bar i.down {
+  background: var(--down);
+}
+
+.unrest-track .line,
+.unrest-legend .line {
+  position: absolute;
+  top: calc(var(--px) * -1);
+  bottom: calc(var(--px) * -1);
+  width: var(--px);
+  background: var(--danger-hi);
+  z-index: 1;
+}
+
+.unrest-track .line.free,
+.unrest-legend .line.free {
+  background: #e05040;
+}
+
+.unrest-legend {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.unrest-legend .line {
+  position: relative;
+  display: inline-block;
+  height: 10px;
+  vertical-align: middle;
+}
+
+.unrest-risk {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+  font-size: 14px;
+}
+
+.unrest-risk > span {
+  color: var(--muted);
+}
+
+.unrest-risk .meter {
+  display: flex;
+}
+
+.unrest-risk .meter i {
+  flex: 1;
+}
+
+.unrest-plot {
+  margin: 0;
+  padding: calc(var(--px) * 3);
+  background: var(--slot);
+}
+
+.unrest-plot svg {
+  display: block;
+  width: 100%;
+  height: 64px;
+}
+
+.unrest-plot .zone {
+  fill: rgb(168 58 42 / 25%);
+}
+
+.unrest-plot line {
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 4 3;
+}
+
+.unrest-plot .revolt {
+  stroke: var(--danger-hi);
+}
+
+.unrest-plot .free {
+  stroke: #e05040;
+}
+
+.unrest-plot .path {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+
+.unrest-plot figcaption {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Over-expansion, tier by tier: the lord's own tier and the one a new town would bring are marked. */
+.overreach-ladder {
+  display: grid;
+  gap: calc(var(--px) * 2);
+}
+
+.overreach-row {
+  display: grid;
+  grid-template-columns: 11ch 1fr;
+  align-items: center;
+  gap: calc(var(--px) * 1) calc(var(--px) * 4);
+  padding: calc(var(--px) * 2) calc(var(--px) * 3);
+  background: var(--slot);
+  font-size: 13px;
+}
+
+.overreach-row > small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.overreach-row.now {
+  box-shadow: inset 0 0 0 var(--px) var(--gold);
+}
+
+.overreach-row.next {
+  box-shadow: inset 0 0 0 var(--px) var(--down);
+}
+
+.overreach-row span small {
+  color: var(--gold);
+}
+
+.overreach-row.next span small {
+  color: var(--down);
+}
+
+.overreach-bar {
+  position: relative;
+  height: calc(var(--px) * 4);
+  background: #3a2a20;
+}
+
 /* A newer build is out: said for a moment before the page reloads (src/lib/version.ts). */
 .update-note {
   position: fixed;
@@ -4432,7 +4634,7 @@ kbd {
 /* The palace tab's parts: the level and the border, the lord's house, the buildings. */
 .palace-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--parts, 3), minmax(0, 1fr));
   gap: calc(var(--px) * 3);
   margin-bottom: calc(var(--px) * 5);
 }
@@ -4446,6 +4648,30 @@ kbd {
 .palace-tabs .btn[aria-pressed='true'] {
   --face: var(--panel-2);
   color: var(--gold);
+}
+
+/* Four parts or more: the icon over a smaller name, so the row still fits the sheet. */
+.palace-tabs.many .btn {
+  flex-direction: column;
+  gap: var(--px);
+  padding: calc(var(--px) * 2) calc(var(--px) * 1);
+  font-size: 13px;
+  line-height: 1.05;
+  text-align: center;
+  white-space: normal;
+  position: relative;
+}
+
+.palace-tabs.many .dot {
+  position: absolute;
+  top: calc(var(--px) * 3);
+  right: calc(var(--px) * 3);
+  margin: 0;
+}
+
+.palace-tabs .btn > span small {
+  font-size: inherit;
+  opacity: 0.8;
 }
 
 .palace-tabs .dot {
@@ -4491,6 +4717,14 @@ input.text {
   margin-left: auto;
 }
 
+/* A warning that is not yet trouble (two towns held: mild over-expansion). */
+.map-alert.mild {
+  --hi: #c8952e;
+  --lo: #2a1a06;
+  background: #4a3410;
+  color: #fff2cc;
+}
+
 .name-edit {
   flex-wrap: wrap;
   gap: calc(var(--px) * 3);
@@ -4511,4 +4745,18 @@ input.text {
 input:not([type='range']):focus-visible {
   outline: var(--px) solid var(--gold);
   outline-offset: calc(var(--px) * -2);
+}
+
+/* A picture over a building's menu (the prison yard, the hall, the treasury), drawn like the away report's. */
+.sheet-scene {
+  margin-bottom: calc(var(--px) * 5);
+}
+
+.sheet-scene .away-scene {
+  width: 100%;
+  height: auto;
+}
+
+.prison-whisper {
+  font-style: italic;
 }

@@ -15,7 +15,7 @@ const RULERS = ['Kral Alparslan', 'Kraliçe Nilüfer', 'Kral Orhan', 'Kraliçe S
 // The crowns' banners: the first capital's red, the second's blue.
 const CROWN_COLORS = ['#b23a26', '#2f5d9e']
 // The same colours as roof colours (see KINGDOM_COLORS).
-const CROWN_ROOFS = ['crimson', 'royal']
+export const CROWN_ROOFS = ['crimson', 'royal']
 
 export interface CityInfo {
   index: number

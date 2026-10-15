@@ -44,7 +44,7 @@ export function rumoursAt(world: World, index: number, kind: InnKind, online: On
   const named = (id: number) => kingdoms.find((k) => k.id === id)?.name ?? 'bilinmeyen bir lord'
   const prices: string[] = []
   for (const good of GOODS) {
-    const ratio = priceAt(market, good, now) / basePrice(good)
+    const ratio = priceAt(market, good, now) / basePrice(good, market)
     if (ratio < 0.85) prices.push(`Pazarlarda ${GOOD_WORDS[good]} bolluğu var; fiyatı düştü, satan az kazanıyor.`)
     else if (ratio > 1.15) prices.push(`${RESOURCE_NAMES[good]} kıt; alıcılar fiyatı yükseltti, elinde olan şimdi satmalı.`)
     else if (kind === 'market') prices.push(`${RESOURCE_NAMES[good]} fiyatı yerinde sayıyor.`)

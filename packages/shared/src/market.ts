@@ -7,13 +7,23 @@ import { balance } from './balance'
 // recovers more slowly than one above it comes down.
 
 export type MarketGood = 'food' | 'materials' | 'arms'
-export type Market = Record<MarketGood, { price: number; at: number }>
+// foodDemand: how much dearer food is as the world's people grow (set by the server; missing: 1, see foodDemandFor).
+export type Market = Record<MarketGood, { price: number; at: number }> & { foodDemand?: number }
 
 const GOODS: MarketGood[] = ['food', 'materials', 'arms']
-export const basePrice = (good: MarketGood) => balance.economy.trade.price[good]
+export const basePrice = (good: MarketGood, market?: Market | null) =>
+  balance.economy.trade.price[good] * (good === 'food' ? (market?.foodDemand ?? 1) : 1)
+
+// The more people live in the lobby's lordships, the more bread they want: food's usual price rises a little, from
+// nothing at fromPeople to maxRise at toPeople (in steps, so the server need not write it for every soul born).
+export function foodDemandFor(people: number) {
+  const d = balance.market.foodDemand
+  const t = Math.max(0, Math.min(1, (people - d.fromPeople) / (d.toPeople - d.fromPeople)))
+  return Number((1 + Math.round((t * d.maxRise) / d.step) * d.step).toFixed(4))
+}
 
 export const freshMarket = (now: number): Market =>
-  Object.fromEntries(GOODS.map((g) => [g, { price: basePrice(g), at: now }])) as Market
+  Object.fromEntries(GOODS.map((g) => [g, { price: basePrice(g), at: now }])) as unknown as Market
 
 // The crown kingdoms buy (CLAUDE.md §7.8): in each window of the clock each crown wants one good, drawn from the
 // window and the crown, and takes so many units of it off the lobby's market every step. Like everything else it
@@ -48,16 +58,16 @@ export function crownDemand(at: number): CrownDemand[] {
 
 // How much of their full demand the crowns buy at `price`: all of it when the good is cheap, less as it nears its base
 // price, none above upToFactor of it. So they lift a market that has sunk to its floor without driving it to its top.
-export const crownAppetite = (good: MarketGood, price: number) => {
-  const top = basePrice(good) * balance.market.crowns.upToFactor
+export const crownAppetite = (good: MarketGood, price: number, market?: Market | null) => {
+  const top = basePrice(good, market) * balance.market.crowns.upToFactor
   return Math.max(0, (top - price) / top)
 }
 
 // How many units of `good` the crowns buy in the step ending at `at`, at `price`.
-const crownUnits = (good: MarketGood, at: number, price: number) => {
+const crownUnits = (good: MarketGood, at: number, price: number, market?: Market | null) => {
   const { stepSeconds } = balance.market.crowns
   const wanted = crownDemand(at - 1).filter((d) => d.good === good).reduce((n, d) => n + (d.perMinute * stepSeconds) / 60, 0)
-  return wanted * crownAppetite(good, price)
+  return wanted * crownAppetite(good, price, market)
 }
 
 // Drifted back toward the base over `ms`: from below slowly, from above faster.
@@ -75,7 +85,7 @@ const NO_MARKET = {}
 // The price at `at`: drifted back toward the base since it was last set, and pushed up by the crowns' purchases at
 // every step since (stepSeconds apart on the clock; over a long gap only the last catchUpHours are walked).
 export function priceAt(market: Market | null | undefined, good: MarketGood, at: number) {
-  const base = basePrice(good)
+  const base = basePrice(good, market)
   const { stepSeconds, catchUpHours } = balance.market.crowns
   const step = stepSeconds * 1000
   const entry = market?.[good]
@@ -94,7 +104,7 @@ export function priceAt(market: Market | null | undefined, good: MarketGood, at:
   let price = from.price
   for (let next = Math.floor(t / step) * step + step; next <= at; next += step) {
     price = drift(price, base, next - t)
-    const units = crownUnits(good, next, price)
+    const units = crownUnits(good, next, price, market)
     if (units > 0) price = clampPrice(price / Math.pow(1 - balance.market.buyImpactPerUnit, units), base)
     t = next
   }
@@ -103,12 +113,12 @@ export function priceAt(market: Market | null | undefined, good: MarketGood, at:
 }
 
 // Whether a price sits on its floor: selling cannot take it lower.
-export const atFloor = (price: number, good: MarketGood) => price <= basePrice(good) * balance.market.minFactor * 1.005
+export const atFloor = (price: number, good: MarketGood, market?: Market | null) => price <= basePrice(good, market) * balance.market.minFactor * 1.005
 
 // After `units` were sold (negative: bought) at `at`.
 export function afterTrade(market: Market | null | undefined, good: MarketGood, units: number, at: number): Market {
   const { sellImpactPerUnit, buyImpactPerUnit, minFactor, maxFactor } = balance.market
-  const base = basePrice(good)
+  const base = basePrice(good, market)
   const price = units >= 0 ? priceAt(market, good, at) * Math.pow(1 - sellImpactPerUnit, units) : priceAt(market, good, at) / Math.pow(1 - buyImpactPerUnit, -units)
   const next = { ...(market ?? freshMarket(at)) }
   next[good] = { price: Math.min(base * maxFactor, Math.max(base * minFactor, price)), at }
@@ -123,7 +133,7 @@ export const buyPrice = (market: Market | null | undefined, good: MarketGood, at
 // so one large purchase costs the same as the same units bought a few at a time.
 export function buyTotal(market: Market | null | undefined, good: MarketGood, units: number, at: number) {
   const { buyImpactPerUnit, maxFactor, buyMarkup } = balance.market
-  const top = basePrice(good) * maxFactor
+  const top = basePrice(good, market) * maxFactor
   let price = priceAt(market, good, at)
   let total = 0
   for (let i = 0; i < units; i++) {
@@ -131,4 +141,11 @@ export function buyTotal(market: Market | null | undefined, good: MarketGood, un
     price /= 1 - buyImpactPerUnit
   }
   return total
+}
+
+// The market with food's demand set anew: the price as it stands now is kept, so the change moves only where it drifts
+// from here on, not what it was before.
+export function withFoodDemand(market: Market | null | undefined, demand: number, at: number): Market {
+  const base = market ?? freshMarket(at)
+  return { ...base, food: { price: priceAt(market, 'food', at), at }, foodDemand: demand }
 }

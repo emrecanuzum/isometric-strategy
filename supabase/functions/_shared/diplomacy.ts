@@ -2,7 +2,7 @@
 // `command` function (answers, intel) and the `tick` function (arrivals, expiries).
 
 import * as game from './game.js'
-import { admin, changeRelation, grantClaim, iso, loadKingdoms, lobbyMarket, ms, mutateKingdom, nameOf, notify, pactsOf, relationOf, reputationOf, counterAgainst, scoreOf, setRelation } from './server.ts'
+import { admin, changeRelation, grantClaim, iso, loadKingdoms, lobbyMarket, ms, mutateKingdom, nameOf, notify, pactsOf, relationOf, reputationOf, counterAgainst, scoreOf, setRelation, syncWarFlags } from './server.ts'
 import type { Row } from './server.ts'
 
 const d = game.balance.diplomacy
@@ -108,6 +108,7 @@ export async function answer(envoy: EnvoyRow, accept: boolean, at: number, expir
     if (!war) accepted = false
     else {
       await admin.from('pacts').update({ ended_at: iso(at), ended_by: envoy.to_id }).eq('id', war.id)
+      await syncWarFlags(lobby, at, [envoy.from_id, envoy.to_id])
       const { value } = await relationOf(lobby, envoy.from_id, envoy.to_id, at)
       await setRelation(lobby, envoy.from_id, envoy.to_id, Math.max(value, d.war.peaceRelation), at)
       // The terms: gold or a tribute from the side that accepted, or gold given to it.

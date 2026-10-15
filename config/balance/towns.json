@@ -68,6 +68,34 @@
       6
     ]
   },
+  "overreach": {
+    "tiers": [
+      {
+        "towns": 2,
+        "loyalty": -5,
+        "happiness": -2,
+        "upkeepFactor": 1.25,
+        "yieldFactor": 0.95,
+        "loyaltyCap": 100
+      },
+      {
+        "towns": 3,
+        "loyalty": -25,
+        "happiness": -6,
+        "upkeepFactor": 1.6,
+        "yieldFactor": 0.8,
+        "loyaltyCap": 100
+      },
+      {
+        "towns": 4,
+        "loyalty": -40,
+        "happiness": -12,
+        "upkeepFactor": 2,
+        "yieldFactor": 0.6,
+        "loyaltyCap": 15
+      }
+    ]
+  },
   "score": {
     "perTown": 40
   }

@@ -13,7 +13,8 @@ export type FishError = 'building' | 'busy'
 export const castReadyAt = (k: Kingdom) => (k.lastFishAt ?? -Infinity) + F.cooldownSeconds * 1000
 
 export function fishError(k: Kingdom, at: number): FishError | null {
-  if (!k.buildings.some((b) => b.kind === 'fisherHut' && b.doneAt <= at)) return 'building'
+  // At the hut, or at the entertainment hall, which has every mini-game (CLAUDE.md §6.5).
+  if (!k.buildings.some((b) => (b.kind === 'fisherHut' || b.kind === balance.minigames.hall) && b.doneAt <= at)) return 'building'
   if (castReadyAt(k) > at) return 'busy'
   return null
 }

@@ -758,7 +758,7 @@ interface Page {
   lines: Line[]
 }
 
-const MILITARY = new Set(['naval_battle', 'blockade_lifted', 'fleet_turned', 'battle_start', 'battle_end', 'town_siege', 'town_taken', 'town_held', 'town_siege_lifted', 'town_revolt', 'town_lost_revolt', 'tower_losses', 'army_threat', 'trade_raided', 'raid_repelled', 'war_declared', 'peace_enforced', 'order_failed'])
+const MILITARY = new Set(['siege_people', 'naval_battle', 'blockade_lifted', 'fleet_turned', 'battle_start', 'battle_end', 'town_siege', 'town_taken', 'town_held', 'town_siege_lifted', 'town_revolt', 'town_lost_revolt', 'tower_losses', 'army_threat', 'trade_raided', 'raid_repelled', 'war_declared', 'peace_enforced', 'order_failed'])
 const TRIBUTE = new Set(['patrol_tribute', 'patrol_taken', 'patrol_tip', 'patrol_ignored', 'tribute_ended', 'crown_gift'])
 
 const duration = (ms: number) => {

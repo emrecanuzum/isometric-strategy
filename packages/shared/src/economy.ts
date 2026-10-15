@@ -3,7 +3,7 @@ import type { Point } from './iso'
 import { priceAt } from './market'
 import type { Market } from './market'
 import { happinessStep, happinessTarget, isNightAt, popCapFor, recruitTerms, taxSpec } from './society'
-import { townUpkeep, townYield, townsRound } from './towns'
+import { overreachFor, townUpkeep, townYield, townsRound } from './towns'
 import type { HeldTown, LostTown } from './towns'
 import { addUnits, countOf, garrisonOf, unitSpec } from './units'
 import { perSpan } from './span'
@@ -200,6 +200,13 @@ export interface Kingdom {
   tax?: TaxLevel
   happiness?: number
   queen?: boolean
+  // The villagers (soldiers and crews apart): homes give room, and the people grow into it a little every round
+  // (growthTerms). Absent in older saves: as many as there is room for.
+  people?: number
+  // At war with another lord, and a siege at the palace until then (set by the server; they slow the people's growth
+  // or drive them away, CLAUDE.md §5.2).
+  atWar?: boolean
+  besiegedUntil?: number
   // Soldiers at the palace (how many, and of which kinds), soldiers out in armies (their rows are on the server), and
   // batches still training. The pool of people ready to take up arms refills a little every round.
   soldiers?: number
@@ -623,12 +630,82 @@ export function population(kingdom: Kingdom, at: number) {
   const sailors = sailorsOf(kingdom)
   // Towns that send people add both the room and the folk to fill it.
   const sent = townYield(kingdom.towns, at).villagers
-  const villagers = Math.max(0, Math.min(housing + sent, cap + sent) - soldiers - sailors)
+  // The room for villagers, and the people living in it: they grow into new room round by round, and leave at once
+  // when the room shrinks (a home torn down, soldiers raised; CLAUDE.md §5.2).
+  const room = Math.max(0, Math.min(housing + sent, cap + sent) - soldiers - sailors)
+  const people = Math.min(room, Math.max(0, kingdom.people ?? room))
+  const villagers = Math.floor(people + 1e-9)
   // The sick neither work nor pay taxes.
   const healthy = villagers * (1 - (kingdom.sickness ?? 0))
   // When more hands are set to work than there are healthy villagers, every building works at a matching fraction.
-  return { villagers, healthy, sick: villagers - healthy, housing: housing + sent, cap: cap + sent, soldiers, sailors, jobs, efficiency: jobs === 0 ? 1 : Math.min(1, healthy / jobs) }
+  return { villagers, people, room, healthy, sick: villagers - healthy, housing: housing + sent, cap: cap + sent, soldiers, sailors, jobs, efficiency: jobs === 0 ? 1 : Math.min(1, healthy / jobs) }
 }
+
+// ---- Growth of the people (CLAUDE.md §5.2) --------------------------------------------------------------------------
+
+export type GrowthPart = 'happiness' | 'food' | 'siege' | 'war' | 'sickness' | 'queen' | 'temple'
+
+// The share of the full growth a mood of `happiness` gives: below the curve's zero the people leave.
+export function happinessGrowth(happiness: number) {
+  const curve = balance.society.growth.happiness
+  if (happiness <= curve[0].at) return curve[0].factor
+  for (let i = 1; i < curve.length; i++) {
+    const a = curve[i - 1]
+    const b = curve[i]
+    if (happiness <= b.at) return a.factor + ((b.factor - a.factor) * (happiness - a.at)) / (b.at - a.at)
+  }
+  return curve[curve.length - 1].factor
+}
+
+// How the people grow in the round at `at`: the mood sets the pace (or drives them away), hunger and a siege drive
+// them away, and war, sickness, a queen and a temple speed or slow what growth there is. Newcomers come at a steady
+// trickle and faster the more room stands empty; those leaving go as a share of the people.
+export function growthTerms(kingdom: Kingdom, at: number) {
+  const g = balance.society.growth
+  const { people, room } = population(kingdom, at)
+  const gap = Math.max(0, room - people)
+  const happy = happinessGrowth(happinessOf(kingdom))
+  const starving = kingdom.stock.food <= 0
+  const besieged = (kingdom.besiegedUntil ?? 0) > at
+  const war = !!kingdom.atWar
+  const sick = kingdom.sickness ?? 0
+  const queen = !!kingdom.queen && !kingdom.queenHeldBy
+  const temple = levelOf(kingdom, 'temple', at)
+  // Each part: its multiplier on growth (or, for hunger and a siege, the floor it sets on the pace) and whether it holds.
+  const parts: { part: GrowthPart; value: number; active: boolean }[] = [
+    { part: 'happiness', value: happy, active: true },
+    { part: 'food', value: g.starving, active: starving },
+    { part: 'siege', value: g.besieged, active: besieged },
+    { part: 'war', value: g.war, active: war },
+    { part: 'sickness', value: Math.max(0, 1 - sick * g.sicknessWeight), active: sick > 0.001 },
+    { part: 'queen', value: 1 + g.queen, active: queen },
+    { part: 'temple', value: 1 + temple * g.templePerLevel, active: temple > 0 },
+  ]
+  let factor = happy
+  if (starving) factor = Math.min(factor, g.starving)
+  if (besieged) factor = Math.min(factor, g.besieged)
+  if (factor > 0) for (const p of parts) if (p.active && ['war', 'sickness', 'queen', 'temple'].includes(p.part)) factor *= p.value
+  const perRound = factor > 0 ? Math.min(gap, factor * (g.inflowPerRound + g.gapSharePerRound * gap)) : factor * g.leaveSharePerRound * people
+  return { people, room, gap, factor, perRound, parts }
+}
+
+// How long until the room is full at today's pace (null when the people are not growing).
+export function timeToFill(kingdom: Kingdom, at: number) {
+  const g = balance.society.growth
+  const { people, room, factor } = growthTerms(kingdom, at)
+  if (room - people < 0.5) return 0
+  if (factor <= 0) return null
+  let p = people
+  let rounds = 0
+  while (room - p >= 0.5 && rounds < 20_000) {
+    p += Math.min(room - p, factor * (g.inflowPerRound + g.gapSharePerRound * (room - p)))
+    rounds++
+  }
+  return rounds * productionMs()
+}
+
+// The people after some of them were raised as soldiers or crews (negative `n`: sent home again).
+export const withPeople = (kingdom: Kingdom, at: number, n: number): Kingdom => ({ ...kingdom, people: Math.max(0, population(kingdom, at).people + n) })
 
 export const happinessOf = (kingdom: Kingdom) => kingdom.happiness ?? balance.society.happiness.start
 
@@ -985,6 +1062,8 @@ export function build(world: World, kingdom: Kingdom, stage: number, kind: Build
   const building: Building = { id: kingdom.nextId, kind, x: spot.x, y: spot.y, size: spec.size, doneAt, ...(free && { free }) }
   return {
     ...kingdom,
+    // The palace comes with its servants; everyone after them grows into the homes built (CLAUDE.md §5.2).
+    ...(kind === 'palace' && kingdom.people === undefined && { people: spec.villagers ?? 0 }),
     stock: pay(kingdom.stock, buildCost(kingdom, kind)),
     buildings: [...kingdom.buildings, building],
     nextId: kingdom.nextId + 1,
@@ -1356,6 +1435,11 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
         events.push({ kind: 'wasted', lost })
       }
       for (const [w, v] of Object.entries(weapons)) k.armory![w as Weapon] += v ?? 0
+      // The people grow into the room there is, or leave (CLAUDE.md §5.2); older saves start full.
+      if (k.buildings.some((b) => b.kind === 'palace')) {
+        const grown = growthTerms(k, next)
+        k.people = Math.max(0, Math.min(grown.room, grown.people + grown.perRound))
+      }
       k.sickness = sicknessStep(k, next)
       // The people's mood drifts toward what the taxes, the queen, the granary, the temple and the day make of it.
       const n = balance.society.night
@@ -1457,6 +1541,8 @@ export function happinessFor(k: Kingdom, at: number) {
       dynastyEffects(k).happiness +
       (k.sickness ?? 0) * balance.institutions.sickness.happinessPerShare +
       (k.blockade ? balance.navy.blockade.happiness : 0) +
+      // Holding too many towns at once (CLAUDE.md §8.4).
+      overreachFor(k.towns).happiness +
       fortune.happiness +
       (templeLevel > 0 ? fortune.templeHappiness : 0),
   })

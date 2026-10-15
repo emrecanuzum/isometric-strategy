@@ -30,6 +30,7 @@ import {
   refuse,
   relationOf,
   rememberWorld,
+  syncWarFlags,
   worldOf,
 } from '../_shared/server.ts'
 import type { Kingdom, Point, Row, World } from '../_shared/server.ts'
@@ -300,7 +301,7 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
           .map(([u, n]) => [u, whole(n, 0, 10000)]),
       )
       const k = need()
-      const after = game.disbandUnits(k, units)
+      const after = game.disbandUnits(k, units, now)
       next = changed(after === k ? k : game.book(after, {}, { disband: (k.soldiers ?? 0) - (after.soldiers ?? 0) }))
       break
     }
@@ -636,6 +637,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         await mutateKingdom(to.id, now, drop(me.id))
       }
       await admin.from('pacts').insert({ lobby_id: lobby, kind: 'war', from_id: me.id, to_id: to.id, started_at: iso(now) })
+      await syncWarFlags(lobby, now, [me.id, to.id])
       const told = [to.id, ...game.alliesOf(pacts, to.id), ...game.alliesOf(pacts, me.id)]
       await notify(lobby, told, 'war_declared', { by: me.name, on: to.name, claim }, now)
       return null
@@ -713,7 +715,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         await mutateKingdom(target.id, now, (k) => ({ ...k, revoltUntil: now + o.revolt.seconds * 1000 }))
       } else if (cmd.op === 'townRevolt') {
         // The town's loyalty falls at once; low enough, it rises against its lord (see game.townsRound).
-        await mutateKingdom(target.id, now, (k) => game.inciteTown(k, town!))
+        await mutateKingdom(target.id, now, (k) => game.inciteTown(k, town!, now))
       }
       await spend()
       const townName = cmd.op === 'townRevolt' ? ((await townsOf(lobby)).find((t) => t.id === town)?.name ?? null) : null

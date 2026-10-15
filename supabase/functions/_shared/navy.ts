@@ -5,7 +5,7 @@
 // so a meeting is fought once even when two runs of the tick overlap.
 
 import * as game from './game.js'
-import { mutateKingdom, notify } from './server.ts'
+import { admin, mutateKingdom, notify } from './server.ts'
 import type { Kingdom, Row } from './server.ts'
 
 // deno-lint-ignore no-explicit-any
@@ -70,14 +70,19 @@ async function strike(lobby: string, row: Row, f: Fleet, target: Row | undefined
     return
   }
 
-  const defenders = game.defendersOf(target.state)
+  // The defenders as they stand now, not as the tick first read them (ships may have sailed or been built since).
+  const { data: fresh } = await admin.from('kingdoms').select('state').eq('id', target.id).single()
+  const defending = (fresh?.state ?? target.state) as Kingdom
+  const defenders = game.defendersOf(defending)
   const fight = game.navalBattle(f.ships, defenders, seedOf(row.id, f.id, at / 1000), true)
   const won = fight.winner === 'attackers'
-  const loot: Record<string, number> = won && m.kind === 'raid' ? game.raidLoot(target.state.stock, game.subShips(f.ships, fight.attackerLoss)) : {}
+  const raiding = won && m.kind === 'raid'
 
-  // Claim the meeting on the attacker's row.
+  // Claim the meeting on the attacker's row. The loot is put aboard only once it has really come out of the target's
+  // stores (below), so no more is carried off than was there.
   let claimed = false
   await mutateKingdom(row.id, now, (k) => {
+    claimed = false
     const x = game.fleetOf(k, f.id)
     if (!x || x.mission.kind !== m.kind || x.mission.arriveAt !== at || x.mission.resolved) return null
     claimed = true
@@ -87,25 +92,33 @@ async function strike(lobby: string, row: Row, f: Fleet, target: Row | undefined
       const navy = game.navyOf(next)
       return { ...next, navy: { ...navy, fleets: navy.fleets.map((y: Fleet) => (y.id === f.id ? { ...y, mission: { ...y.mission, resolved: true } } : y)) } }
     }
-    next = game.recallFleet(next, f.id, now, back(next))
-    if (Object.keys(loot).length > 0) {
-      const navy = game.navyOf(next)
-      next = { ...next, navy: { ...navy, fleets: navy.fleets.map((y: Fleet) => (y.id === f.id ? { ...y, mission: { ...y.mission, cargo: loot } } : y)) } }
-    }
-    return next
+    return game.recallFleet(next, f.id, now, back(next))
   })
   if (!claimed) return
 
+  // What the raiders take is worked out from the target's stores at the moment they are robbed.
+  let loot: Record<string, number> = {}
   await mutateKingdom(target.id, now, (k) => {
     let next = game.takeHomeLosses(k, fight.defenderLoss)
     if (won && m.kind === 'blockade') next = { ...next, blockade: { by: row.id, name: row.name ?? '?', color: row.color ?? undefined, fleet: f.id, since: at } }
-    if (won && m.kind === 'raid') {
+    loot = {}
+    if (raiding) {
+      loot = game.raidLoot(next.stock, game.subShips(f.ships, fight.attackerLoss)) as Record<string, number>
       const stock = { ...next.stock }
       for (const [g, n] of Object.entries(loot)) stock[g] = Math.max(0, stock[g] - n)
       next = { ...next, stock }
     }
     return next
   })
+  if (Object.keys(loot).length > 0) {
+    // Aboard the raiders' fleet on its way home (if it still sails).
+    await mutateKingdom(row.id, now, (k) => {
+      const x = game.fleetOf(k, f.id)
+      if (!x) return null
+      const navy = game.navyOf(k)
+      return { ...k, navy: { ...navy, fleets: navy.fleets.map((y: Fleet) => (y.id === f.id ? { ...y, mission: { ...y.mission, cargo: loot } } : y)) } }
+    })
+  }
 
   const report = {
     kind: m.kind,
@@ -141,6 +154,7 @@ async function sortie(lobby: string, row: Row, f: Fleet, byId: Map<number, Row>,
   const won = fight.winner === 'attackers'
   let claimed = false
   await mutateKingdom(row.id, now, (k) => {
+    claimed = false
     const x = game.fleetOf(k, f.id)
     if (!x || x.mission.kind !== 'sortie' || x.mission.arriveAt !== at) return null
     claimed = true

@@ -1,4 +1,4 @@
-import { BUILDINGS, GOODS, atFloor, balance, constructing, fortuneEffects, idleFactor, lobbyTripMs, priceAt, researchEffects, tradeLoad, tradePrice } from '@game/shared'
+import { BUILDINGS, GOODS, atFloor, balance, basePrice, constructing, fortuneEffects, idleFactor, lobbyTripMs, priceAt, researchEffects, tradeLoad, tradePrice } from '@game/shared'
 import type { Cost, Good, Kingdom, Market, Resource, Survey } from '@game/shared'
 import { useState } from 'react'
 import type React from 'react'
@@ -80,7 +80,7 @@ export function GoodChoice({
     <div className="goods" role="radiogroup" aria-label="Satılacak mal">
       {GOODS.map((good) => {
         const price = tradePrice(kingdom, good, market, now)
-        const base = balance.economy.trade.price[good]
+        const base = basePrice(good, market)
         const units = Math.min(load, Math.floor(kingdom.stock[good]))
         return (
           <button key={good} role="radio" aria-checked={good === selected} className={good === selected ? 'good active' : 'good'} onClick={() => onGood(good)}>
@@ -88,7 +88,7 @@ export function GoodChoice({
             <b>{RESOURCE_NAMES[good]}</b>
             <small>Stok {fmt(kingdom.stock[good])}</small>
             <small className={price < base * 0.98 ? 'down' : price > base * 1.02 ? 'up' : undefined}>
-              Birimi {price.toFixed(2).replace('.', ',')} altın{atFloor(priceAt(market, good, now), good) ? ' · dipte' : ''}
+              Birimi {price.toFixed(2).replace('.', ',')} altın{atFloor(priceAt(market, good, now), good, market) ? ' · dipte' : ''}
             </small>
             <small className="up">
               +{Math.round(units * price * bonus)} <Icon name="gold" size={8} /> / sefer ({units} birim)

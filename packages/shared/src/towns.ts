@@ -57,6 +57,9 @@ export interface HeldTown {
   revoltUntil?: number
   // The revolt the server has told its lord of (its revoltUntil).
   revoltTold?: number
+  // When spies last stirred it up, and by how much its loyalty fell then (see inciteTown).
+  incitedAt?: number
+  incitedBy?: number
 }
 
 export type TownGood = 'gold' | 'food' | 'materials' | 'arms' | 'villagers'
@@ -157,9 +160,39 @@ const T = () => balance.towns
 
 export const townLoyalty = (h: Pick<HeldTown, 'loyalty'>) => h.loyalty ?? T().loyalty.start
 export const townUpkeepLevel = (h: Pick<HeldTown, 'upkeep'>) => Math.max(0, Math.min(T().upkeep.goldPerRound.length - 1, h.upkeep ?? T().upkeep.default))
-// Gold the town's upkeep costs every round.
-export const townUpkeepGold = (h: Pick<HeldTown, 'upkeep'>) => T().upkeep.goldPerRound[townUpkeepLevel(h)]
 export const townRevolting = (h: Pick<HeldTown, 'revoltUntil'>, at: number) => (h.revoltUntil ?? 0) > at
+
+// ---- Over-expansion (CLAUDE.md §8.4) ---------------------------------------------------------------------------------
+
+// What holding `towns` towns at once costs a lord: every town's loyalty heads lower (and, at the last tier, never
+// higher than a cap under the revolt line), his own people are less content, each town's upkeep costs more and each
+// sends less. Nothing for a single town.
+export interface Overreach {
+  // The tier's index in balance.towns.overreach.tiers (-1: none).
+  tier: number
+  towns: number
+  loyalty: number
+  loyaltyCap: number
+  happiness: number
+  upkeepFactor: number
+  yieldFactor: number
+}
+
+const NO_OVERREACH = { loyalty: 0, loyaltyCap: 100, happiness: 0, upkeepFactor: 1, yieldFactor: 1 }
+
+export function overreachOf(towns: number): Overreach {
+  const tiers = T().overreach.tiers
+  let tier = -1
+  for (let i = 0; i < tiers.length; i++) if (towns >= tiers[i].towns) tier = i
+  const t = tier < 0 ? NO_OVERREACH : tiers[tier]
+  return { tier, towns, loyalty: t.loyalty, loyaltyCap: t.loyaltyCap, happiness: t.happiness, upkeepFactor: t.upkeepFactor, yieldFactor: t.yieldFactor }
+}
+
+// The over-expansion of a lord's held towns.
+export const overreachFor = (held: HeldTown[] | undefined) => overreachOf(held?.length ?? 0)
+
+// Gold the town's upkeep costs every round, when its lord holds `towns` towns.
+export const townUpkeepGold = (h: Pick<HeldTown, 'upkeep'>, towns = 1) => T().upkeep.goldPerRound[townUpkeepLevel(h)] * overreachOf(towns).upkeepFactor
 
 // What a town's loyalty does to what it sends: from yieldMin at 0 to yieldMax at 100 (×1 at 50); nothing in revolt.
 export function townFactor(h: Pick<HeldTown, 'loyalty' | 'revoltUntil'>, at: number) {
@@ -168,11 +201,11 @@ export function townFactor(h: Pick<HeldTown, 'loyalty' | 'revoltUntil'>, at: num
   return l.yieldMin + ((l.yieldMax - l.yieldMin) * townLoyalty(h)) / 100
 }
 
-// What one town sends in one round (before the idle penalty).
-export function townSends(h: HeldTown, at: number) {
+// What one town sends in one round (before the idle penalty), when its lord holds `towns` towns.
+export function townSends(h: HeldTown, at: number, towns = 1) {
   const out = { gold: 0, food: 0, materials: 0, arms: 0, villagers: 0 }
   const spec = T().kinds[h.kind] as { perRound?: number; villagers?: number }
-  const f = townFactor(h, at)
+  const f = townFactor(h, at) * overreachOf(towns).yieldFactor
   if (h.kind === 'people') out.villagers = Math.round((spec.villagers ?? 0) * f)
   else out[h.kind] = (spec.perRound ?? 0) * f
   return out
@@ -182,25 +215,53 @@ export function townSends(h: HeldTown, at: number) {
 export function townYield(held: HeldTown[] | undefined, at: number) {
   const out = { gold: 0, food: 0, materials: 0, arms: 0, villagers: 0 }
   for (const h of held ?? []) {
-    const s = townSends(h, at)
+    const s = townSends(h, at, held!.length)
     for (const k of Object.keys(out) as TownGood[]) out[k] += s[k]
   }
   return out
 }
 
-// What the lord's realm adds to every town's loyalty: a happy people and a ruler with a way with them.
+// What the lord's realm adds to every town's loyalty: a happy people and a ruler with a way with them; and how many
+// towns he holds (over-expansion; 1 when not given).
 export interface TownMood {
   happiness: number
   // The ruler's people skill as mood points (dynastyEffects().happiness).
   ruler: number
+  towns?: number
 }
 
-// Where a town's loyalty is heading: set by the upkeep paid (none when it was not), moved by the realm's mood.
-export function townLoyaltyTarget(h: HeldTown, mood: TownMood, paid = !h.unpaid) {
+// What makes up where a town's loyalty is heading, part by part (the town sheet draws them).
+export interface LoyaltyParts {
+  // From the upkeep paid (the lowest when it was not).
+  upkeep: number
+  happiness: number
+  ruler: number
+  // Over-expansion: what holding many towns takes off, and the most the target may then be.
+  overreach: number
+  cap: number
+  target: number
+}
+
+export function townLoyaltyParts(h: HeldTown, mood: TownMood, paid = !h.unpaid): LoyaltyParts {
   const l = T().loyalty
-  const level = paid ? townUpkeepLevel(h) : 0
-  const target = l.upkeepTargets[level] + (mood.happiness - 50) * l.happinessWeight + mood.ruler * l.rulerWeight
-  return Math.max(0, Math.min(100, target))
+  const over = overreachOf(mood.towns ?? 1)
+  const upkeep = l.upkeepTargets[paid ? townUpkeepLevel(h) : 0]
+  const happiness = (mood.happiness - 50) * l.happinessWeight
+  const ruler = mood.ruler * l.rulerWeight
+  const target = Math.max(0, Math.min(100, over.loyaltyCap, upkeep + happiness + ruler + over.loyalty))
+  return { upkeep, happiness, ruler, overreach: over.loyalty, cap: over.loyaltyCap, target }
+}
+
+// Where a town's loyalty is heading: set by the upkeep paid (none when it was not), moved by the realm's mood, pulled
+// down by over-expansion.
+export const townLoyaltyTarget = (h: HeldTown, mood: TownMood, paid = !h.unpaid) => townLoyaltyParts(h, mood, paid).target
+
+// How long until a town's loyalty, drifting from where it is toward `target`, falls under the revolt line (ms); null
+// when it does not (it is already under it, or heading no lower).
+export function townRevoltIn(loyalty: number, target: number) {
+  const below = T().revolt.below
+  if (loyalty < below || target >= below) return null
+  return T().loyalty.tauSeconds * 1000 * Math.log((loyalty - target) / (below - target))
 }
 
 // One production round for the held towns at `at` (`roundMs` long): what they sent is added to their tally, loyalty
@@ -209,20 +270,22 @@ export function townLoyaltyTarget(h: HeldTown, mood: TownMood, paid = !h.unpaid)
 export function townsRound(held: HeldTown[], at: number, roundMs: number, paid: Set<number>, mood: TownMood, idle: number) {
   const r = T().revolt
   const step = 1 - Math.exp(-roundMs / (T().loyalty.tauSeconds * 1000))
+  const towns = held.length
+  const mood1 = { ...mood, towns: mood.towns ?? towns }
   const kept: HeldTown[] = []
   const lost: LostTown[] = []
   const events: ({ kind: 'townRevolt'; town: number; name?: string } | { kind: 'townFree'; town: number; name?: string })[] = []
   for (const h0 of held) {
     const h: HeldTown = { ...h0, delivered: { ...h0.delivered } }
-    const sends = townSends(h0, at)
+    const sends = townSends(h0, at, towns)
     for (const k of Object.keys(sends) as TownGood[]) {
       // Villagers are not sent and spent: the tally keeps the most it ever housed.
       if (k === 'villagers') h.delivered!.villagers = Math.max(h.delivered!.villagers ?? 0, sends.villagers)
       else if (sends[k]) h.delivered![k] = (h.delivered![k] ?? 0) + sends[k] * idle
     }
-    h.unpaid = !paid.has(h.id) && townUpkeepGold(h) > 0 ? true : undefined
+    h.unpaid = !paid.has(h.id) && townUpkeepGold(h, towns) > 0 ? true : undefined
     const loyalty = townLoyalty(h)
-    h.loyalty = Math.round((loyalty + (townLoyaltyTarget(h, mood) - loyalty) * step) * 1000) / 1000
+    h.loyalty = Math.round((loyalty + (townLoyaltyTarget(h, mood1) - loyalty) * step) * 1000) / 1000
     if (h.revoltUntil !== undefined && h.revoltUntil <= at) {
       if (h.loyalty < r.breakAwayBelow) {
         lost.push({ id: h.id, name: h.name, at: h.revoltUntil })
@@ -247,7 +310,7 @@ export function townUpkeep(held: HeldTown[] | undefined, gold: number) {
   const paid = new Set<number>()
   let cost = 0
   for (const h of held ?? []) {
-    const g = townUpkeepGold(h)
+    const g = townUpkeepGold(h, held!.length)
     if (g <= 0 || cost + g > gold) continue
     cost += g
     paid.add(h.id)
@@ -334,8 +397,16 @@ export function setTownUpkeep<K extends { towns?: HeldTown[] }>(kingdom: K, town
   return { ...kingdom, towns: held.map((t) => (t.id === town ? { ...t, upkeep: level } : t)) }
 }
 
-// Spies stir a town up against its lord (CLAUDE.md §8.4, §9.7): its loyalty falls at once.
-export function inciteTown<K extends { towns?: HeldTown[] }>(kingdom: K, town: number): K {
+// Spies stir a town up against its lord (CLAUDE.md §8.4, §9.7): its loyalty falls at once. When (`at`) is kept so the
+// town's sheet can tell its lord.
+export function inciteTown<K extends { towns?: HeldTown[] }>(kingdom: K, town: number, at?: number): K {
   const drop = balance.espionage.operations.townRevolt.loyalty
-  return { ...kingdom, towns: (kingdom.towns ?? []).map((t) => (t.id === town ? { ...t, loyalty: Math.max(0, townLoyalty(t) + drop) } : t)) }
+  return {
+    ...kingdom,
+    towns: (kingdom.towns ?? []).map((t) => {
+      if (t.id !== town) return t
+      const loyalty = Math.max(0, townLoyalty(t) + drop)
+      return { ...t, loyalty, ...(at !== undefined && { incitedAt: at, incitedBy: Math.round((loyalty - townLoyalty(t)) * 10) / 10 }) }
+    }),
+  }
 }

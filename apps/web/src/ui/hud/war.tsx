@@ -15,6 +15,7 @@ import type { Online } from './online'
 import { kingdomName } from './online'
 import { Meter, Placeholder, Section, Stat, fmt } from './primitives'
 import { NavyTab } from './navy'
+import { Subtabs, showPart, usePart } from './Subtabs'
 
 // The army tab (CLAUDE.md §9.7): training at the barracks, the garrison, the armies in the field with their morale and
 // knowledge of the ground, and the battles; and the battle view that plays a battle out round by round.
@@ -131,60 +132,44 @@ export function ArmyTab(data: HudData) {
   return (
     <>
       <WarNow online={online} now={now} />
-      <div className="palace-tabs" role="tablist" aria-label="Ordu">
-        <button className="btn small" role="tab" aria-selected={part === 'land'} aria-pressed={part === 'land'} onClick={() => setPart('land')}>
-          <Icon name="swords" size={16} /> Kara ordusu
-        </button>
-        <button className="btn small" role="tab" aria-selected={part === 'sea'} aria-pressed={part === 'sea'} onClick={() => setPart('sea')}>
-          <Icon name="ship" size={16} /> Donanma{ships > 0 ? ` · ${ships}` : ''}
-          {kingdom.blockade && <span className="dot" aria-label="Abluka" />}
-        </button>
-      </div>
-      {part === 'sea' ? <NavyTab {...data} /> : <>
+      <Subtabs
+        label="Ordu"
+        part={part}
+        onPart={setPart}
+        parts={[
+          { id: 'land', name: 'Ordular', icon: 'swords', count: mine.length },
+          { id: 'barracks', name: 'Kışla', icon: 'shield', count: (kingdom.training ?? []).reduce((n, t) => n + t.count, 0) },
+          { id: 'battles', name: 'Savaşlar', icon: 'banner', count: online.battles.filter((b) => !b.resolved || Date.parse(b.ends_at) > now).length },
+          { id: 'sea', name: 'Donanma', icon: 'ship', count: ships, dot: !!kingdom.blockade },
+        ]}
+      />
+      {part === 'sea' && <NavyTab {...data} />}
       {/* The armies first: most orders are given here. */}
-      <Section title="Ordularım" icon="swords" aside={`${mine.length} / ${balance.military.maxArmies}`}>
-        {mine.length === 0 && <p className="hint">Sahada ordun yok. Garnizondan bir ordu çıkar.</p>}
-        <ul className="armies">
-          {mine.map((army, i) => (
-            <ArmyCard key={army.id} index={i + 1} army={army} others={mine.filter((a) => a.id !== army.id)} data={data} rest={rest} />
-          ))}
-        </ul>
-      </Section>
-      <Garrison data={data} armies={mine.length} />
-      <Training data={data} has={!!barracks} />
-      <Battles online={online} now={now} />
-      </>}
+      {part === 'land' && (
+        <>
+          <Section title="Ordularım" icon="swords" aside={`${mine.length} / ${balance.military.maxArmies}`}>
+            {mine.length === 0 && <p className="hint">Sahada ordun yok. Garnizondan bir ordu çıkar.</p>}
+            <ul className="armies">
+              {mine.map((army, i) => (
+                <ArmyCard key={army.id} index={i + 1} army={army} others={mine.filter((a) => a.id !== army.id)} data={data} rest={rest} />
+              ))}
+            </ul>
+          </Section>
+          <Garrison data={data} armies={mine.length} />
+        </>
+      )}
+      {part === 'barracks' && <Training data={data} has={!!barracks} />}
+      {part === 'battles' && <Battles online={online} now={now} />}
     </>
   )
 }
 
-// The army tab's two parts, land and sea, the last one looked at remembered in this browser.
-type ArmyPart = 'land' | 'sea'
-const ARMY_PART_KEY = 'army:part'
-const ARMY_PART_EVENT = 'army-part'
-export function showArmyPart(part: ArmyPart) {
-  try {
-    localStorage.setItem(ARMY_PART_KEY, part)
-  } catch {
-    // Not remembered.
-  }
-  window.dispatchEvent(new CustomEvent(ARMY_PART_EVENT, { detail: part }))
-}
-function useArmyPart(): [ArmyPart, (part: ArmyPart) => void] {
-  const [part, setPart] = useState<ArmyPart>(() => {
-    try {
-      return localStorage.getItem(ARMY_PART_KEY) === 'sea' ? 'sea' : 'land'
-    } catch {
-      return 'land'
-    }
-  })
-  useEffect(() => {
-    const on = (e: Event) => setPart((e as CustomEvent<ArmyPart>).detail)
-    window.addEventListener(ARMY_PART_EVENT, on)
-    return () => window.removeEventListener(ARMY_PART_EVENT, on)
-  }, [])
-  return [part, showArmyPart]
-}
+// The army tab's parts (armies and garrison, the barracks, the battles, the navy), the last one looked at remembered in
+// this browser.
+type ArmyPart = 'land' | 'barracks' | 'battles' | 'sea'
+const ARMY_PARTS: ArmyPart[] = ['land', 'barracks', 'battles', 'sea']
+export const showArmyPart = (part: ArmyPart) => showPart('army', part)
+const useArmyPart = () => usePart('army', ARMY_PARTS, 'land')
 
 // Soldiers by kind, as a row of small counts.
 export function UnitRow({ units }: { units: Units | null | undefined }) {

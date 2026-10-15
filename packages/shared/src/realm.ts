@@ -1,6 +1,6 @@
 import { balance } from './balance'
 import { dynastyStep } from './dynasty'
-import { affordable, armoryOf, palaceLevel, population, recruitment } from './economy'
+import { affordable, armoryOf, palaceLevel, population, recruitment, withPeople } from './economy'
 import type { Cost, Good, Kingdom, Resource, Stock } from './economy'
 import { buyTotal } from './market'
 import type { Market } from './market'
@@ -70,7 +70,7 @@ export function trainSoldiers(kingdom: Kingdom, count: number, at: number, unit:
   const armory = { ...armoryOf(kingdom) }
   for (const [w, n] of Object.entries(weapons)) armory[w as keyof typeof armory] -= (n ?? 0) * count
   return {
-    ...kingdom,
+    ...withPeople(kingdom, at, -count),
     stock: pay(kingdom.stock, times(cost, count)),
     armory,
     manpower: pool - count,
@@ -82,12 +82,12 @@ export const setNightShift = (kingdom: Kingdom, on: boolean): Kingdom => ({ ...k
 
 // Sends soldiers of the garrison home: they become villagers again and count toward the manpower pool once more.
 // What was paid to train them is not given back.
-export function disbandUnits(kingdom: Kingdom, units: Units): Kingdom {
+export function disbandUnits(kingdom: Kingdom, units: Units, at: number): Kingdom {
   const garrison = garrisonOf(kingdom)
   const n = countOf(units)
   if (n < 1 || !hasUnits(garrison, units)) return kingdom
   const left = subtractUnits(garrison, units)
-  return { ...kingdom, units: left, soldiers: countOf(left), manpower: (kingdom.manpower ?? 0) + n }
+  return { ...withPeople(kingdom, at, n), units: left, soldiers: countOf(left), manpower: (kingdom.manpower ?? 0) + n }
 }
 
 export const buyCost = (market: Market | null | undefined, good: Good, units: number, at: number) =>
@@ -165,6 +165,6 @@ export function shipsError(kingdom: Kingdom, ship: Ship, count: number, at: numb
 export function orderShips(kingdom: Kingdom, ship: Ship, count: number, at: number): Kingdom {
   if (shipsError(kingdom, ship, count, at)) return kingdom
   const { pool } = recruitment(kingdom, at)
-  const paid = { ...kingdom, stock: pay(kingdom.stock, shipsCost(ship, count)), manpower: Math.max(0, pool - shipSpec(ship).crew * count) }
+  const paid = { ...withPeople(kingdom, at, -shipSpec(ship).crew * count), stock: pay(kingdom.stock, shipsCost(ship, count)), manpower: Math.max(0, pool - shipSpec(ship).crew * count) }
   return layDownShips(paid, ship, count, at)
 }

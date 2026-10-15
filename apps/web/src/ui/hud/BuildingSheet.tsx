@@ -1,5 +1,5 @@
 import { NavyTab } from './navy'
-import { BUILDINGS, balance, movable, moveCost, moveSeconds, buildingOutput, cutOff, goldCap, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
+import { BUILDINGS, movable, moveCost, moveSeconds, buildingOutput, cutOff, goldCap, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
 import type { Building, BuildingKind, Good, Product, Resource } from '@game/shared'
 import { looksOf } from '../../game/buildingSprites'
 import { Icon } from '../icons'
@@ -10,6 +10,8 @@ import { FisherPanel } from './Fishing'
 import { GamePanel } from './MiniGames'
 import { HospitalPanel, TemplePanel, UniversityPanel } from './institutions'
 import { Meter, Section, SpriteView } from './primitives'
+import { PrisonPanel, SpyHousePanel, TavernPanel } from './buildingPanels'
+import { TreasuryPanel } from './treasury'
 import { KingdomTab, TradeTab } from './tabs'
 import type { HudData } from './tabs'
 
@@ -64,7 +66,7 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
       <div className="sheet-body">
         {b.kind === 'tradePost' || (b.kind === 'market' && b.doneAt <= now) ? (
           <>
-            <TradeTab {...data} />
+            <TradeTab {...data} part={b.kind === 'market' ? 'market' : 'merchant'} />
             {b.kind === 'tradePost' && <GamePanel game="caravan" data={data} />}
           </>
         ) : b.kind === 'palace' ? (
@@ -91,6 +93,9 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
             {!building && b.kind === 'hospital' && <HospitalPanel building={b} data={data} />}
             {!building && b.kind === 'temple' && <TemplePanel data={data} />}
             {!building && b.kind === 'prison' && <PrisonPanel data={data} />}
+            {!building && b.kind === 'tavern' && <TavernPanel data={data} />}
+            {!building && b.kind === 'spyHouse' && <SpyHousePanel data={data} />}
+            {!building && b.kind === 'treasury' && <TreasuryPanel building={b} data={data} />}
             {!building && b.kind === 'fisherHut' && <FisherPanel data={data} />}
             {!building && b.kind === 'barracks' && <GamePanel game="archery" data={data} />}
             {!building && b.kind === 'forge' && <GamePanel game="anvil" data={data} />}
@@ -126,7 +131,7 @@ function Output({ building: b, data }: { building: Building; data: HudData }) {
       </>
     )
   }
-  if (b.kind === 'university' || b.kind === 'hospital' || b.kind === 'temple') return <b>{BUILDING_NOTES[b.kind]}</b>
+  if (b.kind === 'university' || b.kind === 'hospital' || b.kind === 'temple' || b.kind === 'prison' || b.kind === 'tavern' || b.kind === 'spyHouse') return <b>{BUILDING_NOTES[b.kind]}</b>
   if (spec.gold) {
     return (
       <>
@@ -307,41 +312,6 @@ function Demolish({ building: b, data, onDemolish }: { building: Building; data:
           Yık
         </button>
       </div>
-    </Section>
-  )
-}
-
-// The prison (CLAUDE.md §9.7): the queens held in it, each with the ransom set when she was taken, and setting one free
-// (which mends the relation with her kingdom).
-function PrisonPanel({ data }: { data: HudData }) {
-  const hostages = data.kingdom.hostages ?? []
-  const fallback = balance.espionage.operations.kidnap.ransom
-  return (
-    <Section title="Mahkûmlar" icon="crown" aside={hostages.length > 0 ? `${hostages.length} kraliçe` : 'boş'}>
-      {hostages.length === 0 ? (
-        <p className="hint">
-          Hapishane boş. Casus operasyonuyla bir lordun kraliçesini kaçırırsan burada tutulur; fidyesi o lordun altınının casuslarının tahminine göre
-          %{Math.round(balance.espionage.operations.kidnap.ransomShare * 100)}'ı olur (en az {balance.espionage.operations.kidnap.ransomMin} altın).
-        </p>
-      ) : (
-        <ul className="places">
-          {hostages.map((h) => (
-            <li key={h.of}>
-              <Icon name="crown" size={24} />
-              <span>
-                <b>{h.name} kraliçesi</b>
-                <small>Fidyesi {h.ransom ?? fallback} altın · kurtarılmayı bekliyor</small>
-              </span>
-              <button className="btn small" onClick={() => data.online?.act({ type: 'release', target: h.of })}>
-                Serbest bırak
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {hostages.length > 0 && (
-        <p className="hint">Kraliçesi elinde olan lordun halkı mutsuzdur. Fidyeyi öderse kraliçe döner ve altın sana gelir; serbest bırakırsan ilişkiniz düzelir.</p>
-      )}
     </Section>
   )
 }

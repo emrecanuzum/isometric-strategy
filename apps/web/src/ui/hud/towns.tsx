@@ -4,10 +4,12 @@ import {
   dynastyEffects,
   happinessOf,
   heldTown,
+  overreachOf,
   townCenter,
   townFactor,
   townLoyalty,
-  townLoyaltyTarget,
+  townLoyaltyParts,
+  townRevoltIn,
   townRevolting,
   townScore,
   townSends,
@@ -15,11 +17,11 @@ import {
   townUpkeepGold,
   townUpkeepLevel,
 } from '@game/shared'
-import type { Army, HeldTown, Kingdom, Pact, Point, Town, TownGood, World } from '@game/shared'
+import type { Army, HeldTown, Kingdom, LoyaltyParts, Pact, Point, Town, TownGood, World } from '@game/shared'
 import { cityInfo } from '../../game/cities'
 import { TOWN_KIND_NAMES, townGift } from '../../game/towns'
 import { Icon } from '../icons'
-import { Meter, Section, Stat, fmt, signed } from './primitives'
+import { Meter, Section, Stat, fmt, signed, times } from './primitives'
 
 // A town's sheet (CLAUDE.md §8.4): what it sends its holder, who holds it, the siege under way, and sending an army
 // to lay siege to it. A town of the player's own also shows what it has sent so far, how loyal it is and why, the
@@ -112,6 +114,7 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
             </button>
           </Section>
         )}
+        {!mine && <Overreach held={kingdom.towns?.length ?? 0} taking />}
         {!mine && (
           <Section title="Kuşat" icon="shield">
             {!lawful ? (
@@ -146,19 +149,21 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
 function Holding({ world, kingdom, held, now, onUpkeep }: { world: World; kingdom: Kingdom; held: HeldTown; now: number; onUpkeep(level: number): void }) {
   const t = balance.towns
   const loyalty = townLoyalty(held)
-  const mood = { happiness: happinessOf(kingdom), ruler: dynastyEffects(kingdom).happiness }
-  const target = townLoyaltyTarget(held, mood)
+  // How many towns the lord holds (this one among them): over-expansion weighs on all of them.
+  const count = Math.max(1, kingdom.towns?.length ?? 1)
+  const over = overreachOf(count)
+  const mood = { happiness: happinessOf(kingdom), ruler: dynastyEffects(kingdom).happiness, towns: count }
+  const parts = townLoyaltyParts(held, mood)
+  const target = parts.target
   const trend = target - loyalty
   const revolting = townRevolting(held, now)
   const level = townUpkeepLevel(held)
   const roundsPerHour = 3600 / balance.economy.productionSeconds
-  const cost = townUpkeepGold(held)
-  const sends = townSends(held, now)
-  const factor = townFactor(held, now)
+  const cost = townUpkeepGold(held, count)
+  const sends = townSends(held, now, count)
+  const factor = townFactor(held, now) * over.yieldFactor
   const delivered = held.delivered ?? {}
   const goods = (Object.keys(GOOD_NAMES) as TownGood[]).filter((g) => (delivered[g] ?? 0) > 0 || sends[g] > 0)
-  const happinessPart = (mood.happiness - 50) * t.loyalty.happinessWeight
-  const rulerPart = mood.ruler * t.loyalty.rulerWeight
   const points = Math.round(townScore(held, now))
   const liege = kingdom.liege !== undefined && world.cities[kingdom.liege] ? cityInfo(world, kingdom.liege) : null
   const r = t.revolt
@@ -174,25 +179,28 @@ function Holding({ world, kingdom, held, now, onUpkeep }: { world: World; kingdo
           <p className="alert">Sadakat %{r.below}'in altına inerse kasaba ayaklanır. Bakımı artırmak sadakati yükseltir.</p>
         ) : null}
         <Stat label="Gittiği yer" value={`%${Math.round(target)}`} tone={trend >= 0 ? 'up' : 'down'} note={`yaklaşık ${Math.round(t.loyalty.tauSeconds / 60)} dakikada yolun üçte ikisini alır`} />
-        <Stat label={`Taban (bakım: ${upkeepName(held.unpaid ? 0 : level).toLocaleLowerCase('tr-TR')})`} value={`%${t.loyalty.upkeepTargets[held.unpaid ? 0 : level]}`} note={held.unpaid ? 'hazine yetmedi, ödenmedi' : undefined} tone={held.unpaid ? 'down' : undefined} />
-        <Stat label="Halkının mutluluğu" value={signed(happinessPart)} tone={happinessPart >= 0 ? 'up' : 'down'} />
-        <Stat label="Hükümdarın halk yeteneği" value={signed(rulerPart)} tone={rulerPart >= 0 ? 'up' : 'down'} />
         <p className="hint">
-          Sadakat ne kadar yüksekse kasaba o kadar çok gönderir (%0'da ×{t.loyalty.yieldMin}, %100'de ×{t.loyalty.yieldMax}; şu an ×{factor.toFixed(2).replace('.', ',')}).
-          Düşman casusları kasabayı kışkırtıp sadakatini bir anda düşürebilir.
+          Sadakat ne kadar yüksekse kasaba o kadar çok gönderir (%0'da ×{t.loyalty.yieldMin}, %100'de ×{t.loyalty.yieldMax}
+          {over.yieldFactor < 1 && `, aşırı büyüme ×${String(over.yieldFactor).replace('.', ',')}`}; şu an ×{factor.toFixed(2).replace('.', ',')}).
         </p>
       </Section>
+      <Unrest held={held} parts={parts} level={level} loyalty={loyalty} now={now} />
+      {count > 1 && <Overreach held={count} />}
       <Section title="Bakım" icon="gold" aside={cost > 0 ? `tur başına ${amount(cost)} altın` : 'ödeme yok'}>
         <p className="hint">Kasabayı elinde tutmak için her üretim turunda hazineden ödenir. Hazine yetmezse ödenmez ve sadakat bakımsızmış gibi düşer.</p>
         <div className="segmented" role="radiogroup" aria-label="Bakım">
           {t.upkeep.goldPerRound.map((gold, i) => (
             <button key={i} className="btn small" role="radio" aria-checked={level === i} onClick={() => level !== i && onUpkeep(i)}>
               {upkeepName(i)}
-              <small> {gold > 0 ? `${amount(gold)}` : '0'}</small>
+              <small> {gold > 0 ? `${amount(gold * over.upkeepFactor)}` : '0'}</small>
             </button>
           ))}
         </div>
-        <Stat label="Saatte" value={`${amount(cost * roundsPerHour)} altın`} note={`sadakat hedefi %${t.loyalty.upkeepTargets[level]} (+ halk ve hükümdar)`} />
+        <Stat
+          label="Saatte"
+          value={`${amount(cost * roundsPerHour)} altın`}
+          note={`sadakat tabanı %${t.loyalty.upkeepTargets[level]} (+ halk ve hükümdar${over.loyalty < 0 ? ', − aşırı büyüme' : ''})${over.upkeepFactor > 1 ? ` · aşırı büyüme bakımı ${times(over.upkeepFactor)} yapıyor` : ''}`}
+        />
       </Section>
       <Section title="Sana getirdikleri" icon="chest" aside={held.takenAt ? `alınalı ${span(now - held.takenAt)}` : undefined}>
         {goods.length === 0 && <p className="hint">Henüz bir şey göndermedi.</p>}
@@ -223,5 +231,201 @@ function Holding({ world, kingdom, held, now, onUpkeep }: { world: World; kingdo
         </p>
       </Section>
     </>
+  )
+}
+
+// ---- Unrest and over-expansion (CLAUDE.md §8.4) ----------------------------------------------------------------------
+
+const pct = (v: number) => `${Math.max(0, Math.min(100, v))}%`
+const minutesOf = (ms: number) => Math.max(1, Math.round(ms / 60_000))
+
+// How bad over-expansion is at each tier of balance.towns.overreach.tiers, by name.
+const OVERREACH_NAMES = ['Hafif', 'Ağır', 'İsyan']
+const overreachName = (tier: number) => OVERREACH_NAMES[Math.min(tier, OVERREACH_NAMES.length - 1)]
+
+// What over-expansion does at a tier, in one line.
+function overreachText(towns: number) {
+  const o = overreachOf(towns)
+  if (o.tier < 0) return 'Ceza yok.'
+  return [
+    `her kasabanın sadakati ${signed(o.loyalty)}`,
+    ...(o.loyaltyCap < 100 ? [`sadakat en fazla %${o.loyaltyCap} (ayaklanma çizgisi %${balance.towns.revolt.below})`] : []),
+    `halkın mutluluğu ${signed(o.happiness)}`,
+    `bakım ${times(o.upkeepFactor)}`,
+    `katkı ${times(o.yieldFactor)}`,
+  ].join(', ')
+}
+
+// What moves a town's loyalty, drawn as a waterfall on the 0–100 scale: the upkeep's base, the lord's people and ruler,
+// over-expansion (and its cap), and where it all leads; the revolt and break-away lines run through every row. Below:
+// the spies' last incitement, how soon the town will rise, and its loyalty over the next hour.
+function Unrest({ held, parts, level, loyalty, now }: { held: HeldTown; parts: LoyaltyParts; level: number; loyalty: number; now: number }) {
+  const t = balance.towns
+  const r = t.revolt
+  const rows: { label: string; from: number; to: number; note?: string }[] = []
+  let sum = 0
+  const step = (label: string, v: number, note?: string) => {
+    const from = Math.max(0, Math.min(100, sum))
+    sum += v
+    rows.push({ label, from, to: Math.max(0, Math.min(100, sum)), note })
+  }
+  step(`Bakım (${upkeepName(held.unpaid ? 0 : level).toLocaleLowerCase('tr-TR')})`, parts.upkeep, held.unpaid ? 'ödenmedi' : undefined)
+  step('Halkının mutluluğu', parts.happiness)
+  step('Hükümdarın halk yeteneği', parts.ruler)
+  if (parts.overreach !== 0) step('Aşırı büyüme', parts.overreach)
+  if (sum > parts.cap) {
+    rows.push({ label: 'Aşırı büyüme tavanı', from: Math.min(100, sum), to: parts.cap, note: `en fazla %${parts.cap}` })
+    sum = parts.cap
+  }
+  const tau = t.loyalty.tauSeconds * 1000
+  const incited = held.incitedAt !== undefined && now - held.incitedAt < tau * 2 ? held : null
+  const revolting = townRevolting(held, now)
+  const revoltIn = townRevoltIn(loyalty, parts.target)
+  const spy = balance.espionage.operations.townRevolt.loyalty
+  // How likely a revolt is, from certain to low.
+  const risk = revolting
+    ? { value: 1, label: 'Ayaklanmada', text: `Kasaba şu an ayaklanmada. Sadakat %${r.below}'i geçmeden ayaklanma bitmez.` }
+    : revoltIn !== null
+      ? { value: 1, label: 'Kesin', text: `Sadakat %${Math.round(parts.target)}'e gidiyor, ayaklanma çizgisinin altına: yaklaşık ${minutesOf(revoltIn)} dakika içinde ayaklanır.` }
+      : loyalty < r.below + 10 || parts.target < r.below + 10
+        ? { value: 0.75, label: 'Yüksek', text: `Sadakat ayaklanma çizgisine çok yakın; küçük bir sarsıntı (hazinenin boşalması, casuslar) yeter.` }
+        : loyalty + spy < r.below || parts.target + spy < r.below
+          ? { value: 0.45, label: 'Orta', text: `Bir casus kışkırtması (${signed(spy)}) kasabayı ayaklandırabilir.` }
+          : { value: 0.15, label: 'Düşük', text: `Bir casus kışkırtması bile kasabayı ayaklandırmaya yetmez.` }
+  // The next hour of loyalty, drifting toward its target.
+  const W = 120
+  const H = 40
+  const points = Array.from({ length: 31 }, (_, i) => {
+    const m = i * 2
+    const v = parts.target + (loyalty - parts.target) * Math.exp((-m * 60_000) / tau)
+    return `${(m / 60) * W},${H - (v / 100) * H}`
+  }).join(' ')
+  const line = (v: number) => H - (v / 100) * H
+  return (
+    <Section title="Huzursuzluğun kaynakları" icon="unhappy" aside={`ayaklanma riski: ${risk.label.toLocaleLowerCase('tr-TR')}`}>
+      <div className="unrest-chart" role="img" aria-label="Sadakat hedefini oluşturanlar">
+        {rows.map((row) => {
+          const down = row.to < row.from
+          return (
+            <div className="unrest-row" key={row.label}>
+              <span>{row.label}</span>
+              <span className="unrest-track">
+                <i className="line revolt" style={{ left: pct(r.below) }} />
+                <i className="line free" style={{ left: pct(r.breakAwayBelow) }} />
+                <i className={`bar ${down ? 'down' : 'up'}`} style={{ left: pct(Math.min(row.from, row.to)), width: pct(Math.abs(row.to - row.from)) }} />
+              </span>
+              <b className={down ? 'down' : 'up'}>{row.note && row.label.endsWith('tavanı') ? `%${parts.cap}` : signed(row.to - row.from)}</b>
+              {row.note && <small>{row.note}</small>}
+            </div>
+          )
+        })}
+        <div className="unrest-row total">
+          <span>Gittiği yer</span>
+          <span className="unrest-track">
+            <i className="line revolt" style={{ left: pct(r.below) }} />
+            <i className="line free" style={{ left: pct(r.breakAwayBelow) }} />
+            <i className={`bar ${parts.target < r.below ? 'down' : 'gold'}`} style={{ left: 0, width: pct(parts.target) }} />
+          </span>
+          <b className={parts.target < r.below ? 'down' : undefined}>%{Math.round(parts.target)}</b>
+        </div>
+        <div className="unrest-row total">
+          <span>Şu an</span>
+          <span className="unrest-track">
+            <i className="line revolt" style={{ left: pct(r.below) }} />
+            <i className="line free" style={{ left: pct(r.breakAwayBelow) }} />
+            <i className={`bar ${loyalty < r.below ? 'down' : 'up'}`} style={{ left: 0, width: pct(loyalty) }} />
+          </span>
+          <b className={loyalty < r.below ? 'down' : undefined}>%{Math.round(loyalty)}</b>
+        </div>
+        <small className="unrest-legend">
+          <i className="line revolt" /> %{r.below} ayaklanma · <i className="line free" /> %{r.breakAwayBelow} kopma
+        </small>
+      </div>
+      {incited && (
+        <div className="unrest-row spy">
+          <span>Casus kışkırtması</span>
+          <span className="unrest-track">
+            <i className="bar down" style={{ left: 0, width: pct(Math.abs(incited.incitedBy ?? spy)) }} />
+          </span>
+          <b className="down">{signed(incited.incitedBy ?? spy)}</b>
+          <small>{minutesOf(now - incited.incitedAt!)} dakika önce, bir kerelik; hedefi değiştirmez, sadakat zamanla toparlanır</small>
+        </div>
+      )}
+      <div className="unrest-risk">
+        <span>Ayaklanma riski</span>
+        <Meter value={risk.value} tone={risk.value >= 0.75 ? 'down' : risk.value >= 0.4 ? 'gold' : 'up'} label="Ayaklanma riski" segments={10} />
+        <b className={risk.value >= 0.75 ? 'down' : undefined}>{risk.label}</b>
+      </div>
+      <p className="hint">{risk.text}</p>
+      <figure className="unrest-plot">
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" shapeRendering="crispEdges" aria-label="Önümüzdeki saatte sadakat" role="img">
+          <rect x={0} y={line(r.below)} width={W} height={H - line(r.below)} className="zone" />
+          <line x1={0} x2={W} y1={line(r.below)} y2={line(r.below)} className="revolt" />
+          <line x1={0} x2={W} y1={line(r.breakAwayBelow)} y2={line(r.breakAwayBelow)} className="free" />
+          <polyline points={points} className="path" />
+        </svg>
+        <figcaption>
+          <span>şimdi</span>
+          <span>önümüzdeki saatte sadakat</span>
+          <span>+60 dk</span>
+        </figcaption>
+      </figure>
+    </Section>
+  )
+}
+
+// Over-expansion: what holding `held` towns costs, tier by tier, with the lord's own tier marked (and, `taking`, the
+// one he would reach with one more).
+function Overreach({ held, taking = false }: { held: number; taking?: boolean }) {
+  const tiers = balance.towns.overreach.tiers
+  const now = overreachOf(held)
+  const next = taking ? overreachOf(held + 1) : null
+  const counts = [1, ...tiers.map((t) => t.towns)]
+  const worst = Math.max(1, ...tiers.map((t) => -t.loyalty + (100 - t.loyaltyCap)))
+  const last = tiers[tiers.length - 1]
+  const at = (n: number) => (n >= last.towns ? last.towns : n)
+  return (
+    <Section title="Aşırı büyüme" icon="warn" aside={now.tier < 0 ? (taking ? `${held} kasaban var` : 'yok') : `${held} kasaba · ${overreachName(now.tier).toLocaleLowerCase('tr-TR')}`}>
+      {taking ? (
+        next!.tier < 0 ? (
+          <p className="hint">Bu ilk kasaban olur: tek kasabanın aşırı büyüme cezası yoktur.</p>
+        ) : (
+          <p className={next!.tier >= tiers.length - 1 ? 'alert' : 'hint'}>
+            Bu kasabayı alırsan elinde {held + 1} kasaba olur ve aşırı büyüme {now.tier < 0 ? 'başlar' : next!.tier > now.tier ? 'artar' : 'sürer'} ({overreachName(next!.tier).toLocaleLowerCase('tr-TR')}): {overreachText(held + 1)}.
+            {next!.tier >= tiers.length - 1 && ' Kasabaların hepsi ayaklanır.'}
+          </p>
+        )
+      ) : (
+        <p className={now.tier >= tiers.length - 1 ? 'alert' : 'hint'}>
+          Bir lord aynı anda ancak bu kadar kasabaya söz geçirebilir. {held} kasaba elinde: {overreachText(held)}.
+          {now.tier >= tiers.length - 1 && ' Kasabaların sadakati ayaklanma çizgisini aşamaz: hepsi ayaklanacak. Birini bırakmak için bakımını kes; kopunca ötekiler rahatlar.'}
+        </p>
+      )}
+      <div className="overreach-ladder" role="table" aria-label="Kasaba sayısına göre aşırı büyüme">
+        {counts.map((n, i) => {
+          const o = overreachOf(n)
+          const weight = -o.loyalty + (100 - o.loyaltyCap)
+          const mark = at(held) === n ? 'now' : next && at(held + 1) === n ? 'next' : ''
+          return (
+            <div key={n} className={`overreach-row ${mark}`} role="row">
+              <span role="cell">
+                {n === last.towns ? `${n}+` : n} kasaba
+                {mark === 'now' && <small> · sen</small>}
+                {mark === 'next' && <small> · alırsan</small>}
+              </span>
+              <span className="overreach-bar" role="cell">
+                <i className={i === counts.length - 1 ? 'down' : i === 0 ? 'up' : 'gold'} style={{ width: pct(i === 0 ? 2 : (weight / worst) * 100) }} />
+              </span>
+              <small role="cell">
+                {o.tier < 0
+                  ? 'ceza yok'
+                  : `sadakat ${signed(o.loyalty)}${o.loyaltyCap < 100 ? `, en fazla %${o.loyaltyCap}` : ''} · mutluluk ${signed(o.happiness)} · bakım ${times(o.upkeepFactor)} · katkı ${times(o.yieldFactor)}`}
+              </small>
+            </div>
+          )
+        })}
+      </div>
+      <p className="hint">Cezalar elindeki bütün kasabalara (ve lordluğunun halkına) birlikte işler; bir kasaba kopunca ya da elden çıkınca hemen hafifler.</p>
+    </Section>
   )
 }

@@ -79,7 +79,7 @@ async function settleRevolts(lobby: string, rows: Row[], towns: TownRow[], now: 
     const held = (row.state?.towns ?? []) as { id: number; loyalty?: number; revoltUntil?: number; revoltTold?: number }[]
     if (held.length === 0) continue
     const restless = held.some(
-      (h) => h.revoltUntil !== undefined || game.townLoyalty(h) < r.below + 5 || game.townLoyaltyTarget(h, { happiness: game.happinessOf(row.state), ruler: 0 }) < r.below,
+      (h) => h.revoltUntil !== undefined || game.townLoyalty(h) < r.below + 5 || game.townLoyaltyTarget(h, { happiness: game.happinessOf(row.state), ruler: 0, towns: held.length }) < r.below,
     )
     if (!restless || now - (row.state.settledAt ?? 0) < 60_000) continue
     const told: { id: number; name?: string }[] = []

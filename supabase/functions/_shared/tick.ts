@@ -12,7 +12,7 @@ import { ensureTowns, settleTowns } from './towns.ts'
 import { settlePatrols } from './patrols.ts'
 import { settleNavy } from './navy.ts'
 import type { EnvoyRow } from './diplomacy.ts'
-import { admin, changeRelation, grantClaim, iso, loadKingdoms, ms, mutateKingdom, nameOf, notify, pactsOf, worldOf } from './server.ts'
+import { admin, changeRelation, grantClaim, iso, loadKingdoms, ms, mutateKingdom, nameOf, notify, pactsOf, settleFoodDemand, syncWarFlags, worldOf } from './server.ts'
 import type { Kingdom, LobbyWorld, Point, Row } from './server.ts'
 
 // deno-lint-ignore no-explicit-any
@@ -97,6 +97,10 @@ export async function tick(lobby: string, simAt: number, now: number) {
     if (why) await notify(lobby, [order.kingdom_id], 'order_failed', { order: order.payload, why }, at)
   }
 
+  // Sieges begun: the people of the besieged palace flee (CLAUDE.md §8.3).
+  const { data: besieging } = await admin.from('battles').select('*').eq('lobby_id', lobby).eq('kind', 'siege').eq('resolved', false).lte('started_at', iso(now))
+  for (const battle of besieging ?? []) await siegeBegun(battle, rows)
+
   // Battles that are over.
   const { data: ending } = await admin.from('battles').select('*').eq('lobby_id', lobby).eq('resolved', false).lte('ends_at', iso(now))
   for (const battle of ending ?? []) await finishBattle(battle, world, now)
@@ -112,6 +116,30 @@ export async function tick(lobby: string, simAt: number, now: number) {
   await settlePatrols(lobby, world, await loadKingdoms(lobby), now)
   // Fleets meeting at the lords' docks: blockades, raids and sorties (CLAUDE.md §8.5).
   await settleNavy(lobby, await loadKingdoms(lobby), await pactsOf(lobby), now)
+  // Which lords are at war (their people grow slower), and food's price as the world's people grow (CLAUDE.md §5.2, §9.7).
+  await syncWarFlags(lobby, now)
+  await settleFoodDemand(lobby, await loadKingdoms(lobby), now)
+}
+
+// A siege at a lord's palace has begun: a share of the people flee at once, and while it lasts more leave (the lord's
+// state knows until when, see game.growthTerms). Done once per siege: the battle keeps how many fled.
+// deno-lint-ignore no-explicit-any
+async function siegeBegun(battle: any, rows: Row[]) {
+  if (battle.kind !== 'siege' || battle.besieged === null || battle.plan?.fled !== undefined) return
+  const at = ms(battle.started_at)
+  const until = ms(battle.ends_at)
+  // Claimed on the battle first, so the people flee once even if two runs meet here.
+  const { data: claimed } = await admin.from('battles').update({ plan: { ...battle.plan, fled: 0 } }).eq('id', battle.id).is('plan->fled', null).select('id').maybeSingle()
+  if (!claimed) return
+  let fled = 0
+  await mutateKingdom(battle.besieged, at, (k) => {
+    const { people } = game.population(k, at)
+    fled = Math.min(Math.floor(people), Math.round(people * game.balance.society.growth.siege.startShare))
+    return { ...k, people: Math.max(0, people - fled), besiegedUntil: Math.max(k.besiegedUntil ?? 0, until) }
+  })
+  battle.plan = { ...battle.plan, fled }
+  await admin.from('battles').update({ plan: battle.plan }).eq('id', battle.id)
+  if (fled > 0) await notify(battle.lobby_id, [battle.besieged], 'siege_people', { lost: fled, by: nameOf(rows, battle.attackers?.[0]?.kingdom), taken: false }, at)
 }
 
 // ---- Armies on the move -------------------------------------------------------------------------------------------
@@ -335,6 +363,8 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
   const lobby = battle.lobby_id
   const at = ms(battle.ends_at)
   const plan = battle.plan
+  // A siege begun and ended between two runs: its people fled first.
+  await siegeBegun(battle, await loadKingdoms(lobby))
   const rows = await loadKingdoms(lobby)
   const states = new Map(rows.filter((r) => r.state).map((r) => [r.id, r.state as Kingdom]))
   const report: Record<string, unknown> = { winner: plan.winner, losses: {} as Record<string, number> }
@@ -406,7 +436,11 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
     const survivors = battle.attackers.reduce((n, f, i) => n + Math.max(0, f.soldiers - (plan.attackerLosses[i] ?? 0)), 0)
     const carry = survivors * m.siege.carryPerSoldier
     const loot: Record<string, number> = {}
+    // More of the people flee a palace taken.
+    let fled = 0
     await mutateKingdom(battle.besieged, at, (k) => {
+      const { people } = game.population(k, at)
+      fled = Math.min(Math.floor(people), Math.round(people * game.balance.society.growth.siege.takenShare))
       const stock = { ...k.stock }
       const want: Record<string, number> = {}
       for (const r of ['gold', 'food', 'materials', 'arms']) want[r] = Math.floor(stock[r] * share)
@@ -422,8 +456,10 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
       let breaking = Math.ceil(k.buildings.filter((b: { kind: string; broken?: boolean }) => b.kind === 'wall' && !b.broken).length * breakShare)
       const buildings = k.buildings.map((b: { kind: string; broken?: boolean }) => (b.kind === 'wall' && !b.broken && breaking-- > 0 ? { ...b, broken: true } : b))
       // The shield against the next siege.
-      return { ...k, stock, buildings, happiness: Math.max(0, (k.happiness ?? 60) + game.balance.society.happiness.looted), shieldUntil: at + m.siege.shieldSeconds * 1000 }
+      return { ...k, stock, buildings, people: Math.max(0, people - fled), happiness: Math.max(0, (k.happiness ?? 60) + game.balance.society.happiness.looted), shieldUntil: at + m.siege.shieldSeconds * 1000 }
     })
+    if (fled > 0) await notify(lobby, [battle.besieged], 'siege_people', { lost: fled, by: nameOf(rows, battle.attackers[0].kingdom), taken: true }, Math.min(at, now))
+    report.fled = fled
     const taker = battle.attackers[0].kingdom
     await mutateKingdom(taker, at, (k) => {
       const stock = { ...k.stock }

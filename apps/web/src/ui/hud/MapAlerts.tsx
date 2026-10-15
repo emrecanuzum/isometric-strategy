@@ -1,4 +1,4 @@
-import { balance, cutOff, imprisoned, navyOf, palaceLevel } from '@game/shared'
+import { balance, cutOff, imprisoned, navyOf, overreachFor, palaceLevel, townLoyalty, townRevolting } from '@game/shared'
 import { showArmyPart } from './war'
 import type { Kingdom } from '@game/shared'
 import { Icon } from '../icons'
@@ -7,9 +7,24 @@ import type { WarNote } from './war'
 
 // Standing trouble in the kingdom, kept on the right edge of the map between the top bar and the map buttons until it
 // is put right. Tapping one opens the tab where it is dealt with.
-export function MapAlerts({ kingdom, now, war = [], onOpen, onQueen }: { kingdom: Kingdom; now: number; war?: WarNote[]; onOpen: (tab: TabId) => void; onQueen?: () => void }) {
+export function MapAlerts({
+  kingdom,
+  now,
+  war = [],
+  onOpen,
+  onQueen,
+  onTown,
+}: {
+  kingdom: Kingdom
+  now: number
+  war?: WarNote[]
+  onOpen: (tab: TabId) => void
+  onQueen?: () => void
+  // Opens a held town's sheet (the over-expansion card opens the most restless one).
+  onTown?: (town: number) => void
+}) {
   // The fighting first: war is what matters most (see warNotes).
-  const alerts: { key: string; tab: TabId; text: string; sea?: boolean }[] = war.map((n) => ({ key: n.key, tab: 'army', text: n.text }))
+  const alerts: { key: string; tab: TabId; text: string; sea?: boolean; town?: number; mild?: boolean }[] = war.map((n) => ({ key: n.key, tab: 'army', text: n.text }))
   if (imprisoned(kingdom.buildings, kingdom.site, now)) {
     alerts.push({
       key: 'prison',
@@ -30,6 +45,24 @@ export function MapAlerts({ kingdom, now, war = [], onOpen, onQueen }: { kingdom
     if (m.kind === 'raid') alerts.push({ key: `fleet${f.id}`, tab: 'army', sea: true, text: `Filon ${m.name} kıyısına akına gidiyor.` })
   }
   if ((kingdom.revoltUntil ?? 0) > now) alerts.push({ key: 'revolt', tab: 'people', text: 'Halk ayaklandı: üretim yarıda, mutluluk düşük.' })
+  // Holding too many towns at once (CLAUDE.md §8.4): the card opens the most restless of them.
+  const held = kingdom.towns ?? []
+  const over = overreachFor(held)
+  if (over.tier >= 0) {
+    const restless = [...held].sort((a, b) => townLoyalty(a) - townLoyalty(b))[0]
+    const rising = held.filter((h) => townRevolting(h, now)).length
+    const last = over.tier >= balance.towns.overreach.tiers.length - 1
+    const effects = `sadakat ${over.loyalty}${over.loyaltyCap < 100 ? ` (en fazla %${over.loyaltyCap})` : ''}, mutluluk ${over.happiness}, bakım ×${String(over.upkeepFactor).replace('.', ',')}`
+    alerts.push({
+      key: 'overreach',
+      tab: 'army',
+      town: restless.id,
+      mild: over.tier === 0,
+      text: last
+        ? `Aşırı büyüme! ${held.length} kasaba elinde: hepsi ayaklanıyor${rising > 0 ? ` (${rising} kasaba ayaklanmada)` : ''}; ${effects}. Birinin bakımını kesip bırak.`
+        : `Aşırı büyüme: ${held.length} kasaba elinde; ${effects}.${rising > 0 ? ` ${rising} kasaba ayaklanmada.` : ''} Bir kasaba daha alırsan ceza ağırlaşır.`,
+    })
+  }
   // A palace past its second level and no lady at court (raised before the rule): the house needs a queen, at once.
   const needsQueen = palaceLevel(kingdom, now) >= balance.dynasty.queenForPalaceLevel && !kingdom.queen && !kingdom.queenHeldBy
   if (alerts.length === 0 && !needsQueen) return null
@@ -45,7 +78,11 @@ export function MapAlerts({ kingdom, now, war = [], onOpen, onQueen }: { kingdom
         </div>
       )}
       {alerts.map((a) => (
-        <button key={a.key} className="map-alert frame" onClick={() => (a.sea && showArmyPart('sea'), onOpen(a.tab))}>
+        <button
+          key={a.key}
+          className={`map-alert frame${a.mild ? ' mild' : ''}`}
+          onClick={() => (a.town !== undefined && onTown ? onTown(a.town) : (a.sea && showArmyPart('sea'), onOpen(a.tab)))}
+        >
           <Icon name="warn" size={16} />
           <span>{a.text}</span>
         </button>

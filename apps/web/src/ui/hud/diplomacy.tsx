@@ -23,6 +23,7 @@ import {
 } from '@game/shared'
 import type { BattleRecord, Envoy, Kingdom, Operation, Pact, PeaceTerms, SpyTopic } from '@game/shared'
 import { useState } from 'react'
+import { Subtabs, usePart } from './Subtabs'
 import { KINGDOM_COLORS } from '../../game/buildingSprites'
 import type { KingdomColor } from '../../game/buildingSprites'
 import { INN_KIND_NAMES, innInfo } from '../../game/innInfo'
@@ -115,23 +116,30 @@ const stateChips = (online: Online, id: number) => {
   return chips
 }
 
+// The diplomacy tab's two parts, the lords and the spies, the last one looked at remembered in this browser.
+type DiplomacyPart = 'kingdoms' | 'spies'
+const DIPLOMACY_PARTS: DiplomacyPart[] = ['kingdoms', 'spies']
+
 export function DiplomacyTab(data: HudData) {
   const { online } = data
-  const [view, setView] = useState<'kingdoms' | 'spies'>('kingdoms')
+  const [view, setView] = usePart('diplomacy', DIPLOMACY_PARTS, 'kingdoms')
   if (!online) return null
   const focus = online.kingdoms.find((k) => k.id === online.focus && k.id !== online.me)
   if (focus) return <KingdomDetail data={data} online={online} target={focus} />
+  const incoming = online.envoys.filter((e) => e.to_id === online.me && e.status === 'pending').length
+  const active = online.missions.filter((m) => m.owner_id === online.me && !m.ended_at).length
   return (
     <>
-      <div className="segmented" role="tablist">
-        <button className="btn small" role="tab" aria-selected={view === 'kingdoms'} onClick={() => setView('kingdoms')}>
-          <Icon name="banner" size={16} /> Lordlar
-        </button>
-        <button className="btn small" role="tab" aria-selected={view === 'spies'} onClick={() => setView('spies')}>
-          <Icon name="eye" size={16} /> Casusluk
-        </button>
-      </div>
-      {view === 'kingdoms' ? <KingdomList data={data} online={online} /> : <Spies data={data} online={online} />}
+      <Subtabs
+        label="Diplomasi"
+        part={view}
+        onPart={setView}
+        parts={[
+          { id: 'kingdoms', name: 'Lordlar', icon: 'banner', dot: incoming > 0 },
+          { id: 'spies', name: 'Casusluk', icon: 'eye', count: active },
+        ]}
+      />
+      {view === 'kingdoms' ? <KingdomList data={data} online={online} /> : <SpyPanel data={data} online={online} />}
     </>
   )
 }
@@ -655,11 +663,15 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
   )
 }
 
-function Spies({ data, online }: { data: HudData; online: Online }) {
+// The spies: at home and away, their missions with how strong each network has grown (as the last report measured it),
+// and the latest news of spies. `detail`: the report opens the lord's page (the diplomacy tab), not only the figures.
+export function SpyPanel({ data, online, detail = true }: { data: HudData; online: Online; detail?: boolean }) {
   const { kingdom, now } = data
   const capacity = spyCapacity(kingdom, now)
   const active = online.missions.filter((m) => !m.ended_at && (!m.caught_at || Date.parse(m.caught_at) > now))
   const ended = online.missions.filter((m) => m.ended_at).slice(0, 6)
+  // The envoy's news of spies (caught, ours or theirs; operations foiled), newest first.
+  const news = data.journal.entries.filter((e) => e.icon === 'eye').slice(0, 5)
   if (capacity === 0 && active.length === 0) {
     return (
       <Section title="Casusluk" icon="eye">
@@ -678,7 +690,7 @@ function Spies({ data, online }: { data: HudData; online: Online }) {
         <Stat label="Görevde" value={kingdom.spiesAway ?? 0} />
         <SpyHouseEffects kingdom={kingdom} />
         {next !== null && next > 0 && <Stat label="Sıradaki casus" value={`${Math.ceil(next / 1000)} sn`} note={`${balance.espionage.spyCost.gold} altın`} />}
-        <p className="hint">Bir lorda casus göndermek için Lordlar listesinden lordu seç.</p>
+        <p className="hint">Bir lorda casus göndermek için {detail ? '' : 'Diplomasi sekmesindeki '}Lordlar listesinden lordu seç.</p>
       </Section>
       <Section title="Görevler" icon="scroll" aside={`${active.length}`}>
         {active.length === 0 && <p className="hint">Görevde casus yok.</p>}
@@ -691,9 +703,17 @@ function Spies({ data, online }: { data: HudData; online: Online }) {
                   {kingdomName(online, m.target_id)} · {TOPIC_NAMES[m.topic]}
                 </b>
                 <small>{Math.floor((now - Date.parse(m.started_at)) / 60000)} dakikadır orada</small>
+                {online.intel[m.target_id] ? (
+                  <>
+                    <small>Ağ %{Math.round(online.intel[m.target_id]!.strength[m.topic])} (son rapora göre)</small>
+                    <Meter value={online.intel[m.target_id]!.strength[m.topic] / 100} tone="water" label={`${TOPIC_NAMES[m.topic]} ağı`} segments={10} />
+                  </>
+                ) : (
+                  <small>Ağın gücü için raporu getir.</small>
+                )}
               </span>
-              <button className="btn small" onClick={() => (online.setFocus(m.target_id), online.loadIntel(m.target_id))}>
-                Rapor
+              <button className="btn small" onClick={() => (detail && online.setFocus(m.target_id), online.loadIntel(m.target_id))}>
+                {detail ? 'Rapor' : 'Ölç'}
               </button>
               <button className="btn small" onClick={() => online.act({ type: 'recall', mission: m.id })}>
                 Geri çağır
@@ -715,6 +735,20 @@ function Spies({ data, online }: { data: HudData; online: Online }) {
           </ul>
         )}
       </Section>
+      {news.length > 0 && (
+        <Section title="Casus haberleri" icon="scroll" aside="günlükten">
+          <ul className="places compact">
+            {news.map((e) => (
+              <li key={e.id}>
+                <span>
+                  <b>{e.title}</b>
+                  {e.text && <small>{e.text}</small>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
     </>
   )
 }

@@ -11,8 +11,10 @@ import {
   goldCap,
   tradeReserve,
   atFloor,
+  basePrice,
   crownAppetite,
   crownDemand,
+  crownOrderError,
   idleFactor,
   plannedHousing,
   palaceLevel,
@@ -58,15 +60,17 @@ import type { BuildingKind, Good, Kingdom, Market, Plot, Point, Resource, Stock,
 import { useEffect, useRef, useState } from 'react'
 import { STRUCTURE_SPRITES, palaceIn } from '../../game/buildingSprites'
 import { Icon } from '../icons'
-import type { IconName } from '../icons'
 import { BUILDING_NAMES, BUILDING_NOTES, RESOURCE_ICONS, RESOURCE_NAMES, WEAPON_ICONS, WEAPON_NAMES } from '../names'
 import { CostList, GoodChoice, Missing } from '../panels'
 import type { Journal } from './journal'
 import { DynastySection } from './dynasty'
 import type { Online } from './online'
 import { REPORT_ROUNDS, isImportant, unreadImportant } from './journal'
-import { FortuneNote, Sickness } from './institutions'
+import { FortuneNote, HospitalPanel, Sickness, TemplePanel } from './institutions'
+import { PopulationPanel } from './population'
+import { IncomeSection, SeasonBooks } from './treasury'
 import { History, Meter, Placeholder, Section, SpriteView, Stat, fmt, signed, times } from './primitives'
+import { Subtabs, showPart, usePart } from './Subtabs'
 
 export const RESOURCES: Resource[] = ['gold', 'food', 'materials', 'arms']
 
@@ -259,42 +263,57 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
 
 // ---- Depo -----------------------------------------------------------------------------------------------------------
 
+// The storehouse tab in parts: the goods and how they flow, the gold's books, the armoury.
+type StorePart = 'goods' | 'books' | 'armory'
+const STORE_PARTS: StorePart[] = ['goods', 'books', 'armory']
+
 export function StoreTab({ kingdom, now, journal, online }: HudData) {
+  const [part, setPart] = usePart('store', STORE_PARTS, 'goods')
   const flow = flows(kingdom, now, online?.market)
   const armory = armoryOf(kingdom)
   const { weapons } = roundOutcome(kingdom, now)
-  const l = ledger(kingdom, now)
-  const tradeGold = flow.tradeGold
   const cap = storageCap(kingdom, now)
   const room = (r: Resource) => (r === 'gold' ? goldCap(kingdom, now) : cap)
+  const full = RESOURCES.some((r) => kingdom.stock[r] >= room(r))
   return (
     <>
+      <Subtabs
+        label="Depo"
+        part={part}
+        onPart={setPart}
+        parts={[
+          { id: 'goods', name: 'Mallar', icon: 'chest', dot: full },
+          { id: 'books', name: 'Hazine', icon: 'gold' },
+          { id: 'armory', name: 'Cephanelik', icon: 'arms' },
+        ]}
+      />
+      {part === 'books' && (
+        <>
+          <IncomeSection kingdom={kingdom} now={now} online={online} />
+          <SeasonBooks kingdom={kingdom} />
+        </>
+      )}
+      {part === 'armory' && (
+        <Section title="Cephanelik" icon="arms" aside="silahlar">
+          <div className="armory">
+            {WEAPONS.map((w) => (
+              <div key={w} className="slot">
+                <Icon name={WEAPON_ICONS[w]} size={24} />
+                <b>{fmt(armory[w])}</b>
+                <small>{WEAPON_NAMES[w]}</small>
+                {(weapons[w] ?? 0) > 0.05 && <small className="up">{signed(weapons[w]!)} / tur</small>}
+              </div>
+            ))}
+          </div>
+          <p className="hint">Silah atölyesi işledikçe silahlar burada birikir; kışlada okçu ve kalkanlı piyade eğitmek için harcanır.</p>
+        </Section>
+      )}
+      {part === 'goods' && (
+        <>
       <p className="hint">
         Her mal için depo yeri {fmt(cap)} (saray seviyesi ve ambarlarla artar); hazinede {fmt(goldCap(kingdom, now))} altın yeri var (saray seviyesi ve
-        hazine binasıyla artar). Sığmayan boşa gider.
+        hazine binasıyla artar). Sığmayan boşa gider. Her {balance.economy.productionSeconds} saniyede bir üretim turu işler; rakamlar tur başınadır.
       </p>
-      <Section title="Gelir ve gider" icon="gold" aside="altın / tur">
-        <Stat label="Vergi" value={signed(l.tax)} tone="up" />
-        {tradeGold > 0 && <Stat label="Ticaret" value={signed(tradeGold)} tone="up" />}
-        {l.tributes.map((t) => (
-          <Stat key={t.other} label={t.dir === 'in' ? `Haraç · ${t.name}` : `Haraç → ${t.name}`} value={signed(t.gold)} tone={t.gold > 0 ? 'up' : 'down'} />
-        ))}
-        {l.soldiersGold > 0 && <Stat label="Asker maaşı" value={signed(-l.soldiersGold)} tone="down" note={`ve ${fmt(l.soldiersFood)} yemek`} />}
-        <Stat label="Net" value={signed(flow.gold.net)} tone={flow.gold.net >= 0 ? 'up' : 'down'} />
-      </Section>
-      <Section title="Cephanelik" icon="arms" aside="silahlar">
-        <div className="armory">
-          {WEAPONS.map((w) => (
-            <div key={w} className="slot">
-              <Icon name={WEAPON_ICONS[w]} size={24} />
-              <b>{fmt(armory[w])}</b>
-              <small>{WEAPON_NAMES[w]}</small>
-              {(weapons[w] ?? 0) > 0.05 && <small className="up">{signed(weapons[w]!)} / tur</small>}
-            </div>
-          ))}
-        </div>
-      </Section>
-      <p className="hint">Her {balance.economy.productionSeconds} saniyede bir üretim turu işler. Rakamlar tur başınadır.</p>
       {RESOURCES.map((r) => {
         const { made, used, net } = flow[r]
         const stock = kingdom.stock[r]
@@ -336,18 +355,39 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
           </article>
         )
       })}
+        </>
+      )}
     </>
   )
 }
 
 // ---- Ticaret --------------------------------------------------------------------------------------------------------
 
-export function TradeTab(data: HudData) {
+// The trade tab in parts: the merchant and the post, the lobby's market, the crowns' commissions and who leads the trade.
+export type TradePart = 'merchant' | 'market' | 'orders' | 'shares'
+const TRADE_PARTS: TradePart[] = ['merchant', 'market', 'orders', 'shares']
+
+export function TradeTab(data: HudData & { part?: TradePart }) {
+  const [part, setPart] = usePart('trade', TRADE_PARTS, 'merchant', data.part)
+  const { kingdom, now, world, online } = data
+  const ordersOpen = world.cities.some((_, crown) => crownOrderError(kingdom, crown, now, world.cities.length, palaceLevel(kingdom, now)) === null)
   return (
     <>
-      <TradePost {...data} />
-      <MarketSection {...data} />
-      {data.online && <TradeShares online={data.online} />}
+      <Subtabs
+        label="Ticaret"
+        part={part}
+        onPart={setPart}
+        parts={[
+          { id: 'merchant', name: 'Tüccar', icon: 'trade', dot: !!kingdom.trade.damaged },
+          { id: 'market', name: 'Pazar', icon: 'gold' },
+          ...(world.cities.length > 0 ? [{ id: 'orders' as const, name: 'Siparişler', icon: 'scroll' as const, dot: ordersOpen }] : []),
+          { id: 'shares', name: 'Hâkimler', icon: 'star' },
+        ]}
+      />
+      {part === 'merchant' && <TradePost {...data} />}
+      {part === 'market' && <MarketSection {...data} />}
+      {part === 'orders' && <CrownOrders world={world} kingdom={kingdom} now={now} online={online} />}
+      {part === 'shares' && (online ? <TradeShares online={online} /> : <Placeholder icon="trade" title="Lobi yükleniyor" />)}
     </>
   )
 }
@@ -404,8 +444,8 @@ function MarketSection({ world, kingdom, now, online }: HudData) {
       <div className="price-row">
         {MARKET_GOODS.map((g) => {
           const price = priceAt(market, g, now)
-          const base = balance.economy.trade.price[g]
-          const floor = atFloor(price, g)
+          const base = Math.round(basePrice(g, market) * 100) / 100
+          const floor = atFloor(price, g, market)
           return (
             <span key={g} className="price" title={`${RESOURCE_NAMES[g]} · olağan fiyatı ${base}${floor ? ' · en dipte' : ''}`}>
               <Icon name={RESOURCE_ICONS[g]} size={16} />
@@ -415,7 +455,10 @@ function MarketSection({ world, kingdom, now, online }: HudData) {
           )
         })}
       </div>
-      {MARKET_GOODS.some((g) => atFloor(priceAt(market, g, now), g)) && (
+      {(market?.foodDemand ?? 1) > 1.001 && (
+        <p className="hint">Dünya nüfusu yemeği pahalandırıyor: olağan fiyatı +%{Math.round(((market?.foodDemand ?? 1) - 1) * 100)}.</p>
+      )}
+      {MARKET_GOODS.some((g) => atFloor(priceAt(market, g, now), g, market)) && (
         <p className="hint">En dipteki malın fiyatını satış daha fazla düşürmez; zamanla ve taç krallıkları aldıkça olağan fiyatına doğru toparlanır.</p>
       )}
       <CrownBuyers world={world} market={market} now={now} />
@@ -519,7 +562,6 @@ function TradePost(data: HudData) {
         <GoodChoice kingdom={kingdom} selected={trade.good} onGood={onGood} market={online?.market} now={now} />
       </Section>
       <TradeDestination world={world} kingdom={kingdom} market={online?.market} now={now} onCity={(city) => online?.act({ type: 'tradeCity', city })} />
-      <CrownOrders world={world} kingdom={kingdom} now={now} online={online} />
       <div className="feature">
         <SpriteView sprite={thumb('tradePost')} scale={0.5} />
         <div>
@@ -573,40 +615,10 @@ const describe = (plot: Plot | null | undefined) =>
 
 // The palace tab in three parts, the one last looked at remembered (in this browser).
 type PalacePart = 'level' | 'house' | 'buildings'
-const PALACE_PARTS: { id: PalacePart; name: string; icon: IconName }[] = [
-  { id: 'level', name: 'Seviye', icon: 'home' },
-  { id: 'house', name: 'Hanedan', icon: 'crown' },
-  { id: 'buildings', name: 'Yapılar', icon: 'build' },
-]
-const PALACE_PART_KEY = 'palace:part'
-const PALACE_PART_EVENT = 'palace-part'
+const PALACE_PARTS: PalacePart[] = ['level', 'house', 'buildings']
 
 // Opens the palace tab at a part next time (or now, if it is open): for whatever sends the player there.
-export function showPalacePart(part: PalacePart) {
-  try {
-    localStorage.setItem(PALACE_PART_KEY, part)
-  } catch {
-    // Not remembered: the tab opens where it did.
-  }
-  window.dispatchEvent(new CustomEvent(PALACE_PART_EVENT, { detail: part }))
-}
-
-function usePalacePart(): [PalacePart, (part: PalacePart) => void] {
-  const [part, setPart] = useState<PalacePart>(() => {
-    try {
-      const saved = localStorage.getItem(PALACE_PART_KEY)
-      return PALACE_PARTS.some((p) => p.id === saved) ? (saved as PalacePart) : 'level'
-    } catch {
-      return 'level'
-    }
-  })
-  useEffect(() => {
-    const on = (e: Event) => setPart((e as CustomEvent<PalacePart>).detail)
-    window.addEventListener(PALACE_PART_EVENT, on)
-    return () => window.removeEventListener(PALACE_PART_EVENT, on)
-  }, [])
-  return [part, showPalacePart]
-}
+export const showPalacePart = (part: PalacePart) => showPart('palace', part)
 
 export function KingdomTab(data: HudData) {
   const { kingdom, now, stage, plots, confirmReset, onUpgradeBuilding, onMute, onReset, onExit, onShow } = data
@@ -624,20 +636,22 @@ export function KingdomTab(data: HudData) {
       : describe(plots?.dock)
   const counts = new Map<BuildingKind, number>()
   for (const b of kingdom.buildings) if (b.doneAt <= now) counts.set(b.kind, (counts.get(b.kind) ?? 0) + 1)
-  const [part, setPart] = usePalacePart()
+  const [part, setPart] = usePart('palace', PALACE_PARTS, 'level')
   const d = kingdom.dynasty
   // The house waits on the lord: a young child still to be named, or one with no upbringing chosen.
   const houseWaits = !!d && d.children.some((c) => !ofAge(c, now) && (!c.named || (!d.council && !c.education)))
   return (
     <>
-      <div className="palace-tabs" role="tablist" aria-label="Saray">
-        {PALACE_PARTS.map((p) => (
-          <button key={p.id} className="btn small" role="tab" aria-selected={part === p.id} aria-pressed={part === p.id} onClick={() => setPart(p.id)}>
-            <Icon name={p.icon} size={16} /> {p.name}
-            {p.id === 'house' && houseWaits && <span className="dot" aria-label="Bekleyen karar" />}
-          </button>
-        ))}
-      </div>
+      <Subtabs
+        label="Saray"
+        part={part}
+        onPart={setPart}
+        parts={[
+          { id: 'level', name: 'Seviye', icon: 'home' },
+          { id: 'house', name: 'Hanedan', icon: 'crown', dot: houseWaits },
+          { id: 'buildings', name: 'Yapılar', icon: 'build' },
+        ]}
+      />
       {part === 'level' && (
         <>
           <div className="feature">
@@ -735,9 +749,15 @@ export function KingdomTab(data: HudData) {
 
 // ---- Halk -----------------------------------------------------------------------------------------------------------
 
+// The people's tab in parts: how many and how they fare, their mood (tax, night work), health and faith, and the queen.
+type PeoplePart = 'people' | 'mood' | 'health' | 'queen'
+const PEOPLE_PARTS: PeoplePart[] = ['people', 'mood', 'health', 'queen']
+export const showPeoplePart = (part: PeoplePart) => showPart('people', part)
+
 export function PeopleTab(data: HudData) {
-  const { kingdom, now } = data
-  const { villagers, jobs, efficiency } = population(kingdom, now)
+  const { kingdom, now, online } = data
+  const [part, setPart] = usePart('people', PEOPLE_PARTS, 'people')
+  const { villagers, soldiers, cap, housing, jobs, efficiency } = population(kingdom, now)
   const food = flows(kingdom, now).food
   const houses = kingdom.buildings.filter((b) => b.kind === 'house' && b.doneAt <= now).length
   // How the people are doing, read off the state of the kingdom: fed and put to work. A shrinking granary only
@@ -752,31 +772,60 @@ export function PeopleTab(data: HudData) {
   const worst = Math.min(...signs.map((s) => s.value))
   const mood = worst >= 0.9 ? 'happy' : worst >= 0.5 ? 'content' : 'unhappy'
   const moodName = { happy: 'Memnun', content: 'İdare ediyor', unhappy: 'Huzursuz' }[mood]
+  const happiness = kingdom.happiness ?? balance.society.happiness.start
+  // The queen's part waits on the lord when she is held, or when one can be had.
+  const queenWaits = !!kingdom.queenHeldBy || (!kingdom.queen && queenError(kingdom, now) === null)
   return (
     <>
-      <div className="feature mood">
-        <Icon name={mood} size={48} />
-        <div>
-          <b>Halk {moodName.toLowerCase()}</b>
-          <p className="hint">Halkın hâli karnının tokluğuna ve işine bağlı.</p>
-        </div>
-      </div>
-      <Section title="Halkın durumu" icon="people">
-        {signs.map((s) => (
-          <div key={s.name} className="sign">
-            <span>{s.name}</span>
-            <Meter value={s.value} tone={s.value >= 0.9 ? 'up' : s.value >= 0.5 ? 'gold' : 'down'} label={s.name} segments={10} />
-            <small>{s.note}</small>
+      <PeopleAlerts kingdom={kingdom} now={now} online={online} />
+      <Subtabs
+        label="Halk"
+        part={part}
+        onPart={setPart}
+        parts={[
+          { id: 'people', name: 'Nüfus', icon: 'villager' },
+          { id: 'mood', name: 'Mutluluk', icon: happiness >= 60 ? 'happy' : happiness >= 35 ? 'content' : 'unhappy' },
+          { id: 'health', name: 'Sağlık ve din', icon: 'heal' },
+          { id: 'queen', name: 'Kraliçe', icon: 'crown', dot: queenWaits },
+        ]}
+      />
+      {part === 'people' && (
+        <>
+          <div className="feature mood">
+            <Icon name={mood} size={48} />
+            <div>
+              <b>Halk {moodName.toLowerCase()}</b>
+              <p className="hint">Halkın hâli karnının tokluğuna ve işine bağlı.</p>
+            </div>
           </div>
-        ))}
-      </Section>
-      <Section title="Nüfus" icon="villager">
-        <Stat label="Köylü" value={villagers} note={`${houses} ev`} />
-        <Stat label="İş gücü ihtiyacı" value={jobs} tone={villagers < jobs ? 'down' : undefined} />
-        <Stat label="Üretim verimi" value={`%${Math.round(efficiency * 100)}`} tone={efficiency < 1 ? 'down' : 'up'} />
-        <Stat label="Yemek tüketimi" value={`${signed(-food.used)} / tur`} />
-      </Section>
-      <Society kingdom={kingdom} now={now} online={data.online} />
+          <Section title="Halkın durumu" icon="people">
+            {signs.map((s) => (
+              <div key={s.name} className="sign">
+                <span>{s.name}</span>
+                <Meter value={s.value} tone={s.value >= 0.9 ? 'up' : s.value >= 0.5 ? 'gold' : 'down'} label={s.name} segments={10} />
+                <small>{s.note}</small>
+              </div>
+            ))}
+          </Section>
+          <Section title="İş gücü" icon="villager">
+            <Stat label="Köylü" value={villagers} note={`${houses} ev`} />
+            <Stat label="İş gücü ihtiyacı" value={jobs} tone={villagers < jobs ? 'down' : undefined} />
+            <Stat label="Üretim verimi" value={`%${Math.round(efficiency * 100)}`} tone={efficiency < 1 ? 'down' : 'up'} />
+            <Stat label="Yemek tüketimi" value={`${signed(-food.used)} / tur`} />
+          </Section>
+          <PopulationPanel kingdom={kingdom} now={now} online={online} />
+          <Section title="Nüfus sınırı" icon="villager" aside={`${villagers + soldiers} / ${cap}`}>
+            <Meter value={cap ? (villagers + soldiers) / cap : 0} tone={villagers + soldiers >= cap ? 'down' : 'gold'} label="Nüfus" segments={16} />
+            <p className="hint">
+              Sarayın her seviyesi {balance.society.popCapPerPalaceLevel} kişilik yer açar. Evlerin {housing} kişilik yeri var
+              {housing > cap ? `; ${housing - cap} kişi sığmıyor, sarayı yükselt` : ''}. Askerler de bu sınırdan sayılır.
+            </p>
+          </Section>
+        </>
+      )}
+      {part === 'mood' && <Mood kingdom={kingdom} now={now} online={online} />}
+      {part === 'health' && <Health data={data} />}
+      {part === 'queen' && <Queen kingdom={kingdom} now={now} online={online} />}
     </>
   )
 }
@@ -791,20 +840,49 @@ const QUEEN_WHY: Record<string, string> = {
   busy: 'Kraliçen rehin',
 }
 
-function Society({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?: Online }) {
+// What is wrong with the people now, over whichever part is shown: an enemy at the border, walls with no gate, a revolt
+// and walls to mend.
+function PeopleAlerts({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?: Online }) {
+  const walls = repairCost(kingdom)
+  const broken = kingdom.buildings.filter((b) => b.kind === 'wall' && b.broken).length
+  return (
+    <>
+      <FortuneNote kingdom={kingdom} now={now} />
+      {(kingdom.fearUntil ?? 0) > now && (
+        <p className="alert">
+          <Icon name="warn" size={16} /> Sınırında düşman ordusu bekliyor: halk korkuyor (mutluluk {balance.military.fear.happiness}).
+        </p>
+      )}
+      {imprisoned(kingdom.buildings, kingdom.site, now) && (
+        <p className="alert">
+          <Icon name="warn" size={16} /> Surlarında kapı yok, halk dışarı çıkamıyor: lordluğun bir hapishane (mutluluk {balance.society.happiness.imprisoned}).
+          Sura bir kapı koy.
+        </p>
+      )}
+      {(kingdom.revoltUntil ?? 0) > now && (
+        <p className="alert">
+          <Icon name="warn" size={16} /> Halk ayaklandı: {Math.ceil(((kingdom.revoltUntil ?? 0) - now) / 60000)} dakika daha üretim yarıda ve mutluluk düşük.
+        </p>
+      )}
+      {broken > 0 && (
+        <Section title="Yıkık surlar" icon="warn" aside={`${broken}`}>
+          <button className="btn small" onClick={() => online?.act({ type: 'repairWalls' })}>
+            Onar · {Object.entries(walls).map(([r, v]) => `${v} ${RESOURCE_NAMES[r as Resource].toLowerCase()}`).join(', ')}
+          </button>
+        </Section>
+      )}
+    </>
+  )
+}
+
+function Mood({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?: Online }) {
   const happiness = kingdom.happiness ?? balance.society.happiness.start
   const target = happinessFor(kingdom, now)
   const night = isNightAt(now)
   const rate = workRate(kingdom, now)
   const fatigue = kingdom.fatigue ?? 0
   const n = balance.society.night
-  // Set when she was taken (older captures: the plain ransom).
-  const ransom = kingdom.queenHeldBy?.ransom ?? balance.espionage.operations.kidnap.ransom
-  const { villagers, soldiers, cap, housing } = population(kingdom, now)
   const tax = kingdom.tax ?? 'normal'
-  const queen = queenError(kingdom, now)
-  const walls = repairCost(kingdom)
-  const broken = kingdom.buildings.filter((b) => b.kind === 'wall' && b.broken).length
   return (
     <>
       <Section title="Mutluluk" icon={happiness >= 60 ? 'happy' : happiness >= 35 ? 'content' : 'unhappy'} aside={`%${Math.round(happiness)} → %${Math.round(target)}`}>
@@ -814,13 +892,19 @@ function Society({ kingdom, now, online }: { kingdom: Kingdom; now: number; onli
           ucuza asker olur.
         </p>
       </Section>
-      <FortuneNote kingdom={kingdom} now={now} />
-      <Section title="Sağlık" icon="heal">
-        <Sickness kingdom={kingdom} now={now} />
-        <p className="hint">
-          Köylüler zaman zaman hastalanır; hasta köylü çalışmaz, vergi vermez ve halkın keyfini kaçırır. Kendiliğinden yavaşça iyileşirler,{' '}
-          {kingdom.buildings.some((b) => b.kind === 'hospital') ? 'hastane iyileşmeyi hızlandırıyor.' : 'hastane (3. seviye saray) iyileşmeyi hızlandırır.'}
-        </p>
+      <Section title="Vergi" icon="gold" aside={`köylü başına ${balance.society.tax.levels[tax].goldPerVillager} altın`}>
+        <div className="segmented" role="radiogroup" aria-label="Vergi oranı">
+          {TAX_LEVELS.map((t) => (
+            <button key={t} className="btn small" role="radio" aria-checked={tax === t} onClick={() => online?.act({ type: 'tax', tax: t })}>
+              {TAX_NAMES[t]}
+            </button>
+          ))}
+        </div>
+        <Stat
+          label="Mutluluğa etkisi"
+          value={`${balance.society.tax.levels[tax].happiness >= 0 ? '+' : ''}${Math.round(balance.society.tax.levels[tax].happiness * (balance.society.tax.levels[tax].happiness < 0 ? sermonTaxFactor(kingdom, now) : 1))}`}
+          note={sermonTaxFactor(kingdom, now) < 1 ? 'tapınakta vaaz sürüyor' : undefined}
+        />
       </Section>
       <Section title="Gece mesaisi" icon={night ? 'moon' : 'sun'} aside={`şu an ${night ? 'gece' : 'gündüz'} · iş %${Math.round(rate * 100)}`}>
         <p className="hint">
@@ -841,36 +925,47 @@ function Society({ kingdom, now, online }: { kingdom: Kingdom; now: number; onli
           <small>verim −%{Math.round(fatigue * 100)}</small>
         </div>
       </Section>
-      {(kingdom.fearUntil ?? 0) > now && (
-        <p className="alert">
-          <Icon name="warn" size={16} /> Sınırında düşman ordusu bekliyor: halk korkuyor (mutluluk {balance.military.fear.happiness}).
-        </p>
+    </>
+  )
+}
+
+// The people's health and faith: the sick and the hospital, the temple and its sermons.
+function Health({ data }: { data: HudData }) {
+  const { kingdom, now } = data
+  const hospital = kingdom.buildings.find((b) => b.kind === 'hospital' && b.doneAt <= now)
+  const temple = kingdom.buildings.some((b) => b.kind === 'temple' && b.doneAt <= now)
+  return (
+    <>
+      {hospital ? (
+        <HospitalPanel building={hospital} data={data} />
+      ) : (
+        <Section title="Sağlık" icon="heal">
+          <Sickness kingdom={kingdom} now={now} />
+          <p className="hint">
+            Köylüler zaman zaman hastalanır; hasta köylü çalışmaz, vergi vermez ve halkın keyfini kaçırır. Kendiliğinden yavaşça iyileşirler; hastane (3.
+            seviye saray) iyileşmeyi hızlandırır.
+          </p>
+        </Section>
       )}
-      {imprisoned(kingdom.buildings, kingdom.site, now) && (
-        <p className="alert">
-          <Icon name="warn" size={16} /> Surlarında kapı yok, halk dışarı çıkamıyor: lordluğun bir hapishane (mutluluk {balance.society.happiness.imprisoned}).
-          Sura bir kapı koy.
-        </p>
+      {temple ? (
+        <TemplePanel data={data} />
+      ) : (
+        <Section title="İnanç" icon="temple">
+          <p className="hint">
+            Tapınak (3. seviye saray) halkın mutluluğunu artırır, askerlerine iman gücü verir; rahipleri vaaz verince vergiler halka daha az ağır gelir.
+          </p>
+        </Section>
       )}
-      {(kingdom.revoltUntil ?? 0) > now && (
-        <p className="alert">
-          <Icon name="warn" size={16} /> Halk ayaklandı: {Math.ceil(((kingdom.revoltUntil ?? 0) - now) / 60000)} dakika daha üretim yarıda ve mutluluk düşük.
-        </p>
-      )}
-      <Section title="Vergi" icon="gold" aside={`köylü başına ${balance.society.tax.levels[tax].goldPerVillager} altın`}>
-        <div className="segmented" role="radiogroup" aria-label="Vergi oranı">
-          {TAX_LEVELS.map((t) => (
-            <button key={t} className="btn small" role="radio" aria-checked={tax === t} onClick={() => online?.act({ type: 'tax', tax: t })}>
-              {TAX_NAMES[t]}
-            </button>
-          ))}
-        </div>
-        <Stat
-          label="Mutluluğa etkisi"
-          value={`${balance.society.tax.levels[tax].happiness >= 0 ? '+' : ''}${Math.round(balance.society.tax.levels[tax].happiness * (balance.society.tax.levels[tax].happiness < 0 ? sermonTaxFactor(kingdom, now) : 1))}`}
-          note={sermonTaxFactor(kingdom, now) < 1 ? 'tapınakta vaaz sürüyor' : undefined}
-        />
-      </Section>
+    </>
+  )
+}
+
+function Queen({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?: Online }) {
+  // Set when she was taken (older captures: the plain ransom).
+  const ransom = kingdom.queenHeldBy?.ransom ?? balance.espionage.operations.kidnap.ransom
+  const queen = queenError(kingdom, now)
+  return (
+    <>
       <Section title="Kraliçe" icon="crown">
         {kingdom.queenHeldBy ? (
           <>
@@ -915,20 +1010,6 @@ function Society({ kingdom, now, online }: { kingdom: Kingdom; now: number; onli
               </li>
             ))}
           </ul>
-        </Section>
-      )}
-      <Section title="Nüfus sınırı" icon="villager" aside={`${villagers + soldiers} / ${cap}`}>
-        <Meter value={cap ? (villagers + soldiers) / cap : 0} tone={villagers + soldiers >= cap ? 'down' : 'gold'} label="Nüfus" segments={16} />
-        <p className="hint">
-          Sarayın her seviyesi {balance.society.popCapPerPalaceLevel} kişilik yer açar. Evlerin {housing} kişilik yeri var
-          {housing > cap ? `; ${housing - cap} kişi sığmıyor, sarayı yükselt` : ''}. Askerler de bu sınırdan sayılır.
-        </p>
-      </Section>
-      {broken > 0 && (
-        <Section title="Yıkık surlar" icon="warn" aside={`${broken}`}>
-          <button className="btn small" onClick={() => online?.act({ type: 'repairWalls' })}>
-            Onar · {Object.entries(walls).map(([r, v]) => `${v} ${RESOURCE_NAMES[r as Resource].toLowerCase()}`).join(', ')}
-          </button>
         </Section>
       )}
     </>
@@ -1006,7 +1087,7 @@ function CrownBuyers({ world, market, now }: { world: World; market?: Market | n
     <ul className="pop-lines">
       {buyers.map((d) => {
         const info = cityInfo(world, d.crown)
-        const rate = Math.round(d.perMinute * crownAppetite(d.good, priceAt(market, d.good, now)))
+        const rate = Math.round(d.perMinute * crownAppetite(d.good, priceAt(market, d.good, now), market))
         return (
           <li key={d.crown}>
             <span>
