@@ -177,6 +177,27 @@ export function fleetAt(world: World, k: Kingdom, fleet: Fleet, at: number): Poi
 
 export type SailError = NavyError | 'land' | 'route'
 
+// Where a fleet sent to `to` rides at anchor: `to` itself if the water all round it is open, else the nearest spot
+// within a few tiles that is (so the hulls do not hang over the bank), else `to`.
+export function openWater(world: World, to: Point): Point {
+  const open = (x: number, y: number) => {
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (!isWaterTile(world, x + dx, y + dy)) return false
+    return true
+  }
+  const tx = Math.floor(to.x)
+  const ty = Math.floor(to.y)
+  for (let r = 0; r <= 4; r++) {
+    let best: Point | null = null
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || !open(tx + dx, ty + dy)) continue
+      const p = { x: tx + dx + 0.5, y: ty + dy + 0.5 }
+      if (!best || Math.hypot(p.x - to.x, p.y - to.y) < Math.hypot(best.x - to.x, best.y - to.y)) best = p
+    }
+    if (best) return best
+  }
+  return to
+}
+
 // The way a fleet would sail to `to` now, or why it cannot: it must be at home (not trading, not off on a raid), the
 // spot must be water, and water must join it to where the fleet is.
 function plan(world: World, k: Kingdom, id: number, to: Point, at: number): { error: SailError } | { path: Point[] } {
@@ -185,7 +206,7 @@ function plan(world: World, k: Kingdom, id: number, to: Point, at: number): { er
   if (!atHome(fleet) || fleet.mission.kind === 'trade') return { error: 'away' }
   if (!Number.isFinite(to.x) || !Number.isFinite(to.y) || !isWaterTile(world, to.x, to.y)) return { error: 'land' }
   const from = fleetAt(world, k, fleet, at)
-  const path = from && waterPath(world, from, to)
+  const path = from && waterPath(world, from, openWater(world, to))
   return path ? { path } : { error: 'route' }
 }
 

@@ -1,4 +1,4 @@
-import { BUILDINGS, balance, buildingOutput, fishCatch, gameTime, goldCap, idleFactor, ledger, population, roundOutcome, sailorsOf, storageCap, townYield } from '@game/shared'
+import { BUILDINGS, balance, buildingOutput, fishCatch, gameTime, goldCap, growthTerms, idleFactor, ledger, population, timeToFill, roundOutcome, sailorsOf, storageCap, townYield } from '@game/shared'
 import type { BuildingKind, Kingdom, Market, Resource, Stock } from '@game/shared'
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
@@ -207,8 +207,11 @@ function ResourceCard({ resource: r, kingdom, now, history, market }: { resource
 }
 
 function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
-  const { villagers, jobs, efficiency, cap, soldiers, housing, sick, healthy } = population(kingdom, now)
+  const { villagers, jobs, efficiency, cap, soldiers, sailors, housing, sick, healthy } = population(kingdom, now)
   const homes = kingdom.buildings.filter((b) => b.doneAt <= now && (BUILDINGS[b.kind].villagers ?? 0) > 0).length
+  // How fast the people grow into their room (CLAUDE.md §5.2).
+  const grow = growthTerms(kingdom, now)
+  const fill = timeToFill(kingdom, now)
   const most = Math.max(villagers, jobs, 1)
   return (
     <>
@@ -227,6 +230,20 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
       </div>
       <ul className="pop-lines">
         <li>
+          <span>Büyüme</span>
+          <b className={grow.perRound > 0.001 ? 'up' : grow.perRound < -0.001 ? 'down' : undefined}>
+            {grow.perRound >= 0 ? '+' : '−'}
+            {num(Math.abs(grow.perRound * (3600 / balance.economy.productionSeconds)))} / saat
+          </b>
+        </li>
+        <li>
+          <span>Yerleşim</span>
+          <b>
+            {Math.round(grow.people)} / {grow.room}
+            {fill !== null && fill > 0 && ` · dolmaya ${fill >= 3_600_000 ? `${Math.floor(fill / 3_600_000)} sa ${Math.round((fill % 3_600_000) / 60_000)} dk` : `${Math.ceil(fill / 60_000)} dk`}`}
+          </b>
+        </li>
+        <li>
           <span>Nüfus / sınır</span>
           <b className={villagers + soldiers >= cap ? 'down' : undefined}>
             {villagers + soldiers} / {cap}
@@ -236,6 +253,12 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
           <li>
             <span>Asker</span>
             <b>{soldiers}</b>
+          </li>
+        )}
+        {sailors > 0 && (
+          <li>
+            <span>Denizci (yerden düşer)</span>
+            <b>{sailors}</b>
           </li>
         )}
         {sick >= 0.5 && (

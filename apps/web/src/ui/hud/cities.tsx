@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { GOODS, balance, crownOrder, crownOrderError, orderPay, palaceLevel, byPower, cityCenter, cityPrice, cityTripMs, crownGoods, crownPower, crownRelation, crownRest, doneBuildings, fealtyOpen, giftAt, lobbyTripMs, priceAt, stewardFactor, tradeCityReadyAt, tradeUnits } from '@game/shared'
-import type { Kingdom, Market, Point, World } from '@game/shared'
+import { GOODS, balance, goldCap, crownDemand, questError, questProgress, crownOrder, crownOrderError, orderPay, palaceLevel, byPower, cityCenter, cityPrice, cityTripMs, crownGoods, crownPower, crownRelation, crownRest, doneBuildings, fealtyOpen, giftAt, lobbyTripMs, priceAt, stewardFactor, tradeCityReadyAt, tradeUnits } from '@game/shared'
+import type { Kingdom, Market, Point, QuestKind, World } from '@game/shared'
 import { cityInfo } from '../../game/cities'
 import { Icon } from '../icons'
 import { RESOURCE_ICONS, RESOURCE_NAMES } from '../names'
-import { Meter, Section, fmt } from './primitives'
+import { Meter, Section, Stat, fmt } from './primitives'
 import type { Online } from './online'
 
 // The free cities (CLAUDE.md §4.2, §7.6): what they are, and the merchant's choice between the lobby's market and a
@@ -472,5 +472,112 @@ export function CrownOrders({ world, kingdom, now, online }: { world: World; kin
         {Math.round((o.payFactor - 1) * 100)} fazlasına alır (biat ettiğin taç %{Math.round(o.swornBonus * 100)} daha fazla öder), ilişkiniz iyileşir. Satış lobi fiyatlarına dokunmaz. Kervan dönerken hazine doluysa sığmayan altın boşa gider.
       </p>
     </Section>
+  )
+}
+
+// The crowns as the diplomacy tab shows them (Diplomasi → Krallık; CLAUDE.md §7.8): each crown's ruler and its
+// standing with the lord, its policies of the moment (what it buys at the lobby's market, the good it watches over,
+// its order of the hour, its patrols and tribute), the task it asks of the lord this hour, and the struggle for power
+// between the two.
+const QUEST_TITLES: Record<QuestKind, string> = { trade: 'Ticari üstünlük', town: 'Kasaba ele geçir', order: 'Siparişimizi gönder', army: 'Ordunu büyüt' }
+
+function questText(kind: QuestKind, units: number | undefined, good: string | undefined, need: number) {
+  switch (kind) {
+    case 'trade':
+      return `Bu saat tüccarın ${fmt(units ?? 0)} birim ${good} satsın: pazarda sözümüz geçsin.`
+    case 'town':
+      return 'Bu saat bir kasabayı ele geçir ya da kuşatıp al.'
+    case 'order':
+      return 'Bu saatin siparişini (yukarıda; Ticaret → Siparişler) kervanla başkente gönder.'
+    case 'army':
+      return `Garnizonun ve sahadaki ordularınla en az ${fmt(need)} askere ulaş.`
+  }
+}
+
+const QUEST_WHY: Record<string, string> = {
+  locked: `${balance.cities.crown.quests.minPalace}. seviye saray gerekir`,
+  relation: 'İlişkiniz çok kötü: bu taç senden bir şey istemez',
+  notYet: 'Henüz tamamlanmadı',
+  done: 'Ödülü aldın',
+}
+
+export function CrownsPanel({ world, kingdom, online, market, now }: { world: World; kingdom: Kingdom; online: Online; market?: Market | null; now: number }) {
+  if (world.cities.length === 0) return <p className="hint">Bu lobide taç krallığı yok.</p>
+  const demand = crownDemand(now)
+  const { goods, endsAt } = crownGoods(kingdom.lobbyKey, now)
+  const crowns = world.cities.length
+  const palace = palaceLevel(kingdom, now)
+  const q = balance.cities.crown.quests
+  const tribute = balance.cities.crown.patrol.tribute
+  const minutes = (ms: number) => `${Math.max(1, Math.ceil(ms / 60_000))} dk`
+  const goldRoom = goldCap(kingdom, now) - kingdom.stock.gold
+  return (
+    <>
+      {world.cities.map((_, i) => {
+        const info = cityInfo(world, i)
+        const buys = demand[i]
+        const order = crownOrder(kingdom.lobbyKey, i, now)
+        const orderSent = (kingdom.ordersDone ?? [])[i] === order.window
+        const { quest, taken, have, need } = questProgress(kingdom, i, now)
+        const take = questError(kingdom, i, 'take', now, crowns, palace)
+        const claim = questError(kingdom, i, 'claim', now, crowns, palace)
+        const relation = crownRelation(kingdom, i)
+        const sworn = kingdom.liege === i
+        const goodName = (g: keyof typeof RESOURCE_NAMES) => RESOURCE_NAMES[g].toLowerCase()
+        return (
+          <Section key={i} title={info.name} icon="crown" aside={sworn ? 'biat ettiğin taç' : `ilişki ${signedInt(Math.round(relation))}`}>
+            <div className="feature">
+              <Icon name="crown" size={32} />
+              <div>
+                <b style={{ color: info.color }}>{info.ruler}</b>
+                <small className="hint">
+                  {info.capital} şehrinden hüküm sürer. {sworn ? 'Sen onun lordusun.' : kingdom.liege !== undefined && kingdom.liege !== null ? 'Rakip tacın lordusun; sana soğuk bakar.' : 'Henüz kimseye biat etmedin.'}
+                </small>
+              </div>
+            </div>
+            <Meter value={(relation + 100) / 200} tone={relation >= 30 ? 'up' : relation <= -30 ? 'down' : 'gold'} label={`${info.name} ile ilişki`} segments={20} />
+            <b className="crown-sub">Politikaları</b>
+            <Stat label="Pazardan alıyor" value={goodName(buys.good)} note={`dakikada ${fmt(buys.perMinute)} birim, ucuzken · ${minutes(buys.until - now)} daha`} />
+            <Stat label="Yönettiği mal" value={goodName(goods[i])} note={`satarken senin fiyatın ×${price(stewardFactor(kingdom, goods[i], now))} · ${minutes(endsAt - now)} daha`} />
+            <Stat
+              label="Siparişi"
+              value={`${fmt(order.units)} ${goodName(order.good)}`}
+              note={`${fmt(orderPay(kingdom, order, market, now))} altın öder${orderSent ? ' · gönderdin' : ''} · Ticaret → Siparişler · ${minutes(order.endsAt - now)} daha`}
+            />
+            <Stat
+              label="Devriye ve haraç"
+              value={sworn ? 'devriye' : kingdom.liege !== undefined && kingdom.liege !== null ? 'haraççı' : 'gelmez'}
+              note={
+                sworn
+                  ? 'devriyesi eğlence merkezine uğrar, bahşiş bırakır'
+                  : kingdom.liege !== undefined && kingdom.liege !== null
+                    ? `${Math.round(tribute.everySeconds / 60)} dakikada bir hazinenin %${Math.round(tribute.share * 100)}'ini ister`
+                    : 'biat etmediğin için ne devriye ne haraççı gönderir'
+              }
+            />
+            <b className="crown-sub">Senden istediği · {QUEST_TITLES[quest.kind]}</b>
+            <p className="hint">{questText(quest.kind, quest.units, quest.good && goodName(quest.good), need)}</p>
+            {taken && <Meter value={need ? Math.min(1, have / need) : 1} tone={have >= need ? 'up' : 'gold'} label="Görevin ilerlemesi" segments={10} />}
+            <p className="hint">
+              {taken ? `${fmt(Math.min(have, need))} / ${fmt(need)} · ` : ''}Ödül: {fmt(quest.gold)} altın ve ilişki +{sworn ? q.relation.own : q.relation.other} · {minutes(quest.endsAt - now)} kaldı
+            </p>
+            {taken && !claim && goldRoom < quest.gold && (
+              <p className="hint down">Hazinende {fmt(Math.max(0, goldRoom))} altınlık yer var: ödülün kalanı boşa gider. Önce biraz harca.</p>
+            )}
+            {!taken ? (
+              <button className="btn small" disabled={!!take} title={take ? QUEST_WHY[take] : undefined} onClick={() => online.act({ type: 'quest', crown: i, action: 'take' })}>
+                <Icon name="scroll" size={16} /> {take ? QUEST_WHY[take] ?? 'Alınamaz' : 'Görevi al'}
+              </button>
+            ) : (
+              <button className={claim ? 'btn small' : 'btn small primary'} disabled={!!claim} onClick={() => online.act({ type: 'quest', crown: i, action: 'claim' })}>
+                <Icon name="chest" size={16} /> {claim ? QUEST_WHY[claim] ?? 'Alınamaz' : 'Ödülü al'}
+              </button>
+            )}
+          </Section>
+        )
+      })}
+      <CrownRivalry world={world} online={online} />
+      <Stewardship world={world} kingdom={kingdom} now={now} />
+    </>
   )
 }

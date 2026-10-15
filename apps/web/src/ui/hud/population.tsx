@@ -1,5 +1,7 @@
-import { balance, growthTerms, happinessOf, levelOf, population, timeToFill } from '@game/shared'
+import { balance, growthTerms, happinessGrowth, happinessOf, levelOf, population, timeToFill } from '@game/shared'
 import type { GrowthPart, Kingdom } from '@game/shared'
+import { useState } from 'react'
+import { Icon } from '../icons'
 import { Meter, Section, Stat, fmt } from './primitives'
 import type { Online } from './online'
 
@@ -50,6 +52,7 @@ export function PopulationPanel({ kingdom, now }: { kingdom: Kingdom; now: numbe
   const { villagers, room, housing, cap, soldiers, sailors } = population(kingdom, now)
   const grow = growthTerms(kingdom, now)
   const fill = timeToFill(kingdom, now)
+  const [explain, setExplain] = useState(false)
   const full = grow.gap < 0.5
   const perHour = grow.factor > 0 ? Math.min(grow.gap, grow.perRound * ROUNDS_PER_HOUR) : grow.perRound * ROUNDS_PER_HOUR
   const status = full
@@ -69,11 +72,19 @@ export function PopulationPanel({ kingdom, now }: { kingdom: Kingdom; now: numbe
         <Stat label="Barınak" value={fmt(housing)} note={`saray sınırı ${fmt(cap)}`} />
         {soldiers + sailors > 0 && <Stat label="Asker ve denizci" value={fmt(soldiers + sailors)} note="köylülerin yerinden düşer" />}
         <Stat
-          label="Büyüme"
+          label={
+            <>
+              Büyüme{' '}
+              <button className="btn icon-only info-btn" aria-expanded={explain} aria-label="Nüfus büyümesi nasıl işler?" title="Nüfus büyümesi nasıl işler?" onClick={() => setExplain(!explain)}>
+                <Icon name="info" size={16} />
+              </button>
+            </>
+          }
           value={`${signedNum(grow.perRound)} / tur`}
-          note={`≈ ${signedNum(perHour, 1)} / saat`}
+          note={`yaklaşık ${signedNum(perHour, 1)} / saat`}
           tone={grow.perRound > 0.001 ? 'up' : grow.perRound < -0.001 ? 'down' : undefined}
         />
+        {explain && <GrowthExplained kingdom={kingdom} now={now} />}
         <p className="hint">{status}</p>
       </Section>
       <Section title="Büyümeyi belirleyenler" icon="people" aside={grow.factor > 0 ? `toplam ${factorText(grow.factor)}` : grow.factor < 0 ? 'göç' : 'durgun'}>
@@ -96,5 +107,39 @@ export function PopulationPanel({ kingdom, now }: { kingdom: Kingdom; now: numbe
         </p>
       </Section>
     </>
+  )
+}
+
+// How the people grow, worked through with this lordship's own numbers (the (i) by Büyüme; CLAUDE.md §5.2).
+export function GrowthExplained({ kingdom, now }: { kingdom: Kingdom; now: number }) {
+  const g = balance.society.growth
+  const grow = growthTerms(kingdom, now)
+  const base = g.inflowPerRound + g.gapSharePerRound * grow.gap
+  const h = Math.round(happinessOf(kingdom))
+  return (
+    <div className="explain frame">
+      <b>Nüfus nasıl büyür?</b>
+      <p>
+        Evler, saray ve kalabalık kasabalar yalnız <b>yer</b> verir; köylüler o yere her üretim turunda ({balance.economy.productionSeconds} saniyede bir) yavaş
+        yavaş gelir. Askerler ve denizciler de bu yerden düşer. Şu an yer: <b>{fmt(grow.room)}</b>, yerleşmiş köylü: <b>{fmt(Math.round(grow.people))}</b>, boş yer:{' '}
+        <b>{fmt(Math.round(grow.gap))}</b>.
+      </p>
+      <p>
+        Tur başına gelen: (<b>{num(g.inflowPerRound, 2)}</b> + boş yerin <b>%{num(g.gapSharePerRound * 100, 1)}</b>'i) × büyüme çarpanı. Senin için bu{' '}
+        {num(base, 2)} × {num(Math.max(0, grow.factor), 2)}
+        {grow.gap < 0.5 ? ', ama boş yer olmadığı için kimse gelmez' : <>, yani tur başına <b>{num(Math.max(0, grow.perRound), 2)}</b> kişi</>}. Boş yer çoksa halk
+        daha hızlı gelir, doldukça yavaşlar.
+      </p>
+      <p>
+        <b>Çarpanı mutluluk belirler</b> (şu an %{h}, çarpan {num(happinessGrowth(h), 2)}): {g.happiness.map((p) => `%${p.at} → ${p.factor < 0 ? '−' : ''}${num(Math.abs(p.factor), 1)}`).join(', ')} (aradakiler doğrusal; 0'da büyüme durur). Savaş ×{num(g.war, 1)},
+        hastalık hasta payı kadar düşürür; kraliçe ×{num(1 + g.queen, 1)}, tapınak her seviyede +%{Math.round(g.templePerLevel * 100)} artırır.
+      </p>
+      <p>
+        <b>Çarpan sıfırın altına inerse halk göç eder:</b> tur başına halkın %{num(g.leaveSharePerRound * 100, 1)}'i × çarpan. Açlık (ambarda yemek yok)
+        çarpanı en fazla {num(g.starving, 1)}, kuşatma {num(g.besieged, 0)} yapar. Ama sarayın hizmetlileri gitmez; nüfus onların altına inerse aç da olsalar
+        geri gelirler.
+      </p>
+      <p>Ev yıkılır ya da asker yazılırsa yeri kalmayan köylüler hemen gider; terhis edilen asker köylüye döner. Yer dolunca büyümek için yeni ev ya da daha yüksek saray gerekir.</p>
+    </div>
   )
 }

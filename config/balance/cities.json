@@ -92,6 +92,18 @@
       },
       "minRelation": -50,
       "minPalace": 2
+    },
+    "quests": {
+      "windowSeconds": 3600,
+      "kinds": ["trade", "town", "order", "army"],
+      "tradeUnits": [150, 450],
+      "tradeStep": 50,
+      "armyGrowth": 1.25,
+      "armyMin": 10,
+      "gold": [100, 250],
+      "relation": { "own": 5, "other": 3 },
+      "minRelation": -50,
+      "minPalace": 2
     }
   },
   "size": 16,

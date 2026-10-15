@@ -459,7 +459,11 @@ değerler `society.json` → `growth`). Tur başına gelen: (0,08 + boş yerin
   sıçramaz); yeni lordluk sarayın hizmetlileriyle başlar.
 - Halk sekmesindeki **Nüfus** bölümü (`apps/web/src/ui/hud/population.tsx`
   → `PopulationPanel`) köylü / yer, tur ve saat başına büyümeyi, her
-  çarpanı nedeniyle ve dolmaya kalan süreyi gösterir.
+  çarpanı nedeniyle ve dolmaya kalan süreyi gösterir. Büyümenin yanındaki
+  **(i)** düğmesi büyümenin nasıl işlediğini lordun kendi sayılarıyla
+  anlatır (`GrowthExplained`: yer, boş yer, formül, mutluluk çarpanı, göç,
+  hizmetliler). Üst çubuktaki nüfus kartı da saatlik büyümeyi, yerleşimi
+  (köylü / yer, dolmaya kalan süre) ve denizcileri gösterir.
 - Sunucu, savaşta olan lordları (`atWar`) savaş ilanında, barışta ve her
   tick'te işaretler; kuşatılan sarayın `besiegedUntil` değeri kuşatma
   başlayınca yazılır.
@@ -887,7 +891,7 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   tapınak, vaaz) / Kraliçe; **Ticaret** → Tüccar / Pazar / Siparişler /
   Hâkimler; **Depo** → Mallar / Hazine (gelir-gider, sezonun defteri) /
   Cephanelik; **Ordu** → Ordular (ve garnizon) / Kışla / Savaşlar /
-  Donanma; **Diplomasi** → Lordlar / Casusluk. Bir lordun sayfası da
+  Donanma; **Diplomasi** → Lordlar / Krallık (§7.8) / Casusluk. Bir lordun sayfası da
   bölümlere ayrılır (`usePart` anahtarı `lord`): **İlişki** (seninle ilişkisi,
   savaş puanı, gerekçeler, dış ilişkileri), **Elçi** (ilişki geliştir, hediye,
   haraç iste, ittifak, barış; yoldaki elçi sayısı), **Anlaşmalar** (haracı
@@ -1276,6 +1280,25 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
 - **Taçların gücü** (`crown.power`): Bir tacın gücü 400 + ona bağlı
   lordların puanlarının toplamıdır; lordları geliştikçe güçlenir. Güç payı
   kendi lordlarına bahşiş ve armağanları ×0,7–1,3 etkiler (eşit güçte ×1).
+- **Taçların görevleri** (`cities.json` → `crown.quests`; `crowns.ts` →
+  `crownQuest`, `questProgress`, `questError`, `takeQuest`, `claimQuest`;
+  sunucuda `quest` komutu): her taç her saat her lorddan bir iş ister (lobi
+  tohumundan, herkese aynı): **ticari üstünlük** (bu saat tüccarın bir maldan
+  150–450 birim satsın), **kasaba ele geçir**, **siparişimizi gönder** (bu
+  saatin taç siparişi) ya da **ordunu büyüt** (garnizon ve sahadaki askerler
+  en az ×1,25, en az 10). Lord görevi alır (başladığı yer saklanır:
+  satılmış birim, kasaba sayısı, hedef asker; `Kingdom.crownQuests`), saat
+  dolmadan bitirip **ödülü alır**: 100–250 altın (hazineye sığdığı kadar;
+  yer azsa önceden uyarılır) ve o taçla ilişki (kendi tacı +5, öbürü +3).
+  2. seviye saray ister; ilişki −50'nin altındaysa taç bir şey istemez.
+- **Diplomasi → Krallık** (`cities.tsx` → `CrownsPanel`): her taç için bir
+  kart: hükümdar ve başkent, seninle ilişkisi (çubuk), **politikaları**
+  (lobi pazarından o an hangi malı dakikada kaç birim aldığı, yönettiği mal ve
+  senin fiyat etkin, bu saatin siparişi ve ödediği, devriye mi haraççı mı
+  gönderdiği) ve **senden istediği** görev (ilerleme çubuğu, ödül, kalan
+  süre, "Görevi al" / "Ödülü al"); altında **taçların gücü** (güç savaşı:
+  pasta grafik ve iki tacın lordları) ve **taçların pazarı**. Ödülü
+  bekleyen görev varsa sekmede kırmızı nokta yanar.
 - **Taç paneli** (başkente tıklayınca): hükümdar, şehrin fiyatları,
   seninle ilişkisi (çubuk, dinlenme değeri, ilişkiyi değiştirenler ve
   armağan baremleri), **taçların gücü** (pasta grafik ve iki tacın lordları
@@ -1611,7 +1634,9 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
   gidilemez ("Oraya su yolu yok"). Yol karo karo su üstünde aranır (A*,
   karadan köşe kesmeden), sonra suyun izin verdiği yerde düzleştirilir;
   filo karo başına 0,5 sn'de yol alır (`navy.json` → `sail`) ve vardığı
-  yerde demirler. Emir elçisiz, hemen gider. Seyir filonun `sail` alanında
+  yerde demirler. Hedef dar ya da kıyıya yapışık bir su karosuysa filo
+  4 karo içindeki en yakın açık suya (çevresi de su olan karoya) demirler,
+  gövdeler kıyıya taşmaz (`openWater`). Emir elçisiz, hemen gider. Seyir filonun `sail` alanında
   yol, kalkış ve varış anı olarak saklanır, konum bunlardan hesaplanır;
   bölünen filonun yeni parçası aynı yoldan gider. Görevler (balık, korsan
   avı, ticaret) eskisi gibi işler; seyir yalnız filonun nerede durduğunu

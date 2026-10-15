@@ -12,7 +12,7 @@ import { cutOff, imprisoned } from './walls'
 import { dynastyEffects, dynastyStep } from './dynasty'
 import type { Dynasty, DynastyEvent } from './dynasty'
 import { changeCrownRelation, driftCrownRelations, fealtyOpen, settleOrderTrips, stewardFactor } from './crowns'
-import type { OrderTrip } from './crowns'
+import type { OrderTrip, QuestTaken } from './crowns'
 import { crisisDecideMs, crisisWarded, isCrisis, isDilemma, fortuneEffects, fortunesBegun, hasResearch, hospitalHeal, levelOf, researchEffects, sermonTaxFactor, templeHappiness } from './institutions'
 import type { FortuneKind, FortuneScope } from './institutions'
 import type { Unit, Units } from './units'
@@ -283,6 +283,8 @@ export interface Kingdom {
   fledAt?: number
   // The crowns' commissions delivered: by crown, the window last delivered in (crowns.ts, crownOrder).
   ordersDone?: number[]
+  // The crowns' tasks taken this window (CLAUDE.md §7.8; crowns.ts → takeQuest), by crown.
+  crownQuests?: (QuestTaken | null)[]
   // Caravans on their way to a crown with its order, paid when they are back (crowns.ts).
   orderTrips?: OrderTrip[]
   // The lord's ships: the harbour, the fleets and the slipways (navy.ts; CLAUDE.md §8.5).

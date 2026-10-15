@@ -4925,3 +4925,36 @@ input:not([type='range']):focus-visible {
   width: 100%;
   justify-content: center;
 }
+
+/* The (i) by a figure, and the explanation it opens. */
+.info-btn {
+  padding: 0;
+  min-height: 0;
+  vertical-align: middle;
+}
+
+.explain {
+  display: grid;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 4);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.explain b {
+  color: var(--text, #f3e6c8);
+}
+
+.explain p {
+  margin: 0;
+}
+
+/* A sub-heading inside a crown's card (Diplomasi → Krallık). */
+.crown-sub {
+  display: block;
+  margin-top: calc(var(--px) * 3);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+}

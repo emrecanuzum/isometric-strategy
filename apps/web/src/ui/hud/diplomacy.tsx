@@ -1,5 +1,7 @@
 import {
   OPERATIONS,
+  palaceLevel,
+  questError,
   operationNetworkCost,
   UNITS,
   allied,
@@ -36,7 +38,7 @@ import { RESOURCE_NAMES, UNIT_NAMES } from '../names'
 import type { HudData } from './tabs'
 import type { KingdomInfo, Online } from './online'
 import { kingdomName, lastSeen, relationTermsIn } from './online'
-import { CrownBanner } from './cities'
+import { CrownBanner, CrownsPanel } from './cities'
 import { Meter, Placeholder, Section, SpriteView, Stat, fmt } from './primitives'
 
 // The diplomacy tab (CLAUDE.md §9.7): the kingdoms of the lobby and the player's standing with each, a kingdom
@@ -118,8 +120,8 @@ const stateChips = (online: Online, id: number) => {
 }
 
 // The diplomacy tab's two parts, the lords and the spies, the last one looked at remembered in this browser.
-type DiplomacyPart = 'kingdoms' | 'spies'
-const DIPLOMACY_PARTS: DiplomacyPart[] = ['kingdoms', 'spies']
+type DiplomacyPart = 'kingdoms' | 'crowns' | 'spies'
+const DIPLOMACY_PARTS: DiplomacyPart[] = ['kingdoms', 'crowns', 'spies']
 
 export function DiplomacyTab(data: HudData) {
   const { online } = data
@@ -129,6 +131,8 @@ export function DiplomacyTab(data: HudData) {
   if (focus) return <KingdomDetail data={data} online={online} target={focus} />
   const incoming = online.envoys.filter((e) => e.to_id === online.me && e.status === 'pending').length
   const active = online.missions.filter((m) => m.owner_id === online.me && !m.ended_at).length
+  // A crown's task done and waiting for its reward.
+  const crownReady = !!data.kingdom && data.world.cities.some((_, i) => !questError(data.kingdom!, i, 'claim', data.now, data.world.cities.length, palaceLevel(data.kingdom!, data.now)))
   return (
     <>
       <Subtabs
@@ -137,10 +141,13 @@ export function DiplomacyTab(data: HudData) {
         onPart={setView}
         parts={[
           { id: 'kingdoms', name: 'Lordlar', icon: 'banner', dot: incoming > 0 },
+          { id: 'crowns', name: 'Krallık', icon: 'crown', dot: crownReady },
           { id: 'spies', name: 'Casusluk', icon: 'eye', count: active },
         ]}
       />
-      {view === 'kingdoms' ? <KingdomList data={data} online={online} /> : <SpyPanel data={data} online={online} />}
+      {view === 'kingdoms' && <KingdomList data={data} online={online} />}
+      {view === 'crowns' && data.kingdom && <CrownsPanel world={data.world} kingdom={data.kingdom} online={online} market={online.market} now={data.now} />}
+      {view === 'spies' && <SpyPanel data={data} online={online} />}
     </>
   )
 }

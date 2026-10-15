@@ -61,6 +61,7 @@ const MAPS = {
   book: ['........', 'kkkk.kkk', 'kwwlklwk', 'kwwlklwk', 'kwwlklwk', 'kwwlklwk', 'kkkkkkkk', '..kRRk..'],
   heal: ['..kkkk..', '..kRRk..', 'kkkRRkkk', 'kRRRRRRk', 'kRRRRRRk', 'kkkRRkkk', '..kRRk..', '..kkkk..'],
   temple: ['...yy...', '...ky...', '..kssk..', '.kssssk.', 'kkkkkkkk', '.ksksks.', '.ksksks.', 'kkkkkkkk'],
+  info: ['..cccc..', '.ccwwcc.', 'cccccccc', 'cccwwccc', 'cccwwccc', '.ccwwcc.', '..cccc..', '........'],
   bell: ['...yy...', '..yyyy..', '.yyyyyy.', '.yyyyyy.', '.yyyyyy.', 'yyyyyyyy', '...kk...', '........'],
   menu: ['........', 'wwwwwwww', 'wwwwwwww', '........', 'wwwwwwww', 'wwwwwwww', '........', 'wwwwwwww'],
   gear: ['...ww...', '.w.ww.w.', '..wwww..', 'www..www', 'www..www', '..wwww..', '.w.ww.w.', '...ww...'],

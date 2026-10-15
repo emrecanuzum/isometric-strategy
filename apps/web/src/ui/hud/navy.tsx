@@ -90,6 +90,7 @@ const clock = (ms: number) => {
   return s >= 3600 ? `${Math.floor(s / 3600)} sa ${Math.floor((s % 3600) / 60)} dk` : s >= 60 ? `${Math.floor(s / 60)} dk ${s % 60} sn` : `${s} sn`
 }
 const pct = (v: number) => `%${Math.round(v * 100)}`
+const dec = (v: number) => String(v).replace('.', ',')
 
 export function ShipRow({ ships }: { ships: Ships | null | undefined }) {
   const shown = SHIPS.filter((x) => (ships?.[x] ?? 0) > 0)
@@ -211,7 +212,7 @@ function missionStatus(data: HudData, f: Fleet) {
       return `Eve dönüyor · ${clock(m.arriveAt - now)}${cargo.length ? ` · ganimet: ${cargo.map(([g, v]) => `${fmt(v ?? 0)} ${RESOURCE_NAMES[g as Good].toLowerCase()}`).join(', ')}` : ''}`
     }
     case 'fish':
-      return `İskele önünde balık tutuyor · tur başına +${(balance.navy.ships.cog.fish * (f.ships.cog ?? 0) + balance.navy.ships.galley.fish * (f.ships.galley ?? 0) + balance.navy.ships.corsair.fish * (f.ships.corsair ?? 0)).toFixed(1)} yemek (arazi çarpanından önce)`
+      return `${f.sail ? 'Durduğu yerin çevresinde' : 'İskele önünde'} balık tutuyor · tur başına +${(balance.navy.ships.cog.fish * (f.ships.cog ?? 0) + balance.navy.ships.galley.fish * (f.ships.galley ?? 0) + balance.navy.ships.corsair.fish * (f.ships.corsair ?? 0)).toFixed(1)} yemek (arazi çarpanından önce)`
     case 'hunt':
       return 'Korsanların peşinde · yakalanan her korsan için ödül'
     default:
@@ -429,7 +430,7 @@ function Shipyard({ data, online }: { data: HudData; online: Online }) {
         ))}
       </div>
       <p className="hint">{SHIP_NOTES[ship]}.</p>
-      <Stat label="Güç · eskort · yük" value={`${spec.might} · ${spec.escort} · ${spec.cargo}`} note={`${spec.crew} denizci`} />
+      <Stat label="Güç · eskort · yük" value={`${dec(spec.might)} · ${dec(spec.escort)} · ${spec.cargo}`} note={`${spec.crew} denizci`} />
       <Stat
         label="Gemi başı"
         value={Object.entries(spec.cost)
@@ -523,7 +524,7 @@ export function RivalFleetSheet({ lord, color, index, fleet, intel, now, onSpy, 
           {spied ? (
             <>
               {SHIPS.filter((x) => spied.ships[x].hi > 0).map((x) => (
-                <Stat key={x} label={SHIP_NAMES[x]} value={range(spied.ships[x])} note={`güç ${shipSpec(x).might} · eskort ${shipSpec(x).escort} · yük ${shipSpec(x).cargo}`} />
+                <Stat key={x} label={SHIP_NAMES[x]} value={range(spied.ships[x])} note={`güç ${dec(shipSpec(x).might)} · eskort ${dec(shipSpec(x).escort)} · yük ${shipSpec(x).cargo}`} />
               ))}
               <p className="hint">Casusların tahmini; ağ güçlendikçe aralık daralır.</p>
             </>

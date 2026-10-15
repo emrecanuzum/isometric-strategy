@@ -193,3 +193,105 @@ export function settleOrderTrips(kingdom: Kingdom, at: number, goldRoom: (k: Kin
   }
   return { kingdom: k, back }
 }
+
+// ---- What the crowns ask of the lords (CLAUDE.md §7.8) --------------------------------------------------------------
+
+// Each crown asks one task an hour of every lord, the same for all (seeded by the lobby): sell a lot of a good (trade
+// mastery), take a town, send its order, or grow the army. A lord takes it (what it starts from is noted), does it
+// before the hour is out and claims gold and the crown's goodwill.
+export type QuestKind = 'trade' | 'town' | 'order' | 'army'
+
+export interface CrownQuest {
+  crown: number
+  window: number
+  endsAt: number
+  kind: QuestKind
+  // Trade: the good and how many units to sell.
+  good?: Good
+  units?: number
+  gold: number
+}
+
+// A task taken: in which window, and what it started from (units of the good sold so far, towns held, the soldiers to
+// reach).
+export interface QuestTaken {
+  window: number
+  base: number
+  target?: number
+  done?: boolean
+}
+
+const quests = () => spec().quests
+
+export function crownQuest(lobbyKey: number | undefined, crown: number, at: number): CrownQuest {
+  const q = quests()
+  const ms = q.windowSeconds * 1000
+  const window = Math.floor(at / ms)
+  const h = mix(lobbyKey ?? 0, window, crown, 7717)
+  const kind = q.kinds[h % q.kinds.length] as QuestKind
+  const steps = Math.floor((q.tradeUnits[1] - q.tradeUnits[0]) / q.tradeStep)
+  const gold = q.gold[0] + ((h >>> 8) % (q.gold[1] - q.gold[0] + 1))
+  return {
+    crown,
+    window,
+    endsAt: (window + 1) * ms,
+    kind,
+    ...(kind === 'trade' && { good: GOODS_ORDER[(h >>> 4) % 3], units: q.tradeUnits[0] + ((h >>> 6) % (steps + 1)) * q.tradeStep }),
+    gold,
+  }
+}
+
+const soldiersNow = (k: Kingdom) => (k.soldiers ?? 0) + (k.fielded ?? 0)
+
+// Where the lord stands on the task: how far along and how far to go.
+export function questProgress(kingdom: Kingdom, crown: number, at: number): { quest: CrownQuest; taken: QuestTaken | null; have: number; need: number } {
+  const quest = crownQuest(kingdom.lobbyKey, crown, at)
+  const t = kingdom.crownQuests?.[crown] ?? null
+  const taken = t && t.window === quest.window ? t : null
+  const sold = (g?: Good) => (g ? (kingdom.trade.ledger?.[g] ?? 0) : 0)
+  switch (quest.kind) {
+    case 'trade':
+      return { quest, taken, have: taken ? Math.max(0, sold(quest.good) - taken.base) : 0, need: quest.units ?? 0 }
+    case 'town':
+      return { quest, taken, have: taken ? Math.max(0, (kingdom.towns?.length ?? 0) - taken.base) : 0, need: 1 }
+    case 'order':
+      return { quest, taken, have: (kingdom.ordersDone ?? [])[crown] === quest.window ? 1 : 0, need: 1 }
+    case 'army':
+      return { quest, taken, have: soldiersNow(kingdom), need: taken?.target ?? Math.max(quests().armyMin, Math.ceil(soldiersNow(kingdom) * quests().armyGrowth)) }
+  }
+}
+
+export type QuestError = 'crown' | 'locked' | 'relation' | 'taken' | 'notTaken' | 'done' | 'notYet'
+
+export function questError(kingdom: Kingdom, crown: number, action: 'take' | 'claim', at: number, crowns: number, palace: number): QuestError | null {
+  if (!Number.isInteger(crown) || crown < 0 || crown >= crowns) return 'crown'
+  if (palace < quests().minPalace) return 'locked'
+  if (crownRelation(kingdom, crown) < quests().minRelation) return 'relation'
+  const { taken, have, need } = questProgress(kingdom, crown, at)
+  if (action === 'take') return taken ? 'taken' : null
+  if (!taken) return 'notTaken'
+  if (taken.done) return 'done'
+  return have >= need ? null : 'notYet'
+}
+
+export function takeQuest(kingdom: Kingdom, crown: number, at: number, crowns: number, palace: number): Kingdom {
+  if (questError(kingdom, crown, 'take', at, crowns, palace)) return kingdom
+  const { quest, need } = questProgress(kingdom, crown, at)
+  const base = quest.kind === 'trade' ? (kingdom.trade.ledger?.[quest.good!] ?? 0) : quest.kind === 'town' ? (kingdom.towns?.length ?? 0) : 0
+  const list = [...(kingdom.crownQuests ?? [])]
+  while (list.length <= crown) list.push(null)
+  list[crown] = { window: quest.window, base, ...(quest.kind === 'army' && { target: need }) }
+  return { ...kingdom, crownQuests: list }
+}
+
+// Claims the reward: the gold (as far as the treasury holds it) and the crown's goodwill, more from one's own crown.
+export function claimQuest(kingdom: Kingdom, crown: number, at: number, crowns: number, palace: number, goldRoom: number): Kingdom {
+  if (questError(kingdom, crown, 'claim', at, crowns, palace)) return kingdom
+  const { quest } = questProgress(kingdom, crown, at)
+  const gold = Math.max(0, Math.min(quest.gold, goldRoom))
+  const list = [...(kingdom.crownQuests ?? [])]
+  list[crown] = { ...list[crown]!, done: true }
+  const q = quests()
+  const next = changeCrownRelation({ ...kingdom, crownQuests: list, stock: { ...kingdom.stock, gold: kingdom.stock.gold + gold } }, crown, kingdom.liege === crown ? q.relation.own : q.relation.other)
+  return gold > 0 ? book(next, { crownGot: gold }) : next
+}

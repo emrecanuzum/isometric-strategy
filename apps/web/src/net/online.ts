@@ -201,6 +201,7 @@ export type Command =
   | { type: 'fleet'; action: 'merge'; fleet: number; other: number }
   | { type: 'fleet'; action: 'dock' | 'recall'; fleet: number }
   | { type: 'fleet'; action: 'sail'; fleet: number; x: number; y: number }
+  | { type: 'quest'; crown: number; action: 'take' | 'claim' }
   | { type: 'fleet'; action: 'mission'; fleet: number; order: MissionOrder }
 
 export class CommandError extends Error {}
