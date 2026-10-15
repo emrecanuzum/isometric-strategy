@@ -1385,8 +1385,9 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
 - **Türler ve katkı** (tur başına, yokluk cezasına tabi): vergi kasabası
   +1,5 altın, tarım +5 yemek, kereste +4 yapı malzemesi, demirci +3,5 savaş
   malzemesi (mal kasabaları önce 2 / 1,6 / 1,4 idi ve bakımlarını
-  karşılamıyordu); kalabalık kasaba **+14 köylü** (nüfus sınırı ve barınak birlikte
-  artar). Türler kasabalar arasında dağıtılır; her tür en az bir kez vardır.
+  karşılamıyordu); kalabalık kasaba **14 köylülük yer** verir (nüfus sınırı ve
+  barınak birlikte artar; halk o yeri zamanla doldurur, ayaklanmada yer
+  gidince o köylüler de gider). Türler kasabalar arasında dağıtılır; her tür en az bir kez vardır.
 - **Kuşatma:** Kasabaya tıklayınca panel açılır; "Gönder" ile bir ordu
   seçilir (ordu "Hareket" ile kasabanın üstüne gönderilerek de aynısı olur).
   Ordu kasabanın kapısına varınca kuşatma başlar ve **15 dakika** sürer;
@@ -1469,6 +1470,14 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
     katkısı, kattığı puan biter, aşırı büyüme basamağı hemen düşer. Kuşatma
     altındaki kasaba bırakılamaz (`'besieged'`). Bir bedeli yoktur: aşırı
     büyümeden kurtulmanın, ayaklanmayı beklemeden yolu budur.
+  - **Panelin bölümleri:** kasaba paneli de alt sekmelere bölünür (son bakılan
+    hatırlanır; `usePart` anahtarı `town:own` / `town:other`). Üstte özet hep
+    durur (kimin elinde, ne gönderir). Kendi kasaban: **Durum** (sadakat,
+    huzursuzluğun kaynakları; ayaklanmada ya da ayaklanmaya yakınken kırmızı
+    nokta), **Bakım** (aşırı büyüme ve bakım; birden çok kasabada nokta),
+    **Getiri** (gönderdikleri, kattığı güç), **Kuşatma** (süren kuşatma ya da
+    savunma bilgisi) ve **Bırak**. Başkasının ya da sahipsiz kasaba: **Bilgi**
+    (bir kasaba daha almanın aşırı büyümeye etkisi) ve **Kuşat**.
   - **Kasaba paneli** (kendi kasaban): sadakat çubuğu, yönü ve hedefi neyin
     belirlediği, ayaklanma uyarısı; **huzursuzluğun kaynakları** (bakım tabanı,
     halkın mutluluğu, hükümdar, aşırı büyüme ve tavanı, gittiği yer ve şu an

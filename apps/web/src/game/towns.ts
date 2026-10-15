@@ -27,7 +27,7 @@ export const TOWN_KIND_NAMES: Record<TownKind, string> = {
 export function townGift(kind: TownKind) {
   const spec = balance.towns.kinds[kind] as { perRound?: number; villagers?: number }
   const n = (v = 0) => v.toLocaleString('tr-TR')
-  if (kind === 'people') return `+${n(spec.villagers)} köylü (nüfus sınırı da artar)`
+  if (kind === 'people') return `${n(spec.villagers)} köylülük yer (halk o yeri zamanla doldurur)`
   const what = { gold: 'altın', food: 'yemek', materials: 'yapı malzemesi', arms: 'savaş malzemesi' }[kind]
   return `tur başına +${n(spec.perRound)} ${what}`
 }

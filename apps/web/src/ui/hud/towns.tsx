@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Subtabs, usePart } from './Subtabs'
+import type { Part } from './Subtabs'
 import {
   atWar,
   balance,
@@ -74,6 +76,31 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
   const own = armies.filter((a) => a.kingdom_id === me && a.status !== 'battle')
   const minutes = Math.round(townSiegeMs(walled) / 60_000)
   const p = balance.towns.palisade
+  const held = mine ? (kingdom.towns?.find((h) => h.id === town.id) ?? heldTown(town, now)) : null
+  // In parts, like the other menus (the last one looked at remembered): one's own town and another's have their own.
+  const [part, setPart] = usePart<TownPart>(mine ? 'town:own' : 'town:other', mine ? OWN_PARTS : OTHER_PARTS, mine ? 'state' : 'info')
+  const restless = !!held && (townRevolting(held, now) || townLoyalty(held) < balance.towns.revolt.below + 5)
+  const parts: Part<TownPart>[] = mine
+    ? [
+        { id: 'state', name: 'Durum', icon: 'happy', dot: restless },
+        { id: 'upkeep', name: 'Bakım', icon: 'gold', dot: (kingdom.towns?.length ?? 0) > 1 },
+        { id: 'yield', name: 'Getiri', icon: 'chest' },
+        { id: 'siege', name: 'Kuşatma', icon: 'swords', dot: !!siege },
+        { id: 'release', name: 'Bırak', icon: 'banner' },
+      ]
+    : [
+        { id: 'info', name: 'Bilgi', icon: 'scroll' },
+        { id: 'siege', name: 'Kuşat', icon: 'swords', dot: !!siege },
+      ]
+  const siegeSection = siege && (
+    <Section title="Kuşatma" icon="swords" aside={`${clock(siege.endsAt - now)} kaldı`}>
+      <p className="hint">{siege.kingdom === me ? 'Ordun kasabayı kuşatıyor.' : `${names.get(siege.kingdom) ?? '?'} ordusu kasabayı kuşatıyor.`}</p>
+      <Meter value={(now - siege.startedAt) / (siege.endsAt - siege.startedAt)} tone={siege.kingdom === me ? 'up' : 'down'} label="Kuşatma ilerlemesi" segments={12} />
+      <button className="btn small" onClick={onWatch}>
+        İzle
+      </button>
+    </Section>
+  )
   return (
     <section className="sheet frame" aria-labelledby="town-title">
       <header className="sheet-head">
@@ -107,18 +134,24 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
             </small>
           </div>
         </div>
-        {mine && <Holding world={world} kingdom={kingdom} held={kingdom.towns?.find((h) => h.id === town.id) ?? heldTown(town, now)} now={now} onUpkeep={onUpkeep} besieged={!!siege} onRelease={onRelease} />}
-        {siege && (
-          <Section title="Kuşatma" icon="swords" aside={`${clock(siege.endsAt - now)} kaldı`}>
-            <p className="hint">{siege.kingdom === me ? 'Ordun kasabayı kuşatıyor.' : `${names.get(siege.kingdom) ?? '?'} ordusu kasabayı kuşatıyor.`}</p>
-            <Meter value={(now - siege.startedAt) / (siege.endsAt - siege.startedAt)} tone={siege.kingdom === me ? 'up' : 'down'} label="Kuşatma ilerlemesi" segments={12} />
-            <button className="btn small" onClick={onWatch}>
-              İzle
-            </button>
-          </Section>
+        <Subtabs label="Kasaba" parts={parts} part={part} onPart={setPart} />
+        {held && part !== 'siege' && <Holding world={world} kingdom={kingdom} held={held} now={now} onUpkeep={onUpkeep} besieged={!!siege} onRelease={onRelease} part={part} />}
+        {mine && part === 'siege' && (
+          <>
+            {siegeSection || (
+              <Section title="Kuşatma" icon="shield">
+                <p className="hint">Kasaban şu an kuşatma altında değil.</p>
+              </Section>
+            )}
+            <p className="hint">
+              Savaşta olduğun bir lord ordusunu kasabanın kapısına getirirse kuşatma başlar ve {minutes} dakika sürer; bitince kasaba onun olur. Ordunla gelip
+              kuşatanla meydan muharebesine girersen kuşatmayı kırarsın.{walled ? ' Tahta çit kuşatmayı uzatır.' : ''}
+            </p>
+          </>
         )}
-        {!mine && <Overreach held={kingdom.towns?.length ?? 0} taking />}
-        {!mine && (
+        {!mine && part === 'info' && <Overreach held={kingdom.towns?.length ?? 0} taking />}
+        {!mine && part === 'siege' && siegeSection}
+        {!mine && part === 'siege' && (
           <Section title="Kuşat" icon="shield">
             {!lawful ? (
               <p className="hint">Bu kasaba {holder} elinde ve onunla savaşta değilsin. Kuşatmak için önce savaş ilan etmelisin.</p>
@@ -149,7 +182,11 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
 }
 
 // A town of the player's: its loyalty and what moves it, the upkeep, what it has sent, and the strength it lends.
-function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease }: { world: World; kingdom: Kingdom; held: HeldTown; now: number; onUpkeep(level: number): void; besieged: boolean; onRelease(): void }) {
+type TownPart = 'state' | 'upkeep' | 'yield' | 'siege' | 'release' | 'info'
+const OWN_PARTS: TownPart[] = ['state', 'upkeep', 'yield', 'siege', 'release']
+const OTHER_PARTS: TownPart[] = ['info', 'siege']
+
+function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, part }: { world: World; kingdom: Kingdom; held: HeldTown; now: number; onUpkeep(level: number): void; besieged: boolean; onRelease(): void; part: TownPart }) {
   const [sure, setSure] = useState(false)
   const t = balance.towns
   const loyalty = townLoyalty(held)
@@ -173,82 +210,98 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease }: {
   const r = t.revolt
   return (
     <>
-      <Section title="Sadakat" icon={loyalty >= 50 ? 'happy' : loyalty >= r.below ? 'content' : 'unhappy'} aside={`%${Math.round(loyalty)} · ${Math.abs(trend) < 0.5 ? 'durgun' : trend > 0 ? 'yükseliyor' : 'düşüyor'}`}>
-        <Meter value={loyalty / 100} tone={loyalty >= 50 ? 'up' : loyalty >= r.below ? 'gold' : 'down'} label="Sadakat" segments={20} />
-        {revolting ? (
-          <p className="alert">
-            Kasaba ayaklandı: {span(held.revoltUntil! - now)} daha hiçbir şey göndermeyecek. Ayaklanma bittiğinde sadakat %{r.breakAwayBelow}'nin altındaysa kasaba senden kopar.
-          </p>
-        ) : loyalty < r.below + 10 ? (
-          <p className="alert">Sadakat %{r.below}'in altına inerse kasaba ayaklanır. Bakımı artırmak sadakati yükseltir.</p>
-        ) : null}
-        <Stat label="Gittiği yer" value={`%${Math.round(target)}`} tone={trend >= 0 ? 'up' : 'down'} note={`yaklaşık ${Math.round(t.loyalty.tauSeconds / 60)} dakikada yolun üçte ikisini alır`} />
-        <p className="hint">
-          Sadakat ne kadar yüksekse kasaba o kadar çok gönderir (%0'da ×{t.loyalty.yieldMin}, %100'de ×{t.loyalty.yieldMax}
-          {over.yieldFactor < 1 && `, aşırı büyüme ×${String(over.yieldFactor).replace('.', ',')}`}; şu an ×{factor.toFixed(2).replace('.', ',')}).
-        </p>
-      </Section>
-      <Unrest held={held} parts={parts} level={level} loyalty={loyalty} now={now} />
-      {count > 1 && <Overreach held={count} />}
-      <Section title="Bakım" icon="gold" aside={cost > 0 ? `tur başına ${amount(cost)} altın` : 'ödeme yok'}>
-        <p className="hint">Kasabayı elinde tutmak için her üretim turunda hazineden ödenir. Hazine yetmezse ödenmez ve sadakat bakımsızmış gibi düşer.</p>
-        <div className="segmented" role="radiogroup" aria-label="Bakım">
-          {t.upkeep.goldPerRound.map((gold, i) => (
-            <button key={i} className="btn small" role="radio" aria-checked={level === i} onClick={() => level !== i && onUpkeep(i)}>
-              {upkeepName(i)}
-              <small> {gold > 0 ? `${amount(gold * over.upkeepFactor)}` : '0'}</small>
+      {part === 'state' && (
+        <>
+          <Section title="Sadakat" icon={loyalty >= 50 ? 'happy' : loyalty >= r.below ? 'content' : 'unhappy'} aside={`%${Math.round(loyalty)} · ${Math.abs(trend) < 0.5 ? 'durgun' : trend > 0 ? 'yükseliyor' : 'düşüyor'}`}>
+            <Meter value={loyalty / 100} tone={loyalty >= 50 ? 'up' : loyalty >= r.below ? 'gold' : 'down'} label="Sadakat" segments={20} />
+            {revolting ? (
+              <p className="alert">
+                Kasaba ayaklandı: {span(held.revoltUntil! - now)} daha hiçbir şey göndermeyecek. Ayaklanma bittiğinde sadakat %{r.breakAwayBelow}'nin altındaysa kasaba senden kopar.
+              </p>
+            ) : loyalty < r.below + 10 ? (
+              <p className="alert">Sadakat %{r.below}'in altına inerse kasaba ayaklanır. Bakımı artırmak sadakati yükseltir.</p>
+            ) : null}
+            <Stat label="Gittiği yer" value={`%${Math.round(target)}`} tone={trend >= 0 ? 'up' : 'down'} note={`yaklaşık ${Math.round(t.loyalty.tauSeconds / 60)} dakikada yolun üçte ikisini alır`} />
+            <p className="hint">
+              Sadakat ne kadar yüksekse kasaba o kadar çok gönderir (%0'da ×{t.loyalty.yieldMin}, %100'de ×{t.loyalty.yieldMax}
+              {over.yieldFactor < 1 && `, aşırı büyüme ×${String(over.yieldFactor).replace('.', ',')}`}; şu an ×{factor.toFixed(2).replace('.', ',')}).
+            </p>
+          </Section>
+          <Unrest held={held} parts={parts} level={level} loyalty={loyalty} now={now} />
+        </>
+      )}
+      {part === 'upkeep' && (
+        <>
+          {count > 1 && <Overreach held={count} />}
+          <Section title="Bakım" icon="gold" aside={cost > 0 ? `tur başına ${amount(cost)} altın` : 'ödeme yok'}>
+            <p className="hint">Kasabayı elinde tutmak için her üretim turunda hazineden ödenir. Hazine yetmezse ödenmez ve sadakat bakımsızmış gibi düşer.</p>
+            <div className="segmented" role="radiogroup" aria-label="Bakım">
+              {t.upkeep.goldPerRound.map((gold, i) => (
+                <button key={i} className="btn small" role="radio" aria-checked={level === i} onClick={() => level !== i && onUpkeep(i)}>
+                  {upkeepName(i)}
+                  <small> {gold > 0 ? `${amount(gold * over.upkeepFactor)}` : '0'}</small>
+                </button>
+              ))}
+            </div>
+            <Stat
+              label="Saatte"
+              value={`${amount(cost * roundsPerHour)} altın`}
+              note={`sadakat tabanı %${t.loyalty.upkeepTargets[level]} (+ halk ve hükümdar${over.loyalty < 0 ? ', − aşırı büyüme' : ''})${over.upkeepFactor > 1 ? ` · aşırı büyüme bakımı ${times(over.upkeepFactor)} yapıyor` : ''}`}
+            />
+          </Section>
+        </>
+      )}
+      {part === 'yield' && (
+        <>
+          <Section title="Sana getirdikleri" icon="chest" aside={held.takenAt ? `alınalı ${span(now - held.takenAt)}` : undefined}>
+            {goods.length === 0 && <p className="hint">Henüz bir şey göndermedi.</p>}
+            {goods.map((g) => (
+              <Stat
+                key={g}
+                label={
+                  <>
+                    <Icon name={g === 'villagers' ? 'villager' : g} size={16} /> {GOOD_NAMES[g]}
+                  </>
+                }
+                value={g === 'villagers' ? `${fmt(sends.villagers)} köylü` : `${amount(delivered[g] ?? 0)} toplam`}
+                note={g === 'villagers' ? 'şu an barındırdığı' : `şu an tur başına ${amount(sends[g])}`}
+              />
+            ))}
+            {cost > 0 && <Stat label="Bakıma giden" value={`tur başına −${amount(cost)} altın`} tone="down" />}
+          </Section>
+          <Section title="Sana kattığı güç" icon="crown" aside={`+${points} puan`}>
+            <p className="hint">
+              Kasaba lordluğunun puanına +{points} katar (sadakatle artar, ayaklanmada yarıya iner).{' '}
+              {liege ? (
+                <>
+                  Bağlı olduğun <b style={{ color: liege.color }}>{liege.name}</b>nın gücüne +{points}.
+                </>
+              ) : (
+                'Henüz bir taç krallığına biat etmedin; ettiğinde bu puan onun gücüne de eklenir.'
+              )}
+            </p>
+          </Section>
+        </>
+      )}
+      {part === 'release' && (
+        <>
+          <Section title="Serbest bırak" icon="banner">
+            <p className="hint">
+              Kasabayı bırakırsan sahipsiz kalır ve {t.revolt.garrison[0]}–{t.revolt.garrison[1]} askerlik küçük bir garnizonla kendini korur. Bakımı, katkısı ve kattığı
+              puan biter; {count > 1 ? `elindeki kasaba ${count - 1}'e iner ve aşırı büyüme cezası hemen hafifler` : 'sonra yeniden kuşatıp alabilirsin'}.
+            </p>
+            <button
+              className={sure ? 'btn small danger' : 'btn small'}
+              disabled={besieged}
+              title={besieged ? 'Kuşatma altındaki kasaba bırakılamaz' : undefined}
+              onClick={() => (sure ? (setSure(false), onRelease()) : setSure(true))}
+              onBlur={() => setSure(false)}
+            >
+              {besieged ? 'Kuşatma sürerken bırakılamaz' : sure ? `Emin misin? ${held.name ?? 'Kasabayı'} serbest bırak` : 'Serbest bırak'}
             </button>
-          ))}
-        </div>
-        <Stat
-          label="Saatte"
-          value={`${amount(cost * roundsPerHour)} altın`}
-          note={`sadakat tabanı %${t.loyalty.upkeepTargets[level]} (+ halk ve hükümdar${over.loyalty < 0 ? ', − aşırı büyüme' : ''})${over.upkeepFactor > 1 ? ` · aşırı büyüme bakımı ${times(over.upkeepFactor)} yapıyor` : ''}`}
-        />
-      </Section>
-      <Section title="Sana getirdikleri" icon="chest" aside={held.takenAt ? `alınalı ${span(now - held.takenAt)}` : undefined}>
-        {goods.length === 0 && <p className="hint">Henüz bir şey göndermedi.</p>}
-        {goods.map((g) => (
-          <Stat
-            key={g}
-            label={
-              <>
-                <Icon name={g === 'villagers' ? 'villager' : g} size={16} /> {GOOD_NAMES[g]}
-              </>
-            }
-            value={g === 'villagers' ? `${fmt(sends.villagers)} köylü` : `${amount(delivered[g] ?? 0)} toplam`}
-            note={g === 'villagers' ? 'şu an barındırdığı' : `şu an tur başına ${amount(sends[g])}`}
-          />
-        ))}
-        {cost > 0 && <Stat label="Bakıma giden" value={`tur başına −${amount(cost)} altın`} tone="down" />}
-      </Section>
-      <Section title="Serbest bırak" icon="banner">
-        <p className="hint">
-          Kasabayı bırakırsan sahipsiz kalır ve {t.revolt.garrison[0]}–{t.revolt.garrison[1]} askerlik küçük bir garnizonla kendini korur. Bakımı, katkısı ve kattığı
-          puan biter; {count > 1 ? `elindeki kasaba ${count - 1}'e iner ve aşırı büyüme cezası hemen hafifler` : 'sonra yeniden kuşatıp alabilirsin'}.
-        </p>
-        <button
-          className={sure ? 'btn small danger' : 'btn small'}
-          disabled={besieged}
-          title={besieged ? 'Kuşatma altındaki kasaba bırakılamaz' : undefined}
-          onClick={() => (sure ? (setSure(false), onRelease()) : setSure(true))}
-          onBlur={() => setSure(false)}
-        >
-          {besieged ? 'Kuşatma sürerken bırakılamaz' : sure ? `Emin misin? ${held.name ?? 'Kasabayı'} serbest bırak` : 'Serbest bırak'}
-        </button>
-      </Section>
-      <Section title="Sana kattığı güç" icon="crown" aside={`+${points} puan`}>
-        <p className="hint">
-          Kasaba lordluğunun puanına +{points} katar (sadakatle artar, ayaklanmada yarıya iner).{' '}
-          {liege ? (
-            <>
-              Bağlı olduğun <b style={{ color: liege.color }}>{liege.name}</b>nın gücüne +{points}.
-            </>
-          ) : (
-            'Henüz bir taç krallığına biat etmedin; ettiğinde bu puan onun gücüne de eklenir.'
-          )}
-        </p>
-      </Section>
+          </Section>
+        </>
+      )}
     </>
   )
 }
