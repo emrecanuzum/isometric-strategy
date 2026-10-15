@@ -6,6 +6,9 @@
 
 :root {
   --px: 2px;
+  /* Control heights: every button and text field is one of these, so a field and its buttons line up. */
+  --control: 40px;
+  --control-small: 34px;
 
   --ink: #120d0b;
   --wood-0: #2a1c14;
@@ -129,7 +132,7 @@ small {
   align-items: center;
   justify-content: center;
   gap: calc(var(--px) * 3);
-  min-height: 40px;
+  min-height: var(--control);
   padding: 0 calc(var(--px) * 6);
   border: 0;
   border-radius: 0;
@@ -186,7 +189,7 @@ small {
 }
 
 .btn.small {
-  min-height: 34px;
+  min-height: var(--control-small);
   padding: 0 calc(var(--px) * 5);
   font-size: 15px;
 }
@@ -4342,7 +4345,7 @@ kbd {
 input.text {
   flex: 1;
   min-width: 0;
-  height: 34px;
+  height: var(--control);
   padding: 0 calc(var(--px) * 4);
   border: 0;
   border-radius: 0;
@@ -4370,4 +4373,21 @@ input.text {
 .name-edit {
   flex-wrap: wrap;
   gap: calc(var(--px) * 3);
+}
+
+/* A text field and the buttons beside it stand the same height, whatever size the buttons are elsewhere, with the
+   row's gap between them; a field's focus ring is drawn inside it so it neither grows nor eats that gap. */
+:is(.row, .name-row, .name-edit):has(> input) {
+  align-items: stretch;
+  gap: calc(var(--px) * 4);
+}
+
+:is(.row, .name-row, .name-edit):has(> input) > :is(input, .btn) {
+  height: var(--control);
+  min-height: var(--control);
+}
+
+input:not([type='range']):focus-visible {
+  outline: var(--px) solid var(--gold);
+  outline-offset: calc(var(--px) * -2);
 }
