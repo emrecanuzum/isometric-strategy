@@ -104,6 +104,7 @@ import { CitySheet, CityTip, CrownBanner } from './ui/hud/cities'
 import { TownSheet } from './ui/hud/towns'
 import type { HudData } from './ui/hud/tabs'
 import { GoodPicker, SitePicker, missingText } from './ui/panels'
+import type { SiteAccess } from './ui/panels'
 import { Timers } from './ui/hud/Timers'
 
 const TERRAIN_NAMES: Record<number, string> = {
@@ -672,6 +673,25 @@ function App({
   const choosing = kingdom ? null : (mine.sites[selectedSite] ?? null)
   // The land around each site the player may choose from.
   const surveys = useMemo(() => (view && !kingdom ? mine.sites.map((site) => surveySite(view.world, site)) : []), [view, kingdom, mine.sites])
+  // How far each offered site's trade post and dock plots lie (the merchant's trip grows with the trade post's
+  // distance from a palace in the middle of the land).
+  const access = useMemo(
+    (): SiteAccess[] =>
+      view && !kingdom
+        ? mine.sites.map((site) => {
+            const rect = territoryRect(site, 0)
+            const trade = findPlot(view.world, rect, TileRule.TradePostOnly)
+            const dock = findPlot(view.world, rect, TileRule.DockOnly)
+            const palace = { kind: 'palace' as const, x: site.x - 2, y: site.y - 2, size: 4 }
+            const middle = (p: { x: number; y: number; size: number }) => Math.round(Math.hypot(p.x + p.size / 2 - site.x, p.y + p.size / 2 - site.y))
+            return {
+              trade: trade && { tiles: middle(trade.plot), outside: trade.granted, tripMs: lobbyTripMs([palace, { kind: 'tradePost', ...trade.plot }]) },
+              dock: dock && { tiles: middle(dock.plot), outside: dock.granted },
+            }
+          })
+        : [],
+    [view, kingdom, mine.sites],
+  )
   const site = kingdom?.site ?? choosing
   const plots = useMemo(() => {
     if (!view || !site) return null
@@ -1570,6 +1590,7 @@ function App({
       {view && !kingdom && (
         <SitePicker
           surveys={surveys}
+          access={access}
           selected={selectedSite}
           onSelect={setSelectedSite}
           colors={lobbyColors(lobby.max_players)}

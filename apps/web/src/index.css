@@ -3054,6 +3054,30 @@ small {
   font-size: 15px;
 }
 
+/* The trade post's and the dock's distance under the multipliers, each with its note. */
+.site-distance {
+  display: grid;
+  gap: calc(var(--px) * 1);
+}
+
+.site-distance:first-of-type,
+.site-yield + .site-distance {
+  margin-top: calc(var(--px) * 2);
+}
+
+.site-card .site-note {
+  font-size: 12px;
+}
+
+/* The distances' bars line up whatever the length of the number beside them. */
+.site-distance .site-yield {
+  grid-template-columns: auto 1fr 64px;
+}
+
+.site-distance .site-yield > b {
+  text-align: right;
+}
+
 /* On a phone the three sites stack as short rows: the name, then the three multipliers side by side, then the land. */
 @media (max-width: 560px) {
   .dialog.site-picker {
@@ -3084,6 +3108,14 @@ small {
 
   .site-yield .meter {
     display: none;
+  }
+
+  .site-distance {
+    grid-column: 1 / -1;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: calc(var(--px) * 3);
+    margin-top: 0;
   }
 
   .site-card small {

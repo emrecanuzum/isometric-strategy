@@ -5,6 +5,7 @@ import type React from 'react'
 import { KINGDOM_COLORS, palaceIn } from '../game/buildingSprites'
 import type { KingdomColor } from '../game/buildingSprites'
 import { Icon } from './icons'
+import type { IconName } from './icons'
 import { BUILDING_NAMES, RESOURCE_ICONS, RESOURCE_NAMES } from './names'
 import { Meter, SpriteView, fmt, times } from './hud/primitives'
 
@@ -175,8 +176,45 @@ const suggestName = (taken: ReadonlySet<string> = new Set()) => {
 
 // Before founding: the sites the player was given, side by side, with what the land around each would yield; the
 // player picks one of them.
+
+// How far a site's trade post and dock plots lie from the middle of its land, in tiles; outside: beyond the border.
+export interface SiteAccess {
+  trade: { tiles: number; outside: boolean; tripMs: number } | null
+  dock: { tiles: number; outside: boolean } | null
+}
+
+// The trade post's and the dock's distance, with a bar that is full when the plot lies close.
+function SiteDistances({ access }: { access: SiteAccess }) {
+  const base = balance.economy.trade.tripSeconds * 1000
+  const rows: { icon: IconName; label: string; value: number; text: string; note: string }[] = []
+  if (access.trade) {
+    const seconds = Math.round(access.trade.tripMs / 1000)
+    rows.push({ icon: 'trade', label: 'Ticaret noktası', value: base / access.trade.tripMs, text: `${access.trade.tiles} karo`, note: `sefer ${seconds} sn${access.trade.outside ? ' · hudut dışı' : ''}` })
+  } else rows.push({ icon: 'trade', label: 'Ticaret noktası', value: 0, text: 'yok', note: 'yakında yol yok' })
+  if (access.dock) {
+    rows.push({ icon: 'pin', label: 'İskele', value: Math.max(0.05, 1 - access.dock.tiles / 60), text: `${access.dock.tiles} karo`, note: access.dock.outside ? 'hudut dışı, ek alanlı' : 'hudut içinde' })
+  } else rows.push({ icon: 'pin', label: 'İskele', value: 0, text: 'yok', note: 'yakında su yok' })
+  return (
+    <>
+      {rows.map((r) => (
+        <span key={r.label} className="site-distance" title={`${r.label}: ${r.text}, ${r.note}`}>
+          <span className="site-yield">
+            <Icon name={r.icon} size={16} />
+            <Meter value={Math.max(0, Math.min(1, r.value))} tone={r.value >= 0.6 ? 'up' : 'down'} label={`${r.label} uzaklığı`} segments={6} />
+            <b className={r.value >= 0.6 ? 'up' : 'down'}>{r.text}</b>
+          </span>
+          <small className="site-note">
+            {r.label} · {r.note}
+          </small>
+        </span>
+      ))}
+    </>
+  )
+}
+
 export function SitePicker({
   surveys,
+  access = [],
   selected,
   onSelect,
   onFound,
@@ -185,6 +223,7 @@ export function SitePicker({
   names = [],
 }: {
   surveys: Survey[]
+  access?: SiteAccess[]
   selected: number
   onSelect: (index: number) => void
   onFound: (name: string, color: KingdomColor) => void
@@ -226,6 +265,7 @@ export function SitePicker({
                     <b className={s.yields[good] >= 1 ? 'up' : 'down'}>{times(s.yields[good])}</b>
                   </span>
                 ))}
+                {access[i] && <SiteDistances access={access[i]} />}
                 <small>
                   {LAND.filter(([k]) => s[k] >= 0.05)
                     .map(([k, name]) => `${name} %${Math.round(s[k] * 100)}`)
@@ -234,7 +274,10 @@ export function SitePicker({
               </button>
             ))}
           </div>
-          <p className="hint site-why">Nehir ve çayır yemeği, orman yapı malzemesini, dağ savaş malzemesini artırır; bataklık hepsini biraz düşürür.</p>
+          <p className="hint site-why">
+            Nehir ve çayır yemeği, orman yapı malzemesini, dağ savaş malzemesini artırır; bataklık hepsini biraz düşürür. Ticaret noktası saraydan uzaksa tüccarın
+            seferi uzar, daha az satar. İskele hududun dışındaysa çevresinde küçük bir ek alan verilir; köylüler oraya yürür.
+          </p>
         </>
       )}
       <label className="name-field">

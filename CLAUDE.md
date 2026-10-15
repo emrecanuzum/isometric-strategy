@@ -76,7 +76,9 @@ kararlar verebilmeli; sürekli başında durmak zorunlu olmamalı. Kritik sürel
 1. **Oluşturma** — harita üretilir (seed), oyuncu slotları açılır.
 2. **Katılım** — oyuncuya **3 başlangıç yeri** rastgele atanır; yerini
    haritadan kendisi seçemez. Üç yer baştan yan yana büyük kartlarda
-   gösterilir (biyom çarpanları ve arazi payları); oyuncu birini seçip
+   gösterilir (biyom çarpanları ve arazi payları; ayrıca ticaret noktası
+   ve iskele arsasının uzaklığı, ticaret seferinin süresi ve hudut içinde
+   mi dışında mı olduğu, yakınlığa göre dolan çubuklarla); oyuncu birini seçip
    krallığını kurar (bkz. §6.4).
 3. **Aktif sezon** — 2 hafta (336 oyun günü).
 4. **Sezon sonu** — skor tablosu, ödüller/başarımlar kaydedilir.
