@@ -32,9 +32,8 @@ export interface TownSiege {
   // Milliseconds.
   startedAt: number
   endsAt: number
-  // The besiegers when it began, and the soldiers they have lost to the garrison so far (sieges laid before these were
-  // kept lack them).
-  soldiers?: number
+  // The soldiers the besiegers have lost so far (sieges laid before it was kept lack it). Their strength itself is not
+  // kept here, as everyone in the lobby reads the towns.
   lost?: number
 }
 

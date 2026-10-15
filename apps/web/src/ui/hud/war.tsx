@@ -583,12 +583,17 @@ export function TownSiegeView({ town, army, walled, online, now, onClose }: { to
     }
   }, [over])
   if (!siege) return null
-  const soldiers = siege.soldiers ?? (army?.soldiers ?? 0) + (siege.lost ?? 0)
-  const rounds = townSiegeRounds(town, siege, soldiers, walled)
+  // Another lord's besiegers are known only by their losses (their strength is for spies to tell).
+  const known = army?.soldiers !== null && army?.soldiers !== undefined
+  const soldiers = known ? army!.soldiers! + (siege.lost ?? 0) : 0
+  const rounds = townSiegeRounds(town, siege, known ? soldiers : Number.MAX_SAFE_INTEGER, walled)
   const done = townRoundsDone(siege, now, rounds.length)
   const last = done > 0 ? rounds[done - 1] : null
   const garrison = town.owner === null ? town.garrison : 0
-  const left = last?.attackers ?? soldiers
+  const lostSoFar = last?.lost ?? 0
+  const left = known ? (last?.attackers ?? soldiers) : null
+  // For the picture only: about as many figures as the army shows on the map.
+  const drawn = known ? soldiers : Math.max(lostSoFar + 2, (army?.figures ?? 3) * 2 + lostSoFar)
   const defenders = last?.defenders ?? garrison
   const besieger = online.kingdoms.find((k) => k.id === siege.kingdom)
   const holder = town.owner !== null ? online.kingdoms.find((k) => k.id === town.owner) : null
@@ -611,12 +616,12 @@ export function TownSiegeView({ town, army, walled, online, now, onClose }: { to
           </button>
         </header>
         <BattleScene
-          attackers={{ soldiers: left, start: soldiers, color: swatch(besieger?.color, '#a8a4ac'), archers: (units?.archer ?? 0) > 0, catapults: (units?.catapult ?? 0) > 0 }}
+          attackers={{ soldiers: left ?? drawn - lostSoFar, start: drawn, color: swatch(besieger?.color, '#a8a4ac'), archers: (units?.archer ?? 0) > 0, catapults: (units?.catapult ?? 0) > 0 }}
           defenders={{ soldiers: Math.max(defenders, town.owner !== null ? 3 : 0), start: Math.max(garrison, town.owner !== null ? 3 : 0), color: swatch(holder?.color, '#b08a3c'), archers: true, catapults: false }}
           siege
           round={done}
           over={over}
-          winner={left > 0 ? 'attackers' : 'defenders'}
+          winner={left === null || left > 0 ? 'attackers' : 'defenders'}
         />
         <div className="battle-sides">
           <div className="battle-side">
@@ -625,7 +630,7 @@ export function TownSiegeView({ town, army, walled, online, now, onClose }: { to
               <Dot color={besieger?.color} />
               {kingdomName(online, siege.kingdom)}
             </b>
-            <Stat label="Asker" value={`${fmt(left)} / ${fmt(soldiers)}`} />
+            <Stat label="Asker" value={left !== null ? `${fmt(left)} / ${fmt(soldiers)}` : `bilinmiyor · ${fmt(lostSoFar)} kayıp`} />
             {units && <UnitRow units={units} />}
           </div>
           <div className="battle-side">
@@ -649,7 +654,7 @@ export function TownSiegeView({ town, army, walled, online, now, onClose }: { to
                 <b>{i + 1}.</b> kuşatan −{r.lost - (i > 0 ? rounds[i - 1].lost : 0)}
                 {town.owner === null ? ` · garnizon −${r.killed - (i > 0 ? rounds[i - 1].killed : 0)}` : ''}
                 <small>
-                  {fmt(r.attackers)} / {town.owner === null ? fmt(r.defenders) : '—'} asker
+                  {known ? fmt(r.attackers) : '?'} / {town.owner === null ? fmt(r.defenders) : '—'} asker
                 </small>
               </li>
             ))}

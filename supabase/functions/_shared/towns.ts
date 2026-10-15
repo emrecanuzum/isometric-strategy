@@ -20,7 +20,7 @@ export interface TownRow {
   name: string
   owner_id: number | null
   garrison: number
-  siege: { army: number; kingdom: number; startedAt: number; endsAt: number; soldiers?: number; lost?: number } | null
+  siege: { army: number; kingdom: number; startedAt: number; endsAt: number; lost?: number } | null
 }
 
 export async function townsOf(lobby: string): Promise<TownRow[]> {
@@ -106,7 +106,7 @@ export async function settleTowns(lobby: string, rows: Row[], pacts: Pact[], now
     }
     if (town.siege) continue
     const at = Math.min(now, Math.max(ms(army.arrive_at), now - 60_000))
-    const siege = { army: army.id, kingdom: army.kingdom_id, startedAt: at, endsAt: at + game.townSiegeMs(walled(town)), soldiers: army.soldiers, lost: 0 }
+    const siege = { army: army.id, kingdom: army.kingdom_id, startedAt: at, endsAt: at + game.townSiegeMs(walled(town)), lost: 0 }
     // Only one siege at a time: claimed only if no other army laid one meanwhile.
     const { data: claimed } = await admin.from('lobby_towns').update({ siege }).eq('id', town.id).is('siege', null).select('id').maybeSingle()
     if (!claimed) continue
@@ -123,7 +123,8 @@ export async function settleTowns(lobby: string, rows: Row[], pacts: Pact[], now
     if (!s || s.startedAt > now) continue
     const army = byId.get(s.army)
     if (!army || army.status === 'battle') continue
-    const rounds = game.townSiegeRounds({ id: town.id, owner: town.owner_id, garrison: town.garrison }, s, s.soldiers ?? army.soldiers + (s.lost ?? 0), walled(town))
+    // The besiegers' strength stays off the town's row (everyone in the lobby reads it): worked out from the army.
+    const rounds = game.townSiegeRounds({ id: town.id, owner: town.owner_id, garrison: town.garrison }, s, army.soldiers + (s.lost ?? 0), walled(town))
     const done = game.townRoundsDone(s, now, rounds.length)
     const due = done > 0 ? Math.min(army.soldiers + (s.lost ?? 0), rounds[done - 1].lost) : 0
     const lost = Math.max(0, due - (s.lost ?? 0))
@@ -134,7 +135,7 @@ export async function settleTowns(lobby: string, rows: Row[], pacts: Pact[], now
     const killed = done > 0 ? rounds[done - 1].killed : 0
     // Claimed only while this very siege is still on, at the losses written so far.
     const change = !over
-      ? { siege: { ...s, soldiers: s.soldiers ?? army.soldiers + (s.lost ?? 0), lost: (s.lost ?? 0) + lost } }
+      ? { siege: { ...s, lost: (s.lost ?? 0) + lost } }
       : left > 0
         ? { siege: null, owner_id: s.kingdom, garrison: 0, taken_at: iso(at) }
         : { siege: null, garrison: Math.max(0, town.garrison - killed) }
