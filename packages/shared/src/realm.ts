@@ -9,6 +9,8 @@ import { TAX_LEVELS } from './society'
 import type { TaxLevel } from './society'
 import { countOf, garrisonOf, hasUnits, subtractUnits, unitSpec } from './units'
 import type { Unit, Units } from './units'
+import { buildShipsError, layDownShips, shipSpec, shipsCost } from './navy'
+import type { NavyError, Ship } from './navy'
 
 // Commands on the realm itself (CLAUDE.md §9.7): taxes, the queen, training soldiers, buying at the market and
 // repairing walls. Each returns the kingdom unchanged when it is not allowed; the `…Error` functions say why.
@@ -151,4 +153,18 @@ export function preach(kingdom: Kingdom, at: number): Kingdom {
   if (sermonError(kingdom, at)) return kingdom
   const s = balance.institutions.temple.sermon
   return { ...kingdom, stock: pay(kingdom.stock, s.cost as Cost), sermonUntil: at + s.seconds * 1000 * (1 + researchEffects(kingdom, at).sermon), lastSermonAt: at }
+}
+
+// ---- Ships (CLAUDE.md §8.5) ----------------------------------------------------------------------------------------
+
+// Why `count` ships of a kind cannot be laid down: the crews come from the people willing to serve, like soldiers.
+export function shipsError(kingdom: Kingdom, ship: Ship, count: number, at: number): NavyError | null {
+  return buildShipsError(kingdom, ship, count, at, recruitment(kingdom, at).willing, (cost) => affordable(kingdom.stock, cost))
+}
+
+export function orderShips(kingdom: Kingdom, ship: Ship, count: number, at: number): Kingdom {
+  if (shipsError(kingdom, ship, count, at)) return kingdom
+  const { pool } = recruitment(kingdom, at)
+  const paid = { ...kingdom, stock: pay(kingdom.stock, shipsCost(ship, count)), manpower: Math.max(0, pool - shipSpec(ship).crew * count) }
+  return layDownShips(paid, ship, count, at)
 }

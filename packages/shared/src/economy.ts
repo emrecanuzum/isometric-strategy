@@ -19,6 +19,8 @@ import type { TaxLevel } from './society'
 import { TileRule, findPlot, territoryRect, tileRule } from './territory'
 import type { Rect } from './territory'
 import { Terrain, cityCenter } from './worldgen'
+import { cargoOf, fishCatch, huntRound, launchShips, navyOf, navyUpkeep, nextVoyage, sailorsOf, takeFleetLosses, voyagePirates } from './navy'
+import type { Blockade, Navy, Ship } from './navy'
 import type { World } from './worldgen'
 
 // A kingdom's economy: gold plus three goods, produced by buildings and sold by the merchant of its trade post.
@@ -31,7 +33,7 @@ export type Resource = 'gold' | Good
 export type Stock = Record<Resource, number>
 export type Cost = Partial<Stock>
 
-export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple', 'warehouse', 'treasury', 'fisherHut', 'prison', 'tavern'] as const
+export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple', 'warehouse', 'treasury', 'fisherHut', 'prison', 'tavern', 'shipyard'] as const
 export type BuildingKind = 'palace' | 'tradePost' | (typeof BUILDABLE)[number]
 
 // Weapons are worked from raw goods in the forge and kept in the armory, apart from the tradeable stores.
@@ -70,6 +72,8 @@ export interface BuildingSpec extends LevelSpec {
   unique?: boolean
   // Goes on a shore tile (beside the water), where nothing else but a dock may stand.
   shoreOnly?: boolean
+  // Stands at the water's edge: on free land and shore tiles, with at least one shore tile (the shipyard).
+  coastal?: boolean
   // Gold it brings in every round on its own (the fisher's finds in the river).
   goldPerRound?: number
   // How many may stand at each palace level (houses), so growing the town means raising them too.
@@ -265,6 +269,10 @@ export interface Kingdom {
   // The season's accounts: every gold piece that came in or went out and why, the soldiers lost and to what (see
   // Books). Absent in older saves.
   books?: Books
+  // The lord's ships: the harbour, the fleets and the slipways (navy.ts; CLAUDE.md §8.5).
+  navy?: Navy
+  // Another lord's fleet blockading this lord's dock (set and cleared by the server).
+  blockade?: Blockade | null
   // How things stood when the player was last seen (kept by the server with lastSeenAt): the "while you were away"
   // report reads what changed since from it.
   seen?: SeenSnapshot
@@ -289,6 +297,10 @@ export interface Books {
   townUpkeep?: number
   // Merchant trips made with a lighter load while the lord was away.
   tradeSlack?: number
+  // The navy: the crews' pay, what sea trade brought, the pirates' bounties (absent in older books).
+  navy?: number
+  sea?: number
+  bounty?: number
   // Towns, the fisher's river finds, fortunes of the day.
   other: number
   wastedGold: number
@@ -350,6 +362,12 @@ export type EconomyEvent =
   | { kind: 'crisis'; fortune: FortuneKind; lost?: Partial<Stock>; sick?: number }
   // A held town rose against its lord, or broke free of him (CLAUDE.md §8.4).
   | { kind: 'townRevolt' | 'townFree'; town: number; name?: string }
+  // The navy (CLAUDE.md §8.5): ships launched, a sea-trade voyage back (perhaps met by pirates), a pirate hunt's
+  // catch, a fleet home.
+  | { kind: 'launched'; ship: Ship; count: number }
+  | { kind: 'voyage'; fleet: number; good: Good; sold: number; gold: number; city: number; blocked?: boolean; full?: boolean; pirates?: { won: boolean; sunk?: Ship; bounty?: number; lost?: number } }
+  | { kind: 'hunt'; fleet: number; bounty: number; sunk?: Ship }
+  | { kind: 'fleetHome'; fleet: number; cargo?: Partial<Stock> }
 
 // The merchant's trip to the lobby's market: the base trip, and longer the farther the trade post lies from the
 // palace he sets out from (beyond a short walk that the base covers). Straight-line tiles between the two.
@@ -450,12 +468,21 @@ const within = (spot: Rect, area: Rect) =>
 // Inside the territory (shore buildings also beside a granted dock plot), on free land, clear of other buildings by
 // `gap` tiles (one tile between a wall or gate and anything else when `kind` is given).
 export function canPlace(world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'> & { dockPlot?: Rect | null }, stage: number, spot: Rect, gap = 0, kind?: BuildingKind) {
-  const annex = kind && BUILDINGS[kind].shoreOnly ? dockAnnex(kingdom, stage) : null
+  const annex = kind && (BUILDINGS[kind].shoreOnly || BUILDINGS[kind].coastal) ? dockAnnex(kingdom, stage) : null
   if (!within(spot, territoryRect(kingdom.site, stage)) && !(annex && within(spot, annex))) return false
+  const coastal = !!kind && !!BUILDINGS[kind].coastal
+  let shore = false
   for (let y = spot.y; y < spot.y + spot.size; y++) {
-    // Shore buildings stand on shore tiles, everything else on free land.
-    for (let x = spot.x; x < spot.x + spot.size; x++) if (tileRule(world, x, y) !== (kind && BUILDINGS[kind].shoreOnly ? TileRule.DockOnly : TileRule.Free)) return false
+    // Shore buildings stand on shore tiles, coastal ones on land with a foot on the shore, everything else on free land.
+    for (let x = spot.x; x < spot.x + spot.size; x++) {
+      const rule = tileRule(world, x, y)
+      if (coastal) {
+        if (rule === TileRule.DockOnly) shore = true
+        else if (rule !== TileRule.Free) return false
+      } else if (rule !== (kind && BUILDINGS[kind].shoreOnly ? TileRule.DockOnly : TileRule.Free)) return false
+    }
   }
+  if (coastal && !shore) return false
   return !kingdom.buildings.some((b) => clash(b, spot, gap, kind))
 }
 
@@ -590,13 +617,15 @@ export function population(kingdom: Kingdom, at: number) {
     return { housing, jobs, cap: popCapFor(palaceLevel(kingdom, at)) }
   })
   const soldiers = soldiersOf(kingdom)
+  // The ships' crews are not villagers either (CLAUDE.md §8.5).
+  const sailors = sailorsOf(kingdom)
   // Towns that send people add both the room and the folk to fill it.
   const sent = townYield(kingdom.towns, at).villagers
-  const villagers = Math.max(0, Math.min(housing + sent, cap + sent) - soldiers)
+  const villagers = Math.max(0, Math.min(housing + sent, cap + sent) - soldiers - sailors)
   // The sick neither work nor pay taxes.
   const healthy = villagers * (1 - (kingdom.sickness ?? 0))
   // When more hands are set to work than there are healthy villagers, every building works at a matching fraction.
-  return { villagers, healthy, sick: villagers - healthy, housing: housing + sent, cap: cap + sent, soldiers, jobs, efficiency: jobs === 0 ? 1 : Math.min(1, healthy / jobs) }
+  return { villagers, healthy, sick: villagers - healthy, housing: housing + sent, cap: cap + sent, soldiers, sailors, jobs, efficiency: jobs === 0 ? 1 : Math.min(1, healthy / jobs) }
 }
 
 export const happinessOf = (kingdom: Kingdom) => kingdom.happiness ?? balance.society.happiness.start
@@ -635,8 +664,8 @@ export function workRate(kingdom: Kingdom, at: number) {
 
 // The most people that would take up arms: a share of the population that grows with its happiness.
 export function manpowerCap(kingdom: Kingdom, at: number) {
-  const { villagers, soldiers } = population(kingdom, at)
-  return Math.max(0, Math.floor((villagers + soldiers) * recruitTerms(happinessOf(kingdom)).share) - soldiers)
+  const { villagers, soldiers, sailors } = population(kingdom, at)
+  return Math.max(0, Math.floor((villagers + soldiers + sailors) * recruitTerms(happinessOf(kingdom)).share) - soldiers - sailors)
 }
 
 // How many more villagers would become soldiers of a kind now (the manpower pool, the villagers there are), and what
@@ -687,8 +716,9 @@ export function buildingOutput(kingdom: Kingdom, b: Building, at: number, round?
   const spec = levelSpec(b.kind, b.level)
   if (!done(b, at) || !spec.amount) return null
   const r = round ?? roundContext(kingdom, at)
-  // Behind a wall with no gate the workers cannot get there.
+  // Behind a wall with no gate the workers cannot get there; a blockaded dock lands no fish.
   if (r.cut.has(b.id)) return null
+  if (b.kind === 'dock' && kingdom.blockade) return null
   const slots = workerSlots(b)
   const crew = slots === 0 ? 1 : staffOf(b) / slots
   let choice = productOf(b)
@@ -733,10 +763,14 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
   }
   const l = ledger(kingdom, at)
   delta.food = (delta.food ?? 0) - villagers * balance.economy.foodPerVillager - l.soldiersFood
+  // The ships: the crews' pay and bread, the fishing fleets' catch.
+  const navy = navyUpkeep(kingdom)
+  delta.food += fishCatch(kingdom) - navy.food
+  delta.gold = (delta.gold ?? 0) - navy.gold
   // Gold some buildings bring in on their own (the fisher's river finds).
   for (const b of kingdom.buildings) {
     const per = BUILDINGS[b.kind].goldPerRound
-    if (per && done(b, at) && !round.cut.has(b.id)) delta.gold = (delta.gold ?? 0) + per * idleFactor(kingdom, at)
+    if (per && done(b, at) && !round.cut.has(b.id) && !(b.kind === 'fisherHut' && kingdom.blockade)) delta.gold = (delta.gold ?? 0) + per * idleFactor(kingdom, at)
   }
   delta.gold = (delta.gold ?? 0) + l.tax - l.soldiersGold + l.tributes.reduce((sum, t) => sum + t.gold, 0)
   // What the held towns send, and the upkeep paid them while the treasury has it (CLAUDE.md §8.4).
@@ -745,7 +779,7 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
   for (const r of ['gold', 'food', 'materials', 'arms'] as const) if (sends[r]) delta[r] = (delta[r] ?? 0) + sends[r] * idle
   const towns = townUpkeep(kingdom.towns, stock.gold + (delta.gold ?? 0))
   if (towns.cost > 0) delta.gold = (delta.gold ?? 0) - towns.cost
-  return { delta, weapons, worked, towns }
+  return { delta, weapons, worked, towns, navy }
 }
 
 // What one production round adds to (and eats from) the stores.
@@ -827,7 +861,7 @@ export function demolishRefund(b: Building): Cost {
 // building keeps its level, hands and product; it stands as a building site (making nothing) until it is up again.
 // Moving costs a share of all that was spent on it, a little less than tearing it down and building it again
 // (balance.economy.move), and takes longer than building it to its level anew.
-const FIXED: BuildingKind[] = ['palace', 'tradePost', 'dock', 'wall', 'gate']
+const FIXED: BuildingKind[] = ['palace', 'tradePost', 'dock', 'wall', 'gate', 'shipyard']
 export const movable = (b: Building) => !FIXED.includes(b.kind)
 
 export function moveCost(b: Building): Cost {
@@ -1174,6 +1208,13 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
     k.soldiers = countOf(k.units)
     events.push({ kind: 'trained', count })
   }
+  // Ships whose building ended moor in the harbour.
+  if ((kingdom.navy?.building ?? []).some((b) => b.doneAt <= now)) {
+    edit()
+    const launched = launchShips(k, now)
+    k.navy = launched.kingdom.navy
+    for (const l of launched.launched) events.push({ kind: 'launched', ...l })
+  }
   // Research that ended since the last settling (told once: settling moves settledAt past it).
   const learnt = (kingdom.researches ?? []).filter((r) => r.doneAt > kingdom.settledAt && r.doneAt <= now)
   for (const r of learnt) events.push({ kind: 'researched', id: r.id })
@@ -1182,10 +1223,50 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
   const finishing = kingdom.buildings.filter((b) => b.doneAt > kingdom.settledAt && b.doneAt <= now)
   for (;;) {
     const tripEnd = k.trade.good ? k.trade.departedAt + tradeTripMs(k) : Infinity
-    const next = Math.min(tripEnd, k.nextProductionAt)
+    const voyage = nextVoyage(k)
+    const next = Math.min(tripEnd, k.nextProductionAt, voyage?.end ?? Infinity)
     if (next > now) break
     edit()
-    if (next === k.nextProductionAt) {
+    if (voyage && next === voyage.end && next !== k.nextProductionAt && next !== tripEnd) {
+      // A fleet back from sea: a trade voyage sells its cargo at the crown's harbour (or lost it to pirates) and sets
+      // out again; a fleet coming home moors with what it carries (CLAUDE.md §8.5).
+      const f = voyage.fleet
+      const m = f.mission
+      const navy = navyOf(k)
+      if (m.kind === 'return') {
+        for (const [r, v] of Object.entries(m.cargo ?? {})) k.stock[r as Resource] += v ?? 0
+        k.navy = { ...navy, fleets: navy.fleets.map((x) => (x.id === f.id ? { ...x, mission: { kind: 'port' } } : x)) }
+        events.push({ kind: 'fleetHome', fleet: f.id, ...(m.cargo && { cargo: m.cargo }) })
+      } else if (m.kind === 'trade') {
+        const good = m.good
+        const blocked = !!k.blockade
+        const strike = blocked ? null : voyagePirates(k, f, m.departedAt, next)
+        const price = priceAt(market, good, next) * stewardFactor(k, good, next) * balance.navy.trade.priceFactor
+        const perUnit = price * (1 + researchEffects(k, next).trade + fortuneEffects(k, next).trade + dynastyEffects(k).trade) * idleFactor(k, next)
+        const room = Math.max(0, goldCap(k, next) - k.stock.gold)
+        const full = room < 1
+        const away = isAway(k, next)
+        const load = Math.floor(cargoOf(f.ships) * (away ? balance.economy.away.merchantLoad : 1))
+        const units = blocked || full ? 0 : Math.max(0, Math.min(load, Math.floor(k.stock[good] - tradeReserve(k, good, next)), perUnit > 0 ? Math.ceil(room / perUnit) : Infinity))
+        const lostToPirates = strike && !strike.won ? units : 0
+        const sold = units - lostToPirates
+        const gold = Math.min(Math.round(sold * perUnit), Math.floor(room))
+        k.stock[good] -= units
+        const bounty = strike?.bounty ?? 0
+        k.stock.gold = Math.min(goldCap(k, next), k.stock.gold + gold + bounty)
+        k.books!.sea = (k.books!.sea ?? 0) + gold
+        k.books!.bounty = (k.books!.bounty ?? 0) + bounty
+        // Sea sales move the lobby's prices, less than the merchant's.
+        if (sold > 0) soldTotal[good] = (soldTotal[good] ?? 0) + sold * balance.navy.trade.marketImpact
+        if (sold > 0) k.crownRelations = changeCrownRelation(k, m.city, balance.navy.trade.crownRelation).crownRelations
+        const l = navy.ledger ?? { voyages: 0, units: 0, gold: 0, pirates: 0, lostUnits: 0, sunk: 0, bounty: 0 }
+        const ledger = { ...l, voyages: l.voyages + (units > 0 ? 1 : 0), units: l.units + sold, gold: l.gold + gold, pirates: l.pirates + (strike ? 1 : 0), lostUnits: l.lostUnits + lostToPirates, sunk: l.sunk + (strike?.sunk ? 1 : 0), bounty: l.bounty + bounty }
+        let after: Kingdom = { ...k, navy: { ...navy, ledger, fleets: navy.fleets.map((x) => (x.id === f.id ? { ...x, mission: { ...m, departedAt: next } } : x)) } }
+        if (strike?.sunk) after = takeFleetLosses(after, f.id, { [strike.sunk]: 1 })
+        k.navy = after.navy
+        events.push({ kind: 'voyage', fleet: f.id, good, sold, gold, city: m.city, ...(blocked && { blocked }), ...(full && { full }), ...(strike && { pirates: { won: strike.won, ...(strike.sunk && { sunk: strike.sunk }), ...(bounty && { bounty }), ...(lostToPirates && { lost: lostToPirates }) } }) })
+      }
+    } else if (next === k.nextProductionAt) {
       // A fortune that befell the kingdom since the last round: what it does at once.
       if (k.buildings.some((b) => b.kind === 'palace')) {
         const harm = (spec: (typeof begun)['spec']) => {
@@ -1217,7 +1298,19 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
           events.push({ kind: 'crisis', fortune: due.kind, ...(Object.keys(lost).length > 0 && { lost }), ...(due.spec.sicken && { sick: (k.sickness ?? 0) - before }) })
         }
       }
-      const { delta, weapons, towns: upkept } = roundOutcome(k, next)
+      const { delta, weapons, towns: upkept, navy: shipsKept } = roundOutcome(k, next)
+      // Fleets hunting pirates: now and then a crew caught for its bounty, now and then a ship lost.
+      let bounties = 0
+      for (const f of navyOf(k).fleets) {
+        if (f.mission.kind !== 'hunt' || k.blockade) continue
+        const caught = huntRound(k, f, Math.floor(next / productionMs()))
+        if (!caught) continue
+        delta.gold = (delta.gold ?? 0) + caught.bounty
+        bounties += caught.bounty
+        k.books!.bounty = (k.books!.bounty ?? 0) + caught.bounty
+        if (caught.sunk) k.navy = takeFleetLosses(k, f.id, { [caught.sunk]: 1 }).navy
+        events.push({ kind: 'hunt', fleet: f.id, bounty: caught.bounty, ...(caught.sunk && { sunk: caught.sunk }) })
+      }
       // The accounts: the taxes, the soldiers' pay and the tributes between lords as they were, the rest (towns, the
       // fisher) together.
       const books = k.books!
@@ -1230,7 +1323,8 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
         else books.tributeOut -= t.gold
       }
       books.townUpkeep = (books.townUpkeep ?? 0) + upkept.cost
-      books.other += (delta.gold ?? 0) - (l.tax - l.soldiersGold + tributes) + upkept.cost
+      books.navy = (books.navy ?? 0) + shipsKept.gold
+      books.other += (delta.gold ?? 0) - (l.tax - l.soldiersGold + tributes) + upkept.cost + shipsKept.gold - bounties
       // While the lord is away the storehouses are not filled to the brim: what is made slows as a store nears the
       // top of its room and stops short of it (CLAUDE.md §6.4).
       if (isAway(k, next)) {
@@ -1359,6 +1453,7 @@ export function happinessFor(k: Kingdom, at: number) {
       researchEffects(k, at).happiness +
       dynastyEffects(k).happiness +
       (k.sickness ?? 0) * balance.institutions.sickness.happinessPerShare +
+      (k.blockade ? balance.navy.blockade.happiness : 0) +
       fortune.happiness +
       (templeLevel > 0 ? fortune.templeHappiness : 0),
   })

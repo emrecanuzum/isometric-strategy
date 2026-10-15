@@ -380,6 +380,90 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
     case 'repairWalls':
       next = changed(game.repairWalls(need()))
       break
+    case 'ships': {
+      // Ships laid down at the shipyard (CLAUDE.md §8.5).
+      const count = whole(cmd.count, 1, 20)
+      if (!game.SHIPS.includes(cmd.ship)) refuse('rejected')
+      const error = game.shipsError(need(), cmd.ship, count, now)
+      if (error) refuse(error)
+      next = changed(game.orderShips(need(), cmd.ship, count, now))
+      break
+    }
+    case 'fleet': {
+      const k = need()
+      const id = Number.isInteger(cmd.fleet) ? cmd.fleet : -1
+      switch (cmd.action) {
+        case 'form': {
+          const ships = game.cleanShips(cmd.ships) ?? refuse('rejected')
+          const error = game.formFleetError(k, ships)
+          if (error) refuse(error)
+          next = changed(game.formFleet(k, ships))
+          break
+        }
+        case 'split': {
+          const ships = game.cleanShips(cmd.ships) ?? refuse('rejected')
+          const error = game.splitFleetError(k, id, ships)
+          if (error) refuse(error)
+          next = changed(game.splitFleet(k, id, ships))
+          break
+        }
+        case 'merge': {
+          const error = game.mergeFleetsError(k, id, cmd.other)
+          if (error) refuse(error)
+          next = changed(game.mergeFleets(k, id, cmd.other))
+          break
+        }
+        case 'dock': {
+          const error = game.dockFleetError(k, id)
+          if (error) refuse(error)
+          next = changed(game.dockFleet(k, id))
+          break
+        }
+        case 'mission': {
+          const o = cmd.order ?? {}
+          const kinds = ['port', 'fish', 'hunt', 'sortie', 'trade', 'blockade', 'raid']
+          if (!kinds.includes(o.kind)) refuse('rejected')
+          const order =
+            o.kind === 'trade' ? { kind: 'trade', good: o.good, city: o.city } : o.kind === 'blockade' || o.kind === 'raid' ? { kind: o.kind, target: o.target } : { kind: o.kind }
+          // Against another lord: its dock, whether it is already blockaded, and whether we are at war with it.
+          let ctx: Record<string, unknown> = { cities: lobbyWorld.cities }
+          if (order.kind === 'blockade' || order.kind === 'raid') {
+            const { data: t } = await admin.from('kingdoms').select('id, name, state').eq('lobby_id', lobby).eq('id', o.target).neq('id', row.id).maybeSingle()
+            if (!t?.state) refuse('target')
+            const pacts = await pactsOf(lobby)
+            ctx = {
+              ...ctx,
+              atWar: game.atWar(pacts, row.id, t!.id),
+              target: { id: t!.id, name: t!.name ?? '?', dockPlot: t!.state.dockPlot, hasDock: t!.state.buildings.some((b: { kind: string; doneAt: number }) => b.kind === 'dock' && b.doneAt <= now), blockadedBy: t!.state.blockade?.by ?? null },
+            }
+          }
+          const error = game.missionError(k, id, order, now, ctx)
+          if (error) refuse(error)
+          next = changed(game.setMission(k, id, order, now, ctx))
+          break
+        }
+        case 'recall': {
+          const error = game.recallError(k, id)
+          if (error) refuse(error)
+          const m = game.fleetOf(k, id).mission
+          let outMs: number | undefined
+          if (m.kind === 'blockade' || m.kind === 'raid') {
+            const { data: t } = await admin.from('kingdoms').select('id, state').eq('id', m.target).maybeSingle()
+            outMs = game.voyageMs(k.dockPlot, t?.state?.dockPlot)
+            // A blockade called off leaves the target's waters at once.
+            if (t?.state?.blockade?.by === row.id && t.state.blockade.fleet === id) {
+              await mutateKingdom(t.id, now, (s) => (s.blockade?.by === row.id ? { ...s, blockade: null } : null))
+              await notify(lobby, [t.id], 'blockade_lifted', { by: row.name, why: 'recalled' }, now)
+            }
+          } else outMs = game.balance.navy.sortieSeconds * 1000
+          next = changed(game.recallFleet(k, id, now, outMs))
+          break
+        }
+        default:
+          refuse('rejected')
+      }
+      break
+    }
     case 'reset':
       // Testing aid: start the kingdom over in the same lobby (its armies, spies and pacts go with it).
       await admin.from('armies').delete().eq('kingdom_id', row.id)
@@ -918,7 +1002,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
   }
 }
 
-const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'townUpkeep', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'nameChild', 'educate', 'crisis', 'choose', 'seen', 'reset'])
+const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'townUpkeep', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'nameChild', 'educate', 'crisis', 'choose', 'seen', 'reset', 'ships', 'fleet'])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

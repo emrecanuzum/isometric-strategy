@@ -284,7 +284,7 @@ function CrownStanding({ world, index, kingdom }: { world: World; index: number;
       <p className="hint">
         Zamanla {signedInt(rest)} düzeyine döner ({sworn ? 'kendi tacın sana sıcak bakar' : kingdom.liege !== undefined ? 'rakip taç sana soğuk bakar' : 'henüz kimseye biat etmedin'}).
         İlişkiyi artıranlar: tüccarını {info.capital} şehrine göndermek (her sefer {signedDec(r.cityTrip)}), devriyesini ağırlamak ({signedInt(r.visit)}), istediği haracı
-        ödemek ({signedInt(r.tributePaid)}). Azaltanlar: haracı reddetmek ({signedInt(r.tributeRefused)}), devriyesine cevap vermemek ({signedInt(r.tributeTaken)}).
+        ödemek ({signedInt(r.tributePaid)}). Azaltanlar: haracı reddetmek ({signedInt(r.tributeRefused)}). Cevapsız kalan haraç kendiliğinden ödenir (oyundaysan fazlasıyla); ilişkiyi bozmaz.
       </p>
       <ul className="tiers">
         {balance.cities.crown.gifts.map((g) => (

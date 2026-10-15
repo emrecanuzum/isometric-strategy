@@ -1112,8 +1112,12 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     ister (`share`; 7000 altında 350); ilişki ve güç bunu değiştirmez.
     Elçi diyaloğunda **"Öde"** ya da **"Reddet"**. Reddedilirse o tacın
     bütün lordlarıyla ilişki **−8** düşer. 5 dakika içinde cevap
-    verilmezse (oyuncu çevrimdışıysa da) haraç **zorla alınır** (hazinede
-    ne kadar varsa, en fazla istenen kadar); ilişki düşmez. Böylece dolu
+    verilmezse haraç **kendiliğinden ödenir** (hazinede ne kadar varsa),
+    ilişki bozulmaz: oyuncu **çevrimdışıysa** olağan haracı öder, ceza
+    yoktur; **oyundaysa** (süre dolarken son 7 dakikada görülmüşse; oyun açıkken 5 dakikada bir haber verir. AFK)
+    haracı **%50 fazlasıyla** öder (`tribute.afkFactor`, `onlineMinutes`).
+    Haraç diyaloğu bu fazlalığı önceden yazar, ödeme haberi de hangisinin
+    olduğunu söyler. Böylece dolu
     hazine düzenli boşalır ve tüccar yeniden satar (§6.4).
   - Biat etmemiş lordlara ne devriye ne haraççı gelir.
 - **Eğlence merkezi** (4. seviye saray, krallıkta bir tane; 1200 altın, 700
@@ -1125,8 +1129,8 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   +15, rakip taçla −15, biatsızken 0. Biat edince kendi tacıyla +20.
   Artıranlar: tüccarı o tacın başkentine göndermek (satış yapılan her
   sefer +1,2), kendi tacının devriyesini ağırlamak (+1), rakip tacın
-  haracını ödemek (+4). Azaltanlar: haracı reddetmek (−10), cevap vermeyip
-  zorla aldırmak (−5).
+  haracını ödemek (+4). Azaltanlar: haracı reddetmek (−10). Cevapsız kalan
+  haraç kendiliğinden ödenir, ilişkiyi değiştirmez.
 - **Armağanlar:** Kendi tacının devriyesi her uğrayışta ilişki baremine
   göre armağan getirir: 30+ "Teşekkür sepeti", 60+ "Saray armağanı", 85+
   "Hükümdarın lütfu" (altın ve mallar; `crown.gifts`).

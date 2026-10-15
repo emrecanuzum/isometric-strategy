@@ -14,7 +14,9 @@
       "answerSeconds": 300,
       "tribute": {
         "everySeconds": 1800,
-        "share": 0.05
+        "share": 0.05,
+        "afkFactor": 1.5,
+        "onlineMinutes": 7
       },
       "refuseRelation": -8,
       "tip": 120
@@ -27,7 +29,6 @@
       "cityTrip": 1.2,
       "tributePaid": 4,
       "tributeRefused": -10,
-      "tributeTaken": -5,
       "visit": 1
     },
     "gifts": [

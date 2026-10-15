@@ -149,7 +149,7 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       return {
         icon: 'banner',
         title: `${crown(p.crown)} haraççıları kapında`,
-        text: `Rakip taç ${crown(p.crown)} haraççıları sarayına geldi (her ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelirler) ve ${fmt(Number(p.amount))} altın${share} haraç istiyor. Ödersen yollarına giderler. Reddedersen o tacın lordlarıyla ilişkin ${-balance.cities.crown.patrol.refuseRelation} düşer. ${Math.round(balance.cities.crown.patrol.answerSeconds / 60)} dakika içinde cevap vermezsen haracı zorla alırlar.`,
+        text: `Rakip taç ${crown(p.crown)} haraççıları sarayına geldi (her ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelirler) ve ${fmt(Number(p.amount))} altın${share} haraç istiyor. Ödersen yollarına giderler. Reddedersen o tacın lordlarıyla ilişkin ${-balance.cities.crown.patrol.refuseRelation} düşer. ${Math.round(balance.cities.crown.patrol.answerSeconds / 60)} dakika içinde cevap vermezsen haraç kendiliğinden ödenir, ama oyundaysan %${Math.round((balance.cities.crown.patrol.tribute.afkFactor - 1) * 100)} fazlasıyla: ${fmt(Math.round(Number(p.amount) * balance.cities.crown.patrol.tribute.afkFactor))} altın.`,
       }
     }
     case 'patrol_tip':
@@ -163,7 +163,13 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       }
     }
     case 'patrol_taken':
-      return { icon: 'gold', title: 'Haraççılar haracı aldı', text: `${crown(p.crown)} haraççılarına kimse cevap vermedi; hazineden ${fmt(Number(p.amount))} altın alıp gitti.` }
+      return p.afk
+        ? {
+            icon: 'gold',
+            title: 'Haraç fazlasıyla ödendi',
+            text: `Oyundaydın ama ${crown(p.crown)} haraççılarına cevap vermedin; haraç kendiliğinden, %${Math.round((balance.cities.crown.patrol.tribute.afkFactor - 1) * 100)} fazlasıyla ödendi: ${fmt(Number(p.amount))} altın${Number(p.asked) > 0 ? ` (istenen ${fmt(Number(p.asked))})` : ''}. Zamanında ödersen ya da reddedersen bu fazlalık olmaz.`,
+          }
+        : { icon: 'gold', title: 'Haraç ödendi', text: `Sen yokken ${crown(p.crown)} haraççıları geldi; olağan haracı, ${fmt(Number(p.amount))} altın ödedin.` }
     case 'patrol_ignored':
       return { icon: 'warn', title: 'Haraç cevapsız kaldı', text: `${crown(p.crown)} devriyesi ${fmt(Number(p.amount))} altınını alamadan döndü. O tacın lordları bunu unutmayacak: ilişkin ${-balance.cities.crown.patrol.refuseRelation} düştü.` }
     case 'town_revolt':

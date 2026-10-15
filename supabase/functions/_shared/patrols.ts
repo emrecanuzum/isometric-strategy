@@ -119,12 +119,16 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
 }
 
 // A demand nobody answered: the patrol carries off the tribute (as much as the treasury holds).
+// A demand nobody answered is paid all the same (as much as the treasury holds): the plain tribute by a lord who was
+// away, with a surcharge by one who had the game open and let it pass. The crown holds neither against the lord.
 async function takeTribute(lobby: string, kingdom: number, crown: number, amount: number, at: number) {
   let taken = 0
+  let afk = false
   await mutateKingdom(kingdom, at, (k) => {
-    taken = Math.min(amount, Math.max(0, Math.floor(k.stock.gold)))
-    // Taken, not given: the crown thinks the less of the lord for it.
-    return game.book(game.changeCrownRelation({ ...k, stock: { ...k.stock, gold: k.stock.gold - taken } }, crown, game.balance.cities.crown.relation.tributeTaken), { crownPaid: taken })
+    const due = game.unansweredTribute(amount, k.lastSeenAt, at)
+    afk = due.afk
+    taken = Math.min(due.amount, Math.max(0, Math.floor(k.stock.gold)))
+    return game.book({ ...k, stock: { ...k.stock, gold: k.stock.gold - taken } }, { crownPaid: taken })
   })
-  await notify(lobby, [kingdom], 'patrol_taken', { crown, amount: taken }, at)
+  await notify(lobby, [kingdom], 'patrol_taken', { crown, amount: taken, afk, asked: amount }, at)
 }

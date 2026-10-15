@@ -56,6 +56,14 @@ export function tributeVisitAt(seed: number, crown: number, lord: number, slot: 
 export const tributeCrowns = (crowns: number, liege: number | null | undefined) =>
   liege === undefined || liege === null ? [] : Array.from({ length: crowns }, (_, i) => i).filter((c) => c !== liege)
 
+// A demand left unanswered is paid all the same. A lord who had the game open (seen within onlineMinutes of the
+// demand running out) but let it pass pays it with a surcharge; one who was away pays the plain tribute, no harm done.
+export function unansweredTribute(amount: number, lastSeenAt: number | undefined, at: number) {
+  const t = patrolSpec().tribute
+  const afk = (lastSeenAt ?? 0) >= at - t.onlineMinutes * 60_000
+  return { afk, amount: afk ? Math.round(amount * t.afkFactor) : amount }
+}
+
 // The tribute demanded of a lord with `gold` in the treasury: a fixed share of it.
 export const tributeDemand = (gold: number) => Math.floor(Math.max(0, gold) * patrolSpec().tribute.share)
 

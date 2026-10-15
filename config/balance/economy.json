@@ -603,12 +603,51 @@
       "produces": "food",
       "amount": 1,
       "goldPerRound": 0.1
+    },
+    "shipyard": {
+      "size": 2,
+      "requiresPalace": 3,
+      "unique": true,
+      "coastal": true,
+      "cost": {
+        "gold": 700,
+        "materials": 500,
+        "arms": 80
+      },
+      "buildSeconds": 90,
+      "workers": 3,
+      "levels": [
+        {
+          "cost": {
+            "gold": 1100,
+            "materials": 800,
+            "arms": 150
+          },
+          "buildSeconds": 150,
+          "workers": 4
+        },
+        {
+          "cost": {
+            "gold": 2000,
+            "materials": 1400,
+            "arms": 300
+          },
+          "buildSeconds": 240,
+          "workers": 5
+        }
+      ]
     }
   },
   "maxBatch": 64,
   "maxPlan": 256,
-  "move": { "costShare": 0.4, "timeFactor": 1.25 },
-  "wallClearance": { "behind": 1, "front": 2 },
+  "move": {
+    "costShare": 0.4,
+    "timeFactor": 1.25
+  },
+  "wallClearance": {
+    "behind": 1,
+    "front": 2
+  },
   "freeFirst": [
     "lumberCamp",
     "house",
@@ -658,7 +697,10 @@
       "startProgress": 0.4,
       "fillPerSecond": 0.12,
       "drainPerSecond": 0.1,
-      "retargetSeconds": [1, 2.2],
+      "retargetSeconds": [
+        1,
+        2.2
+      ],
       "pull": 5,
       "damping": 3,
       "dartChance": 0.008,

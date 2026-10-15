@@ -2428,6 +2428,84 @@ function tavern(variant = 0): Sprite {
   return smoky(canvas.sprite(cx, base, 0), [top])
 }
 
+// The shipyard (CLAUDE.md §8.5): a plank yard at the water's edge with a shed of tools and pitch, a slipway running
+// down toward the water with a hull on it — bare ribs on a keel at level 1, a second slip at level 2, a planked hull
+// with its mast stepped and a pennant at level 3 — a timber derrick swinging a beam, and stacks of seasoned timber.
+const PITCH = ramp(0x1a120c, 0x2a1c12, 0x3e2a1a)
+function shipyard(variant = 0, level = 1): Sprite {
+  const v = variant % 2
+  const { canvas, cx, base, h } = footprint(2, 124)
+  // The plank yard.
+  for (let y = base - h * 2; y <= base; y++) {
+    for (let x = cx - (h * 2 - 2); x <= cx + (h * 2 - 2); x++) {
+      const a = (x - cx) / (h * 2 - 4)
+      const b = (y - (base - h)) / (h - 2)
+      if (Math.abs(a) + Math.abs(b) > 1) continue
+      const seam = (x - y * 2) % 7 === 0
+      canvas.set(x, y, seam ? PLANK[0] : pick(PLANK, 1.4 + hash(x >> 3, y >> 1, 517) * 1.4))
+    }
+  }
+  // The shed at the back, its doors open on the tools and the pitch kettle.
+  const top = hall(canvas, cx - 22, base - h - 2, { w: 24, wall: 22, roof: 15, walls: WALL, roofs: v ? SLATE : ROOF, door: true, chimney: 0.5 })
+  // A slipway: two rails running from the back right down toward the front, the hull on them.
+  const slip = (sx: number, sy: number, length: number, planked: boolean, seed: number) => {
+    for (let t = 0; t < length; t++) {
+      const x = sx + t
+      const y = sy + t / 2
+      for (const off of [-3, 3]) canvas.set(x, y + off, TIMBER[t % 6 === 0 ? 0 : 2])
+      if (t % 6 === 0) for (let d = -4; d <= 4; d++) canvas.set(x, y + d, TIMBER[1])
+    }
+    // The keel, raised on blocks.
+    for (let t = 4; t < length - 2; t++) canvas.set(sx + t, sy + t / 2 - 3, PITCH[1])
+    // Ribs: arcs across the keel, tallest amidships.
+    for (let i = 0; i < Math.floor((length - 8) / 4); i++) {
+      const t = 6 + i * 4
+      const mid = 1 - Math.abs(t / length - 0.5) * 1.6
+      const tall = 7 + Math.round(9 * mid)
+      for (let z = 0; z < tall; z++) {
+        const spread = Math.round(Math.sqrt(z / tall) * (4 + 3 * mid))
+        for (const side of [-1, 1]) canvas.set(sx + t + side * spread * 0.5, sy + t / 2 - 3 - z + side * spread * 0.25, TIMBER[side < 0 ? 3 : 1])
+      }
+      if (!planked) continue
+      // Planking over the ribs: a dark hull with a painted strake.
+      for (let z = 0; z < tall; z++) {
+        for (let d = 0; d < 4; d++) {
+          const spread = Math.round(Math.sqrt(z / tall) * (4 + 3 * mid))
+          const color = z === tall - 3 ? (seed ? CRIMSON[2] : CANOPY_BLUE[1]) : pick(PITCH, z < tall / 3 ? 0.5 : 1.6)
+          canvas.set(sx + t + d - spread * 0.5, sy + t / 2 - 3 - z + d / 2 - spread * 0.25, color)
+        }
+      }
+    }
+    if (planked) {
+      // The mast, its yard and a pennant.
+      const mx = sx + length / 2
+      const my = sy + length / 4 - 18
+      for (let z = 0; z < 34; z++) canvas.set(mx, my - z, TIMBER[z % 9 === 0 ? 3 : 1])
+      for (let d = -7; d <= 7; d++) canvas.set(mx + d, my - 26 + d / 4, TIMBER[2])
+      for (let d = 0; d < 7; d++) for (let e = 0; e <= (7 - d) / 3; e++) canvas.set(mx + 1 + d, my - 33 + e, CRIMSON[2])
+    }
+  }
+  slip(cx - 6, base - h - 4, 40, level >= 3, v)
+  if (level >= 2) slip(cx - 34, base - h + 8, 30, false, 1 - v)
+  // The derrick: two raking poles, a boom and a beam hanging from its rope.
+  const dx = cx + 34
+  const dy = base - h + 4
+  for (let z = 0; z < 44; z++) {
+    canvas.set(dx - z * 0.18, dy - z, TIMBER[2])
+    canvas.set(dx + 6 - z * 0.05, dy + 3 - z, TIMBER[1])
+  }
+  for (let t = 0; t < 26; t++) canvas.set(dx - 8 - t, dy - 42 + t * 0.25, TIMBER[3])
+  for (let z = 0; z < 16; z++) canvas.set(dx - 30, dy - 35 + z, ROPE)
+  for (let t = 0; t < 12; t++) for (let d = 0; d < 2; d++) canvas.set(dx - 36 + t, dy - 19 + t / 2 + d, LOGS[2 + d])
+  // Seasoned timber stacked by the shed and a pile of barrels of pitch.
+  logPile(canvas, cx - 54, base - h + 14, [[0, 4], [1, 3]])
+  if (level >= 2) logPile(canvas, cx + 6, base - 12, [[0, 3]])
+  barrel(canvas, cx - 30, base - 8)
+  barrel(canvas, cx - 24, base - 5)
+  if (level >= 3) barrel(canvas, cx - 36, base - 11)
+  return smoky(canvas.sprite(cx, base, 0), [top])
+}
+
 // The crown capital's cathedral (no lord may build one): a long nave of pale stone under slate, a great bell tower at
 // its front with a tall spire, a rose window of coloured glass, gilded crosses on the ridge and spire.
 const ROSE = [ramp(0x7a1822), ramp(0x2a4a8a), ramp(0xe2c058), ramp(0x2a7a48)]
@@ -2653,6 +2731,7 @@ export const LEVEL_SPRITES: Partial<Record<BuildingKind, Sprite[][]>> = {
   temple: [2, 3].map((level) => variants(2, (v) => temple(v, level))),
   warehouse: [2, 3].map((level) => variants(2, (v) => warehouse(v, level))),
   treasury: [2, 3].map((level) => variants(2, (v) => treasury(v, level))),
+  shipyard: [2, 3].map((level) => variants(2, (v) => shipyard(v, level))),
 }
 
 // The palace in each kingdom colour and at each level, made when first seen.
@@ -2698,6 +2777,7 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   prison: variants(2, (v) => prison(v)),
   prisonFull: variants(2, (v) => prison(v, true)),
   tavern: variants(2, (v) => tavern(v)),
+  shipyard: variants(2, (v) => shipyard(v)),
   // A crown capital's own, never a lord's.
   cathedral: variants(2, (v) => cathedral(v)),
   monument: variants(2, (v) => monument(v)),
