@@ -1394,8 +1394,10 @@ export async function createWorld(
       if (!tone) continue
       const sign = new Sprite(signOf(tone))
       sign.anchor.set(0.5, 1)
-      sign.position.set(hit.sx, hit.sy - hit.sprite.anchorY - 4)
-      signBase.push(hit.sy - hit.sprite.anchorY - 4)
+      // The post stands on the top of the art (sprites keep empty headroom), sunk a little into the roof.
+      const base = hit.sy - hit.sprite.anchorY + contentTop(hit.sprite) + 6
+      sign.position.set(hit.sx, base)
+      signBase.push(base)
       clogSigns.addChild(sign)
     }
   }
