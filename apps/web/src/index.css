@@ -2234,6 +2234,34 @@ small {
   flex: none;
 }
 
+/* The header that folds the cards away: a small bar with the count on a red badge. */
+.map-alerts-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 2) calc(var(--px) * 5);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-alerts-head b {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 0 calc(var(--px) * 2);
+  border-radius: 2px;
+  background: #a83a2a;
+  color: #fff;
+  text-align: center;
+}
+
+.map-alerts.folded {
+  width: auto;
+  align-items: flex-end;
+}
+
 .map-alert {
   display: flex;
   align-items: flex-start;

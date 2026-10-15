@@ -1,4 +1,5 @@
 import { balance, clogsOf, cutOff, imprisoned, navyOf, overreachFor, palaceLevel, townLoyalty, townRevolting } from '@game/shared'
+import { useState } from 'react'
 import { showArmyPart } from './war'
 import type { Kingdom } from '@game/shared'
 import { Icon } from '../icons'
@@ -24,6 +25,22 @@ export function MapAlerts({
   // Opens a held town's sheet (the over-expansion card opens the most restless one).
   onTown?: (town: number) => void
 }) {
+  // Folded away to a header with the count (remembered in the browser), like the timers.
+  const [folded, setFolded] = useState(() => {
+    try {
+      return localStorage.getItem(FOLD_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const fold = () => {
+    setFolded(!folded)
+    try {
+      localStorage.setItem(FOLD_KEY, folded ? '0' : '1')
+    } catch {
+      // Without storage it is only folded for now.
+    }
+  }
   // The fighting first: war is what matters most (see warNotes).
   const alerts: { key: string; tab: TabId; text: string; sea?: boolean; town?: number; mild?: boolean }[] = war.map((n) => ({ key: n.key, tab: 'army', text: n.text }))
   if (imprisoned(kingdom.buildings, kingdom.site, now)) {
@@ -81,9 +98,15 @@ export function MapAlerts({
   // A palace past its second level and no lady at court (raised before the rule): the house needs a queen, at once.
   const needsQueen = palaceLevel(kingdom, now) >= balance.dynasty.queenForPalaceLevel && !kingdom.queen && !kingdom.queenHeldBy
   if (alerts.length === 0 && !needsQueen) return null
+  const count = alerts.length + (needsQueen ? 1 : 0)
   return (
-    <div className="map-alerts" role="status">
-      {needsQueen && (
+    <div className={folded ? 'map-alerts folded' : 'map-alerts'} role="status">
+      <button className="map-alerts-head frame" onClick={fold} aria-expanded={!folded}>
+        <Icon name={folded ? 'plus' : 'minus'} size={8} />
+        <span>Uyarılar</span>
+        <b>{count}</b>
+      </button>
+      {!folded && needsQueen && (
         <div className="map-alert frame urgent">
           <Icon name="crown" size={16} />
           <span>Kraliçeye ihtiyacımız var! Sarayın bu büyüklükte bir hanedan ister: kraliçe olmadan çocuk doğmaz, varis olmaz.</span>
@@ -92,16 +115,19 @@ export function MapAlerts({
           </button>
         </div>
       )}
-      {alerts.map((a) => (
-        <button
-          key={a.key}
-          className={`map-alert frame${a.mild ? ' mild' : ''}`}
-          onClick={() => (a.town !== undefined && onTown ? onTown(a.town) : (a.sea && showArmyPart('sea'), onOpen(a.tab)))}
-        >
-          <Icon name="warn" size={16} />
-          <span>{a.text}</span>
-        </button>
-      ))}
+      {!folded &&
+        alerts.map((a) => (
+          <button
+            key={a.key}
+            className={`map-alert frame${a.mild ? ' mild' : ''}`}
+            onClick={() => (a.town !== undefined && onTown ? onTown(a.town) : (a.sea && showArmyPart('sea'), onOpen(a.tab)))}
+          >
+            <Icon name="warn" size={16} />
+            <span>{a.text}</span>
+          </button>
+        ))}
     </div>
   )
 }
+
+const FOLD_KEY = 'alerts-folded'

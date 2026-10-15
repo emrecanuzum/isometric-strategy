@@ -693,6 +693,12 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   ya da tarlaya varan uç da gevşek sayılmaz, solmaz. Köylüler de
   patikalardan yürür. Patikalar bütün krallıklarda çizilir (rakiplerinki de
   herkese görünür).
+  Lordluğun binalar arasında kalan zemini ve patika kenarları boş kalmaz:
+  ağaç dikilmez (surları ve yürüyenleri örterdi), ama çimen tutamları, kır
+  çiçekleri, ara sıra bir taş ve kimsenin arkasından geçmediği yerde alçak
+  çalılar (böğürtlen de) serpilir; patika kenarında daha sıktır. Çölde
+  seyrektir: kuru ot tutamı, çakıl, bodur çalı. Binanın oturduğu karoya ve
+  patikanın üstüne bir şey konmaz (`chunkPainter.ts`).
 - **İnşa menüsü (devam):**
   - **İnşa listesi** saray seviyesine göre 5 sekmedir (1. sv. … 5. sv.): her
     sekmede o seviyede açılan yapılar ve sınırı artan yapılar yazar; henüz
@@ -771,7 +777,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   - **Harita uyarıları:** Süren sorunlar (hapishane, sur arkasında kalan
     yapılar, sınırdaki düşman ordusu, ayaklanma) ekranın sağ kenarında,
     ayarlar ve ana menü düğmelerinin altında kırmızı kartlarla durur; dokununca
-    ilgili sekme açılır (`apps/web/src/ui/hud/MapAlerts.tsx`).
+    ilgili sekme açılır (`apps/web/src/ui/hud/MapAlerts.tsx`). Kartların
+    üstündeki "Uyarılar" başlığı (kırmızı rozette sayı) onları katlar ve
+    açar; tercih tarayıcıda hatırlanır.
     **Savaş en üsttedir:** oyuncunun kuşattığı ya da onun kasabasını kuşatan
     kasaba kuşatmaları (kalan süreyle), askerinin bulunduğu süren
     muharebeler ve kuşatmaya yürüyen orduları da birer kart olur; dokununca

@@ -918,11 +918,19 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
         // A lordship's ground between its buildings and along its footpaths, where no tree may stand (it would hide a
         // wall or a walker): grass tufts, wildflowers and a stone here and there, thicker along the path's verges, and
         // a low bush where nobody walks just behind it (CLAUDE.md §6.4).
-        if ((terrain !== Terrain.Grass && terrain !== Terrain.Forest) || footprint[i] || world.feature[i] !== Feature.None) continue
+        if (footprint[i] || world.feature[i] !== Feature.None) continue
+        if (terrain !== Terrain.Grass && terrain !== Terrain.Forest && terrain !== Terrain.Desert) continue
         if (road[i] < ROAD_HALF + 0.45 || trail[i] < TRAIL_HALF + 0.3) continue
         const verge = trail[i] < TRAIL_HALF + 1.4
         const g = hash(x, y, seed + 201)
         const v = hash(x, y, seed + 203)
+        if (terrain === Terrain.Desert) {
+          // Dry ground stays sparse: a stone, a dry tuft, a scrub where nobody walks behind it.
+          if (g < (verge ? 0.1 : 0.06)) place(choose(SPRITES.tuft, v), ...spot(9), own)
+          else if (g < 0.12) place(choose(SPRITES.pebbles, v), ...spot(9), own)
+          else if (g < 0.15 && !walkedBehind(x, y)) place(choose(SPRITES.scrub, v), ...spot(9), own)
+          continue
+        }
         const grass = verge ? 0.42 : 0.24
         if (g < grass) place(choose(SPRITES.tallGrass, v), ...spot(9), own)
         else if (g < grass + 0.07) {
