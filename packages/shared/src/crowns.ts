@@ -1,5 +1,7 @@
 import { balance } from './balance'
 import { book } from './economy'
+import { priceAt } from './market'
+import type { Market } from './market'
 import type { Good, Kingdom } from './economy'
 
 // The politics of the two crown kingdoms (CLAUDE.md §7.8): every lord stands somewhere with each crown (a relation from
@@ -121,8 +123,6 @@ export interface CrownOrder {
   endsAt: number
   good: Good
   units: number
-  // What the crown pays for the lot (before the bonus to its own lords), and the standing it brings.
-  gold: number
 }
 
 const orders = () => spec().orders
@@ -137,12 +137,14 @@ export function crownOrder(lobbyKey: number | undefined, crown: number, at: numb
   const good = GOODS_ORDER[h % 3]
   const steps = Math.floor((o.units[1] - o.units[0]) / o.step)
   const units = o.units[0] + ((h >>> 4) % (steps + 1)) * o.step
-  const base = (balance.economy.trade.price as Record<Good, number>)[good]
-  return { crown, window, endsAt: (window + 1) * ms, good, units, gold: Math.round(units * base * o.payFactor) }
+  return { crown, window, endsAt: (window + 1) * ms, good, units }
 }
 
-// What the lord is paid for it: more by its own crown.
-export const orderPay = (kingdom: Pick<Kingdom, 'liege'>, order: CrownOrder) => Math.round(order.gold * (kingdom.liege === order.crown ? 1 + orders().swornBonus : 1))
+// What the crown pays for the lot: over the lobby's price of the moment (so goods bought cheap at the market and
+// handed over earn nothing more than selling them would), more from one's own crown.
+export const orderPay = (kingdom: Pick<Kingdom, 'liege'>, order: CrownOrder, market: Market | null | undefined, at: number) =>
+  Math.round(order.units * priceAt(market, order.good, at) * orders().payFactor * (kingdom.liege === order.crown ? 1 + orders().swornBonus : 1))
+
 
 export type OrderError = 'done' | 'have' | 'relation' | 'locked' | 'crown'
 
@@ -156,16 +158,38 @@ export function crownOrderError(kingdom: Kingdom, crown: number, at: number, cro
   return null
 }
 
-// Delivers the order: the goods go, the crown's gold comes in (as much as the treasury holds) and the crown warms to
-// the lord (its own crown more).
-export function fulfilOrder(kingdom: Kingdom, crown: number, at: number, crowns: number, palace: number, goldRoom: number): Kingdom {
-  if (crownOrderError(kingdom, crown, at, crowns, palace)) return kingdom
+// Sends the order (CLAUDE.md §7.8): the goods leave the stores at once on a caravan to the crown's capital (a trip
+// as long as the merchant's there and back, `tripMs`); the crown's payment, fixed at its price of the moment, and its
+// goodwill come back with the caravan (settled by `settleOrderTrips`).
+export function fulfilOrder(kingdom: Kingdom, crown: number, at: number, crowns: number, palace: number, tripMs: number | null, market: Market | null | undefined): Kingdom {
+  if (crownOrderError(kingdom, crown, at, crowns, palace) || !tripMs) return kingdom
   const order = crownOrder(kingdom.lobbyKey, crown, at)
-  const pay = Math.min(orderPay(kingdom, order), Math.max(0, Math.floor(goldRoom)))
   const done = [...(kingdom.ordersDone ?? [])]
   done[crown] = order.window
-  const stock = { ...kingdom.stock, [order.good]: kingdom.stock[order.good] - order.units, gold: kingdom.stock.gold + pay }
+  const trip: OrderTrip = { crown, good: order.good, units: order.units, gold: orderPay(kingdom, order, market, at), leftAt: at, arriveAt: at + tripMs }
+  return { ...kingdom, stock: { ...kingdom.stock, [order.good]: kingdom.stock[order.good] - order.units }, ordersDone: done, orderTrips: [...(kingdom.orderTrips ?? []), trip] }
+}
+
+export interface OrderTrip {
+  crown: number
+  good: Good
+  units: number
+  gold: number
+  leftAt: number
+  arriveAt: number
+}
+
+// Caravans back from the crowns by `at`: their gold (as much as the treasury holds, `goldRoom`) and the crowns'
+// goodwill.
+export function settleOrderTrips(kingdom: Kingdom, at: number, goldRoom: (k: Kingdom) => number): { kingdom: Kingdom; back: OrderTrip[] } {
+  const back = (kingdom.orderTrips ?? []).filter((t) => t.arriveAt <= at)
+  if (back.length === 0) return { kingdom, back }
+  let k: Kingdom = { ...kingdom, orderTrips: (kingdom.orderTrips ?? []).filter((t) => t.arriveAt > at) }
   const r = orders().relation
-  const warmed = changeCrownRelation({ ...kingdom, stock, ordersDone: done }, crown, kingdom.liege === crown ? r.own : r.other)
-  return book(warmed, { other: pay })
+  for (const t of back) {
+    const pay = Math.min(t.gold, Math.max(0, Math.floor(goldRoom(k))))
+    k = book({ ...k, stock: { ...k.stock, gold: k.stock.gold + pay } }, { other: pay, ...(t.gold > pay && { wastedGold: t.gold - pay }) })
+    k = changeCrownRelation(k, t.crown, k.liege === t.crown ? r.own : r.other)
+  }
+  return { kingdom: k, back }
 }

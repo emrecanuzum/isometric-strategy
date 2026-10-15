@@ -144,6 +144,8 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
         title: `${f?.title ?? 'Olay'}: kimse bir şey yapmadı`,
         text: extra.length > 0 ? `${extra.join(', ')}.` : 'Olay etkisini tam olarak gösterdi.',
       })
+    } else if (event.kind === 'orderPaid') {
+      j = write(j, seasonStart, at, { tone: 'good', icon: 'scroll', title: 'Taç siparişinin kervanı döndü', text: `${fmt(event.units)} ${RESOURCE_NAMES[event.good].toLowerCase()} teslim edildi; kervan ${fmt(event.gold)} altınla döndü ve taçla ilişkin iyileşti.` })
     } else if (event.kind === 'launched') {
       j = write(j, seasonStart, at, { tone: 'good', icon: 'ship', title: `Tersane ${event.count} ${SHIP_WORDS[event.ship]} denize indirdi`, text: 'Gemiler limanda; Ordu sekmesinin Donanma bölümünden filo çıkarabilirsin.' })
     } else if (event.kind === 'voyage') {

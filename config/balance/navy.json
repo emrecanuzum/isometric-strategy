@@ -54,14 +54,14 @@
     "goodCooldownSeconds": 120
   },
   "pirates": {
-    "chance": 0.16,
+    "chance": 0.12,
     "escortCut": 0.13,
     "minShare": 0.15,
     "huntCut": 0.5,
     "stormFactor": 1.8,
     "might": [2, 9],
     "bounty": 35,
-    "sinkChance": { "escorted": 0.35, "alone": 0.25 }
+    "sinkChance": { "escorted": 0.15, "alone": 0.2 }
   },
   "hunt": {
     "maxPerRound": 0.03,
@@ -89,7 +89,7 @@
     "cooldownSeconds": 600
   },
   "sortieSeconds": 30,
-  "upkeepFoodPerCrew": 0.25,
+  "upkeepFoodPerCrew": 0.1,
   "seaWeather": {
     "storm": 1.8,
     "fog": 0.7

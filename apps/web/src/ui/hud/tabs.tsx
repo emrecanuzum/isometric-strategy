@@ -5,6 +5,7 @@ import {
   affordable,
   TAX_LEVELS,
   armoryOf,
+  armoryCap,
   balance,
   capOf,
   storageCap,
@@ -275,6 +276,8 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
   const cap = storageCap(kingdom, now)
   const room = (r: Resource) => (r === 'gold' ? goldCap(kingdom, now) : cap)
   const full = RESOURCES.some((r) => kingdom.stock[r] >= room(r))
+  const armsRoom = armoryCap(kingdom, now)
+  const armsFull = WEAPONS.some((w) => armory[w] >= armsRoom)
   return (
     <>
       <Subtabs
@@ -284,7 +287,7 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
         parts={[
           { id: 'goods', name: 'Mallar', icon: 'chest', dot: full },
           { id: 'books', name: 'Hazine', icon: 'gold' },
-          { id: 'armory', name: 'Cephanelik', icon: 'arms' },
+          { id: 'armory', name: 'Cephanelik', icon: 'arms', dot: armsFull },
         ]}
       />
       {part === 'books' && (
@@ -294,18 +297,24 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
         </>
       )}
       {part === 'armory' && (
-        <Section title="Cephanelik" icon="arms" aside="silahlar">
+        <Section title="Cephanelik" icon="arms" aside={`her silahtan en çok ${fmt(armsRoom)}`}>
           <div className="armory">
             {WEAPONS.map((w) => (
-              <div key={w} className="slot">
+              <div key={w} className={armory[w] >= armsRoom ? 'slot full' : 'slot'}>
                 <Icon name={WEAPON_ICONS[w]} size={24} />
-                <b>{fmt(armory[w])}</b>
+                <b className={armory[w] >= armsRoom ? 'down' : undefined}>
+                  {fmt(armory[w])} / {fmt(armsRoom)}
+                </b>
                 <small>{WEAPON_NAMES[w]}</small>
-                {(weapons[w] ?? 0) > 0.05 && <small className="up">{signed(weapons[w]!)} / tur</small>}
+                <Meter value={Math.min(1, armory[w] / armsRoom)} tone={armory[w] >= armsRoom ? 'down' : 'gold'} label={`${WEAPON_NAMES[w]} yeri`} segments={8} />
+                {armory[w] >= armsRoom ? <small className="down">Dolu: atölye durdu</small> : (weapons[w] ?? 0) > 0.05 && <small className="up">{signed(weapons[w]!)} / tur</small>}
               </div>
             ))}
           </div>
-          <p className="hint">Silah atölyesi işledikçe silahlar burada birikir; kışlada okçu ve kalkanlı piyade eğitmek için harcanır.</p>
+          <p className="hint">
+            Silah atölyesi işledikçe silahlar burada birikir; kışlada okçu ve kalkanlı piyade eğitmek için harcanır. Her silahın yeri saray seviyesiyle ve her
+            ambar seviyesiyle (+{balance.economy.armory.perWarehouseLevel}) artar. Yeri dolan silahı işleyen atölye durur: hammadde harcamaz, işçileri boşta kalır.
+          </p>
         </Section>
       )}
       {part === 'goods' && (

@@ -1,7 +1,8 @@
-import { balance, cutOff, imprisoned, navyOf, overreachFor, palaceLevel, townLoyalty, townRevolting } from '@game/shared'
+import { balance, clogsOf, cutOff, imprisoned, navyOf, overreachFor, palaceLevel, townLoyalty, townRevolting } from '@game/shared'
 import { showArmyPart } from './war'
 import type { Kingdom } from '@game/shared'
 import { Icon } from '../icons'
+import { BUILDING_NAMES, RESOURCE_NAMES, WEAPON_NAMES } from '../names'
 import type { TabId } from './Hud'
 import type { WarNote } from './war'
 
@@ -43,6 +44,20 @@ export function MapAlerts({
     const m = f.mission
     if (m.kind === 'blockade') alerts.push({ key: `fleet${f.id}`, tab: 'army', sea: true, text: m.arriveAt > now ? `Filon ${m.name} iskelesine yol alıyor.` : `Filon ${m.name} iskelesini abluka ediyor.` })
     if (m.kind === 'raid') alerts.push({ key: `fleet${f.id}`, tab: 'army', sea: true, text: `Filon ${m.name} kıyısına akına gidiyor.` })
+  }
+  // Production going nowhere (CLAUDE.md §6.4, "üretim ağı tıkandı"): one card per good or weapon with no room.
+  const clogs = clogsOf(kingdom, now)
+  for (const makes of [...new Set(clogs.map((c) => c.makes))]) {
+    const these = clogs.filter((c) => c.makes === makes)
+    const kinds = [...new Set(these.map((c) => c.kind))].map((k) => `${these.filter((c) => c.kind === k).length} ${BUILDING_NAMES[k].toLowerCase()}`).join(', ')
+    const weapon = these[0].reason === 'armory'
+    const name = weapon ? WEAPON_NAMES[makes as keyof typeof WEAPON_NAMES].toLowerCase() : RESOURCE_NAMES[makes as keyof typeof RESOURCE_NAMES].toLowerCase()
+    alerts.push({
+      key: `clog:${makes}`,
+      tab: 'store',
+      mild: !weapon,
+      text: weapon ? `Cephanelik dolu: ${name}. ${kinds} boşta duruyor; üretim ağı tıkandı.` : `Ambar dolu: ${name}. ${kinds} boşa üretiyor.`,
+    })
   }
   if ((kingdom.revoltUntil ?? 0) > now) alerts.push({ key: 'revolt', tab: 'people', text: 'Halk ayaklandı: üretim yarıda, mutluluk düşük.' })
   // Holding too many towns at once (CLAUDE.md §8.4): the card opens the most restless of them.

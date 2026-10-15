@@ -50,6 +50,7 @@ import {
   upgradeSpec,
   upgradeTrade,
   countShips,
+  clogsOf,
 } from '@game/shared'
 import type { Along, Lord, BuildError, BuildingKind, Good, Kingdom, PlanStep, Point, World } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -184,6 +185,7 @@ const REFUSALS: Record<string, string> = {
   notBlockaded: 'İskelen abluka altında değil',
   city: 'Bir liman seç',
   good: 'Taşınacak malı seç',
+  engaged: 'Filo vardı, çarpışma başlamak üzere; şimdi geri çağrılamaz',
 }
 const refusal = (e: unknown) => {
   const code = e instanceof CommandError ? e.message : 'server'
@@ -945,6 +947,9 @@ function App({
     () => view?.setMarked([...[...demolishing].map((id) => ({ id, tone: 'demolish' as const })), ...(moving !== null ? [{ id: moving, tone: 'move' as const }] : [])]),
     [view, demolishing, moving],
   )
+  // Buildings whose work goes nowhere carry a warning sign on the map (CLAUDE.md §6.4).
+  const clogKey = kingdom ? JSON.stringify(clogsOf(kingdom, serverNow()).map((c) => [c.id, c.reason])) : '[]'
+  useEffect(() => view?.setClogged((JSON.parse(clogKey) as [number, 'armory' | 'store'][]).map(([id, tone]) => ({ id, tone }))), [view, clogKey])
   const movingBuilding = moving !== null ? shown?.buildings.find((b) => b.id === moving) : undefined
   // Tearing down or moving several buildings: a tool in hand until the player is done (see MapTool).
   const [tool, setTool] = useState<MapTool>(null)

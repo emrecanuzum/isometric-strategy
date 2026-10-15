@@ -147,6 +147,7 @@ export type NavyError =
   | 'cooldown'
   | 'city'
   | 'good'
+  | 'engaged'
 
 const scaled = (cost: Cost, n: number): Cost => Object.fromEntries(Object.entries(cost).map(([r, v]) => [r, (v ?? 0) * n]))
 
@@ -355,12 +356,17 @@ export function setMission(k: Kingdom, id: number, order: MissionOrder, at: numb
 
 // A fleet away is called home: it turns back from where it is (as long a way back as it sailed), keeping what it
 // carries. A blockade lifted this way leaves the target (the server clears it).
-export function recallError(k: Kingdom, id: number): NavyError | null {
+export function recallError(k: Kingdom, id: number, at = -Infinity): NavyError | null {
   const f = fleetOf(k, id)
   if (!f) return 'fleet'
-  if (f.mission.kind !== 'blockade' && f.mission.kind !== 'raid' && f.mission.kind !== 'sortie') return 'away'
+  const m = f.mission
+  if (m.kind !== 'blockade' && m.kind !== 'raid' && m.kind !== 'sortie') return 'away'
+  // Arrived and about to fight: the battle is fought first (its outcome is not to be dodged).
+  if (m.arriveAt <= at && !(m.kind === 'blockade' && m.resolved)) return 'engaged'
   return null
 }
+// (The server turns fleets home after their battle too, so this does not wait for the battle: the player's command
+// is checked with recallError(k, id, now).)
 export function recallFleet(k: Kingdom, id: number, at: number, outMs?: number): Kingdom {
   if (recallError(k, id)) return k
   const n = navyOf(k)

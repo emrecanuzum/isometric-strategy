@@ -414,31 +414,62 @@ function Stewardship({ world, kingdom, now }: { world: World; kingdom: Kingdom; 
 export function CrownOrders({ world, kingdom, now, online }: { world: World; kingdom: Kingdom; now: number; online?: Online }) {
   if (world.cities.length === 0) return null
   const palace = palaceLevel(kingdom, now)
+  const trips = (kingdom.orderTrips ?? []).filter((t) => t.arriveAt > now)
+  const o = balance.cities.crown.orders
   return (
     <Section title="Taç siparişleri" icon="scroll" aside="saatte bir yenilenir">
-      <ul className="queue-list">
-        {world.cities.map((_, crown) => {
+      <ul className="order-cards">
+        {world.cities.map((city, crown) => {
           const info = cityInfo(world, crown)
           const order = crownOrder(kingdom.lobbyKey, crown, now)
           const why = crownOrderError(kingdom, crown, now, world.cities.length, palace)
-          const pay = orderPay(kingdom, order)
-          const text = why === 'done' ? 'Teslim edildi' : why === 'have' ? `Depoda ${fmt(kingdom.stock[order.good])} var` : why === 'relation' ? 'Taç seninle alışveriş etmiyor' : why === 'locked' ? `${balance.cities.crown.orders.minPalace}. seviye saray gerekir` : 'Teslim et'
+          const pay = orderPay(kingdom, order, online?.market, now)
+          const trip = cityTripMs(kingdom, city)
+          const have = Math.floor(kingdom.stock[order.good])
+          const text =
+            why === 'done' ? 'Bu saatin siparişi gönderildi' : why === 'have' ? `Depoda ${fmt(have)} / ${fmt(order.units)} var` : why === 'relation' ? 'Taç seninle alışveriş etmiyor' : why === 'locked' ? `${o.minPalace}. seviye saray gerekir` : !trip ? 'Ticaret noktası yok' : 'Kervanla gönder'
           return (
-            <li key={crown} className="queue-item">
-              <Icon name={RESOURCE_ICONS[order.good]} size={16} />
-              <span>
-                <b style={{ color: info.color }}>{info.capital}</b> {fmt(order.units)} {RESOURCE_NAMES[order.good].toLowerCase()} istiyor · <b>{fmt(pay)} altın</b>
-                <small> · {Math.ceil((order.endsAt - now) / 60_000)} dk kaldı</small>
-              </span>
-              <button className="btn small" disabled={!!why || !online} onClick={() => online?.act({ type: 'order', crown })}>
+            <li key={crown} className="order-card">
+              <Icon name={RESOURCE_ICONS[order.good]} size={24} />
+              <div className="order-body">
+                <b style={{ color: info.color }}>{info.name}</b>
+                <span>
+                  {fmt(order.units)} {RESOURCE_NAMES[order.good].toLowerCase()} istiyor
+                </span>
+                <span className="order-meta">
+                  <span>
+                    <Icon name="gold" size={16} /> {fmt(pay)} altın
+                  </span>
+                  <span>
+                    <Icon name="time" size={16} /> sefer {trip ? `${seconds(trip)} sn` : '—'}
+                  </span>
+                  <span>{Math.ceil((order.endsAt - now) / 60_000)} dk kaldı</span>
+                </span>
+              </div>
+              <button className="btn small order-send" disabled={!!why || !trip || !online} onClick={() => online?.act({ type: 'order', crown })}>
                 {text}
               </button>
             </li>
           )
         })}
       </ul>
+      {trips.length > 0 && (
+        <ul className="order-trips" aria-label="Yoldaki kervanlar">
+          {trips.map((t) => (
+            <li key={`${t.crown}:${t.leftAt}`}>
+              <Icon name="trade" size={16} />
+              <span>
+                {fmt(t.units)} {RESOURCE_NAMES[t.good].toLowerCase()} → {cityInfo(world, t.crown).capital} · {fmt(t.gold)} altın
+              </span>
+              <Meter value={Math.max(0, Math.min(1, (now - t.leftAt) / (t.arriveAt - t.leftAt)))} label="Kervan" segments={10} />
+              <small>{seconds(t.arriveAt - now)} sn</small>
+            </li>
+          ))}
+        </ul>
+      )}
       <p className="hint">
-        Siparişi depondan hemen teslim edersin; taç malı olağan fiyatının %{Math.round((balance.cities.crown.orders.payFactor - 1) * 100)} fazlasına alır (biat ettiğin taç %{Math.round(balance.cities.crown.orders.swornBonus * 100)} daha fazla öder) ve ilişkiniz iyileşir. Satış lobi fiyatlarına dokunmaz.
+        Mallar depondan hemen çıkar ve kervanla tacın başkentine gider; ödeme kervan dönünce gelir (sefer, tüccarın o şehre gidip dönmesi kadar sürer). Taç malı gönderdiğin andaki lobi fiyatının %
+        {Math.round((o.payFactor - 1) * 100)} fazlasına alır (biat ettiğin taç %{Math.round(o.swornBonus * 100)} daha fazla öder), ilişkiniz iyileşir. Satış lobi fiyatlarına dokunmaz. Kervan dönerken hazine doluysa sığmayan altın boşa gider.
       </p>
     </Section>
   )

@@ -27,6 +27,7 @@ import {
   recruitment,
   allShips,
   PIRATE_SEASON_FACTOR,
+  recallError,
 } from '@game/shared'
 import type { Fleet, Good, MissionOrder, NavyError, Ship, Ships } from '@game/shared'
 import { useState } from 'react'
@@ -135,7 +136,7 @@ export function NavyTab(data: HudData) {
     return (
       <Section title="Donanma" icon="ship">
         <Placeholder icon="lock" title="Tersanen yok">
-          Sarayı 3. seviyeye yükselt, sonra İnşa sekmesinden suyun kıyısına bir tersane kur (en az bir karosu kıyıda olmalı). Tersane kadırga, koka ve çektiri yapar.
+          Sarayı 4. seviyeye yükselt, sonra İnşa sekmesinden suyun kıyısına bir tersane kur (en az bir karosu kıyıda olmalı). Tersane kadırga, koka ve çektiri yapar.
           Gemiler filolar halinde deniz ticaretine, balığa, korsan avına çıkar; savaşta düşmanın iskelesini abluka altına alır ya da kıyısına akın eder.
         </Placeholder>
       </Section>
@@ -279,7 +280,7 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
       )}
       {!home && fleet.mission.kind !== 'return' && (
         <div className="army-orders">
-          <button className="btn small" onClick={() => online.act({ type: 'fleet', action: 'recall', fleet: fleet.id })}>
+          <button className="btn small" disabled={!!recallError(kingdom, fleet.id, now)} title={recallError(kingdom, fleet.id, now) === 'engaged' ? 'Çarpışma başlamak üzere' : undefined} onClick={() => online.act({ type: 'fleet', action: 'recall', fleet: fleet.id })}>
             <Icon name="home" size={16} /> Geri çağır
           </button>
         </div>

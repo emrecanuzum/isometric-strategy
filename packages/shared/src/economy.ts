@@ -11,7 +11,8 @@ import type { SpanCache } from './span'
 import { cutOff, imprisoned } from './walls'
 import { dynastyEffects, dynastyStep } from './dynasty'
 import type { Dynasty, DynastyEvent } from './dynasty'
-import { changeCrownRelation, driftCrownRelations, fealtyOpen, stewardFactor } from './crowns'
+import { changeCrownRelation, driftCrownRelations, fealtyOpen, settleOrderTrips, stewardFactor } from './crowns'
+import type { OrderTrip } from './crowns'
 import { crisisDecideMs, crisisWarded, isCrisis, isDilemma, fortuneEffects, fortunesBegun, hasResearch, hospitalHeal, levelOf, researchEffects, sermonTaxFactor, templeHappiness } from './institutions'
 import type { FortuneKind, FortuneScope } from './institutions'
 import type { Unit, Units } from './units'
@@ -276,8 +277,14 @@ export interface Kingdom {
   // The season's accounts: every gold piece that came in or went out and why, the soldiers lost and to what (see
   // Books). Absent in older saves.
   books?: Books
+  // When the lord last gave a real command (not the open game's "still here"; see presenceAt).
+  lastActedAt?: number
+  // When the people last fled a siege (they flee at most once in a while; CLAUDE.md §5.2).
+  fledAt?: number
   // The crowns' commissions delivered: by crown, the window last delivered in (crowns.ts, crownOrder).
   ordersDone?: number[]
+  // Caravans on their way to a crown with its order, paid when they are back (crowns.ts).
+  orderTrips?: OrderTrip[]
   // The lord's ships: the harbour, the fleets and the slipways (navy.ts; CLAUDE.md §8.5).
   navy?: Navy
   // Another lord's fleet blockading this lord's dock (set and cleared by the server).
@@ -374,6 +381,8 @@ export type EconomyEvent =
   // The navy (CLAUDE.md §8.5): ships launched, a sea-trade voyage back (perhaps met by pirates), a pirate hunt's
   // catch, a fleet home.
   | { kind: 'launched'; ship: Ship; count: number }
+  // A caravan back from a crown with the pay for its order (CLAUDE.md §7.8).
+  | { kind: 'orderPaid'; crown: number; good: Good; units: number; gold: number }
   | { kind: 'voyage'; fleet: number; good: Good; sold: number; gold: number; city: number; blocked?: boolean; full?: boolean; pirates?: { won: boolean; sunk?: Ship; bounty?: number; lost?: number } }
   | { kind: 'hunt'; fleet: number; bounty: number; sunk?: Ship }
   | { kind: 'fleetHome'; fleet: number; cargo?: Partial<Stock> }
@@ -568,6 +577,55 @@ const done = (b: Building, at: number) => b.doneAt <= at
 
 export const armoryOf = (kingdom: Kingdom): Armory => kingdom.armory ?? { sword: 0, shield: 0, bow: 0 }
 
+// How many of each weapon the armory holds: a palace-level amount and more for every warehouse level (CLAUDE.md §6.4).
+export function armoryCap(kingdom: Kingdom, at: number) {
+  const a = balance.economy.armory
+  const base = a.baseByPalaceLevel[Math.max(0, Math.min(a.baseByPalaceLevel.length - 1, palaceLevel(kingdom, at) - 1))]
+  let extra = 0
+  for (const b of kingdom.buildings) {
+    if (b.kind !== 'warehouse') continue
+    const level = b.doneAt <= at || b.moving ? (b.level ?? 1) : (b.level ?? 1) - 1
+    extra += Math.max(0, level) * a.perWarehouseLevel
+  }
+  return base + extra
+}
+
+const isWeapon = (v: string): v is Weapon => (WEAPONS as readonly string[]).includes(v)
+
+// What a producer is set to make now (its product, or a product still to be learnt falling back to the first).
+export function productMakes(kingdom: Kingdom, b: Building, at: number): Good | Weapon | null {
+  const spec = levelSpec(b.kind, b.level)
+  if (!spec.amount) return null
+  let choice = productOf(b)
+  if (choice && spec.products![choice].research && !hasResearch(kingdom, spec.products![choice].research!, at)) choice = Object.keys(spec.products!)[0]
+  return choice ? spec.products![choice].makes : (spec.produces ?? null)
+}
+
+// Producers whose work goes nowhere (CLAUDE.md §6.4, "üretim ağı tıkandı"): a forge set to a weapon the armory has
+// no room for stands idle; a building whose good's store is full makes what is thrown away. Only finished, staffed
+// buildings the workers can reach.
+export interface Clog {
+  id: number
+  kind: BuildingKind
+  makes: Good | Weapon
+  reason: 'armory' | 'store'
+}
+export function clogsOf(kingdom: Kingdom, at: number): Clog[] {
+  const out: Clog[] = []
+  const cut = cutOff(kingdom.buildings, kingdom.site, at)
+  const room = storageCap(kingdom, at)
+  const arms = armoryCap(kingdom, at)
+  const armory = armoryOf(kingdom)
+  for (const b of kingdom.buildings) {
+    if (!done(b, at) || cut.has(b.id) || (workerSlots(b) > 0 && staffOf(b) === 0)) continue
+    const makes = productMakes(kingdom, b, at)
+    if (!makes) continue
+    if (isWeapon(makes) && armory[makes] >= arms) out.push({ id: b.id, kind: b.kind, makes, reason: 'armory' })
+    else if (isGood(makes) && kingdom.stock[makes] >= room - 0.5) out.push({ id: b.id, kind: b.kind, makes, reason: 'store' })
+  }
+  return out
+}
+
 // How much of each good the stores hold (CLAUDE.md §6.1): a little more with each palace level, and as much again as
 // the warehouses give; whatever is made beyond it is lost. Gold is not capped.
 const stores: SpanCache<{ goods: number; gold: number }> = new WeakMap()
@@ -643,6 +701,31 @@ export function population(kingdom: Kingdom, at: number) {
 
 // ---- Growth of the people (CLAUDE.md §5.2) --------------------------------------------------------------------------
 
+// The villagers the palace houses at its finished level (its servants).
+export function palaceServants(kingdom: Kingdom, at: number) {
+  const level = palaceLevel(kingdom, at)
+  return level > 0 ? (levelSpec('palace', level).villagers ?? 0) : 0
+}
+
+// Hands for the food producers first when the granary is empty (CLAUDE.md §5.2): the share of a full crew the food
+// makers and the other buildings get. Otherwise everyone works at the same share.
+function staffing(kingdom: Kingdom, at: number) {
+  const p = population(kingdom, at)
+  if (kingdom.stock.food > 0 || p.jobs === 0) return { food: p.efficiency, other: p.efficiency }
+  let foodJobs = 0
+  for (const b of kingdom.buildings) if (done(b, at) && makesFood(b)) foodJobs += staffOf(b)
+  const food = foodJobs === 0 ? 1 : Math.min(1, p.healthy / foodJobs)
+  const otherJobs = p.jobs - foodJobs
+  const other = otherJobs <= 0 ? 1 : Math.min(1, Math.max(0, p.healthy - foodJobs) / otherJobs)
+  return { food, other }
+}
+const makesFood = (b: Building) => {
+  const spec = BUILDINGS[b.kind]
+  if (!spec.amount && !spec.levels?.some((l) => l.amount)) return false
+  const choice = productOf(b)
+  return (choice ? spec.products![choice].makes : spec.produces) === 'food'
+}
+
 export type GrowthPart = 'happiness' | 'food' | 'siege' | 'war' | 'sickness' | 'queen' | 'temple'
 
 // The share of the full growth a mood of `happiness` gives: below the curve's zero the people leave.
@@ -685,8 +768,12 @@ export function growthTerms(kingdom: Kingdom, at: number) {
   if (starving) factor = Math.min(factor, g.starving)
   if (besieged) factor = Math.min(factor, g.besieged)
   if (factor > 0) for (const p of parts) if (p.active && ['war', 'sickness', 'queen', 'temple'].includes(p.part)) factor *= p.value
-  const perRound = factor > 0 ? Math.min(gap, factor * (g.inflowPerRound + g.gapSharePerRound * gap)) : factor * g.leaveSharePerRound * people
-  return { people, room, gap, factor, perRound, parts }
+  let perRound = factor > 0 ? Math.min(gap, factor * (g.inflowPerRound + g.gapSharePerRound * gap)) : factor * g.leaveSharePerRound * people
+  // The palace's own servants never leave, and come back even to a hungry court: no lordship empties for good.
+  const floor = g.palaceFloor ? Math.min(room, palaceServants(kingdom, at)) : 0
+  if (people < floor) perRound = Math.max(perRound, Math.min(floor - people, g.inflowPerRound))
+  else if (perRound < 0) perRound = Math.max(perRound, floor - people)
+  return { people, room, gap, factor, perRound, parts, floor }
 }
 
 // How long until the room is full at today's pace (null when the people are not growing).
@@ -712,6 +799,15 @@ export const happinessOf = (kingdom: Kingdom) => kingdom.happiness ?? balance.so
 // Lands without their ruler give less (CLAUDE.md §6.4): after a grace period, every hour since the player was last
 // seen takes a share off what buildings make, the taxes and the merchant's gold, down to a floor.
 // The lord counts as away a little while after last being seen (the open game reports every few minutes).
+// When the lord counts as last seen after a command at `now` (CLAUDE.md §6.4): a real command marks the ruler present;
+// the open game's periodic "still here" ('seen') only keeps that up for a while after the last real one, so a tab left
+// open (or a script pinging) does not keep an absent lord's lands at full work.
+export function presenceAt(kingdom: Pick<Kingdom, 'lastSeenAt' | 'lastActedAt'>, now: number, real: boolean) {
+  if (real) return { lastSeenAt: now, lastActedAt: now }
+  const acted = kingdom.lastActedAt ?? kingdom.lastSeenAt ?? now
+  return { lastSeenAt: Math.max(kingdom.lastSeenAt ?? 0, Math.min(now, acted + balance.economy.away.seenGraceMinutes * 60_000)), lastActedAt: acted }
+}
+
 export const isAway = (kingdom: Kingdom, at: number) => at - (kingdom.lastSeenAt ?? at) > balance.economy.away.afterMinutes * 60_000
 
 // How much of what is made goes into a store while the lord is away: all of it up to the knee, then less and less,
@@ -782,8 +878,13 @@ export function roundContext(kingdom: Kingdom, at: number) {
     cut: cutOff(kingdom.buildings, kingdom.site, at),
     output: fortuneEffects(kingdom, at).output,
     learnt: researchEffects(kingdom, at).output,
-    // The share of the work done: hands to spare, the hour of the day, the ruler's absence.
-    pace: population(kingdom, at).efficiency * workRate(kingdom, at),
+    // The share of the work done: hands to spare (the food makers first when the granary is empty), the hour of the
+    // day, the ruler's absence.
+    ...(() => {
+      const s = staffing(kingdom, at)
+      const rate = workRate(kingdom, at)
+      return { pace: s.other * rate, foodPace: s.food * rate }
+    })(),
     // The ruler's absence slows everything but the food the people grow for themselves (an absent lord's people do
     // not starve for it).
     idle: idleFactor(kingdom, at),
@@ -804,6 +905,8 @@ export function buildingOutput(kingdom: Kingdom, b: Building, at: number, round?
   // A product still to be learnt at the university falls back to the first one.
   if (choice && spec.products![choice].research && !hasResearch(kingdom, spec.products![choice].research!, at)) choice = Object.keys(spec.products!)[0]
   const product: Product = choice ? spec.products![choice] : { makes: spec.produces!, rate: 1 }
+  // An armory with no room for the weapon: the forge stands idle and uses nothing.
+  if (isWeapon(product.makes) && armoryOf(kingdom)[product.makes] >= armoryCap(kingdom, at)) return null
   // The land's yield and the fortunes of the day only touch raw goods; worked goods depend on the hands alone.
   const raw = isGood(product.makes) && !product.uses
   const land = raw ? kingdom.yields[product.makes as Good] : 1
@@ -811,7 +914,7 @@ export function buildingOutput(kingdom: Kingdom, b: Building, at: number, round?
   const learnt = 1 + (r.learnt[b.kind] ?? 0)
   return {
     makes: product.makes,
-    units: spec.amount * product.rate * land * fortune * learnt * crew * r.pace * (product.makes === 'food' ? 1 : r.idle),
+    units: spec.amount * product.rate * land * fortune * learnt * crew * (product.makes === 'food' ? r.foodPace : r.pace) * (product.makes === 'food' ? 1 : r.idle),
     uses: product.uses,
   }
 }
@@ -851,12 +954,13 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
     const per = BUILDINGS[b.kind].goldPerRound
     if (per && done(b, at) && !round.cut.has(b.id) && !(b.kind === 'fisherHut' && kingdom.blockade)) delta.gold = (delta.gold ?? 0) + per * idleFactor(kingdom, at)
   }
-  delta.gold = (delta.gold ?? 0) + l.tax - l.soldiersGold + l.tributes.reduce((sum, t) => sum + t.gold, 0)
+  // Tributes between lords are not in the round: the server moves what the payer really pays (CLAUDE.md §9.7).
+  delta.gold = (delta.gold ?? 0) + l.tax - l.soldiersGold
   // What the held towns send, and the upkeep paid them while the treasury has it (CLAUDE.md §8.4).
   const sends = townYield(kingdom.towns, at)
   const idle = idleFactor(kingdom, at)
   for (const r of ['gold', 'food', 'materials', 'arms'] as const) if (sends[r]) delta[r] = (delta[r] ?? 0) + sends[r] * idle
-  const towns = townUpkeep(kingdom.towns, stock.gold + (delta.gold ?? 0))
+  const towns = townUpkeep(kingdom.towns, stock.gold + (delta.gold ?? 0), at)
   if (towns.cost > 0) delta.gold = (delta.gold ?? 0) - towns.cost
   return { delta, weapons, worked, towns, navy }
 }
@@ -1289,6 +1393,16 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
     k.soldiers = countOf(k.units)
     events.push({ kind: 'trained', count })
   }
+  // Caravans back from the crowns with the pay for their orders.
+  if ((kingdom.orderTrips ?? []).some((t) => t.arriveAt <= now)) {
+    edit()
+    const paid = settleOrderTrips(k, now, (x) => goldCap(x, now) - x.stock.gold)
+    k.orderTrips = paid.kingdom.orderTrips
+    k.stock = paid.kingdom.stock
+    k.books = paid.kingdom.books
+    k.crownRelations = paid.kingdom.crownRelations
+    for (const t of paid.back) events.push({ kind: 'orderPaid', crown: t.crown, good: t.good, units: t.units, gold: t.gold })
+  }
   // Ships whose building ended moor in the harbour.
   if ((kingdom.navy?.building ?? []).some((b) => b.doneAt <= now)) {
     edit()
@@ -1392,20 +1506,15 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
         if (caught.sunk) k.navy = takeFleetLosses(k, f.id, { [caught.sunk]: 1 }).navy
         events.push({ kind: 'hunt', fleet: f.id, bounty: caught.bounty, ...(caught.sunk && { sunk: caught.sunk }) })
       }
-      // The accounts: the taxes, the soldiers' pay and the tributes between lords as they were, the rest (towns, the
-      // fisher) together.
+      // The accounts: the taxes and the soldiers' pay as they were, the rest (towns, the fisher) together. Tributes
+      // between lords are booked by the server as it moves them.
       const books = k.books!
       const l = ledger(k, next)
-      const tributes = l.tributes.reduce((sum, t) => sum + t.gold, 0)
       books.tax += l.tax
       books.wages += l.soldiersGold
-      for (const t of l.tributes) {
-        if (t.gold > 0) books.tributeIn += t.gold
-        else books.tributeOut -= t.gold
-      }
       books.townUpkeep = (books.townUpkeep ?? 0) + upkept.cost
       books.navy = (books.navy ?? 0) + shipsKept.gold
-      books.other += (delta.gold ?? 0) - (l.tax - l.soldiersGold + tributes) + upkept.cost + shipsKept.gold - bounties
+      books.other += (delta.gold ?? 0) - (l.tax - l.soldiersGold) + upkept.cost + shipsKept.gold - bounties
       // While the lord is away the storehouses are not filled to the brim: what is made slows as a store nears the
       // top of its room and stops short of it (CLAUDE.md §6.4).
       if (isAway(k, next)) {
@@ -1434,7 +1543,9 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
         for (const g of GOODS) books.wastedGoods += lost[g] ?? 0
         events.push({ kind: 'wasted', lost })
       }
-      for (const [w, v] of Object.entries(weapons)) k.armory![w as Weapon] += v ?? 0
+      // The armory holds so much of each weapon; a forge's last batch stops at the top.
+      const armsRoom = armoryCap(k, next)
+      for (const [w, v] of Object.entries(weapons)) k.armory![w as Weapon] = Math.min(Math.max(armsRoom, k.armory![w as Weapon]), k.armory![w as Weapon] + (v ?? 0))
       // The people grow into the room there is, or leave (CLAUDE.md §5.2); older saves start full.
       if (k.buildings.some((b) => b.kind === 'palace')) {
         const grown = growthTerms(k, next)

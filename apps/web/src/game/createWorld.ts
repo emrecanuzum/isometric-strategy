@@ -25,7 +25,7 @@ import { createCaravans } from './caravans'
 import { cityArea, cityAreaAt, cityAt, cityInfo, cityStructures, cityTrails } from './cities'
 import { CHIMNEYS, linkWalls, structureParts } from './buildingSprites'
 import { openGate } from './wallSprites'
-import { SPRITES, lightsOf, outlineOf, silhouetteOf } from './sprites'
+import { Canvas, SPRITES, lightsOf, outlineOf, rgb, silhouetteOf } from './sprites'
 import { daylight, nightness, sunShadow } from './daylight'
 import { createShadows } from './shadows'
 import { innLook } from './innSprites'
@@ -195,6 +195,8 @@ export interface WorldView {
   // The player's buildings marked in the plan: a red silhouette over those to be torn down, a blue one over the one
   // picked up to be moved.
   setMarked(marks: { id: number; tone: 'demolish' | 'move' }[]): void
+  // The player's buildings whose work goes nowhere ("üretim ağı tıkandı"): a warning sign bobs over each.
+  setClogged(ids: { id: number; tone: 'armory' | 'store' }[]): void
   setTown(errands: Errand[], merchants: MerchantTrip[]): void
   // The towns' names over them (in their holder's colour) and, while one is besieged, how far the siege has come.
   setTowns(marks: TownMark[]): void
@@ -329,6 +331,7 @@ export async function createWorld(
   const armyLabels = new Container()
   // Red silhouettes over the buildings marked to be torn down.
   const marks = new Container()
+  const clogSigns = new Container()
   // The building being moved, following the pointer.
   const carried = new Container()
   carried.alpha = 0.6
@@ -338,7 +341,7 @@ export async function createWorld(
   }
   // The target an aimed army has snapped to, outlined over everything on the ground.
   const aimLines = new Graphics()
-  camera.addChild(ground, shadows.layer, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, marks, ambient.sky, cursor, carried, highlight, aimLines)
+  camera.addChild(ground, shadows.layer, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, marks, clogSigns, ambient.sky, cursor, carried, highlight, aimLines)
   app.stage.addChild(camera)
   // Day and night: the whole map is multiplied by the colour of the light at this hour of the game day. Lit windows
   // and the labels sit above it, in a layer that follows the camera, so night never dims them.
@@ -1371,6 +1374,41 @@ export async function createWorld(
   hits = innHits.slice().sort((a, b) => b.depth - a.depth)
   let structureKeys = new Set<string>()
   let marked = new Map<number, 'demolish' | 'move'>()
+  // Warning signs over clogged buildings, bobbing; drawn once per tone.
+  let clogged = new Map<number, 'armory' | 'store'>()
+  const signLooks = new Map<string, Texture>()
+  const signOf = (tone: 'armory' | 'store') => {
+    let t = signLooks.get(tone)
+    if (!t) {
+      t = textureOf(warningSign(tone === 'armory' ? 0xe0402a : 0xe2a826))
+      signLooks.set(tone, t)
+    }
+    return t
+  }
+  let signBase: number[] = []
+  function placeClogs() {
+    for (const child of clogSigns.removeChildren()) child.destroy()
+    signBase = []
+    for (const hit of hits) {
+      const tone = hit.owner || hit.inn || hit.city ? undefined : clogged.get(hit.id)
+      if (!tone) continue
+      const sign = new Sprite(signOf(tone))
+      sign.anchor.set(0.5, 1)
+      sign.position.set(hit.sx, hit.sy - hit.sprite.anchorY - 4)
+      signBase.push(hit.sy - hit.sprite.anchorY - 4)
+      clogSigns.addChild(sign)
+    }
+  }
+  app.ticker.add(() => {
+    if (clogSigns.children.length === 0) return
+    const t = performance.now() / 1000
+    // Bob gently; kept a fixed size on screen at every zoom.
+    const scale = Math.max(1.5, 1.5 / camera.scale.x)
+    for (const [i, sign] of clogSigns.children.entries()) {
+      sign.scale.set(scale)
+      sign.y = signBase[i] - Math.round(Math.abs(Math.sin(t * 2.4 + i)) * 4 * scale)
+    }
+  })
   function placeMarks() {
     for (const child of marks.removeChildren()) child.destroy()
     for (const hit of hits) {
@@ -1406,6 +1444,7 @@ export async function createWorld(
       .concat(innHits)
       .sort((a, b) => b.depth - a.depth)
     placeMarks()
+    placeClogs()
     const keyOf = (s: Structure) => `${s.x},${s.y},${s.size},${s.look},${s.variant},${s.level ?? 1},${JSON.stringify(s.pier ?? null)},${s.links ?? ''}`
     const keys = new Set(structures.map(keyOf))
     const changed = [...structures.filter((s) => !structureKeys.has(keyOf(s)))]
@@ -1500,6 +1539,10 @@ export async function createWorld(
       clearCursor()
       if (lastPointer) pick(lastPointer)
     },
+    setClogged(list) {
+      clogged = new Map(list.map((c) => [c.id, c.tone]))
+      placeClogs()
+    },
     setMarked(list) {
       marked = new Map(list.map((m) => [m.id, m.tone]))
       placeMarks()
@@ -1560,4 +1603,29 @@ export async function createWorld(
       app.destroy(true, { children: true })
     },
   }
+}
+
+// A little pixel warning sign on a post: a diamond of `color` with a black "!" (CLAUDE.md §6.4).
+function warningSign(color: number): Sprite_ {
+  const w = 15
+  const h = 24
+  const canvas = new Canvas(w, h)
+  const fill = rgb(color)
+  const dark = rgb(0x1c1612)
+  const light = rgb(0xfff3c4)
+  const c = 7
+  for (let y = 0; y < 15; y++) {
+    for (let x = 0; x < w; x++) {
+      const d = Math.abs(x - c) + Math.abs(y - 7)
+      if (d > 7) continue
+      canvas.set(x, y, d === 7 ? dark : d === 6 && x < c ? light : fill)
+    }
+  }
+  for (let y = 3; y <= 8; y++) for (const x of [6, 7]) canvas.set(x, y, dark)
+  for (let y = 10; y <= 11; y++) for (const x of [6, 7]) canvas.set(x, y, dark)
+  for (let y = 15; y < h; y++) {
+    canvas.set(6, y, rgb(0x5a3c22))
+    canvas.set(7, y, rgb(0x7a5432))
+  }
+  return canvas.sprite(7, h - 1, 0)
 }

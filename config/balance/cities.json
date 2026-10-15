@@ -24,9 +24,9 @@
     "relation": {
       "restSworn": 15,
       "restRival": -15,
-      "driftPerRound": 0.12,
+      "driftPerRound": 0.03,
       "swear": 20,
-      "cityTrip": 1.2,
+      "cityTrip": 0.4,
       "tributePaid": 4,
       "tributeRefused": -10,
       "visit": 1
@@ -113,8 +113,8 @@
   },
   "trade": {
     "loadFactor": 2,
-    "priceFactor": 1.05,
-    "marketImpact": 0.5,
+    "priceFactor": 1.0,
+    "marketImpact": 0.8,
     "baseSeconds": 30,
     "secondsPerTile": 0.36,
     "changeCooldownSeconds": 120

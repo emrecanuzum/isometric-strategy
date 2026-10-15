@@ -79,7 +79,7 @@ async function pay(from: number, to: number, gold: number, at: number) {
 async function startTribute(lobby: string, receiver: number, payer: number, gold: number, at: number, rows: Row[]) {
   const { data: pact } = await admin
     .from('pacts')
-    .insert({ lobby_id: lobby, kind: 'tribute', from_id: receiver, to_id: payer, gold, started_at: iso(at) })
+    .insert({ lobby_id: lobby, kind: 'tribute', from_id: receiver, to_id: payer, gold, started_at: iso(at), paid_at: iso(at) })
     .select()
     .single()
   const add = (other: number, dir: 'in' | 'out') => (k: any) => ({
@@ -204,4 +204,37 @@ export async function intel(lobby: string, me: number, targetId: number, now: nu
     }
   }
   return report
+}
+
+// Tributes between lords (CLAUDE.md §9.7): every round's tribute is taken from the payer's treasury as far as it holds
+// it, and only what was really paid reaches the receiver (as far as its treasury has room). Settled by the tick for the
+// whole rounds since the pact was last paid; the rounds are claimed on the pact first, so two runs pay them once. A
+// pact from before this rule starts counting from now.
+// deno-lint-ignore no-explicit-any
+export async function settleTributes(lobby: string, pacts: any[], now: number) {
+  const round = game.balance.economy.productionSeconds * 1000
+  for (const p of pacts) {
+    if (p.kind !== 'tribute' || p.ended_at) continue
+    if (!p.paid_at) {
+      await admin.from('pacts').update({ paid_at: iso(now) }).eq('id', p.id).is('paid_at', null)
+      continue
+    }
+    const from = ms(p.paid_at)
+    const rounds = Math.floor((now - from) / round)
+    if (rounds < 1) continue
+    const { data: claimed } = await admin.from('pacts').update({ paid_at: iso(from + rounds * round) }).eq('id', p.id).eq('paid_at', p.paid_at).select('id').maybeSingle()
+    if (!claimed) continue
+    const owed = rounds * (p.gold ?? 0)
+    let paid = 0
+    await mutateKingdom(p.to_id, now, (k) => {
+      paid = Math.max(0, Math.min(owed, Math.floor(k.stock.gold)))
+      return game.book({ ...k, stock: { ...k.stock, gold: k.stock.gold - paid } }, { tributeOut: paid })
+    })
+    if (paid <= 0) continue
+    await mutateKingdom(p.from_id, now, (k) => {
+      const room = Math.max(0, game.goldCap(k, now) - k.stock.gold)
+      const kept = Math.min(paid, room)
+      return game.book({ ...k, stock: { ...k.stock, gold: k.stock.gold + kept } }, { tributeIn: paid, ...(paid > kept && { wastedGold: paid - kept }) })
+    })
+  }
 }

@@ -8,7 +8,8 @@ import { balance } from './balance'
 
 export type MarketGood = 'food' | 'materials' | 'arms'
 // foodDemand: how much dearer food is as the world's people grow (set by the server; missing: 1, see foodDemandFor).
-export type Market = Record<MarketGood, { price: number; at: number }> & { foodDemand?: number }
+// priceRev: the revision of the base prices the stored prices follow (migrations move them with it).
+export type Market = Record<MarketGood, { price: number; at: number }> & { foodDemand?: number; priceRev?: number }
 
 const GOODS: MarketGood[] = ['food', 'materials', 'arms']
 export const basePrice = (good: MarketGood, market?: Market | null) =>

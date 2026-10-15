@@ -2,7 +2,7 @@
 // siege runs its course, and lost when another lord at war with the holder takes them in turn.
 
 import * as game from './game.js'
-import { unitsOf } from './armies.ts'
+import { loseSoldiers } from './armies.ts'
 import type { ArmyRow } from './armies.ts'
 import { admin, iso, loadKingdoms, ms, mutateKingdom, nameOf, notify } from './server.ts'
 import type { Kingdom, LobbyWorld, Point, Row } from './server.ts'
@@ -193,8 +193,7 @@ export async function settleTowns(lobby: string, rows: Row[], pacts: Pact[], now
     if (!claimed) continue
     if (lost > 0) {
       await mutateKingdom(s.kingdom, at, (k) => game.book({ ...k, fielded: Math.max(0, (k.fielded ?? 0) - lost) }, {}, { town: lost }))
-      if (left <= 0) await admin.from('armies').delete().eq('id', army.id)
-      else await admin.from('armies').update({ soldiers: left, units: game.takeShare(unitsOf(army), lost).left }).eq('id', army.id)
+      await loseSoldiers(army.id, lost)
     }
     if (!over) continue
     const total = (s.lost ?? 0) + lost

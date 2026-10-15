@@ -29,9 +29,9 @@
     "amountCooldownSeconds": 120,
     "foodReserveRounds": 30,
     "price": {
-      "food": 0.13,
-      "materials": 0.2,
-      "arms": 0.27
+      "food": 0.2,
+      "materials": 0.3,
+      "arms": 0.4
     },
     "levels": [
       {
@@ -73,7 +73,7 @@
         },
         {
           "cost": {
-            "gold": 1500,
+            "gold": 1200,
             "materials": 800,
             "arms": 200
           },
@@ -82,7 +82,7 @@
         },
         {
           "cost": {
-            "gold": 2600,
+            "gold": 2200,
             "materials": 1500,
             "arms": 500
           },
@@ -606,7 +606,7 @@
     },
     "shipyard": {
       "size": 2,
-      "requiresPalace": 3,
+      "requiresPalace": 4,
       "unique": true,
       "coastal": true,
       "cost": {
@@ -658,7 +658,8 @@
     "afterMinutes": 10,
     "merchantLoad": 0.5,
     "storesKnee": 0.5,
-    "storesTop": 0.8
+    "storesTop": 0.8,
+    "seenGraceMinutes": 40
   },
   "idle": {
     "graceHours": 1,
@@ -708,5 +709,16 @@
       "sink": 280
     },
     "bottleShare": 0.7
+  },
+  "armory": {
+    "note": "per weapon: what the armory holds at each palace level, and what every warehouse level adds",
+    "baseByPalaceLevel": [
+      60,
+      120,
+      200,
+      300,
+      400
+    ],
+    "perWarehouseLevel": 40
   }
 }

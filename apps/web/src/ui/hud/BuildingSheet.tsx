@@ -1,5 +1,5 @@
 import { NavyTab } from './navy'
-import { BUILDINGS, movable, moveCost, moveSeconds, buildingOutput, cutOff, goldCap, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
+import { BUILDINGS, armoryCap, balance, clogsOf, movable, moveCost, moveSeconds, buildingOutput, cutOff, goldCap, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
 import type { Building, BuildingKind, Good, Product, Resource } from '@game/shared'
 import { looksOf } from '../../game/buildingSprites'
 import { Icon } from '../icons'
@@ -89,6 +89,7 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
                 )}
               </div>
             </div>
+            {!building && <Clogged building={b} data={data} />}
             {!building && b.kind === 'university' && <UniversityPanel data={data} />}
             {!building && b.kind === 'hospital' && <HospitalPanel building={b} data={data} />}
             {!building && b.kind === 'temple' && <TemplePanel data={data} />}
@@ -109,6 +110,43 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
         )}
       </div>
     </section>
+  )
+}
+
+// "Üretim ağı tıkandı" (CLAUDE.md §6.4): the store or the armory this building fills has no room, so its work is
+// thrown away (a full store) or stands still (a full armory). What is full, what it costs and what to do about it.
+function Clogged({ building: b, data }: { building: Building; data: HudData }) {
+  const { kingdom, now } = data
+  const clog = clogsOf(kingdom, now).find((c) => c.id === b.id)
+  if (!clog) return null
+  const weapon = clog.reason === 'armory'
+  const name = nameOf(clog.makes).toLowerCase()
+  const out = buildingOutput(kingdom, { ...b }, now)
+  const lost = !weapon && out ? out.units : 0
+  const cap = weapon ? armoryCap(kingdom, now) : storageCap(kingdom, now)
+  const others = Object.keys(BUILDINGS[b.kind].products ?? {}).filter((p) => p !== productOf(b) && productAllowed(kingdom, b.kind, p, now))
+  return (
+    <div className="clog-box" role="alert">
+      <header>
+        <Icon name="warn" size={24} />
+        <b>Üretim ağı tıkandı</b>
+      </header>
+      <p>
+        {weapon
+          ? `Cephanelikte ${name} yeri doldu (${cap} / ${cap}). Atölye ${name} işleyemiyor: hammadde harcamıyor, ${staffOf(b)} işçisi boşta bekliyor.`
+          : `Ambarda ${name} yeri doldu (${Math.floor(kingdom.stock[clog.makes as Good])} / ${cap}). Bu yapının ürettiği ${lost > 0 ? `tur başına ~${num(lost)} ` : ''}${name} sığmıyor ve boşa gidiyor; ${staffOf(b)} işçi boşuna çalışıyor.`}
+      </p>
+      <ul>
+        {others.length > 0 && <li>Ürünü değiştir: {others.map((p) => PRODUCT_NAMES[p] ?? p).join(', ')} (aşağıda).</li>}
+        {weapon ? (
+          <li>Kışlada okçu ya da kalkanlı piyade eğit: silah cephanelikten çıkar, yer açılır.</li>
+        ) : (
+          <li>Tüccarla {name} sat, taç siparişine gönder ya da inşaatta harca.</li>
+        )}
+        <li>Ambar kur ya da yükselt: {weapon ? `her ambar seviyesi cephaneliğe +${balance.economy.armory.perWarehouseLevel} yer açar` : 'depoya yer açar'}; sarayı yükseltmek de sınırı büyütür.</li>
+        <li>İşçilerini başka bir yapıya ver (aşağıdaki işçi sayısını azalt).</li>
+      </ul>
+    </div>
   )
 }
 

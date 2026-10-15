@@ -306,10 +306,12 @@ export function townsRound(held: HeldTown[], at: number, roundMs: number, paid: 
 }
 
 // Which towns' upkeep the treasury can pay this round (in the order they are held), and the gold that takes.
-export function townUpkeep(held: HeldTown[] | undefined, gold: number) {
+// A town in revolt is paid nothing (it takes nothing from its lord and sends nothing).
+export function townUpkeep(held: HeldTown[] | undefined, gold: number, at?: number) {
   const paid = new Set<number>()
   let cost = 0
   for (const h of held ?? []) {
+    if (at !== undefined && townRevolting(h, at)) continue
     const g = townUpkeepGold(h, held!.length)
     if (g <= 0 || cost + g > gold) continue
     cost += g

@@ -24,13 +24,13 @@
       "perRound": 1.5
     },
     "food": {
-      "perRound": 2.0
+      "perRound": 5
     },
     "materials": {
-      "perRound": 1.6
+      "perRound": 4
     },
     "arms": {
-      "perRound": 1.4
+      "perRound": 3.5
     },
     "people": {
       "villagers": 14
@@ -74,16 +74,16 @@
         "towns": 2,
         "loyalty": -5,
         "happiness": -2,
-        "upkeepFactor": 1.25,
-        "yieldFactor": 0.95,
+        "upkeepFactor": 1.1,
+        "yieldFactor": 1,
         "loyaltyCap": 100
       },
       {
         "towns": 3,
-        "loyalty": -25,
+        "loyalty": -20,
         "happiness": -6,
-        "upkeepFactor": 1.6,
-        "yieldFactor": 0.8,
+        "upkeepFactor": 1.4,
+        "yieldFactor": 0.85,
         "loyaltyCap": 100
       },
       {
@@ -92,7 +92,7 @@
         "happiness": -12,
         "upkeepFactor": 2,
         "yieldFactor": 0.6,
-        "loyaltyCap": 15
+        "loyaltyCap": 10
       }
     ]
   },

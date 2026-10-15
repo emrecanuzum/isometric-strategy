@@ -388,7 +388,7 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       const palace = game.palaceLevel(k, now)
       const error = game.crownOrderError(k, cmd.crown, now, crowns, palace)
       if (error) refuse(error)
-      next = changed(game.fulfilOrder(k, cmd.crown, now, crowns, palace, game.goldCap(k, now) - k.stock.gold))
+      next = changed(game.fulfilOrder(k, cmd.crown, now, crowns, palace, game.cityTripMs(k, lobbyWorld.cities[cmd.crown]), market))
       break
     }
     case 'ships': {
@@ -454,7 +454,7 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
           break
         }
         case 'recall': {
-          const error = game.recallError(k, id)
+          const error = game.recallError(k, id, now)
           if (error) refuse(error)
           const m = game.fleetOf(k, id).mission
           let outMs: number | undefined
@@ -491,7 +491,8 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
   }
   // Any command of a founded kingdom marks its ruler as present.
   // How things stand is kept with it, for the report shown when the ruler comes back after a while.
-  if (next?.state) next = { ...next, state: { ...next.state, lastSeenAt: now, seen: game.seenSnapshot(next.state as Kingdom, now), lobbyKey: game.lobbyKeyOf(lobby) } }
+  // A real command marks the ruler present; the open game's 'seen' only for a while after the last one (presenceAt).
+  if (next?.state) next = { ...next, state: { ...next.state, ...game.presenceAt(next.state as Kingdom, now, cmd.type !== 'seen'), seen: game.seenSnapshot(next.state as Kingdom, now), lobbyKey: game.lobbyKeyOf(lobby) } }
   // The lobby's ranking reads the score kept beside the state.
   if (next?.state) next = { ...next, score: game.scoreOf(next.state as Kingdom, now) }
 
@@ -1053,6 +1054,9 @@ Deno.serve(async (req) => {
         if (OWN.has(cmd.type)) row = await own(auth.user.id, lobby, cmd)
         else {
           result = await act(auth.user.id, lobby, cmd)
+          // Commands that reach out (envoys, spies, armies, games) mark the ruler present too.
+          const { data: mine } = await admin.from('kingdoms').select('id, state').eq('lobby_id', lobby).eq('user_id', auth.user.id).maybeSingle()
+          if (mine?.state) await mutateKingdom(mine.id, Date.now(), (k) => ({ ...k, ...game.presenceAt(k, Date.now(), true) })).catch(() => null)
           const { data } = await admin.from('kingdoms').select('*').eq('lobby_id', lobby).eq('user_id', auth.user.id).single()
           row = data as Row
         }

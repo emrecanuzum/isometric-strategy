@@ -158,13 +158,24 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
   }
   if (order.kind === 'split') {
     const part = Math.floor(order.soldiers)
+    if (army.status === 'battle') return 'army'
     if (part < 1 || part >= army.soldiers) return 'soldiers'
     const { count } = await admin.from('armies').select('id', { count: 'exact', head: true }).eq('kingdom_id', army.kingdom_id)
     if ((count ?? 0) >= game.balance.military.maxArmies) return 'armies'
     // Both halves stop where the order found them; each kind is split in proportion.
     const still = standing(now.here, at, now.morale, now.familiarity)
     const { taken, left } = game.takeShare(unitsOf(army), part)
-    await admin.from('armies').update({ ...still, soldiers: army.soldiers - part, units: left, goal: { kind: 'move' } }).eq('id', army.id)
+    // Only from the army as it was read: two splits at once (or a loss written meanwhile) cannot both take the same
+    // soldiers out (they would be doubled).
+    const { data: cut } = await admin
+      .from('armies')
+      .update({ ...still, soldiers: army.soldiers - part, units: left, goal: { kind: 'move' } })
+      .eq('id', army.id)
+      .eq('soldiers', army.soldiers)
+      .neq('status', 'battle')
+      .select('id')
+      .maybeSingle()
+    if (!cut) return 'soldiers'
     await admin.from('armies').insert({ ...still, lobby_id: army.lobby_id, kingdom_id: army.kingdom_id, soldiers: part, units: taken, goal: { kind: 'move' } })
     return null
   }
@@ -177,11 +188,23 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
     const soldiers = army.soldiers + other.soldiers
     const morale = (now.morale * army.soldiers + there.morale * other.soldiers) / soldiers
     const familiarity = (now.familiarity * army.soldiers + there.familiarity * other.soldiers) / soldiers
-    await admin
+    // The merging army goes first, as it was read; then the other takes its soldiers, as it was read (or the merging
+    // one is put back). Two merges at once, or a merge and a loss, never lose or double soldiers.
+    const { data: gone } = await admin.from('armies').delete().eq('id', army.id).eq('soldiers', army.soldiers).neq('status', 'battle').select('*').maybeSingle()
+    if (!gone) return 'army'
+    const { data: joined } = await admin
       .from('armies')
       .update({ ...standing(there.here, at, morale, familiarity), soldiers, units: game.addUnits(unitsOf(army), unitsOf(other)), goal: { kind: 'move' } })
       .eq('id', other.id)
-    await admin.from('armies').delete().eq('id', army.id)
+      .eq('soldiers', other.soldiers)
+      .neq('status', 'battle')
+      .select('id')
+      .maybeSingle()
+    if (!joined) {
+      const { id: _id, ...back } = gone as ArmyRow
+      await admin.from('armies').insert(back)
+      return 'army'
+    }
     return null
   }
   return 'order'
@@ -200,4 +223,29 @@ export async function raiseArmy(row: Row, units: Record<string, number>, at: num
   const soldiers = game.countOf(units)
   if (soldiers < 1 || !game.hasUnits(game.garrisonOf(state), units)) refuse('soldiers')
   return { lobby_id: row.lobby_id, kingdom_id: row.id, soldiers, units, ...standing(door!, at, game.balance.military.morale.start, 100), goal: { kind: 'move' } }
+}
+
+// Takes `lost` soldiers off an army as it stands now (read fresh, written only if unchanged, a few tries), so a loss
+// written while the army was split or merged is neither undone nor doubled. Returns what is left (0: the army is gone).
+export async function loseSoldiers(id: number, lost: number): Promise<number> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { data } = await admin.from('armies').select('*').eq('id', id).maybeSingle()
+    const army = data as ArmyRow | null
+    if (!army) return 0
+    const left = army.soldiers - lost
+    if (left <= 0) {
+      const { data: gone } = await admin.from('armies').delete().eq('id', id).eq('soldiers', army.soldiers).select('id').maybeSingle()
+      if (gone) return 0
+      continue
+    }
+    const { data: written } = await admin
+      .from('armies')
+      .update({ soldiers: left, units: game.takeShare(unitsOf(army), lost).left })
+      .eq('id', id)
+      .eq('soldiers', army.soldiers)
+      .select('id')
+      .maybeSingle()
+    if (written) return left
+  }
+  return -1
 }

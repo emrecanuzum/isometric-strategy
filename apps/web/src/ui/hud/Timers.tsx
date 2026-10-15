@@ -43,6 +43,8 @@ function timersOf(kingdom: Kingdom, online: Online | undefined, now: number): Ti
     const unit = t.unit ?? 'spear'
     out.push({ key: `t:${t.doneAt}`, icon: 'people', label: `${t.count} ${UNIT_NAMES[unit].toLowerCase()}`, start: t.doneAt - t.count * unitSpec(unit).trainSeconds * 1000, end: t.doneAt })
   }
+  // Caravans taking a crown its order (CLAUDE.md §7.8).
+  for (const t of kingdom.orderTrips ?? []) out.push({ key: `o:${t.crown}:${t.leftAt}`, icon: 'scroll', label: 'Taç siparişi kervanı', start: t.leftAt, end: t.arriveAt })
   // Ships on the slipways and fleets at sea (CLAUDE.md §8.5).
   const SHIP = { galley: 'kadırga', cog: 'koka', corsair: 'çektiri' } as const
   for (const b of kingdom.navy?.building ?? []) {

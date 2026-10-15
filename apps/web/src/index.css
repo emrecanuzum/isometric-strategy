@@ -2212,16 +2212,24 @@ small {
 /* Standing trouble (a town with no gate, buildings walled off…) on the right edge, between the top bar and the map
    buttons. */
 .map-alerts {
+  /* Under the top bar, left of the map buttons, stacked one under another; scrolls within itself when there are many
+     (it never covers the buttons or the minimap). */
   position: fixed;
-  right: var(--gap);
-  top: 50%;
-  transform: translateY(-60%);
+  right: calc(var(--gap) + 52px);
+  top: 96px;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: stretch;
   gap: calc(var(--px) * 4);
-  max-width: min(280px, calc(100vw - 2 * var(--gap) - 56px));
+  width: min(280px, calc(100vw - 2 * var(--gap) - 56px));
+  max-height: calc(100dvh - 96px - 200px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   z-index: 3;
+}
+.map-alerts > * {
+  flex: none;
 }
 
 .map-alert {
@@ -4759,4 +4767,88 @@ input:not([type='range']):focus-visible {
 
 .prison-whisper {
   font-style: italic;
+}
+
+/* Crown orders (CLAUDE.md §7.8): one card per crown, the send button on its own row so it never squeezes the text. */
+.order-cards,
+.order-trips {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.order-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: calc(var(--px) * 2) calc(var(--px) * 4);
+  align-items: start;
+  padding: calc(var(--px) * 4);
+  background: var(--panel-2, rgba(0, 0, 0, 0.18));
+  border: var(--px) solid var(--line, rgba(255, 255, 255, 0.08));
+}
+.order-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 1);
+  min-width: 0;
+}
+.order-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 2) calc(var(--px) * 6);
+  color: var(--muted);
+}
+.order-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+}
+.order-send {
+  grid-column: 1 / -1;
+  width: 100%;
+  white-space: normal;
+}
+.order-trips {
+  margin-top: calc(var(--px) * 4);
+}
+.order-trips li {
+  display: grid;
+  grid-template-columns: auto 1fr minmax(60px, 30%) 5ch;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+}
+.order-trips small {
+  text-align: right;
+  color: var(--muted);
+}
+
+/* "Üretim ağı tıkandı" in a building's menu (CLAUDE.md §6.4). */
+.clog-box {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 3);
+  margin: calc(var(--px) * 4) 0;
+  padding: calc(var(--px) * 5);
+  background: #3a1610;
+  border: var(--px) solid #a83a2a;
+  color: #ffe2dc;
+}
+.clog-box header {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+  color: #ffd27a;
+}
+.clog-box p,
+.clog-box ul {
+  margin: 0;
+}
+.clog-box ul {
+  padding-left: 1.2em;
+  color: #f2c9b8;
+}
+.armory .slot.full {
+  outline: var(--px) solid #a83a2a;
 }

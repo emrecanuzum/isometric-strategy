@@ -98,9 +98,12 @@ async function strike(lobby: string, row: Row, f: Fleet, target: Row | undefined
 
   // What the raiders take is worked out from the target's stores at the moment they are robbed.
   let loot: Record<string, number> = {}
+  let lateBlockade = false
   await mutateKingdom(target.id, now, (k) => {
     let next = game.takeHomeLosses(k, fight.defenderLoss)
-    if (won && m.kind === 'blockade') next = { ...next, blockade: { by: row.id, name: row.name ?? '?', color: row.color ?? undefined, fleet: f.id, since: at } }
+    // Another lord's fleet got there first: the dock is already shut, this fleet only fought its way in.
+    if (won && m.kind === 'blockade' && next.blockade && next.blockade.by !== row.id) lateBlockade = true
+    else if (won && m.kind === 'blockade') next = { ...next, blockade: { by: row.id, name: row.name ?? '?', color: row.color ?? undefined, fleet: f.id, since: at } }
     loot = {}
     if (raiding) {
       loot = game.raidLoot(next.stock, game.subShips(f.ships, fight.attackerLoss)) as Record<string, number>
@@ -110,6 +113,14 @@ async function strike(lobby: string, row: Row, f: Fleet, target: Row | undefined
     }
     return next
   })
+  if (lateBlockade) {
+    await mutateKingdom(row.id, now, (k) => {
+      const x = game.fleetOf(k, f.id)
+      if (!x || x.mission.kind !== 'blockade') return null
+      return game.recallFleet(k, f.id, now, back(k))
+    })
+    await notify(lobby, [row.id], 'fleet_turned', { target: m.name, kind: m.kind, why: 'taken' }, now)
+  }
   if (Object.keys(loot).length > 0) {
     // Aboard the raiders' fleet on its way home (if it still sails).
     await mutateKingdom(row.id, now, (k) => {
