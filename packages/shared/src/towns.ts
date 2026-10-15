@@ -37,10 +37,35 @@ export interface TownSiege {
   lost?: number
 }
 
-// What a kingdom holds, kept on its state for the round's sums: each town's id and what it sends.
+// What a kingdom holds, kept on its state for the round's sums: each town's id and what it sends, and how it stands
+// with its lord (CLAUDE.md §8.4). Towns taken before loyalty was kept lack the rest: they count as just taken.
 export interface HeldTown {
   id: number
   kind: TownKind
+  name?: string
+  // When it was taken (ms).
+  takenAt?: number
+  // 0..100: drifts toward what the upkeep paid (and the lord's people) make of it, round by round.
+  loyalty?: number
+  // The upkeep the lord pays it every round: an index into balance.towns.upkeep.goldPerRound.
+  upkeep?: number
+  // Whether the last round's upkeep was paid (not, when the treasury could not).
+  unpaid?: boolean
+  // All it has sent so far.
+  delivered?: Partial<Record<TownGood, number>>
+  // In revolt until then: it sends nothing.
+  revoltUntil?: number
+  // The revolt the server has told its lord of (its revoltUntil).
+  revoltTold?: number
+}
+
+export type TownGood = 'gold' | 'food' | 'materials' | 'arms' | 'villagers'
+
+// A town that broke free of its lord in a revolt: kept on the lord's state until the server sets it free.
+export interface LostTown {
+  id: number
+  name?: string
+  at: number
 }
 
 const NAME_HEADS = ['Ak', 'Kara', 'Gök', 'Sarı', 'Kızıl', 'Yeşil', 'Uzun', 'Eski', 'Yeni', 'Çam', 'Söğüt', 'Kavak', 'Taş', 'Değirmen', 'Kuyu', 'Bakır', 'Ceviz', 'Elma', 'Pınar', 'Kırk']
@@ -126,16 +151,126 @@ export function siteClearOfTowns(site: Point, towns: Pick<Town, 'x' | 'y'>[]) {
   return towns.every((p) => !(p.x < r.x + r.size + g && r.x < p.x + S + g && p.y < r.y + r.size + g && r.y < p.y + S + g))
 }
 
+// ---- Loyalty (CLAUDE.md §8.4) ----------------------------------------------------------------------------------------
+
+const T = () => balance.towns
+
+export const townLoyalty = (h: Pick<HeldTown, 'loyalty'>) => h.loyalty ?? T().loyalty.start
+export const townUpkeepLevel = (h: Pick<HeldTown, 'upkeep'>) => Math.max(0, Math.min(T().upkeep.goldPerRound.length - 1, h.upkeep ?? T().upkeep.default))
+// Gold the town's upkeep costs every round.
+export const townUpkeepGold = (h: Pick<HeldTown, 'upkeep'>) => T().upkeep.goldPerRound[townUpkeepLevel(h)]
+export const townRevolting = (h: Pick<HeldTown, 'revoltUntil'>, at: number) => (h.revoltUntil ?? 0) > at
+
+// What a town's loyalty does to what it sends: from yieldMin at 0 to yieldMax at 100 (×1 at 50); nothing in revolt.
+export function townFactor(h: Pick<HeldTown, 'loyalty' | 'revoltUntil'>, at: number) {
+  if (townRevolting(h, at)) return 0
+  const l = T().loyalty
+  return l.yieldMin + ((l.yieldMax - l.yieldMin) * townLoyalty(h)) / 100
+}
+
+// What one town sends in one round (before the idle penalty).
+export function townSends(h: HeldTown, at: number) {
+  const out = { gold: 0, food: 0, materials: 0, arms: 0, villagers: 0 }
+  const spec = T().kinds[h.kind] as { perRound?: number; villagers?: number }
+  const f = townFactor(h, at)
+  if (h.kind === 'people') out.villagers = Math.round((spec.villagers ?? 0) * f)
+  else out[h.kind] = (spec.perRound ?? 0) * f
+  return out
+}
+
 // What the held towns send in one round (before the idle penalty), and the villagers the "people" towns add.
-export function townYield(held: HeldTown[] | undefined) {
+export function townYield(held: HeldTown[] | undefined, at: number) {
   const out = { gold: 0, food: 0, materials: 0, arms: 0, villagers: 0 }
   for (const h of held ?? []) {
-    const spec = balance.towns.kinds[h.kind] as { perRound?: number; villagers?: number }
-    if (h.kind === 'people') out.villagers += spec.villagers ?? 0
-    else out[h.kind] += spec.perRound ?? 0
+    const s = townSends(h, at)
+    for (const k of Object.keys(out) as TownGood[]) out[k] += s[k]
   }
   return out
 }
+
+// What the lord's realm adds to every town's loyalty: a happy people and a ruler with a way with them.
+export interface TownMood {
+  happiness: number
+  // The ruler's people skill as mood points (dynastyEffects().happiness).
+  ruler: number
+}
+
+// Where a town's loyalty is heading: set by the upkeep paid (none when it was not), moved by the realm's mood.
+export function townLoyaltyTarget(h: HeldTown, mood: TownMood, paid = !h.unpaid) {
+  const l = T().loyalty
+  const level = paid ? townUpkeepLevel(h) : 0
+  const target = l.upkeepTargets[level] + (mood.happiness - 50) * l.happinessWeight + mood.ruler * l.rulerWeight
+  return Math.max(0, Math.min(100, target))
+}
+
+// One production round for the held towns at `at` (`roundMs` long): what they sent is added to their tally, loyalty
+// drifts toward its target, revolts start when it falls too low and end, at their end, with the town broken free if it
+// is lower still. `paid`: the towns whose upkeep was paid this round. `idle`: the absent lord's share.
+export function townsRound(held: HeldTown[], at: number, roundMs: number, paid: Set<number>, mood: TownMood, idle: number) {
+  const r = T().revolt
+  const step = 1 - Math.exp(-roundMs / (T().loyalty.tauSeconds * 1000))
+  const kept: HeldTown[] = []
+  const lost: LostTown[] = []
+  const events: ({ kind: 'townRevolt'; town: number; name?: string } | { kind: 'townFree'; town: number; name?: string })[] = []
+  for (const h0 of held) {
+    const h: HeldTown = { ...h0, delivered: { ...h0.delivered } }
+    const sends = townSends(h0, at)
+    for (const k of Object.keys(sends) as TownGood[]) {
+      // Villagers are not sent and spent: the tally keeps the most it ever housed.
+      if (k === 'villagers') h.delivered!.villagers = Math.max(h.delivered!.villagers ?? 0, sends.villagers)
+      else if (sends[k]) h.delivered![k] = (h.delivered![k] ?? 0) + sends[k] * idle
+    }
+    h.unpaid = !paid.has(h.id) && townUpkeepGold(h) > 0 ? true : undefined
+    const loyalty = townLoyalty(h)
+    h.loyalty = Math.round((loyalty + (townLoyaltyTarget(h, mood) - loyalty) * step) * 1000) / 1000
+    if (h.revoltUntil !== undefined && h.revoltUntil <= at) {
+      if (h.loyalty < r.breakAwayBelow) {
+        lost.push({ id: h.id, name: h.name, at: h.revoltUntil })
+        events.push({ kind: 'townFree', town: h.id, name: h.name })
+        continue
+      }
+      // Still too disloyal: the revolt goes on (the same revolt, told once).
+      if (h.loyalty < r.below) h.revoltUntil += r.seconds * 1000
+      else h.revoltUntil = undefined
+    }
+    if (h.revoltUntil === undefined && h.loyalty < r.below) {
+      h.revoltUntil = at + r.seconds * 1000
+      events.push({ kind: 'townRevolt', town: h.id, name: h.name })
+    }
+    kept.push(h)
+  }
+  return { towns: kept, lost, events }
+}
+
+// Which towns' upkeep the treasury can pay this round (in the order they are held), and the gold that takes.
+export function townUpkeep(held: HeldTown[] | undefined, gold: number) {
+  const paid = new Set<number>()
+  let cost = 0
+  for (const h of held ?? []) {
+    const g = townUpkeepGold(h)
+    if (g <= 0 || cost + g > gold) continue
+    cost += g
+    paid.add(h.id)
+  }
+  return { paid, cost }
+}
+
+// What a town adds to its lord's score (and so to the strength of the crown he is sworn to): more the more loyal it
+// is, half as much in revolt.
+export function townScore(h: HeldTown, at: number) {
+  const f = townFactor(h, at)
+  return T().score.perTown * (f > 0 ? f : T().loyalty.yieldMin / 2)
+}
+
+// A town as a lord's state keeps it when it is taken.
+export const heldTown = (town: Pick<Town, 'id' | 'kind' | 'name'>, at: number): HeldTown => ({
+  id: town.id,
+  kind: town.kind,
+  name: town.name,
+  takenAt: at,
+  loyalty: T().loyalty.start,
+  upkeep: T().upkeep.default,
+})
 
 // Some towns stand behind a wooden palisade (drawn from the lobby seed): weaker than a kingdom's stone walls, it makes
 // a siege last longer and costs the besiegers more soldiers.
@@ -188,3 +323,19 @@ export function townSiegeRounds(town: Pick<Town, 'id' | 'owner' | 'garrison'>, s
 // Rounds of the siege fought by `at` (0 before the first is over, all of them once it has ended).
 export const townRoundsDone = (siege: Pick<TownSiege, 'startedAt' | 'endsAt'>, at: number, count: number) =>
   at >= siege.endsAt ? count : Math.max(0, Math.min(count, Math.floor((at - siege.startedAt) / townRoundMs())))
+
+// The lord sets a town's upkeep (CLAUDE.md §8.4): one of balance.towns.upkeep.goldPerRound. Unchanged when the town is
+// not his or the level is not one.
+export function setTownUpkeep<K extends { towns?: HeldTown[] }>(kingdom: K, town: number, level: number): K {
+  if (!Number.isInteger(level) || level < 0 || level >= balance.towns.upkeep.goldPerRound.length) return kingdom
+  const held = kingdom.towns ?? []
+  const h = held.find((t) => t.id === town)
+  if (!h || townUpkeepLevel(h) === level) return kingdom
+  return { ...kingdom, towns: held.map((t) => (t.id === town ? { ...t, upkeep: level } : t)) }
+}
+
+// Spies stir a town up against its lord (CLAUDE.md §8.4, §9.7): its loyalty falls at once.
+export function inciteTown<K extends { towns?: HeldTown[] }>(kingdom: K, town: number): K {
+  const drop = balance.espionage.operations.townRevolt.loyalty
+  return { ...kingdom, towns: (kingdom.towns ?? []).map((t) => (t.id === town ? { ...t, loyalty: Math.max(0, townLoyalty(t) + drop) } : t)) }
+}

@@ -74,9 +74,9 @@ export function DynastySection({ kingdom, now, online }: { kingdom: Kingdom; now
   const council = !!d.council
   const young = council && d.king ? d.king : null
   const act = online?.act
-  // The lord may name (or rename) anyone of the living house.
-  const rename = (p: Person, always = false) =>
-    naming === p.id ? (
+  // A child is named once: until the lord names it, it bears the name drawn for it. The ruler and the lady keep theirs.
+  const nameOnce = (p: Person) =>
+    p.named ? null : naming === p.id ? (
       <NameField
         person={p}
         label="Ad"
@@ -86,11 +86,9 @@ export function DynastySection({ kingdom, now, online }: { kingdom: Kingdom; now
         }}
       />
     ) : (
-      (always || !p.named) && (
-        <button className="btn small" onClick={() => setNaming(p.id)}>
-          {p.named || always ? 'Adını değiştir' : 'Adını koy'}
-        </button>
-      )
+      <button className="btn small" onClick={() => setNaming(p.id)}>
+        Adını koy
+      </button>
     )
   return (
     <Section title="Hanedan" icon="crown" aside={`${d.generation}. kuşak`}>
@@ -114,7 +112,6 @@ export function DynastySection({ kingdom, now, online }: { kingdom: Kingdom; now
                   {years(d.king, now)} yaşında · {d.generation}. kuşak
                 </small>
                 <SkillBars skills={d.king.skills} />
-                {rename(d.king, true)}
               </div>
             </div>
           )
@@ -128,7 +125,6 @@ export function DynastySection({ kingdom, now, online }: { kingdom: Kingdom; now
                 {years(d.queen, now)} yaşında{kingdom.queenHeldBy ? ` · ${kingdom.queenHeldBy.name} elinde rehin` : ''}
               </small>
               <SkillBars skills={d.queen.skills} />
-              {rename(d.queen, true)}
             </div>
           </div>
         ) : (
@@ -166,7 +162,10 @@ export function DynastySection({ kingdom, now, online }: { kingdom: Kingdom; now
                     </small>
                     <SkillBars skills={c.skills} />
                     {canTeach && (
-                      <div className="row" role="radiogroup" aria-label="Eğitim">
+                      <small className={c.education ? 'education-note' : 'education-note todo'}>{c.education ? `Eğitimi: ${SKILL_NAMES[c.education]}` : 'Eğitim seçilmedi: hocalarına bir yetenek seç'}</small>
+                    )}
+                    {canTeach && (
+                      <div className="segmented three education" role="radiogroup" aria-label="Eğitim">
                         {SKILLS.map((s) => (
                           <button key={s} role="radio" aria-checked={c.education === s} className={c.education === s ? 'btn small active' : 'btn small'} onClick={() => act?.({ type: 'educate', id: c.id, focus: s })}>
                             {SKILL_NAMES[s]}
@@ -174,7 +173,7 @@ export function DynastySection({ kingdom, now, online }: { kingdom: Kingdom; now
                         ))}
                       </div>
                     )}
-                    {rename(c)}
+                    {nameOnce(c)}
                   </div>
                 </li>
               )
@@ -279,7 +278,7 @@ export function HouseDialog({ news, kingdom, now, online, onClose }: { news: Hou
   const role = news.kind === 'wedding' ? 'queen' : news.kind === 'death' || news.kind === 'coronation' ? 'king' : p.sex === 'm' ? 'prince' : 'princess'
   const text =
     news.kind === 'birth'
-      ? `Kraliçe ${kingdom.dynasty?.queen?.name ?? ''} bir ${p.sex === 'm' ? 'oğlan' : 'kız'} doğurdu! Halk sevinçle kutluyor. Ona bir ad koy; hükümdar yaşadıkça eğitimini Saray sekmesinden seçebilirsin.`
+      ? `Kraliçe ${kingdom.dynasty?.queen?.name ?? ''} bir ${p.sex === 'm' ? 'oğlan' : 'kız'} doğurdu! Halk sevinçle kutluyor. Ona bir ad koy; hükümdar yaşadıkça eğitimini Saray sekmesinin Hanedan bölümünden seçebilirsin.`
       : news.kind === 'death'
         ? `Hükümdar ${p.name}, ${Math.floor(ageOf(p, p.diedAt ?? now))} yaşında ${p.cause === 'grief' ? 'kaybedilen savaşın kahrından' : 'yaşlılıktan'} öldü. ${
             news.heir && !kingdom.dynasty?.council ? `Yerine oğlu ${news.heir.name} geçti.` : news.heir ? `Oğlu ${news.heir.name} reşit olana kadar naipler konseyi yönetecek.` : 'Oğlu olmadığı için lordluğu naipler konseyi yönetecek.'

@@ -50,6 +50,13 @@
       "seconds": 600,
       "workRate": 0.5
     },
+    "townRevolt": {
+      "minStrength": 40,
+      "cost": {
+        "gold": 120
+      },
+      "loyalty": -35
+    },
     "cooldownSeconds": 30,
     "networkCostShare": 1
   },

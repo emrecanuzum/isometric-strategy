@@ -299,11 +299,17 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
           .filter(([u]) => game.UNITS.includes(u))
           .map(([u, n]) => [u, whole(n, 0, 10000)]),
       )
-      next = changed(game.disbandUnits(need(), units))
+      const k = need()
+      const after = game.disbandUnits(k, units)
+      next = changed(after === k ? k : game.book(after, {}, { disband: (k.soldiers ?? 0) - (after.soldiers ?? 0) }))
       break
     }
     case 'nightShift':
       next = { state: game.setNightShift(need(), cmd.on === true) }
+      break
+    case 'townUpkeep':
+      // The upkeep paid a town held, for its loyalty (CLAUDE.md §8.4).
+      next = changed(game.setTownUpkeep(need(), Number(cmd.town), Number(cmd.level)))
       break
     case 'buy': {
       const units = whole(cmd.units, 1, game.balance.market.maxBuy)
@@ -332,6 +338,7 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       const k = need()
       const error = game.nameError(k, Number(cmd.id), String(cmd.name ?? ''))
       if (error) refuse(error)
+      // Only once: the ruler, the lady and a child the lord has named keep their names.
       next = changed(game.nameChild(k, Number(cmd.id), String(cmd.name)))
       break
     }
@@ -350,7 +357,21 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       if (!['villagers', 'army', 'none'].includes(choice)) refuse('rejected')
       const error = game.crisisError(k, String(cmd.key), choice, now)
       if (error) refuse(error === 'soldiers' ? 'soldiers' : 'rejected')
-      next = changed(game.answerCrisis(k, String(cmd.key), choice, now, (units: unknown, n: number) => game.takeShare(units, n).left, game.countOf))
+      const after = game.answerCrisis(k, String(cmd.key), choice, now, (units: unknown, n: number) => game.takeShare(units, n).left, game.countOf)
+      const fell = (k.soldiers ?? 0) - (after.soldiers ?? 0)
+      next = changed(fell > 0 ? game.book(after, {}, { crisis: fell }) : after)
+      break
+    }
+    case 'choose': {
+      // A fortune met one of its two ways (CLAUDE.md §9.8): the cost paid, the gain given, its effects while it lasts.
+      const k = need()
+      const choice = String(cmd.choice) as 'a' | 'b'
+      if (choice !== 'a' && choice !== 'b') refuse('rejected')
+      const error = game.dilemmaError(k, String(cmd.key), choice, now)
+      if (error) refuse(error === 'afford' ? 'cost' : 'rejected')
+      const after = game.answerDilemma(k, String(cmd.key), choice, now)
+      const found = Math.max(0, (after.stock.gold ?? 0) - (k.stock.gold ?? 0))
+      next = changed(found > 0 ? game.book(after, { other: found }) : after)
       break
     }
     case 'repairTrade':
@@ -374,7 +395,8 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       refuse('unknown')
   }
   // Any command of a founded kingdom marks its ruler as present.
-  if (next?.state) next = { ...next, state: { ...next.state, lastSeenAt: now, lobbyKey: game.lobbyKeyOf(lobby) } }
+  // How things stand is kept with it, for the report shown when the ruler comes back after a while.
+  if (next?.state) next = { ...next, state: { ...next.state, lastSeenAt: now, seen: game.seenSnapshot(next.state as Kingdom, now), lobbyKey: game.lobbyKeyOf(lobby) } }
   // The lobby's ranking reads the score kept beside the state.
   if (next?.state) next = { ...next, score: game.scoreOf(next.state as Kingdom, now) }
 
@@ -392,6 +414,15 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
   if (settled) await applySold(lobby, settled.sold, now)
   if (bought) await applySold(lobby, { [bought.good]: -bought.units }, now)
   return data as Row
+}
+
+// ---- Mini-game leaderboards (CLAUDE.md §6.5) --------------------------------------------------------------------------
+
+// A verified run on the boards, with the lord's name and colour as they are now (the player's and lobby's names are
+// stamped by the database). A failed write costs the player nothing else.
+async function recordScore(lobby: string, me: Row, which: string, score: number) {
+  const { error } = await admin.from('minigame_scores').insert({ lobby_id: lobby, kingdom_id: me.id, user_id: me.user_id, game: which, score, name: me.name, color: me.color })
+  if (error) console.error('minigame score', error)
 }
 
 // ---- Commands that reach out: envoys, pacts, spies, armies --------------------------------------------------------
@@ -523,7 +554,8 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       const { data: missions } = await admin.from('spy_missions').select('*').eq('owner_id', me.id).eq('target_id', target.id).is('ended_at', null)
       const speed = game.networkSpeed(me.state)
       const strength = game.bestStrength(missions ?? [], me.id, target.id, counter, now, speed)
-      const error = game.operationError(cmd.op, strength, game.advance(me.state, now).kingdom, theirs)
+      const town = cmd.op === 'townRevolt' ? Number(cmd.town) : undefined
+      const error = game.operationError(cmd.op, strength, game.advance(me.state, now).kingdom, theirs, town)
       if (error) refuse(error)
       const spec = game.operationSpec(cmd.op)
       // Paid, and the pause between operations kept, in the same write as the check (no double spending, no flood).
@@ -585,9 +617,13 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         await grantClaim(lobby, target.id, me.id, 'kidnap', now)
       } else if (cmd.op === 'revolt') {
         await mutateKingdom(target.id, now, (k) => ({ ...k, revoltUntil: now + o.revolt.seconds * 1000 }))
+      } else if (cmd.op === 'townRevolt') {
+        // The town's loyalty falls at once; low enough, it rises against its lord (see game.townsRound).
+        await mutateKingdom(target.id, now, (k) => game.inciteTown(k, town!))
       }
       await spend()
-      await notify(lobby, [target.id], 'operation_struck', { op: cmd.op, by: cmd.op === 'kidnap' ? me.name : null }, now)
+      const townName = cmd.op === 'townRevolt' ? ((await townsOf(lobby)).find((t) => t.id === town)?.name ?? null) : null
+      await notify(lobby, [target.id], 'operation_struck', { op: cmd.op, by: cmd.op === 'kidnap' ? me.name : null, ...(townName && { town: townName }) }, now)
       return { success: true }
     }
     case 'raid': {
@@ -621,7 +657,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         const units = game.takeShare(game.garrisonOf(k), lost).left
         const stock = { ...k.stock }
         if (loot) stock[loot.good] += loot.units
-        return { ...k, units, soldiers: game.countOf(units), stock }
+        return game.book({ ...k, units, soldiers: game.countOf(units), stock }, {}, { raid: lost })
       })
       await changeRelation(lobby, me.id, target.id, r.relation, now)
       await grantClaim(lobby, target.id, me.id, 'raid', now)
@@ -638,13 +674,13 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       if (pay) {
         await mutateKingdom(me.id, now, (k) => {
           if (k.stock.gold < visit!.amount) refuse('cost')
-          return { ...k, stock: { ...k.stock, gold: k.stock.gold - visit!.amount } }
+          return game.book({ ...k, stock: { ...k.stock, gold: k.stock.gold - visit!.amount } }, { crownPaid: visit!.amount })
         })
       }
       const { data: claimed } = await admin.from('patrol_visits').update({ status: pay ? 'paid' : 'refused' }).eq('id', visit!.id).eq('status', 'pending').select('id').maybeSingle()
       if (!claimed) {
         // Answered meanwhile (or run out): the gold goes back.
-        if (pay) await mutateKingdom(me.id, now, (k) => ({ ...k, stock: { ...k.stock, gold: k.stock.gold + visit!.amount } }))
+        if (pay) await mutateKingdom(me.id, now, (k) => game.book({ ...k, stock: { ...k.stock, gold: k.stock.gold + visit!.amount } }, { crownPaid: -visit!.amount }))
         refuse('none')
       }
       if (!pay) await refuseDemand(visit!, rows, now)
@@ -765,7 +801,57 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         return { ...k, stock, fishCast: null, fisherLog: game.logCast(k, entry) }
       })
       if (!fresh) refuse('none')
-      return entry
+      // A catch joins the fishing leaderboard (CLAUDE.md §6.5): the sooner caught, the higher.
+      const score = game.fishScore(caught, played.steps)
+      if (score > 0) await recordScore(lobby, me, 'fishing', score)
+      return { ...entry, score }
+    }
+    case 'play': {
+      // A mini-game begins (CLAUDE.md §6.5): the server draws the seed of its run and starts the pause before the next.
+      const which = cmd.game
+      if (!game.isArcadeGame(which)) return refuse('rejected')
+      const why = game.gameError(game.advance(me.state, now).kingdom, which, now)
+      if (why) refuse(why)
+      const seed = crypto.getRandomValues(new Uint32Array(1))[0] | 0
+      await mutateKingdom(me.id, now, (k) => {
+        if (game.gameReadyAt(k, which) > now) refuse('busy')
+        return { ...k, minigames: { ...k.minigames, [which]: { ...k.minigames?.[which], lastAt: now, run: { seed, at: now } } } }
+      })
+      return { seed }
+    }
+    case 'played': {
+      // The run played out: the server plays it again from its seed and the player's presses; the score it gets is
+      // what counts, for the reward and the leaderboard.
+      const which = cmd.game
+      if (!game.isArcadeGame(which)) return refuse('rejected')
+      const run = me.state.minigames?.[which]?.run as { seed: number; at: number } | null | undefined
+      if (!run || now - run.at > game.balance.minigames.runTimeoutSeconds * 1000) refuse('none')
+      if (!game.validToggles(cmd.toggles)) refuse('rejected')
+      const played = game.replayGame(which, run!.seed, cmd.toggles)
+      // Over sooner than it can be played: not counted.
+      const score = game.playedInTime(run!.at, played.steps, now) ? played.score : 0
+      const reward = game.gameReward(which, score)
+      let fresh = true
+      let best = 0
+      await mutateKingdom(me.id, now, (k) => {
+        const mine = k.minigames?.[which]
+        // Settled once only, even if two answers for the same run arrive together.
+        if (mine?.run?.seed !== run!.seed) {
+          fresh = false
+          return null
+        }
+        const stock = { ...k.stock }
+        const caps: Record<string, number> = { gold: game.goldCap(k, now) }
+        for (const [r, v] of Object.entries(reward as Record<string, number>)) {
+          const cap = caps[r] ?? game.storageCap(k, now)
+          stock[r] = Math.max(stock[r], Math.min(cap, stock[r] + v))
+        }
+        best = Math.max(mine?.best ?? 0, score)
+        return { ...k, stock, minigames: { ...k.minigames, [which]: { ...mine, run: null, best } } }
+      })
+      if (!fresh) refuse('none')
+      if (score > 0) await recordScore(lobby, me, which, score)
+      return { score, reward, best }
     }
     case 'recall': {
       const { data: mission } = await admin.from('spy_missions').select('*').eq('id', cmd.mission).maybeSingle()
@@ -832,7 +918,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
   }
 }
 
-const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'seen', 'reset'])
+const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'townUpkeep', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'nameChild', 'educate', 'crisis', 'choose', 'seen', 'reset'])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

@@ -9,12 +9,14 @@ import {
   capOf,
   storageCap,
   goldCap,
+  tradeReserve,
   atFloor,
   crownAppetite,
   crownDemand,
   idleFactor,
   plannedHousing,
   palaceLevel,
+  ofAge,
   buildingCount,
   cutOff,
   imprisoned,
@@ -52,10 +54,11 @@ import {
 import { TradeShares } from './inns'
 import { CrownBanner, Fealty, TradeDestination } from './cities'
 import { cityInfo } from '../../game/cities'
-import type { BuildingKind, Good, Kingdom, Market, Plot, Point, Resource, Stock, TaxLevel, World } from '@game/shared'
+import type { BuildingKind, Good, Kingdom, Market, Plot, Point, Resource, Stock, TaxLevel, Town, World } from '@game/shared'
 import { useEffect, useRef, useState } from 'react'
 import { STRUCTURE_SPRITES, palaceIn } from '../../game/buildingSprites'
 import { Icon } from '../icons'
+import type { IconName } from '../icons'
 import { BUILDING_NAMES, BUILDING_NOTES, RESOURCE_ICONS, RESOURCE_NAMES, WEAPON_ICONS, WEAPON_NAMES } from '../names'
 import { CostList, GoodChoice, Missing } from '../panels'
 import type { Journal } from './journal'
@@ -93,6 +96,8 @@ export interface HudData {
   onImportantRead?(): void
   // The lobby: other kingdoms, diplomacy, spies, armies (absent before the lobby has loaded).
   online?: Online
+  // The lobby's towns and who holds them (CLAUDE.md §8.4).
+  towns?: Town[]
 }
 
 const center = (b: { x: number; y: number; size: number }): Point => ({ x: b.x + b.size / 2, y: b.y + b.size / 2 })
@@ -110,7 +115,9 @@ export function flows(kingdom: Kingdom, now: number, market?: Market | null) {
   // The merchant sells what the stores hold: a full load each trip, or less when the good runs short (then about what
   // is made of it each round).
   const good = kingdom.trade.good
-  const sold = good && !walledIn && !kingdom.trade.damaged ? Math.min(tradeLoad(kingdom) * trips, Math.floor(kingdom.stock[good]) + Math.max(0, round[good] ?? 0)) : 0
+  // A full treasury keeps the merchant home (economy.ts, advance).
+  const full = goldCap(kingdom, now) - kingdom.stock.gold < 1
+  const sold = good && !walledIn && !kingdom.trade.damaged && !full ? Math.max(0, Math.min(tradeLoad(kingdom) * trips, Math.floor(kingdom.stock[good] - tradeReserve(kingdom, good, now)) + Math.max(0, round[good] ?? 0))) : 0
   const bonus = 1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade
   // At the lobby's price as it stands (or the free city's), and less for a ruler long away, as the merchant is paid.
   const tradeGold = good ? sold * tradePrice(kingdom, good, market, now) * bonus * idleFactor(kingdom, now) : 0
@@ -531,6 +538,11 @@ function TradePost(data: HudData) {
           <Icon name="warn" size={16} /> Tüccar surların içinde kaldı: saraydan ticaret noktasına yol yok. Sura bir kapı yap.
         </p>
       )}
+      {trade.good && goldCap(kingdom, now) - kingdom.stock.gold < 1 && (
+        <p className="alert">
+          <Icon name="gold" size={16} /> Hazine dolu: tüccar mal götürmüyor, bekliyor. Haraç, harcama ya da yeni bir hazine yer açınca yeniden satmaya başlar.
+        </p>
+      )}
       {trade.good && <TradeAmount {...data} />}
       {trade.good && (
         <Section title="Tüccar yolda" icon="time" aside={`${Math.max(0, Math.ceil((tripMs - (now - trade.departedAt)) / 1000))} sn`}>
@@ -558,6 +570,43 @@ function TradePost(data: HudData) {
 const describe = (plot: Plot | null | undefined) =>
   !plot ? 'yok' : plot.granted ? `hudut dışında, ${plot.distance} karo` : 'hudut içinde'
 
+// The palace tab in three parts, the one last looked at remembered (in this browser).
+type PalacePart = 'level' | 'house' | 'buildings'
+const PALACE_PARTS: { id: PalacePart; name: string; icon: IconName }[] = [
+  { id: 'level', name: 'Seviye', icon: 'home' },
+  { id: 'house', name: 'Hanedan', icon: 'crown' },
+  { id: 'buildings', name: 'Yapılar', icon: 'build' },
+]
+const PALACE_PART_KEY = 'palace:part'
+const PALACE_PART_EVENT = 'palace-part'
+
+// Opens the palace tab at a part next time (or now, if it is open): for whatever sends the player there.
+export function showPalacePart(part: PalacePart) {
+  try {
+    localStorage.setItem(PALACE_PART_KEY, part)
+  } catch {
+    // Not remembered: the tab opens where it did.
+  }
+  window.dispatchEvent(new CustomEvent(PALACE_PART_EVENT, { detail: part }))
+}
+
+function usePalacePart(): [PalacePart, (part: PalacePart) => void] {
+  const [part, setPart] = useState<PalacePart>(() => {
+    try {
+      const saved = localStorage.getItem(PALACE_PART_KEY)
+      return PALACE_PARTS.some((p) => p.id === saved) ? (saved as PalacePart) : 'level'
+    } catch {
+      return 'level'
+    }
+  })
+  useEffect(() => {
+    const on = (e: Event) => setPart((e as CustomEvent<PalacePart>).detail)
+    window.addEventListener(PALACE_PART_EVENT, on)
+    return () => window.removeEventListener(PALACE_PART_EVENT, on)
+  }, [])
+  return [part, showPalacePart]
+}
+
 export function KingdomTab(data: HudData) {
   const { kingdom, now, stage, plots, confirmReset, onUpgradeBuilding, onMute, onReset, onExit, onShow } = data
   const palace = kingdom.buildings.find((b) => b.kind === 'palace')
@@ -574,80 +623,98 @@ export function KingdomTab(data: HudData) {
       : describe(plots?.dock)
   const counts = new Map<BuildingKind, number>()
   for (const b of kingdom.buildings) if (b.doneAt <= now) counts.set(b.kind, (counts.get(b.kind) ?? 0) + 1)
+  const [part, setPart] = usePalacePart()
+  const d = kingdom.dynasty
+  // The house waits on the lord: a young child still to be named, or one with no upbringing chosen.
+  const houseWaits = !!d && d.children.some((c) => !ofAge(c, now) && (!c.named || (!d.council && !c.education)))
   return (
     <>
-      <div className="feature">
-        <SpriteView sprite={thumb('palace', kingdom.color)} scale={0.5} />
-        <div>
-          <b>Saray</b>
-          <p className="hint">{palace ? 'Lordluğun kalbi. Lord ve kraliçe burada yaşar.' : 'Sarayın henüz yerleştirilmedi.'}</p>
-          {palace && (
-            <button className="btn small" onClick={() => onShow(center(palace))}>
-              <Icon name="home" size={16} /> Saraya git
-            </button>
-          )}
-        </div>
+      <div className="palace-tabs" role="tablist" aria-label="Saray">
+        {PALACE_PARTS.map((p) => (
+          <button key={p.id} className="btn small" role="tab" aria-selected={part === p.id} aria-pressed={part === p.id} onClick={() => setPart(p.id)}>
+            <Icon name={p.icon} size={16} /> {p.name}
+            {p.id === 'house' && houseWaits && <span className="dot" aria-label="Bekleyen karar" />}
+          </button>
+        ))}
       </div>
-      <Fealty world={data.world} kingdom={kingdom} now={data.now} onSwear={(city) => data.online?.act({ type: 'swear', city })} onOpen={(city) => data.online?.openCrown(city)} />
-      <DynastySection kingdom={kingdom} now={data.now} online={data.online} />
-      <Section title="Yapılar" icon="build" aside={`${kingdom.buildings.length} toplam`}>
-        <ul className="tally">
-          {[...counts].map(([kind, n]) => (
-            <li key={kind}>
-              <SpriteView sprite={thumb(kind, kingdom.color)} scale={kind === 'house' ? 0.5 : 0.25} label={BUILDING_NAMES[kind]} />
-              <span>{BUILDING_NAMES[kind]}</span>
-              <b className={capOf(kingdom, kind, now) !== null && n >= capOf(kingdom, kind, now)! ? 'down' : undefined}>
-                {n}
-                {capOf(kingdom, kind, now) !== null ? ` / ${capOf(kingdom, kind, now)}` : kind === 'house' ? ` · ${plannedHousing(kingdom)} / ${population(kingdom, now).cap} barınak` : ''}
-              </b>
-            </li>
-          ))}
-        </ul>
-      </Section>
-      <Section title="Hudut" icon="pin" aside={`${size}×${size} parsel`}>
-        <ol className="stages-track" aria-label="Hudut aşamaları">
-          {balance.territory.stageParcels.map((parcels, i) => (
-            <li key={parcels} className={i === stage ? 'now' : i < stage ? 'past' : ''} aria-current={i === stage ? 'step' : undefined}>
-              <b>
-                {parcels}×{parcels}
-              </b>
-              <small>Saray Sv. {i + 1}</small>
-            </li>
-          ))}
-        </ol>
-        {palace && nextSize ? (
-          <>
-            <p className="hint">
-              Hudut sarayla büyür. Sarayı {(palace.level ?? 1) + 1}. seviyeye yükseltince hudut {nextSize}×{nextSize} parsel olur.
-            </p>
-            {palace.doneAt > now ? (
-              <p className="hint up">Saray yükseltiliyor: {Math.ceil((palace.doneAt - now) / 1000)} sn</p>
-            ) : (
+      {part === 'level' && (
+        <>
+          <div className="feature">
+            <SpriteView sprite={thumb('palace', kingdom.color)} scale={0.5} />
+            <div>
+              <b>Saray</b>
+              <p className="hint">{palace ? 'Lordluğun kalbi. Lord ve kraliçe burada yaşar.' : 'Sarayın henüz yerleştirilmedi.'}</p>
+              {palace && (
+                <button className="btn small" onClick={() => onShow(center(palace))}>
+                  <Icon name="home" size={16} /> Saraya git
+                </button>
+              )}
+            </div>
+          </div>
+          <Section title="Hudut" icon="pin" aside={`${size}×${size} parsel`}>
+            <ol className="stages-track" aria-label="Hudut aşamaları">
+              {balance.territory.stageParcels.map((parcels, i) => (
+                <li key={parcels} className={i === stage ? 'now' : i < stage ? 'past' : ''} aria-current={i === stage ? 'step' : undefined}>
+                  <b>
+                    {parcels}×{parcels}
+                  </b>
+                  <small>Saray Sv. {i + 1}</small>
+                </li>
+              ))}
+            </ol>
+            {palace && nextSize ? (
               <>
-              <button className="btn wide" disabled={upgradeError(kingdom, palace.id, now) !== null} onClick={() => onUpgradeBuilding(palace.id)}>
-                <span>Sarayı yükselt <small>({upgradeSpec(palace)?.buildSeconds} sn)</small></span>
-                <CostList cost={upgradeSpec(palace)?.cost} stock={kingdom.stock} />
-              </button>
-              <Missing cost={upgradeSpec(palace)?.cost} stock={kingdom.stock} />
-              {upgradeError(kingdom, palace.id, now) === 'liege' && <p className="hint down">Önce yukarıdaki Bağlılık bölümünden bir taç krallığına biat et.</p>}
+                <p className="hint">
+                  Hudut sarayla büyür. Sarayı {(palace.level ?? 1) + 1}. seviyeye yükseltince hudut {nextSize}×{nextSize} parsel olur.
+                </p>
+                {palace.doneAt > now ? (
+                  <p className="hint up">Saray yükseltiliyor: {Math.ceil((palace.doneAt - now) / 1000)} sn</p>
+                ) : (
+                  <>
+                  <button className="btn wide" disabled={upgradeError(kingdom, palace.id, now) !== null} onClick={() => onUpgradeBuilding(palace.id)}>
+                    <span>Sarayı yükselt <small>({upgradeSpec(palace)?.buildSeconds} sn)</small></span>
+                    <CostList cost={upgradeSpec(palace)?.cost} stock={kingdom.stock} />
+                  </button>
+                  <Missing cost={upgradeSpec(palace)?.cost} stock={kingdom.stock} />
+                  {upgradeError(kingdom, palace.id, now) === 'liege' && <p className="hint down">Önce aşağıdaki Bağlılık bölümünden bir taç krallığına biat et.</p>}
+                  </>
+                )}
               </>
+            ) : (
+              palace && <p className="hint">Hudut en geniş hâlinde.</p>
             )}
-          </>
-        ) : (
-          palace && <p className="hint">Hudut en geniş hâlinde.</p>
-        )}
-        <Stat label="İskele" value={dockState} />
-        {dock ? (
-          <button className="btn small" onClick={() => onShow(center(dock))}>
-            <Icon name="pin" size={16} /> İskeleye git
-          </button>
-        ) : kingdom.dockPlot ? (
-          <button className="btn small" onClick={() => onShow(center(kingdom.dockPlot!))}>
-            <Icon name="pin" size={16} /> Arsayı göster
-          </button>
-        ) : null}
-        <p className="hint">Hudut başarımlarla büyüyecek; şimdilik yalnızca görünüm için seçilebilir.</p>
-      </Section>
+            <Stat label="İskele" value={dockState} />
+            {dock ? (
+              <button className="btn small" onClick={() => onShow(center(dock))}>
+                <Icon name="pin" size={16} /> İskeleye git
+              </button>
+            ) : kingdom.dockPlot ? (
+              <button className="btn small" onClick={() => onShow(center(kingdom.dockPlot!))}>
+                <Icon name="pin" size={16} /> Arsayı göster
+              </button>
+            ) : null}
+            <p className="hint">Hudut başarımlarla büyüyecek; şimdilik yalnızca görünüm için seçilebilir.</p>
+          </Section>
+          <Fealty world={data.world} kingdom={kingdom} now={data.now} onSwear={(city) => data.online?.act({ type: 'swear', city })} onOpen={(city) => data.online?.openCrown(city)} />
+        </>
+      )}
+      {part === 'house' && <DynastySection kingdom={kingdom} now={data.now} online={data.online} />}
+      {part === 'buildings' && (
+        <Section title="Yapılar" icon="build" aside={`${kingdom.buildings.length} toplam`}>
+          <ul className="tally">
+            {[...counts].map(([kind, n]) => (
+              <li key={kind}>
+                <SpriteView sprite={thumb(kind, kingdom.color)} scale={kind === 'house' ? 0.5 : 0.25} label={BUILDING_NAMES[kind]} />
+                <span>{BUILDING_NAMES[kind]}</span>
+                <b className={capOf(kingdom, kind, now) !== null && n >= capOf(kingdom, kind, now)! ? 'down' : undefined}>
+                  {n}
+                  {capOf(kingdom, kind, now) !== null ? ` / ${capOf(kingdom, kind, now)}` : kind === 'house' ? ` · ${plannedHousing(kingdom)} / ${population(kingdom, now).cap} barınak` : ''}
+                </b>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
       <Section title="Ayarlar" icon="music">
         <div className="row">
           <button className="btn small" onClick={onMute}>

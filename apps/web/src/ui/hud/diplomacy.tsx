@@ -59,12 +59,14 @@ export const OPERATION_NAMES: Record<Operation, string> = {
   delay: 'İnşaatları geciktir',
   kidnap: 'Kraliçeyi kaçır',
   revolt: 'İsyan kışkırt',
+  townRevolt: 'Kasabada isyan kışkırt',
 }
 const OPERATION_NOTES: Record<Operation, string> = {
   burn: 'Yemek ve yapı malzemesinin dörtte biri yanar',
   delay: 'Süren inşaatlar uzar',
   kidnap: 'Kraliçe senin elinde kalır; halkı yasa boğulur, fidye ister',
   revolt: 'On dakika üretimi yarıya iner, halk huzursuzlanır',
+  townRevolt: `Seçtiğin kasabasının sadakati ${-balance.espionage.operations.townRevolt.loyalty} düşer; çok düşerse kasaba ayaklanır, sonunda kopar`,
 }
 export const CLAIM_NAMES: Record<string, string> = {
   spy: 'casus yakalandı',
@@ -256,6 +258,10 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
   const [terms, setTerms] = useState<PeaceTerms['kind']>('white')
   const [termsGold, setTermsGold] = useState(100)
   const [outcome, setOutcome] = useState<string | null>(null)
+  // The town to stir up (townRevolt): one of the target's.
+  const theirTowns = (data.towns ?? []).filter((t) => t.owner === target.id)
+  const [townPick, setTownPick] = useState<number | null>(null)
+  const picked = theirTowns.find((t) => t.id === townPick) ?? theirTowns[0] ?? null
   const me = online.me
   const bond = relationTermsIn(online, me, target.id)
   const relation = relationBetween(online.relations, me, target.id, now, bond)
@@ -601,17 +607,29 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
           {OPERATIONS.map((op) => {
             const spec = operationSpec(op)
             const noPrison = op === 'kidnap' && !kingdom.buildings.some((b) => b.kind === 'prison' && b.doneAt <= now)
-            const blocked = !intel || best < spec.minStrength || (op === 'kidnap' && !target.queen) || noPrison || kingdom.stock.gold < (spec.cost.gold ?? 0)
+            const noTown = op === 'townRevolt' && !picked
+            const blocked = !intel || best < spec.minStrength || (op === 'kidnap' && !target.queen) || noPrison || noTown || kingdom.stock.gold < (spec.cost.gold ?? 0)
             return (
               <li key={op}>
-                <Icon name={op === 'kidnap' ? 'crown' : op === 'revolt' ? 'unhappy' : 'warn'} size={24} />
+                <Icon name={op === 'kidnap' ? 'crown' : op === 'revolt' || op === 'townRevolt' ? 'unhappy' : 'warn'} size={24} />
                 <span>
                   <b>{OPERATION_NAMES[op]}</b>
                   <small>
                     {OPERATION_NOTES[op]} · ağ %{spec.minStrength} ister, ağdan {Math.round(operationNetworkCost(op))} puan harcar · {spec.cost.gold} altın
                     {op === 'kidnap' && !target.queen ? ' · kraliçeleri yok' : ''}
                     {noPrison ? ' · önce hapishane kur' : ''}
+                    {noTown ? ' · elinde kasaba yok' : ''}
                   </small>
+                  {op === 'townRevolt' && theirTowns.length > 1 && (
+                    <select value={picked?.id} onChange={(e) => setTownPick(Number(e.target.value))} aria-label="Kışkırtılacak kasaba">
+                      {theirTowns.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {op === 'townRevolt' && theirTowns.length === 1 && <small>Kasaba: {picked!.name}</small>}
                   <small className={intel?.chances && best >= spec.minStrength ? (intel.chances[op] >= 50 ? 'up' : 'down') : undefined}>
                     {!intel ? 'Başarı şansı: önce raporu getir' : !intel.chances ? 'Başarı şansı: raporu yenile' : best < spec.minStrength ? `Başarı şansı: ağ %${spec.minStrength} olunca` : `Başarı şansı ~%${intel.chances[op]}`}
                   </small>
@@ -620,7 +638,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                   className="btn small"
                   disabled={blocked}
                   onClick={() =>
-                    online.act<{ success: boolean }>({ type: 'operation', target: target.id, op }).then((r) => {
+                    online.act<{ success: boolean }>({ type: 'operation', target: target.id, op, ...(op === 'townRevolt' && picked && { town: picked.id }) }).then((r) => {
                       if (r) setOutcome(r.success ? `${OPERATION_NAMES[op]}: başarılı.` : `${OPERATION_NAMES[op]}: başarısız, casusun yakalandı.`)
                       online.loadIntel(target.id)
                     })

@@ -534,7 +534,13 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 - **Hazine sınırı:** Altının da sınırı vardır: saray seviyesiyle 1000 /
   2000 / 3500 / 5500 / 7000, ve 4. seviye sarayda açılan **Hazine** binası
   ekler (seviye 1/2/3: +4000 / +8000 / +14000; 4. seviyede bir, 5.de iki
-  hazine). Sığmayan altın boşa gider. Depo
+  hazine). Sığmayan altın boşa gider. **Hazine doluyken tüccar mal
+  götürmez**, evde bekler (mallar depoda kalır, lobi fiyatı düşmez); yer
+  azsa yalnızca hazineyi dolduracak kadar satar. Haraç, harcama ya da yeni
+  hazine yer açınca yeniden satmaya başlar (Ticaret sekmesinde "Hazine
+  dolu" uyarısı). Vergi gibi diğer gelirler dolu hazinede boşa gider. Tüccar yemek satarken
+  halkın ve askerin 30 turluk (5 dakikalık) yemeğini depoda bırakır, satış
+  krallığı aç bırakmaz (`trade.foodReserveRounds`). Depo
   ve hazine doluluğu Depo sekmesinde ve üst çubuğun kartlarında
   "stok / sınır" olarak görünür.
 - **Kuruluş:** Hazır şehir düzeni yoktur. Krallık kurulunca oyuncu önce
@@ -543,12 +549,12 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   **ücretsiz 1. seviye ticaret noktası** kurulur. Saray birkaç saray
   hizmetlisi (köylü) barındırır.
 - **Ticaret noktası:** Kurulduğu an oyuncu satılacak malı seçer (3
-  hammaddeden biri; sonradan değiştirilebilir). Tüccar her **10 saniyede**
+  hammaddeden biri; sonradan değiştirilebilir). Tüccar her **30 saniyede**
   seçilen maldan bir miktar götürüp satar ve altın getirir. Seviye
   yükseldikçe sefer başına satılan miktar artar. **Ticaret noktası saraydan
   uzaksa sefer uzar:** saray ile ticaret noktası arasındaki ilk 12 karo
-  10 saniyeye dahildir, ötesindeki her karo 0,07 sn ekler (ör. 100 karo ≈
-  16 sn, 250 karo ≈ 27 sn; `economy.json` → `trade.walkFreeTiles`, `walkSecondsPerTile`;
+  30 saniyeye dahildir, ötesindeki her karo 0,2 sn ekler (ör. 100 karo ≈
+  48 sn, 250 karo ≈ 78 sn; `economy.json` → `trade.walkFreeTiles`, `walkSecondsPerTile`;
   `lobbyTripMs`). Serbest şehre sefer ayrıca hesaplanır (§7.7).
   Tüccar haritada devesiyle saraydan ticaret noktasına yürür (uzaklık ne
   olursa olsun; seferi uzadığı için hızı aynı kalır, köprülerden geçer;
@@ -584,7 +590,7 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   (güneşten öteye kayar; `shadows.ts` → `setFootprint`).
 - **Esrarengiz balıkçı kulübesi** (3. seviye saray, bir tane, yalnızca
   hudut içindeki ya da iskele ekindeki bir **kıyı** karesine kurulur): kendi başına çok az yemek
-  ve nehre atılmış altınlardan çok az (tur başına 0,4) getirir. Tıklanınca
+  ve nehre atılmış altınlardan çok az (tur başına 0,1) getirir. Tıklanınca
   "Oltayı at" ile bir mini oyun açılır: dikey suda düzensiz kaçan bir balık;
   basılı tutunca yükselen, bırakınca düşen yeşil alanı balığın üstünde tutmak
   gerekir; balık alandayken çubuk dolar, dışındayken boşalır; 30 saniyede
@@ -739,7 +745,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 - **Yokluk cezası:** Oyuncunun son görülmesinden (her komut ve oyun
   açıkken birkaç dakikada bir) 1 saat sonra, geçen her saat binaların
   üretimi, vergi ve tüccarın altını %10 azalır (en az %20'ye kadar;
-  `economy.json` → `idle`). Diğer oyuncular Krallıklar sekmesinde
+  `economy.json` → `idle`). Yemek üretimi bundan etkilenmez: halk kendi
+  yiyeceğini yetiştirir, lord uzun süre yokken açlık çekmez. Diğer oyuncular Krallıklar sekmesinde
   "çevrimiçi / X önce görüldü" bilgisini görür.
 - **Duman:** Bacası olan her yapıdan (ev, atölye, oduncu, ticaret evi,
   iskele) hareketli duman yükselir.
@@ -793,6 +800,59 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   renginde), binanın adı ve seviyesi yazar. Yıkım/taşıma modunda
   vurgulanmaz. Yeni bir krallığın yeri, son aşamadaki hududu başka
   hudutlara `kingdomGapTiles` karodan yakın olmayacak şekilde seçilir.
+
+---
+
+### 6.5 Mini oyunlar ve sıralamaları (şu an uygulanan)
+
+Balıkçı kulübesinin oltasına ek olarak üç mini oyun daha vardır. Hepsi
+balık tutmayla aynı hile önleme düzenindedir: oyun başlarken sunucu bir
+tohum verir, oyun saniyede 60 sabit adımla oynanır, istemci yalnızca
+düğmeye basılıp bırakılan adımları gönderir; sunucu oyunu aynı tohum ve
+basışlarla yeniden oynar ve **puanı kendisi bulur**. Oyunun süresinden
+kısa sürede biten bir oyun 0 puan sayılır, adımlar tam sayı ve sıralı
+olmalıdır (en fazla 3000), bir oyunun sonucu bir kez kabul edilir ve 90
+saniye içinde gelmelidir. Oyunlar yalnızca toplama/çarpma kullanır
+(trigonometri yok), böylece her tarayıcı ve sunucu aynı sonucu bulur.
+Pencere hemen açılır; tohum gelene kadar "Hazırlanıyor…", sonuç gelene
+kadar "Puan hesaplanıyor…" yazar. Her oyun 10 dakikada bir oynanır (`cooldownSeconds` 600); ödüller
+küçüktür, oyuncu gelirine aktif oynayana küçük bir ek olur.
+Değerler `config/balance/minigames.json`, mantık
+`packages/shared/src/minigames.ts`, arayüz
+`apps/web/src/ui/hud/MiniGames.tsx`; sunucuda `play` (tohum) ve `played`
+(basışlar) komutları.
+
+- **Okçuluk** (kışla, atış meydanı): nişangâh saman hedefin üstünde
+  gezinir. Basılı tutunca yay gerilir, nişan 1,6 saniye sakinleşir (yavaş
+  kayar), sonra kol titremeye başlar; bırakınca ok çıkar (0,35 sn'den kısa
+  gerilen yay yalnızca indirilir). Her okun bir rüzgârı vardır (bayrak),
+  oku yana taşır: rüzgâra karşı nişan alınır. 6 ok, ok başına en çok 10
+  puan (ortadan her 2,5 pikselde bir eksik), en fazla 30 sn. Ödül: puanın
+  %40'ı altın (en fazla 20).
+- **Örs başında** (silah atölyesi): demircinin 24 işareti kızgın demirin
+  üstünde çekice doğru kayar; her biri çekicin altına geldiğinde basılır.
+  Tam zamanında 5, biraz kayık 3, daha uzak 1 puan; işaretsiz vuruş −1 ve
+  seriyi bozar, kaçırılan işaret de seriyi bozar. Seri her vuruşa
+  (seri / 4) ek puan katar. Ödül: puanın %10'u altın (en fazla 15) ve
+  %12'si savaş malzemesi (en fazla 25).
+- **Kervan yolu** (ticaret noktası): deve kayan yolda yürür; basılı tutunca
+  yukarı, bırakınca aşağı süzülür. Altın +3, ara sıra mücevher +10; kaya
+  −5 ve deve kısa bir süre tökezler. 25 sn. Ödül: puanın %25'i altın (en
+  fazla 25).
+- **Balık tutma** da puan verir: tutulan balık 50 + (kalan sürenin payı ×
+  50), kaçan balık 0. Ödülü eskisi gibidir (kese ya da şişe).
+- Ödüller hazine ve depo sınırını aşmaz. Her oyunun en iyi puanı krallık
+  durumunda (`minigames`) tutulur ve menüde "en iyin" diye yazar.
+- **Sıralamalar:** Doğrulanan her puan (0'dan büyükse) yalnızca sunucu
+  tarafından `minigame_scores` tablosuna yazılır (lord adı ve rengi, oyuncu
+  adı ve lobi adı o anki hâliyle). İstemci yalnızca `minigame_board`
+  fonksiyonuyla okur: **Bu sezon** (lobideki her lordun en iyi puanı, ilk
+  10, yalnızca lobi üyeleri) ve **Tüm zamanlar** (her oyuncunun bütün
+  lobilerdeki en iyi puanı, ilk 10; lobi silinse de kalır). Oyuncunun
+  kendi satırı vurgulanır, ilk 10'da değilse altta sırasıyla gösterilir.
+  Sıralamaya her oyunun menüsündeki "Sıralama" düğmesinden, oyun bitince
+  sonuç penceresinden ve sohbetin **Sıralama** sekmesindeki **Mini
+  oyunlar** bölümünden ulaşılır.
 
 ---
 
@@ -941,9 +1001,9 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   (`loadFactor`) götürür ve **lobinin o anki fiyatının %10 fazlasından**
   (`priceFactor` 1,1) satar; sabit fiyat yoktur, lobi fiyatı düşünce
   şehrin ödediği de düşer. Bu satış **lobi fiyatlarını düşürmez**. Ama
-  sefer her zaman lobi pazarınınkinden (10 sn) uzundur: 10 sn + ticaret
-  noktası ile şehir arasındaki her karo için 0,12 sn (ör. 200 karo ≈ 34
-  sn; hudutlar şehre 40 karodan yaklaşmadığı için en az ~15 sn). Şehir
+  sefer her zaman lobi pazarınınkinden (30 sn) uzundur: 30 sn + ticaret
+  noktası ile şehir arasındaki her karo için 0,36 sn (ör. 200 karo ≈ 102
+  sn; hudutlar şehre 40 karodan yaklaşmadığı için en az ~45 sn). Şehir
   yakınken ve lobide çok satılan bir malı fiyatı daha da düşürmeden
   satmak için kârlıdır. Hedef değiştirilince tüccar yeni sefere
   başlar; 2 dakika yeniden değiştirilemez (`trade.city`, `setTradeCity`;
@@ -1016,7 +1076,7 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   `packages/shared/src/patrols.ts`, sunucu `supabase/functions/_shared/patrols.ts`,
   `patrol_visits` tablosu): her taç krallığı başkentinden **tek, büyük bir
   devriye** çıkarır (`perCrown` = 1). Her 15 dakikalık turda devriye,
-  tohumdan seçilen bir **biat etmiş lordun** sarayına gider (turun %40'ı),
+  tohumdan seçilen **kendi lordlarından birinin** sarayına gider (turun %40'ı),
   orada biraz kalır (%15) ve geri döner.
   Devriye **ticaret yollarından** gider: başkentin surundaki bir yol ucundan
   (böylece iç ve dış surun kapılarından) çıkar, yol ağında lorda en yakın
@@ -1035,14 +1095,17 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   - **Kendi tacının devriyesi** lordun **eğlence merkezine** uğrar, içer,
     eğlenir ve **120 altın bahşiş** bırakır. Eğlence merkezi yoksa sarayın
     önüne gelip geçer, bahşiş bırakmaz.
-  - **Rakip tacın devriyesi** sarayın kapısına gelip **haraç ister**:
-    hazinenin %4'ü (en az 25, en fazla 250 altın); diyalog bunun hazinenin
-    yüzde kaçı olduğunu da yazar. Elçi diyaloğunda **"Öde"** ya da
-    **"Reddet"**. Reddedilirse o tacın bütün lordlarıyla ilişki **−8** düşer.
-    5 dakika içinde cevap verilmezse (oyuncu çevrimdışıysa da) devriye
-    haracı **zorla alır** (hazinede ne kadar varsa, en fazla istenen kadar);
-    ilişki düşmez.
-  - Biat etmemiş lordlara devriye gelmez.
+  - **Haraççılar** (haritada görünmez): Rakip taç, öbür taca bağlı her
+    lordun kapısına **30 dakikada bir** haraççı gönderir (`patrol.tribute`
+    → `everySeconds`); her lordun geliş anı tohumdan sabittir, aralık hep
+    30 dakikadır (`tributeVisitAt`). Haraççı **hazinenin sabit %5'ini**
+    ister (`share`; 7000 altında 350); ilişki ve güç bunu değiştirmez.
+    Elçi diyaloğunda **"Öde"** ya da **"Reddet"**. Reddedilirse o tacın
+    bütün lordlarıyla ilişki **−8** düşer. 5 dakika içinde cevap
+    verilmezse (oyuncu çevrimdışıysa da) haraç **zorla alınır** (hazinede
+    ne kadar varsa, en fazla istenen kadar); ilişki düşmez. Böylece dolu
+    hazine düzenli boşalır ve tüccar yeniden satar (§6.4).
+  - Biat etmemiş lordlara ne devriye ne haraççı gelir.
 - **Eğlence merkezi** (4. seviye saray, krallıkta bir tane; 1200 altın, 700
   yapı malzemesi, 120 sn): bayraklı, fenerli, küçük sahneli iki katlı bir
   salon. Bağlı olunan tacın devriyeleri buraya gelip bahşiş bırakır.
@@ -1056,8 +1119,7 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   zorla aldırmak (−5).
 - **Armağanlar:** Kendi tacının devriyesi her uğrayışta ilişki baremine
   göre armağan getirir: 30+ "Teşekkür sepeti", 60+ "Saray armağanı", 85+
-  "Hükümdarın lütfu" (altın ve mallar; `crown.gifts`). Rakip tacla ilişki
-  iyiyse istediği haraç azalır (+100'de %50 az; `tributeEase`).
+  "Hükümdarın lütfu" (altın ve mallar; `crown.gifts`).
 - **Taçların pazarı** (`crown.stewardship`): Her taç saatte bir değişen
   bir malın ticaretini yönetir (iki taç farklı mallar; lobi tohumu ve
   saatten). Lord o malı sattığında (lobi pazarında da şehirde de) fiyatı o
@@ -1066,8 +1128,7 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   fiyat yarıya iner (`stewardFactor`, `tradePrice`).
 - **Taçların gücü** (`crown.power`): Bir tacın gücü 400 + ona bağlı
   lordların puanlarının toplamıdır; lordları geliştikçe güçlenir. Güç payı
-  etkiler: kendi lordlarına bahşiş ve armağanlar ×0,7–1,3, rakip lordlardan
-  istenen haraç ×0,6–1,4 (eşit güçte ×1).
+  kendi lordlarına bahşiş ve armağanları ×0,7–1,3 etkiler (eşit güçte ×1).
 - **Taç paneli** (başkente tıklayınca): hükümdar, şehrin fiyatları,
   seninle ilişkisi (çubuk, dinlenme değeri, ilişkiyi değiştirenler ve
   armağan baremleri), **taçların gücü** (pasta grafik ve iki tacın lordları
@@ -1188,7 +1249,7 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
   oduncu, demirhane, tapınak), çevresinde evler, köşede gözcü kulesi, önünde
   bir patika. Adı üstünde yazar; sahibi varsa sahibinin renginde ve adıyla.
 - **Türler ve katkı** (tur başına, yokluk cezasına tabi): vergi kasabası
-  +7 altın, tarım +5 yemek, kereste +4 yapı malzemesi, demirci +3,5 savaş
+  +1,5 altın, tarım +5 yemek, kereste +4 yapı malzemesi, demirci +3,5 savaş
   malzemesi; kalabalık kasaba **+14 köylü** (nüfus sınırı ve barınak birlikte
   artar). Türler kasabalar arasında dağıtılır; her tür en az bir kez vardır.
 - **Kuşatma:** Kasabaya tıklayınca panel açılır; "Gönder" ile bir ordu
@@ -1218,7 +1279,37 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
 - Kuşatma başlarken, kalkarken, kasaba alınınca ya da dayanınca elçi iki
   tarafa da haber getirir. Krallığın elindeki kasabalar durumunda tutulur
   (`towns`), katkı her üretim turunda eklenir.
-- **İleride:** kasabaya asker yerleştirme, kasaba yükseltme, puan.
+- **Sadakat ve bakım** (`towns.json` → `loyalty`, `upkeep`, `revolt`, `score`;
+  mantık `packages/shared/src/towns.ts` → `townsRound`): elde tutulan her kasabanın
+  bir **sadakati** (0–100, alınınca 50) ve lordun seçtiği bir **bakımı** vardır:
+  **Yok / Az / Orta / Cömert** (tur başına 0 / 0,3 / 0,7 / 1,2 altın; yeni alınan
+  kasaba "Az" ile başlar). Bakım her üretim turunda hazineden ödenir; hazine
+  yetmezse ödenmez ve o tur bakım yokmuş sayılır. Sadakat her tur bir hedefe
+  doğru kayar (~30 dakikada yolun üçte ikisi): hedef bakımdan gelir (%15 / 45 /
+  65 / 85), lordun halkının mutluluğu (50'den her puan ±0,2) ve hükümdarın halk
+  yeteneği ekler ya da düşürür. Kasabanın katkısı sadakatle çarpılır (%0'da ×0,5,
+  %50'de ×1, %100'de ×1,5; kalabalık kasabanın köylüleri de).
+  - **Ayaklanma:** Sadakat **25'in altına** inince kasaba ayaklanır: 10 dakika
+    hiçbir şey göndermez (köylüleri de gider). Ayaklanma bittiğinde sadakat hâlâ
+    25'in altındaysa ayaklanma sürer; **12'nin altındaysa kasaba lorddan kopar**:
+    sahipsiz olur ve 3–6 askerlik küçük bir garnizonla kendini savunur. Lord
+    ayaklanmayı ve kopuşu elçi haberiyle öğrenir (`town_revolt`,
+    `town_lost_revolt`). Sunucu, sadakati düşük kasabası olan lordların
+    durumunu (çevrimdışıyken de) dakikada bir ilerletir, ayaklanmayı bir kez
+    duyurur ve kopan kasabayı `lobby_towns`'ta sahipsiz yapar (lordun
+    durumundaki `townsLost` listesinden; `supabase/functions/_shared/towns.ts`
+    → `settleRevolts`).
+  - **Casusluk:** Kasaba sahibinde en az %40 ağı olan biri **"Kasabada isyan
+    kışkırt"** operasyonuyla (120 altın) seçtiği kasabanın sadakatini bir anda
+    **35** düşürür (`espionage.json` → `operations.townRevolt`); diğer
+    operasyonlar gibi başarı şansı, ağ harcaması ve yakalanma vardır.
+  - **Kasaba paneli** (kendi kasaban): sadakat çubuğu, yönü ve hedefi neyin
+    belirlediği, ayaklanma uyarısı; bakım seçimi (tur ve saat başına altın);
+    alındığından beri gönderdiklerinin toplamı (mal mal) ve şu anki tur başına
+    katkısı; ve **kattığı güç**: lordun puanına (Zafer kalemi) kasaba başına 40 ×
+    sadakat çarpanı (ayaklanmada yarısı); bu puan bağlı olunan taç krallığının
+    gücüne de eklenir (§7.8).
+- **İleride:** kasabaya asker yerleştirme, kasaba yükseltme.
 
 ## 9. Krallıklar Arası İlişkiler (Crusader Kings tarzı)
 
@@ -1231,8 +1322,14 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
 - Her lordluğun bir **hanedanı** vardır: **hükümdar**, **kraliçe** ve
   **çocuklar**. Kişiler yaşlanır: **1 hanedan yılı = 6 gerçek saat**
   (sezon ≈ 56 yıl). İlk hükümdar 26–38, kraliçe 19–28 yaşında gelir.
-  Saray sekmesindeki **Hanedan** bölümü portreleri, yaşları, yetenekleri,
+  Saray sekmesinin **Hanedan** bölümü portreleri, yaşları, yetenekleri,
   çocukları ve ataları gösterir.
+- **Saray sekmesinin bölümleri:** Saray sekmesi üç alt sekmeye ayrılır:
+  **Seviye** (saray kartı, hudut ve saray yükseltme, iskele, Bağlılık),
+  **Hanedan** ve **Yapılar** (kurulu / sınır listesi); Ayarlar hepsinin
+  altında durur. Son açılan alt sekme tarayıcıda hatırlanır
+  (`tabs.tsx` → `showPalacePart`). Adı konmamış ya da eğitimi seçilmemiş
+  reşit olmayan bir çocuk varsa Hanedan sekmesinde kırmızı bir nokta yanar.
 - **Yetenekler** (0–10): **Maliye** (vergi ±%3, ticaret geliri ±%2 / puan),
   **Halk** (mutluluk ±1,2, iş gücü ±%1,5 / puan), **Askerlik** (savaş zarı
   ±0,12, asker maaşı ∓%2 / puan); 5 ortadır. Kraliçenin yeteneklerinin
@@ -1248,15 +1345,19 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   "Kraliçeye ihtiyacımız var" uyarısı durur; "Kraliçe getir" düğmesi tek
   tuşla, bedelsiz ve nüfus şartı aranmadan rastgele bir kraliçe getirir
   (`queenOwed`). Kraliçesi rehinken yeni kraliçe alınamaz.
-- **Ad üreteci:** Ad koyulan her yerde (doğum penceresi, çocuklar,
-  hükümdar ve kraliçe) "Rastgele" düğmesi bir ad önerir: eski adlardan
-  biri ya da iki yarıdan kurulan bir ad (Alptekin, Gülbike…;
-  `dynasty.json` → `names`, `nameParts`; `randomName`). Hükümdarın ve
-  kraliçenin adı da değiştirilebilir.
+- **Ad üreteci:** Ad koyulan her yerde (doğum penceresi, çocuklar)
+  "Rastgele" düğmesi bir ad önerir: eski adlardan biri ya da iki yarıdan
+  kurulan bir ad (Alptekin, Gülbike…; `dynasty.json` → `names`,
+  `nameParts`; `randomName`).
 - **Ad ve eğitim:** Doğumda bir haber penceresi açılır; çocuğa ad
-  konur (koyulmazsa çekilen ad kalır; sonradan da konabilir). Hükümdar
-  yaşarken reşit olmamış her çocuğun eğitimi seçilir (Maliye, Halk,
-  Askerlik); çocuk 16 yaşında reşit olunca o yetenek +3 artar.
+  konur (koyulmazsa çekilen ad kalır; sonradan çocuğun kartındaki "Adını
+  koy" ile konabilir). **Ad yalnızca bir kez konur:** lordun ad koyduğu
+  çocuğun (`named`) adı değiştirilemez; hükümdarın ve kraliçenin adı da
+  değiştirilemez, geldikleri adı taşırlar (sunucu `nameError` → `'named'`
+  ile reddeder). Hükümdar yaşarken reşit olmamış her çocuğun (yeni doğan
+  bebek dahil) eğitimi seçilir (Maliye, Halk, Askerlik; seçilen düğme
+  yanar, seçilmemişse kartta yazar); çocuk 16 yaşında reşit olunca o
+  yetenek +3 artar.
 - **Ölüm ve tahta geçiş:** Hükümdarın ölüm yaşı doğumunda 58–80 arasında
   çekilir. Ayrıca tarafının kaybettiği her muharebede %5 ihtimalle
   kahrından ölür (sunucu, muharebenin ve lordluğun tohumuyla). Yerine en
@@ -1361,7 +1462,14 @@ mertebesindedir.
 **Vergi ve mutluluk**
 
 - Vergi oranı: düşük / normal / yüksek / ağır. Her üretim turunda köylü
-  başına altın getirir (oran yükseldikçe daha çok).
+  başına 0,008 / 0,02 / 0,036 / 0,056 altın getirir.
+- **Altın dengesi** (hedef, `economy.json`, `society.json`): gelişmiş bir
+  lord (4–5. seviye saray, ~100 köylü, 3. seviye ticaret noktası) çevrimiçi
+  saatte ~2.000–2.500 altın (lobi fiyatı düştükçe daha az), yeni kurulmuş
+  bir lord ~700 altın kazanır. Boş bir 7.000'lik hazine çevrimdışıyken
+  ~4–5 saatte dolar; dolunca tüccar bekler, haraççılar 30 dakikada bir %5
+  alır. Asker maaşı tur başına 0,04 altın, lordlar arası haraç tur başına
+  en fazla 4 altındır.
 - **Mutluluk** (0–100) her tur bir hedefe doğru yavaşça kayar. Hedef:
   taban + vergi etkisi (düşük +, ağır −−) + kraliçe + gıda (açlık −).
 - Mutluluk **asker olmaya gönüllü** halkı ve asker maliyetini belirler:
@@ -1392,8 +1500,8 @@ mertebesindedir.
   düşmesinden zordur:** satılan her birim fiyatı %0,15 düşürür, alınan her
   birim yalnızca %0,08 yükseltir; tabanın altına düşmüş fiyat yarı yolunu
   40 dakikada toplar, tabanın üstüne çıkmış fiyat yarı yolunu 15 dakikada
-  iner (`market.json`). Taban fiyatlar: yemek 1,7, yapı malzemesi 2,5,
-  savaş malzemesi 3,4 (`economy.json` → `trade.price`); pazarın alış
+  iner (`market.json`). Taban fiyatlar: yemek 0,4, yapı malzemesi 0,6,
+  savaş malzemesi 0,8 (`economy.json` → `trade.price`); pazarın alış
   fiyatı lobi fiyatının 1,4 katıdır.
 - Fiyat **olağan fiyatının %30'unun** altına inmez (`minFactor`); oraya inen
   malın kutusunda "en dipte" yazar ve satış onu daha fazla düşürmez.
@@ -1670,9 +1778,13 @@ krallıkta birer tane olur ve 3 seviyelidir.
     anda gelir (lobi tohumundan): kavurucu güneş (yalnız gündüz), yağmur,
     soğuk dalgası (yalnız gece), fırtına, yoğun sis, sel, bereket mevsimi,
     kervan mevsimi, kuyruklu yıldız, dolunay şenliği (yalnız gece), salgın,
-    altına hücum.
+    altına hücum, çekirge istilası, dolu fırtınası, deprem, kutup ışıkları
+    (yalnız gece), güneş tutulması (yalnız gündüz), gökkuşağı (yalnız
+    gündüz), ejderha söylentisi, taç düğünü.
   - **Krallığa özel** (%40): salgın, halk şenliği, orman yangını, maden
-    damarı, gezgin tüccarlar, ambar yangını, define, hacılar.
+    damarı, gezgin tüccarlar, ambar yangını, define, hacılar, göçebe
+    çadırları, gezgin ozan, kurt sürüsü, maden göçüğü, haydut baskını,
+    kayıp kervan, aziz kalıntısı, şövalye turnuvası.
   Gündüz/gece olayları o vakit başlar ve en geç o vakit bitince biter.
   Olay başlayınca açılan pencere, günlük ve Halk sekmesindeki şerit olayın
   **lobi geneli mi krallığa özel mi** olduğunu yazar. Olaylar saklanmaz;
@@ -1680,7 +1792,9 @@ krallıkta birer tane olur ve 3 seviyelidir.
   `lobbyKey`), anlık etkileri (kayıp, define, salgın) başladığı üretim
   turunda bir kez uygulanır.
 - **Krizler (seçimli olaylar):** Orman yangını, ambar yangını, salgın
-  (yerel ve lobi geneli), sel, fırtına ve soğuk dalgası gelince pencere üç
+  (yerel ve lobi geneli), sel, fırtına, soğuk dalgası, çekirge istilası,
+  dolu fırtınası, deprem, kurt sürüsü, maden göçüğü ve haydut baskını
+  gelince pencere üç
   seçenek sunar (`institutions.json` → `events.crisis`):
   **köylüleri seferber et** (zarar önlenir; 5 dakika iş gücü %30 düşer),
   **orduyu seferber et** (zarar önlenir; garnizondan 1, %25 ihtimalle 2
@@ -1691,8 +1805,30 @@ krallıkta birer tane olur ve 3 seviyelidir.
   karar süresi dolunca gelir; önlenmişse gelmez, süren etkileri de
   (üretim düşüşü vb.) uygulanmaz. Cevap krallık durumunda saklanır
   (`responses`, 24 saat), sunucu `crisis` komutuyla doğrular.
+- **İki yollu olaylar (seçim):** Güneş tutulması, ejderha söylentisi, taç
+  düğünü, göçebe çadırları, gezgin ozan, kayıp kervan, aziz kalıntısı ve
+  şövalye turnuvası gelince pencere iki yol sunar (`institutions.json` →
+  `events.choice`). Her yolun hemen ödenen bir bedeli (`cost`) ve hemen
+  gelen bir kazancı (`gain`; altın en fazla 150) olabilir, ayrıca olay
+  sürdükçe etkileri (mutluluk, tapınak mutluluğu, ticaret, iş gücü, üretim)
+  olayın kendi etkisine eklenir. Örn. ozanı saraya davet et (−40 altın,
+  mutluluk +8) ya da meydanda şapka dolaştır (+25 altın, mutluluk −2);
+  kayıp kervanın yükünü al (+40 yapı, +30 yemek, mutluluk −3) ya da
+  sahiplerine haber sal (+50 altın ödül, mutluluk +5, ticaret +%10).
+  Bedeli karşılanamayan yol seçilemez. Karar için 2 dakika vardır;
+  cevap verilmezse olay yalnızca kendi etkisiyle sürer. Cevap `responses`
+  içinde `'a'`/`'b'` olarak saklanır; sunucu `choose` komutuyla
+  (`dilemmaError`, `answerDilemma`) doğrular ve uygular.
+- **Olay penceresi:** Üstte pencerenin tam genişliğinde bir başlık şeridi
+  (hayırlı haberde yeşil, kötü haberde kırmızı), altında pencerenin üst
+  yarısını kenardan kenara dolduran olay çizimi, en altta haber, seçenekler
+  ve düğmeler (`apps/web/src/ui/FortuneDialog.tsx`).
 - **Olay çizimleri:** Her olayın penceresinde oyundan daha ayrıntılı,
-  kodla çizilmiş bir piksel sahnesi vardır (`apps/web/src/ui/EventArt.tsx`).
+  kodla çizilmiş, hareketli bir piksel sahnesi vardır
+  (`apps/web/src/ui/EventArt.tsx`): çekirge sürüsü tarlaların üstünde
+  dalgalanır, dolu yağar ve seker, depremde resim sarsılır, kutup ışıkları
+  göle yansır, tutulmada taç ışınları döner, düğünde çanlar sallanır ve
+  yapraklar uçuşur, turnuvada şövalyeler birbirine koşup mızrak kırar…
 - **Günlük sekmeleri:** "Tümü" ve "Önemli". Önemli'de krallığı etkileyen
   olumsuz olaylar toplanır: kötü olaylar, yağma ve yağma girişimi, savaş
   ilanı, dayatılan barış, hakaret, sabotaj ve kaçırma, yakalanan casuslar,
@@ -1700,20 +1836,32 @@ krallıkta birer tane olur ve 3 seviyelidir.
   isteği, yerine getirilemeyen emirler, ambar boşalıyor uyarıları. Önemli
   kayıtlar diğerlerinden daha uzun saklanır ve kırmızı kenarlıdır. Sekmedeki
   rozet okunmamış önemli kayıt sayısıdır; sekme açılınca sıfırlanır.
+- **Hesap defteri:** Krallık sezon boyunca bir defter tutar (`books`,
+  `economy.ts`): vergi, asker maaşı, tüccar geliri, hazine dolu diye
+  bekleyen tüccar seferleri, lordlar arası haraç, taç haraççılarına ödenen
+  ve devriyenin bıraktığı, kasaba/olay/balıkçı geliri, dolu hazinede ve
+  ambarda boşa giden, ve **kaybedilen askerler nedeniyle** (meydan
+  muharebesi, saray kuşatması, kasaba kuşatması, gözcü kuleleri, yağma,
+  afette seferberlik, terhis). Her komutta sunucu son görülme anıyla
+  birlikte o anın özetini (`seen`: depo, defter, asker, köylü, mutluluk)
+  saklar.
 - **Sen yokken:** Oyuncu en az 20 dakika sonra döndüğünde (sunucunun
   kaydettiği son görülme anından) önce sayfa sayfa bir rapor açılır; her
   sayfada oyunun kendi sprite'larından kurulmuş küçük bir piksel çizim
+  (arkasında sayfaya göre değişen dağ sıraları, bulutlar, tepeler, uzak
+  kale ya da köy, kuşlar; savaşta duman, entrikada gece; bulutlar ve kuşlar
+  hafifçe hareket eder)
   vardır (`apps/web/src/ui/AwayReport.tsx`):
-  **Mali rapor** (yokluk süresi, hazine ve depoların öncesi/sonrası,
-  tüccarın sattıkları, yaklaşık vergi ve asker maaşı, nüfus ve mutluluk,
+  **Mali rapor** (yokluk süresi, hazine ve depoların öncesi/sonrası;
+  defterden gerçek vergi, tüccar geliri, maaş, boşa giden altın, hazine
+  dolu diye bekleyen seferler ve geri kalan harcama; nüfus, mutluluk,
   yokluk cezası), **Askeri rapor** (muharebeler, kuşatmalar, kasabalar,
-  kuleler, sınırdaki ordular, asker sayısı), **Haraçlar** (devriyelerin
-  aldığı ya da bıraktığı, lordlar arası ödenen/alınan haraç), **Elçiler ve
+  kuleler, sınırdaki ordular, asker sayısı ve kayıpların nedeni),
+  **Haraçlar** (haraççıların aldığı, devriyenin bıraktığı, lordlar arası
+  ödenen/alınan haraç), **Elçiler ve
   casuslar** ve **Dünyada olanlar** (kim kime savaş açtı, hangi savaş
   bitti, kim kiminle çarpıştı ve kim kazandı, kim hangi kasabayı fethetti).
-  Öncesi/sonrası için krallığın bir kopyası tarayıcıda tutulur (dakikada
-  bir ve sayfadan ayrılırken); başka cihazda yalnız sunucudan bilinenler
-  yazılır. Rapor açıkken elçi pencereleri beklemez; kapatınca rapordaki
+  Öncesi/sonrası sunucudaki `seen` özetinden okunur (her cihazda aynı). Rapor açıkken elçi pencereleri beklemez; kapatınca rapordaki
   haberler okunmuş sayılır (günlükte yine durur).
 - **Sohbet bildirimleri:** Sohbet kapalıyken gelen yeni mesaj, sayaçların
   yerinde (sohbet düğmesinin üstünde) birkaç saniye görünen bir önizlemeyle
@@ -1743,7 +1891,7 @@ krallıkta birer tane olur ve 3 seviyelidir.
   seviye × 10, sur ve kapı 1.
 - **Nüfus:** köylü + asker × 3. **Ordu:** asker × 2 + cephanelik / 10.
 - **Zafer:** kazanılan muharebe × 40, alınan saray (kuşatma) × 120,
-  kraliçe 40, rehine × 60.
+  kraliçe 40, rehine × 60, elde tutulan kasaba × 40 × sadakat çarpanı (§8.4).
 - **Bilgi:** öğrenilen araştırma × kademe × 50.
 Puanı sunucu, krallığı her yazışında hesaplar ve satırına yazar; böylece
 herkes aynı tabloyu görür. Başkalarının yalnızca zaten görünen kalemleri
@@ -1873,6 +2021,7 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
 | `battles` | sonuç raporu, tohum, kayıplar |
 | `kingdom_daily` | günlük istatistik |
 | `chat_messages` | lobi, gönderen krallık, ad, renk, metin, zaman |
+| `minigame_scores` | mini oyun puanları: lobi, lord, oyuncu, oyun, puan, zaman, ad/renk/lobi adı (yalnız sunucu yazar) |
 
 ---
 

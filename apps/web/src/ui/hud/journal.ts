@@ -91,7 +91,8 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
     } else if (event.kind === 'trade') {
       const tally = { ...j.tally, tradeGold: j.tally.tradeGold + event.gold, trips: j.tally.trips + 1 }
       // An empty trip is told once a day, not every time the merchant comes back.
-      if (event.sold === 0 && !j.tally.emptyTrip) {
+      // A merchant waiting on a full treasury is not an empty trip: the treasury card says so.
+      if (event.sold === 0 && !event.full && !j.tally.emptyTrip) {
         j = write({ ...j, tally: { ...tally, emptyTrip: true } }, seasonStart, at, {
           tone: 'bad',
           icon: 'warn',

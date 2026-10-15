@@ -3156,21 +3156,74 @@ small {
   margin-top: calc(var(--px) * 2);
 }
 
-/* The day's events: a green-edged window for good fortune, a red one for bad. */
-.fortune-dialog.good {
-  box-shadow: inset 0 0 0 calc(var(--px) * 3) #4f8c40, var(--bevel), var(--outline), 0 calc(var(--px) * 3) 0 0 rgb(0 0 0 / 35%);
+/* The day's events (src/ui/FortuneDialog.tsx): a banner across the whole top, green for good fortune and red for bad,
+   the picture filling the upper half edge to edge, the news and any choice below. */
+.dialog.fortune-dialog {
+  --edge: #4f8c40;
+  width: min(600px, calc(100vw - var(--gap) * 2));
+  gap: 0;
+  padding: 0;
+  border: calc(var(--px) * 3) solid var(--edge);
+  box-shadow: var(--outline), 0 calc(var(--px) * 3) 0 0 rgb(0 0 0 / 35%);
 }
 
-.fortune-dialog.good .sheet-head {
+.dialog.fortune-dialog.bad {
+  --edge: #b0302a;
+}
+
+.dialog.fortune-dialog > * {
+  margin: 0;
+}
+
+.fortune-banner {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 5);
+  width: 100%;
+  box-sizing: border-box;
+  padding: calc(var(--px) * 5) calc(var(--px) * 7);
   background: #3f6a34;
+  box-shadow: inset 0 calc(var(--px) * -2) 0 0 rgb(0 0 0 / 30%), inset 0 var(--px) 0 0 rgb(255 255 255 / 15%);
 }
 
-.fortune-dialog.bad {
-  box-shadow: inset 0 0 0 calc(var(--px) * 3) #b0302a, var(--bevel), var(--outline), 0 calc(var(--px) * 3) 0 0 rgb(0 0 0 / 35%);
-}
-
-.fortune-dialog.bad .sheet-head {
+.fortune-dialog.bad .fortune-banner {
   background: #7a2420;
+}
+
+.fortune-banner > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.fortune-banner h2 {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--gold);
+  line-height: 1.1;
+}
+
+.fortune-banner small {
+  color: rgb(255 255 255 / 75%);
+}
+
+.fortune-art {
+  width: 100%;
+  line-height: 0;
+  background: #000;
+  border-bottom: calc(var(--px) * 2) solid var(--ink);
+}
+
+.fortune-art canvas {
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.fortune-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 5);
+  padding: calc(var(--px) * 6) calc(var(--px) * 7) calc(var(--px) * 6);
 }
 
 /* Timers of everything under way, above the menu in the bottom-left corner; a finished one flashes green. */
@@ -4332,6 +4385,42 @@ kbd {
 
 .children .chip {
   margin-left: calc(var(--px) * 3);
+}
+
+/* A child's upbringing: which gift its tutors work on (the chosen one lit), or a nudge when none is chosen. */
+.children small.education-note {
+  color: var(--gold);
+}
+
+.children small.education-note.todo {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* The palace tab's parts: the level and the border, the lord's house, the buildings. */
+.palace-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(var(--px) * 3);
+  margin-bottom: calc(var(--px) * 5);
+}
+
+.palace-tabs .btn {
+  justify-content: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.palace-tabs .btn[aria-pressed='true'] {
+  --face: var(--panel-2);
+  color: var(--gold);
+}
+
+.palace-tabs .dot {
+  width: calc(var(--px) * 3);
+  height: calc(var(--px) * 3);
+  margin-left: calc(var(--px) * 2);
+  background: #b0302a;
 }
 
 .ancestors li {

@@ -304,7 +304,7 @@ function CrownStanding({ world, index, kingdom }: { world: World; index: number;
           ? gift
             ? `Devriyesi sana her uğradığında «${gift.name}» getirir (tacın gücüyle artar ya da azalır).`
             : `İlişkin ${balance.cities.crown.gifts[0].at}'a ulaşınca devriyesi sana armağan getirmeye başlar.`
-          : `Rakip tacın devriyesi armağan getirmez; ama ilişkin iyiyse istediği haraç azalır (en çok %${Math.round(r.tributeEase * 100)}).`}
+          : `Rakip tacın haraççıları ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelip hazinenin %${Math.round(balance.cities.crown.patrol.tribute.share * 100)}'ini ister; armağan getirmezler.`}
       </p>
     </Section>
   )
@@ -361,12 +361,11 @@ export function CrownRivalry({ world, online }: { world: World; online: Online }
       </div>
       <p className="hint">
         Bir tacın gücü kendi {fmt(p.base)} puanı ile ona bağlı lordların puanlarının toplamıdır; lordları geliştikçe tacı güçlenir. Güçlü taç kendi lordlarına daha
-        cömerttir (bahşiş ve armağanlar ×{byPower(1, p.favour).toFixed(1).replace('.', ',')}'e kadar), rakip lordlardan daha çok haraç ister (×
-        {byPower(1, p.demand).toFixed(1).replace('.', ',')}'e kadar). {unsworn > 0 && `${unsworn} lord henüz taraf seçmedi.`}
+        cömerttir (bahşiş ve armağanlar ×{byPower(1, p.favour).toFixed(1).replace('.', ',')}'e kadar). {unsworn > 0 && `${unsworn} lord henüz taraf seçmedi.`}
       </p>
       <p className="hint">
         Şimdi:{' '}
-        {infos.map((info, i) => `${info.name} bahşiş/armağan ×${byPower(share[i], p.favour).toFixed(2).replace('.', ',')}, haraç ×${byPower(share[i], p.demand).toFixed(2).replace('.', ',')}`).join(' · ')}
+        {infos.map((info, i) => `${info.name} bahşiş/armağan ×${byPower(share[i], p.favour).toFixed(2).replace('.', ',')}`).join(' · ')}
       </p>
     </Section>
   )

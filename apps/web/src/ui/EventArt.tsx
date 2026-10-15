@@ -2243,6 +2243,1040 @@ const pilgrims: Scene = {
   },
 }
 
+// ---- More of the day's events: plagues of the sky and the land, wonders, and the fortunes that ask for a choice ------
+
+// A sheep: a woolly ball on four sticks, its dark face down to graze or up.
+function sheep(p: Paint, x: number, y: number, fr: number, flip = false, wool: ArrayLike<number> = ramp(0x8a8478, 0xb8b2a4, 0xdcd6c8, 0xf4f0e6)) {
+  const f = flip ? -1 : 1
+  shadow(p, x + 1, y, 5, 1.2, 0.35)
+  const step = fr % 2
+  for (const [lx, s] of [[-3, step], [-1, -step], [2, -step], [4, step]] as const) p.line(x + lx * f, y - 3, x + (lx + s * 0.5) * f, y - 1, C(0x2a2018))
+  ball(p, x, y - 5, 5, 3.2, wool, { rough: 0.5, seed: x + y })
+  const down = Math.floor(fr / 2) % 3 === 0
+  const hx = x + 5 * f
+  const hy = y - (down ? 3 : 6)
+  p.rect(Math.min(hx, hx + f), hy, 2, 3, C(0x2a221c))
+  p.set(hx + 2 * f, hy + 1, C(0x2a221c))
+  p.set(hx - f, hy, C(0x3a302a))
+}
+
+// A wolf facing right: lean grey body, bushy tail, pricked ears; howling raises its head.
+function wolf(p: Paint, x: number, y: number, fr: number, o: { flip?: boolean; howl?: boolean; eyes?: boolean; fur?: ArrayLike<number> } = {}) {
+  const f = o.flip ? -1 : 1
+  const fur = o.fur ?? ramp(0x1e1e24, 0x34343c, 0x50505a, 0x72727c, 0x9a9aa2)
+  shadow(p, x + 2, y, 8, 1.5, 0.4)
+  const swing = fr % 2 === 0 ? [1, -1, -1, 1] : [-1, 1, 1, -1]
+  ;[-5, -3, 3, 5].forEach((lx, i) => {
+    const c = i === 1 || i === 3 ? fur[0] : fur[1]
+    p.line(x + lx * f, y - 6, x + (lx + swing[i]) * f, y - 1, c)
+  })
+  ball(p, x, y - 8, 7, 3, fur, { rough: 0.3, seed: 7 })
+  ball(p, x + 4 * f, y - 9, 4, 3.2, fur, { rough: 0.3, seed: 8 })
+  // Tail.
+  for (let i = 0; i < 6; i++) {
+    p.set(x - (7 + i) * f, y - 9 + i * 0.7, fur[i < 3 ? 2 : 1])
+    p.set(x - (7 + i) * f, y - 8 + i * 0.7, fur[1])
+  }
+  // Head and muzzle.
+  const hx = x + 8 * f
+  const hy = o.howl ? y - 16 : y - 11
+  p.box(Math.min(hx, hx + 3 * f), hy, Math.max(hx, hx + 3 * f) + 1, hy + 3, fur[2])
+  p.line(hx + 3 * f, hy + (o.howl ? -2 : 1), hx + 5 * f, hy + (o.howl ? -4 : 2), fur[1])
+  p.set(hx + 5 * f, hy + (o.howl ? -4 : 2), INK)
+  p.set(hx, hy - 1, fur[3])
+  p.set(hx + f, hy - 2, fur[2])
+  p.line(x + 5 * f, y - 11, hx, hy + 1, fur[2])
+  if (o.eyes !== false) {
+    p.set(hx + 2 * f, hy + 1, C(0xffe060))
+    glow(p, hx + 2 * f, hy + 1, 3, C(0xffd040), 0.5)
+  }
+}
+
+// A round felt tent of the steppe: a lattice wall, a domed roof, a painted band and a door.
+function yurt(p: Paint, x: number, y: number, r: number, felt: ArrayLike<number>, band: number, seed: number): [number, number] {
+  shadow(p, x + r * 0.4, y, r + 3, 2.5, 0.45)
+  const wallH = Math.round(r * 0.55)
+  p.box(x - r, y - wallH, x + r + 1, y, (px, py) => {
+    const u = (px - x) / r
+    const l = 3.2 - (u + 1) * 1.1 + (rnd(px, py, seed) - 0.5) * 0.4
+    if (py === y - wallH + 2 || py === y - wallH + 3) return mix(C(band), INK, clamp((u + 1) * 0.25))
+    return tone(felt, l, px, py)
+  })
+  for (let py = y - wallH; py < y; py++) {
+    const u = (py - (y - wallH)) / wallH
+    p.dot(x - r, py, felt[0], 0.5)
+    if (u > 0.5) p.dot(x + r, py, felt[0], 0.5)
+  }
+  // The dome.
+  for (let py = y - wallH - Math.round(r * 0.6); py <= y - wallH; py++) {
+    const v = (y - wallH - py) / (r * 0.6)
+    const half = r * Math.sqrt(Math.max(0, 1 - v * v * 0.85)) + 1
+    for (let px = Math.floor(x - half); px <= x + half; px++) {
+      const u = (px - x) / half
+      const rib = Math.abs(Math.sin(u * 5)) < 0.12 ? -0.8 : 0
+      p.set(px, py, tone(felt, 3.6 - (u + 1) * 1.2 + v * 0.6 + rib, px, py))
+    }
+  }
+  const top = y - wallH - Math.round(r * 0.6)
+  p.rect(x - 2, top - 1, 5, 2, WOOD[1])
+  // The door, painted.
+  p.box(x - 3, y - wallH + 4, x + 3, y, (px, py) => ((px + py) % 3 === 0 ? C(0xe8b040) : C(0xa83028)))
+  p.line(x - 4, y - wallH + 4, x + 3, y - wallH + 4, WOOD[2])
+  return [x, top - 2]
+}
+
+// A knight on a horse in a caparison, lance couched (CLAUDE.md §9.8 tournament).
+function knight(p: Paint, x: number, y: number, fr: number, colour: ArrayLike<number>, flip = false, lift = -4) {
+  const f = flip ? -1 : 1
+  horse(p, x, y, fr, ramp(0x3a2c24, 0x5e4a3a, 0x8a7258, 0xb09a7a), flip)
+  // The caparison over the horse, hanging nearly to its knees.
+  for (let dx = -8; dx <= 7; dx++) {
+    for (let dy = -13; dy <= -6; dy++) {
+      const c = tone(colour, 2.4 - (dx * f + 8) * 0.08 - (dy + 13) * 0.12 - ((dx + 16) % 4 === 0 ? 0.8 : 0), x + dx, y + dy)
+      p.set(x + dx * f, y + dy, c)
+    }
+  }
+  for (let dx = -8; dx <= 7; dx += 2) p.set(x + dx * f, y - 5, colour[0])
+  person(p, x - 1 * f, y - 6, { robe: colour, hat: 'helm', pose: 'hold', kneel: true, flip, skin: 0 })
+  // Shield and lance.
+  p.box(Math.min(x + 1 * f, x + 4 * f), y - 16, Math.max(x + 1 * f, x + 4 * f) + 1, y - 11, (px, py) => (py === y - 16 ? GOLD[3] : tone(colour, px === x + f ? 3.5 : 2.5, px, py)))
+  p.line(x + 2 * f, y - 15, x + 26 * f, y - 15 + lift, WOOD[4])
+  p.line(x + 2 * f, y - 14, x + 26 * f, y - 14 + lift, WOOD[2])
+  p.set(x + 27 * f, y - 15 + lift, STONE[5])
+  // A plume on the helm.
+  p.set(x - 1 * f, y - 24, colour[2])
+  p.set(x - 2 * f, y - 25, colour[2])
+  p.set(x - 3 * f, y - 25, colour[1])
+}
+
+// A quaver drifting up from a song.
+function note(p: Paint, x: number, y: number, c: number, k = 1) {
+  p.tint(x, y, c, k)
+  p.tint(x + 1, y, c, k)
+  p.tint(x, y + 1, c, k)
+  p.tint(x + 1, y + 1, c, k)
+  for (let i = 1; i <= 4; i++) p.tint(x + 1, y - i, c, k)
+  p.tint(x + 2, y - 4, c, k)
+  p.tint(x + 3, y - 3, c, k)
+}
+
+// Shakes the whole picture by (dx, dy).
+function shake(p: Paint, dx: number, dy: number) {
+  if (!dx && !dy) return
+  const src = p.px.slice()
+  for (let y = 0; y < H; y++) {
+    const sy = clamp(y - dy, 0, H - 1)
+    for (let x = 0; x < W; x++) p.px[y * W + x] = src[sy * W + clamp(x - dx, 0, W - 1)]
+  }
+}
+
+const DUST = ramp(0x6a5a46, 0x8a7a62, 0xa89a80, 0xc8bca2)
+
+const locusts: Scene = {
+  draw(p) {
+    sky(p, ramp(0x5a4a30, 0x7a6640, 0x9a8250, 0xb89e62, 0xd0b678, 0xe2cc90), 0, 72)
+    glow(p, 196, 30, 50, C(0xfff0c0), 0.4)
+    p.disc(196, 30, 8, 8, C(0xf8e8b8))
+    land(p, (x) => 60 - noise(x * 0.02, 0, 21) * 9, (x, y, dd) => tone(ramp(0x5a5a3a, 0x6c6a44, 0x7e7a4e), 2 - dd * 0.1, x, y), 72)
+    for (let i = 0; i < 9; i++) p.veil(C(0xb0a070), 0.4, () => roundTree(p, 12 + i * 30 + rnd(i, 0, 21) * 10, 68, 4, LEAF[i % 2], 60 + i))
+    // Crop rows: green where the swarm has not been yet, stripped stubble where it has.
+    for (let y = 68; y < H; y++) {
+      const depth = y - 64
+      for (let x = 0; x < W; x++) {
+        const u = ((x - 110) / depth) * 1.8
+        const s = u - Math.floor(u)
+        const eaten = fbm(x * 0.02, y * 0.05, 22, 3) + (x - 128) * 0.002 > 0.52
+        const row = s < 0.5
+        let c: number
+        if (!row) c = tone(DIRT, 2.4 + (noise(x * 0.3, y, 2) - 0.5), x, y)
+        else if (eaten) c = rnd(x, y, 5) > 0.8 ? C(0x9a8a4a) : tone(DIRT, 3 + (rnd(x, y, 6) - 0.5), x, y)
+        else c = tone(GRASS, 3.8 - (s > 0.35 ? 1 : 0) + (rnd(x, y, 2) - 0.5) * 0.6, x, y)
+        p.set(x, y, c)
+      }
+    }
+    house(p, 6, 92, { w: 18, d: 26, h: 12, roof: THATCH, chimney: false, door: 'shut', shutters: true })
+    // A scarecrow that fooled nobody.
+    p.line(206, 112, 206, 84, WOOD[2])
+    p.line(196, 92, 216, 92, WOOD[2])
+    p.box(202, 90, 211, 102, (x, y) => tone(ROBE.ochre, 2.6 - (x - 202) * 0.2 + (rnd(x, y, 4) - 0.5), x, y))
+    p.box(203, 84, 210, 89, PLASTER[3])
+    for (let dx = -6; dx <= 6; dx++) p.set(206 + dx, 84, C(0xd8b860))
+    p.set(205, 86, INK)
+    p.set(208, 86, INK)
+    for (const sx of [196, 216]) for (let k = 0; k < 3; k++) p.set(sx + (sx < 206 ? -k : k), 93 + k, C(0xd8b860))
+  },
+  fx(p, t) {
+    const fr = Math.floor(t * 4)
+    campfire(p, 120, 118, t, 1.4)
+    smoke(p, 120, 104, t, { n: 6, size: 4, rise: 50, drift: 30, c: ramp(0x5a5850, 0x7a766a, 0x9a9488, 0xbab4a6), k: 0.75 })
+    person(p, 96, 122, { robe: ROBE.red, hat: 'scarf', hatColor: C(0xe8dcc0), pose: 'drum', frame: fr, skin: 1 })
+    person(p, 146, 120, { robe: ROBE.blue, hat: 'straw', pose: 'wave', frame: fr, flip: true })
+    person(p, 170, 116, { robe: ROBE.brown, hat: 'cap', hatColor: C(0x6a3a2a), pose: 'up', frame: fr + 1, flip: true, skin: 2 })
+    // The swarm: a living cloud sweeping over the fields, thick in its heart and ragged at its edges.
+    const cx = 150 + Math.sin(t * 0.25) * 50
+    const cy = 52 + Math.sin(t * 0.4) * 8
+    for (let i = 0; i < 700; i++) {
+      const a = rnd(i, 0, 31) * Math.PI * 2
+      const r = rnd(i, 1, 31) ** 0.7
+      const ox = Math.cos(a + t * (0.3 + rnd(i, 2, 31) * 0.4)) * r * 110 + (noise(i * 0.31, t * 0.8, 32) - 0.5) * 40
+      const oy = Math.sin(a * 1.3 + t * 0.5) * r * 34 + (noise(i * 0.31, t * 0.8 + 40, 33) - 0.5) * 18
+      const x = cx + ox
+      // Some stream down onto the crops.
+      const fall = rnd(i, 3, 31) > 0.85 ? ((t * 0.5 + rnd(i, 4, 31)) % 1) * 60 : 0
+      const y = cy + oy + fall
+      const flap = (fr + i) % 2 === 0
+      p.set(x, y, C(0x2a2010))
+      if (r < 0.6 || flap) p.set(x + 1, y, flap ? C(0x8a7a40) : C(0x3a2e16))
+    }
+    // Locusts at work on the crops.
+    for (let i = 0; i < 30; i++) {
+      const hop = Math.max(0, Math.sin(t * 3 + i * 1.7)) * 3
+      const x = 20 + rnd(i, 0, 34) * 220
+      const y = 76 + rnd(i, 1, 34) * 50 - hop
+      p.set(x, y, C(0x4a5a1a))
+      p.set(x + 1, y, C(0x6a7a2a))
+    }
+  },
+}
+
+const hailstorm: Scene = {
+  draw(p) {
+    sky(p, ramp(0x10181a, 0x1a2426, 0x263434, 0x344642, 0x485a52, 0x5e7064), 0, 70)
+    for (let y = 0; y < 56; y++) {
+      for (let x = 0; x < W; x++) {
+        const v = fbm(x * 0.03 - y * 0.01, y * 0.08, 41, 4)
+        if (v < 0.42) continue
+        p.set(x, y, tone(ramp(0x0e1414, 0x1a2424, 0x2a3836, 0x3e504a, 0x5a6e62), (v - 0.42) * 8 - y * 0.02, x, y))
+      }
+    }
+    land(p, (x) => 62 - noise(x * 0.02, 0, 42) * 8, (x, y, dd) => tone(ramp(0x22302a, 0x2c3c32, 0x384a3a), 2 - dd * 0.1, x, y), 74)
+    // A field of barley beaten flat in swathes.
+    for (let y = 70; y < H; y++) {
+      const depth = y - 64
+      for (let x = 0; x < W; x++) {
+        const flat = noise(x * 0.03, y * 0.08, 43) > 0.55
+        const stalk = noise(x * (flat ? 0.15 : 0.9), y * (flat ? 0.9 : 0.12), 44)
+        p.set(x, y, tone(ramp(0x3a3a1e, 0x5a5a28, 0x7a7632, 0x9a9440, 0xb8b058), 1.6 + stalk * 2 - depth * 0.004 - (flat ? 0.6 : 0), x, y))
+      }
+    }
+    const chimney = house(p, 176, 98, { w: 20, d: 32, h: 14, roof: TILE, chimney: true, door: 'shut', shutters: true })
+    if (chimney) smoke(p, chimney[0], chimney[1], 2, { n: 3, size: 2, rise: 16, drift: -12, k: 0.5 })
+    wagon(p, 28, 110, [C(0x7a5a3a), C(0xc8b490)], false)
+    // Hail lying in drifts.
+    for (let i = 0; i < 260; i++) {
+      const x = rnd(i, 0, 45) * W
+      const y = 72 + rnd(i, 1, 45) ** 0.8 * 56
+      p.set(x, y, rnd(i, 2, 45) > 0.4 ? C(0xe8f0f0) : C(0xb8c8c8))
+    }
+  },
+  fx(p, t) {
+    // Stones the size of walnuts slanting down, bouncing where they land.
+    for (let i = 0; i < 170; i++) {
+      const ground = 74 + rnd(i, 4, 46) * 54
+      const sy = rnd(i, 1, 46) * (ground + 10)
+      const speed = 160 + rnd(i, 2, 46) * 80
+      const y = (sy + t * speed) % (ground + 10) - 10
+      const x = (rnd(i, 0, 46) * (W + 40) - y * 0.25 + W) % (W + 40) - 20
+      const big = rnd(i, 3, 46) > 0.75
+      for (let k = 1; k < 4; k++) p.tint(x + k * 0.25, y - k * 2, C(0xc8d8dc), 0.35 * (1 - k / 4))
+      p.set(x, y, C(0xf4fafa))
+      if (big) {
+        p.set(x + 1, y, C(0xd8e4e8))
+        p.set(x, y + 1, C(0xb8c8cc))
+        p.set(x + 1, y + 1, C(0xc8d4d8))
+      }
+      if (y > ground - 6) {
+        const b = (ground - y) / 6
+        p.set(x + 2, ground - 3 - b * 3, C(0xe8f0f0))
+      }
+    }
+    // A man running for cover, his basket over his head.
+    const fr = Math.floor(t * 6)
+    const rx = ((t * 22) % (W + 40)) - 20
+    person(p, rx, 124, { robe: ROBE.green, hat: 'none', pose: 'walk', frame: fr, skin: 1 })
+    p.disc(rx, 106, 6, 3, (x, y) => tone(THATCH, 3.2 - (y - 103) * 0.4 - ((x + y) % 2 === 0 ? 0.6 : 0), x, y))
+    person(p, 150, 116, { robe: ROBE.red, hat: 'scarf', hatColor: C(0xe8dcc0), pose: 'brow', frame: fr, skin: 0 })
+    const cycle = t % 5.2
+    if (cycle < 0.18) for (let i = 0; i < W * 70; i++) p.px[i] = mix(p.px[i], C(0xd0e0d8), 0.18)
+  },
+}
+
+const earthquake: Scene = {
+  draw(p) {
+    sky(p, ramp(0x5a4a42, 0x7a6252, 0x9a7c62, 0xb89874, 0xd0b48c), 0, 70)
+    land(p, (x) => 56 - noise(x * 0.02, 0, 51) * 12, (x, y, dd) => tone(ramp(0x4a3e3a, 0x5a4c44, 0x6c5c50), 2 - dd * 0.1, x, y), 76)
+    // A watchtower on the hill, cracked and leaning.
+    for (let y = 30; y < 74; y++) {
+      const lean = (74 - y) * 0.12
+      for (let x = 36; x < 52; x++) {
+        const px = x + lean
+        p.set(px, y, (x + (y % 6 < 3 ? 0 : 3)) % 6 === 0 || y % 6 === 0 ? STONE[1] : tone(STONE, 3.6 - (x - 36) * 0.15, px, y))
+      }
+    }
+    for (let i = 0; i < 4; i++) p.rect(36 + 5.3 + i * 4, 26, 3, 4, STONE[3])
+    p.line(44, 40, 48, 52, INK)
+    p.line(48, 52, 45, 60, INK)
+    land(p, () => 74, (x, y, dd) => tone(ramp(0x3e3428, 0x544636, 0x6a5a44, 0x806e54), 2.2 + dd * 0.01 + (noise(x * 0.2, y * 0.4, 52) - 0.5), x, y))
+    house(p, 74, 92, { w: 20, d: 28, h: 13, roof: TILE, door: 'shut', chimney: true })
+    house(p, 176, 90, { w: 18, d: 30, h: 13, roof: SLATE, door: 'shut', shutters: true })
+    // The fallen corner of a cottage.
+    p.box(140, 92, 166, 100, (x, y) => tone(PLASTER, 3 - (x - 140) * 0.05 + (rnd(x, y, 53) - 0.5), x, y))
+    p.poly([140, 92, 150, 80, 158, 86, 166, 92], (x, y) => tone(TILE, 3 - (y - 80) * 0.15, x, y))
+    for (let i = 0; i < 6; i++) p.line(142 + i * 4, 92, 148 + i * 3, 84 + (i & 1) * 4, WOOD[1])
+    // The rift across the street: dark depths, lit lips.
+    const rift = (x: number) => 104 + Math.sin(x * 0.05) * 6 + (noise(x * 0.2, 0, 54) - 0.5) * 6
+    for (let x = 0; x < W; x++) {
+      const c = rift(x)
+      const w = 1.2 + Math.sin(x * 0.02 + 1) * 1.6 + noise(x * 0.1, 0, 55) * 2.5
+      for (let y = Math.floor(c - w); y <= c + w; y++) {
+        const v = (y - (c - w)) / (2 * w)
+        p.set(x, y, v < 0.18 ? DIRT[3] : tone(ramp(0x080604, 0x140e0a, 0x241a12), 2 - v * 2, x, y))
+      }
+      if (x % 37 < 6) for (let k = 0; k < 6; k++) p.set(x + k * 0.6, c + w + k, DIRT[0])
+    }
+    for (const [x, y, s] of [[18, 118, 0], [222, 116, 1], [126, 98, 2], [160, 104, 3]] as const) p.sprite(SPRITES.boulder[s], x, y, { scale: 0.55 })
+  },
+  fx(p, t) {
+    const cycle = t % 4.5
+    const quaking = cycle < 1.6
+    const fr = Math.floor(t * 5)
+    // Dust boiling out of the rift and the fallen house.
+    smoke(p, 150, 90, t, { n: 6, size: 5, rise: 30, drift: 26, c: DUST, k: quaking ? 0.8 : 0.4, seed: 3 })
+    for (let i = 0; i < 4; i++) smoke(p, 30 + i * 60, 104, t + i * 1.3, { n: 4, size: 3, rise: 18, drift: 10, c: DUST, k: quaking ? 0.6 : 0.25, seed: 10 + i })
+    // Stones falling from the tower while the earth shakes.
+    if (quaking) {
+      for (let i = 0; i < 8; i++) {
+        const a = (cycle * 1.4 + rnd(i, 0, 56)) % 1
+        p.rect(44 + rnd(i, 1, 56) * 12 + a * 6, 32 + a * a * 40, 2, 2, STONE[rnd(i, 2, 56) > 0.5 ? 3 : 2])
+      }
+    }
+    person(p, 112, 122, { robe: ROBE.blue, hat: 'none', pose: quaking ? 'up' : 'point', frame: fr, skin: 1 })
+    person(p, 128, 124, { robe: ROBE.red, hat: 'scarf', hatColor: C(0xe8dcc0), pose: quaking ? 'pray' : 'hold', kneel: quaking, skin: 0, flip: true })
+    person(p, ((t * 18) % 80) + 186, 124, { robe: ROBE.ochre, hat: 'straw', pose: 'walk', frame: fr })
+    if (quaking) shake(p, Math.round(Math.sin(t * 47) * 2), Math.round(Math.sin(t * 61) * 1))
+  },
+}
+
+// Curtains of the northern lights: how bright they are at (x, y) and time t, and the hue (0 green … 1 violet).
+function auroraAt(x: number, y: number, t: number): [number, number] {
+  const base = 50 + Math.sin(x * 0.022 + t * 0.3) * 10 + (noise(x * 0.018, t * 0.12, 61) - 0.5) * 18
+  const top = base - 26 - noise(x * 0.04, t * 0.25, 62) * 22
+  if (y > base + 3 || y < top) return [0, 0]
+  const rays = 0.45 + 0.55 * Math.abs(Math.sin(x * 0.45 + noise(x * 0.06, t * 0.4, 63) * 9))
+  const v = (y - top) / (base - top)
+  return [rays * (0.25 + 0.75 * Math.min(1, v * 1.3) ** 1.3) * (y > base ? 0.4 : 1), 1 - v]
+}
+
+const aurora: Scene = {
+  draw(p) {
+    sky(p, ramp(0x02040e, 0x050a1a, 0x081226, 0x0c1a32, 0x12243e), 0, 84)
+    land(p, (x) => 52 + Math.abs(((x * 0.8 + 30) % 80) - 40) * 0.6 + noise(x * 0.07, 0, 64) * 6, (x, y, dd) => (dd < 5 - noise(x * 0.3, 0, 65) * 3 ? tone(SNOW, 2.4 - ((x * 0.8 + 30) % 80 > 40 ? 1 : 0), x, y) : tone(ramp(0x080c16, 0x0e1420, 0x161e2c), 2 - ((x * 0.8 + 30) % 80 > 40 ? 1 : 0) - dd * 0.03, x, y)), 82)
+    // The still lake.
+    for (let y = 82; y < 104; y++) for (let x = 0; x < W; x++) p.set(x, y, tone(ramp(0x02040a, 0x060a14, 0x0a1220, 0x101a2c), 2.6 - (y - 82) * 0.06 + (noise(x * 0.04, y * 0.6, 66) - 0.5) * 0.6, x, y))
+    // A snowy shore, firs, a lit cabin.
+    land(p, (x) => 102 + Math.sin(x * 0.03) * 3 + noise(x * 0.1, 0, 67) * 2, (x, y, dd) => tone(ramp(0x1a2234, 0x243048, 0x2e3c58, 0x3a4a68, 0x4a5a7a), 3 - dd * 0.06 + (noise(x * 0.2, y * 0.4, 68) - 0.5) * 0.6, x, y))
+    for (let i = 0; i < 9; i++) p.veil(C(0x060a14), 0.55, () => conifer(p, [8, 20, 32, 210, 222, 236, 248, 60, 186][i], 106 + (i % 3), 18 + (i % 4) * 5, ramp(0x061210, 0x0a1a16, 0x10241c, 0x162e24), { snow: true, seed: 70 + i }))
+    p.veil(C(0x0a1020), 0.35, () => house(p, 150, 108, { w: 14, d: 20, h: 10, snow: true, lit: true, chimney: true, roof: SLATE }))
+  },
+  fx(p, t) {
+    stars(p, 90, 82, t, 61)
+    for (let y = 0; y < 84; y++) {
+      for (let x = 0; x < W; x++) {
+        const [a, hue] = auroraAt(x, y, t)
+        if (a <= 0.05) continue
+        p.tint(x, y, mix(C(0x48f0a0), C(0xb070f0), clamp(hue * 1.3 - 0.25)), a * 0.8)
+      }
+    }
+    // Its mirror in the lake, broken into ripples, and the lake's own glints.
+    for (let y = 84; y < 102; y++) {
+      for (let x = 0; x < W; x++) {
+        const ripple = noise(x * 0.06 + t * 0.3, y * 1.1, 69)
+        if (ripple < 0.42) continue
+        const [a, hue] = auroraAt(x + Math.sin(y * 1.3 + t * 2) * 2, 58 - (y - 84) * 1.8, t)
+        if (a > 0.05) p.tint(x, y, mix(C(0x48f0a0), C(0xb070f0), clamp(hue * 1.3 - 0.25)), a * 0.4 * (ripple - 0.3) * 2)
+      }
+    }
+    for (let i = 0; i < 14; i++) {
+      const x = (rnd(i, 0, 60) * W + t * 3) % W
+      const y = 86 + rnd(i, 1, 60) * 14
+      for (let k = 0; k < 4; k++) p.tint(x + k, y, C(0xa8c8e8), 0.35)
+    }
+    const fr = Math.floor(t * 2)
+    person(p, 96, 122, { robe: ROBE.grey, hat: 'hood', hatColor: ROBE.brown[1], pose: 'point', frame: fr })
+    person(p, 112, 124, { robe: ROBE.blue, hat: 'scarf', hatColor: C(0x9a2a2a), pose: 'up', frame: fr + 1, skin: 1 })
+    person(p, 80, 124, { robe: ROBE.red, hat: 'hood', pose: 'hold', kneel: true, skin: 2 })
+    for (const x of [96, 112, 80]) p.tint(x - 1, 106, C(0x60f0b0), 0.5)
+  },
+}
+
+const eclipse: Scene = {
+  draw(p) {
+    sky(p, ramp(0x06061a, 0x0e0c2a, 0x1c163c, 0x34244a, 0x5a3a4e, 0xa86a4a, 0xe0a060), 0, 78)
+    glow(p, 128, 32, 46, C(0xd8e0ff), 0.55)
+    land(p, (x) => 66 - noise(x * 0.02, 0, 71) * 10, (x, y, dd) => tone(ramp(0x120e1a, 0x1a1624, 0x241e2e), 2 - dd * 0.1, x, y), 80)
+    p.veil(C(0x1a1430), 0.55, () => {
+      house(p, 180, 80, { w: 14, d: 20, h: 10, roof: TILE, chimney: true })
+      house(p, 212, 82, { w: 16, d: 24, h: 11, roof: THATCH })
+      roundTree(p, 160, 80, 5, LEAF[0], 72)
+    })
+    land(p, fields(80), (x, y, dd) => tone(ramp(0x161c18, 0x1e2820, 0x283428, 0x344232, 0x40503c), 2.4 - dd * 0.02 + (noise(x * 0.2, y * 0.4, 73) - 0.5) * 0.9, x, y))
+    // The temple's steps where the people gather.
+    p.box(18, 102, 72, 106, (x, y) => tone(STONE, 3 - (y - 102) * 0.4, x, y))
+    p.box(24, 98, 66, 102, (x, y) => tone(STONE, 3.4 - (y - 98) * 0.4, x, y))
+    for (let i = 0; i < 4; i++) p.box(28 + i * 11, 70, 32 + i * 11, 98, (x, y) => tone(STONE, x === 28 + i * 11 ? 3.6 : 2.2, x, y))
+    p.box(24, 64, 66, 70, (x, y) => tone(STONE, 3 - (y - 64) * 0.3, x, y))
+    p.poly([22, 64, 45, 54, 68, 64], (x, y) => tone(STONE, x < 45 ? 3.2 : 2, x, y))
+    // A goat tethered, birds gone to roost on the fence.
+    p.line(100, 110, 150, 110, WOOD[1])
+    for (let i = 0; i < 6; i++) p.rect(100 + i * 10, 108, 1, 8, WOOD[1])
+    for (const bx of [114, 120, 138]) {
+      p.rect(bx, 106, 3, 2, INK)
+      p.set(bx + 3, 106, C(0x5a4a2a))
+    }
+  },
+  fx(p, t) {
+    stars(p, 40, 60, t, 74)
+    // The corona: pale streamers turning slowly round the dark moon.
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2 + t * 0.05
+      const len = 10 + rnd(i, 0, 75) * 16 + Math.sin(t * 1.3 + i) * 3
+      for (let s = 0; s < len; s++) {
+        const k = 1 - s / len
+        p.tint(128 + Math.cos(a) * (13 + s), 32 + Math.sin(a) * (13 + s), C(0xe8f0ff), k * 0.55)
+      }
+    }
+    p.disc(128, 32, 13, 13, C(0xf4f6ff))
+    p.disc(128, 32, 12, 12, C(0x020206))
+    // The diamond ring flaring on its rim.
+    const flare = Math.round(2 + Math.sin(t * 2.4) * 2)
+    glint(p, 137, 24, flare + 2, C(0xffffff))
+    glow(p, 137, 24, 8, C(0xffffff), 0.4)
+    const fr = Math.floor(t * 2)
+    person(p, 46, 98, { robe: ROBE.white, hat: 'hood', hatColor: ROBE.white[2], pose: fr % 2 ? 'up' : 'staff', frame: fr })
+    person(p, 30, 118, { robe: ROBE.brown, hat: 'hood', pose: 'pray', kneel: true, skin: 1 })
+    person(p, 52, 120, { robe: ROBE.red, hat: 'scarf', hatColor: C(0xe8dcc0), pose: 'pray', kneel: true, skin: 2 })
+    person(p, 72, 118, { robe: ROBE.green, hat: 'cap', pose: 'point', flip: false })
+    person(p, 170, 122, { robe: ROBE.blue, hat: 'straw', pose: 'brow', flip: true, skin: 1 })
+  },
+}
+
+const RAINBOW = [0xe03838, 0xf08a30, 0xf4d850, 0x5cb850, 0x4a8ad8, 0x5a4ab0, 0x8a50b0]
+
+const rainbow: Scene = {
+  draw(p) {
+    sky(p, ramp(0x3a7ac4, 0x5090d0, 0x70aad8, 0x98c4e0, 0xc4dce8), 0, 72)
+    const cl = ramp(0x5a6476, 0x76808e, 0x949caa, 0xb4bac4)
+    cloud(p, 228, 14, 90, 22, cl, 81)
+    cloud(p, 30, 10, 70, 16, ramp(0xb8c8d8, 0xd4dee6, 0xeef2f4, 0xffffff), 82)
+    // The bow: seven bands, and a faint second bow outside it with its colours turned round.
+    for (let y = 0; y < 100; y++) {
+      for (let x = 0; x < W; x++) {
+        const d = Math.hypot(x - 140, (y - 118) * 1.05)
+        const b = Math.floor((d - 92) / 2.2)
+        if (b >= 0 && b < 7) p.tint(x, y, C(RAINBOW[b]), 0.6 * clamp((96 - y) / 30))
+        const b2 = Math.floor((d - 112) / 2.6)
+        if (b2 >= 0 && b2 < 7) p.tint(x, y, C(RAINBOW[6 - b2]), 0.22 * clamp((90 - y) / 30))
+        if (d < 92) p.tint(x, y, C(0xffffff), 0.08)
+      }
+    }
+    land(p, (x) => 62 - noise(x * 0.02, 0, 83) * 10, (x, y, dd) => tone(ramp(0x3e7050, 0x4c8058, 0x5a9060), 2 - dd * 0.1, x, y), 74)
+    land(p, fields(70), (x, y, dd) => tone(GRASS, 4 - dd * 0.012 + (noise(x * 0.2, y * 0.4, 84) - 0.5) * 1.1, x, y))
+    // A brook winding through, mirroring the bow.
+    for (let y = 72; y < H; y++) {
+      const u = (y - 72) / (H - 72)
+      const cx = 190 - Math.sin(u * 4) * 20 - u * 40
+      const half = 1 + u * 9
+      for (let x = Math.floor(cx - half); x <= cx + half; x++) {
+        const edge = Math.abs(x - cx) > half - 1
+        p.set(x, y, edge ? GRASS[1] : tone(ramp(0x3a6aa0, 0x5a8ac0, 0x8ab4d8, 0xc0dcec), 2 + (noise(x * 0.2, y * 0.6, 85) - 0.5) * 1.6, x, y))
+      }
+    }
+    for (let i = 0; i < 140; i++) {
+      const x = rnd(i, 0, 86) * W
+      const y = 74 + rnd(i, 1, 86) ** 0.7 * 52
+      p.set(x, y, C([0xf8f4f0, 0xf0d040, 0xe8609a, 0xa070e0][i % 4]))
+    }
+    const chimney = house(p, 14, 96, { w: 20, d: 28, h: 13, roof: TILE, chimney: true })
+    if (chimney) smoke(p, chimney[0], chimney[1], 1, { n: 4, size: 2, rise: 22, drift: 10, c: ramp(0x9aa4b0, 0xb8c0ca, 0xd4dae2, 0xeef2f6), k: 0.5 })
+    roundTree(p, 236, 104, 9, LEAF[0], 87)
+    p.sprite(SPRITES.blossom[0], 92, 92, { scale: 0.8 })
+  },
+  fx(p, t) {
+    // Drops on the grass catching the light.
+    for (let i = 0; i < 24; i++) {
+      const ph = (t * 0.7 + rnd(i, 0, 88)) % 1
+      glint(p, 10 + rnd(i, 1, 88) * 236, 80 + rnd(i, 2, 88) * 44, Math.round(Math.sin(ph * Math.PI) * 2), C(0xffffff))
+    }
+    // Butterflies.
+    for (let i = 0; i < 6; i++) {
+      const x = 60 + i * 30 + Math.sin(t * 0.8 + i * 2) * 14
+      const y = 90 + Math.sin(t * 1.7 + i) * 8 + (i % 2) * 10
+      const open = Math.floor(t * 8 + i) % 2 === 0
+      const c = C([0xf0c040, 0xf8f4f0, 0xe86a90, 0x70a0f0, 0xf09030, 0xb070e0][i])
+      p.set(x, y, INK)
+      p.set(x - 1, y - (open ? 1 : 0), c)
+      p.set(x + 1, y - (open ? 1 : 0), c)
+      if (open) {
+        p.set(x - 2, y - 1, c)
+        p.set(x + 2, y - 1, c)
+      }
+    }
+    const fr = Math.floor(t * 3)
+    person(p, 120, 118, { robe: ROBE.rose, pose: 'dance', frame: fr, hat: 'scarf', hatColor: C(0xf8f0e0) })
+    person(p, 140, 120, { robe: ROBE.blue, pose: 'dance', frame: fr + 1, flip: true, skin: 1 })
+    person(p, 66, 122, { robe: ROBE.green, pose: 'point', hat: 'straw', skin: 2 })
+    birds(p, t, 3, 20, 26, C(0x2a3a4a), 89)
+  },
+}
+
+// A winged shape in the clouds: or is it?
+function dragon(p: Paint, x: number, y: number, fr: number, c: number, k: number) {
+  const up = fr % 2 === 0
+  const body: number[] = [x - 14, y, x - 4, y - 3, x + 8, y - 2, x + 14, y - 5, x + 18, y - 4, x + 15, y - 1, x + 8, y + 2, x - 4, y + 2]
+  const shape = (pts: number[]) => p.poly(pts, (px, py) => (k >= bay(px, py) ? c : undefined))
+  shape(body)
+  // Tail curling back.
+  for (let i = 0; i < 14; i++) p.dot(x - 14 - i, y + Math.sin(i * 0.5) * 2 + i * 0.2, c, k)
+  p.dot(x - 29, y + 1, c, k)
+  // Wings.
+  if (up) {
+    shape([x - 4, y - 2, x - 10, y - 18, x - 2, y - 13, x + 2, y - 20, x + 6, y - 2])
+  } else {
+    shape([x - 4, y, x - 14, y + 10, x - 4, y + 7, x + 2, y + 12, x + 6, y + 1])
+  }
+}
+
+const dragonRumour: Scene = {
+  draw(p) {
+    sky(p, ramp(0x1a1230, 0x2e1c40, 0x4a2648, 0x763650, 0xa84c4c, 0xd87a48, 0xf0a860), 0, 76)
+    // The far peak and the cave.
+    land(p, (x) => 24 + Math.abs(x - 190) * 0.8 + noise(x * 0.1, 0, 91) * 6, (x, y, dd) => tone(ramp(0x1a1420, 0x2a1e2e, 0x3a2a3a, 0x4e3846), 3 - dd * 0.04 - (x > 190 ? 1 : 0), x, y), 76)
+    p.disc(196, 50, 4, 3, C(0x0a0608))
+    land(p, (x) => 66 - noise(x * 0.02, 0, 92) * 8, (x, y, dd) => tone(ramp(0x161018, 0x20161e, 0x2c1e26), 2 - dd * 0.1, x, y), 82)
+    for (let i = 0; i < 12; i++) conifer(p, i * 22 + rnd(i, 0, 93) * 10, 82 + rnd(i, 1, 93) * 3, 14 + rnd(i, 2, 93) * 8, ramp(0x0a0c0c, 0x121614, 0x1a201c, 0x222a24), { seed: 90 + i })
+    land(p, () => 84, (x, y, dd) => tone(ramp(0x1a1612, 0x2a221a, 0x3a3022, 0x4a3e2c), 2.2 + dd * 0.02 + (noise(x * 0.25, y * 0.4, 94) - 0.5), x, y))
+    // The inn, its sign a dragon's head.
+    house(p, 6, 116, { w: 26, d: 40, h: 18, roof: THATCH, lit: true, chimney: true, door: 'open' })
+    p.line(82, 116, 82, 92, WOOD[1])
+    p.line(76, 92, 92, 92, WOOD[2])
+    p.box(80, 94, 94, 102, (x, y) => tone(WOOD, 3 - (x - 80) * 0.1, x, y))
+    p.poly([82, 100, 86, 95, 92, 96, 89, 98, 92, 100], C(0x9a2a1e))
+    p.set(87, 97, C(0xffd040))
+    // Benches round the fire.
+    p.box(150, 116, 186, 118, WOOD[2])
+    p.box(102, 120, 132, 122, WOOD[2])
+  },
+  fx(p, t) {
+    // The shape crossing the clouds, now and then.
+    const cycle = (t % 9) / 9
+    const dx = -40 + cycle * 340
+    const dy = 22 + Math.sin(cycle * 6) * 4
+    dragon(p, dx, dy, Math.floor(t * 3), C(0x140a14), 0.8)
+    for (let y = 14; y < 34; y++) for (let x = 0; x < W; x++) {
+      const v = fbm(x * 0.03 + t * 0.05, y * 0.15, 95, 2)
+      if (v > 0.55) p.tint(x, y, C(0xc86a5a), (v - 0.55) * 2.2)
+    }
+    glow(p, 196, 50, 8 + Math.sin(t * 2) * 2, C(0xff8030), 0.5)
+    p.set(196, 50, C(0xffc060))
+    campfire(p, 144, 110, t, 1.3)
+    glow(p, 144, 106, 22, C(0xffa040), 0.2 + Math.sin(t * 9) * 0.03)
+    const fr = Math.floor(t * 2)
+    person(p, 160, 112, { robe: ROBE.purple, hat: 'hood', pose: fr % 3 === 0 ? 'up' : 'point', frame: fr, flip: true, skin: 1 })
+    person(p, 114, 120, { robe: ROBE.brown, hat: 'cap', hatColor: C(0x6a3a2a), pose: 'hold', kneel: true })
+    person(p, 126, 122, { robe: ROBE.green, hat: 'hood', pose: fr % 2 ? 'brow' : 'hold', kneel: true, skin: 2, flip: true })
+    person(p, 176, 120, { robe: ROBE.red, hat: 'scarf', hatColor: C(0xe8dcc0), pose: 'pray', kneel: true, flip: true })
+    person(p, 54, 124, { robe: ROBE.ochre, hat: 'straw', pose: 'point', frame: fr })
+  },
+}
+
+const royalWedding: Scene = {
+  draw(p) {
+    sky(p, ramp(0x3a80cc, 0x5096d6, 0x74b0e0, 0xa4cce6, 0xd0e4ee), 0, 72)
+    cloud(p, 50, 14, 60, 12, ramp(0xb8c8d8, 0xd4dee6, 0xeef2f4, 0xffffff), 101)
+    land(p, (x) => 64 - noise(x * 0.02, 0, 105) * 8, (x, y, dd) => tone(ramp(0x4a7458, 0x5a8460, 0x6a9668), 2 - dd * 0.1, x, y), 76)
+    land(p, fields(74), (x, y, dd) => tone(GRASS, 3.6 - dd * 0.012 + (noise(x * 0.2, y * 0.4, 106) - 0.5) * 1.1, x, y))
+    for (let i = 0; i < 6; i++) roundTree(p, [12, 34, 54, 204, 226, 246][i], 100 + (i % 2) * 4, 6 + (i % 3), LEAF[i % 3], 107 + i)
+    const marble = ramp(0x7a7064, 0x9e9282, 0xbeb2a0, 0xd8ccb8, 0xeee4d2)
+    // The cathedral's front: two towers with spires and a great door under a rose window.
+    for (const tx of [70, 160]) {
+      p.box(tx, 22, tx + 26, 100, (x, y) => ((y % 7 === 0 || (x + (Math.floor(y / 7) % 2) * 4) % 8 === 0) ? marble[1] : tone(marble, 3.4 - (x - tx) * 0.07, x, y)))
+      p.poly([tx - 1, 22, tx + 13, -6, tx + 27, 22], (x, y) => tone(SLATE, x < tx + 13 ? 3.4 : 1.6, x, y))
+      p.box(tx + 9, 34, tx + 17, 46, C(0x1a1420))
+      p.disc(tx + 13, 34, 4, 3, C(0x1a1420))
+    }
+    p.box(96, 40, 160, 100, (x, y) => ((y % 7 === 0 || (x + (Math.floor(y / 7) % 2) * 4) % 8 === 0) ? marble[1] : tone(marble, 3.2 - (x - 96) * 0.02, x, y)))
+    p.poly([94, 40, 128, 18, 162, 40], (x, y) => tone(marble, x < 128 ? 3.6 : 2.4, x, y))
+    // Rose window.
+    p.disc(128, 54, 11, 11, C(0x2a1a30))
+    for (let a = 0; a < 12; a++) {
+      const ang = (a / 12) * Math.PI * 2
+      p.line(128, 54, 128 + Math.cos(ang) * 10, 54 + Math.sin(ang) * 10, C([0xc83a3a, 0x3a5ac8, 0xe8c040][a % 3]))
+    }
+    p.disc(128, 54, 3, 3, GOLD[3])
+    // The door.
+    p.poly([114, 100, 114, 78, 118, 71, 128, 67, 138, 71, 142, 78, 142, 100], (x, y) => tone(ramp(0x1a0e0a, 0x2a1810, 0x3a2416), 1.4 + (x - 114) * 0.03, x, y))
+    for (const x of [113, 143]) p.line(x, 100, x, 76, GOLD[2])
+    // Steps and a red runner down them.
+    for (let i = 0; i < 4; i++) p.box(84 - i * 8, 100 + i * 4, 172 + i * 8, 104 + i * 4, (x, y) => tone(marble, 3.4 - (y - 100 - i * 4) * 0.4, x, y))
+    p.poly([118, 100, 138, 100, 150, H, 106, H], (x, y) => tone(ROBE.red, 2.2 - (y - 100) * 0.02 + ((x + y) % 9 === 0 ? 0.6 : 0), x, y))
+  },
+  fx(p, t) {
+    // The crowns' banners, red and blue, hanging from the towers.
+    const wv = Math.round(Math.sin(t * 3))
+    for (const [x, c] of [[76, ROBE.red], [166, ROBE.blue], [86, ROBE.blue], [176, ROBE.red]] as const) {
+      p.poly([x, 50, x + 8, 50, x + 8 + wv, 72, x + 4, 68, x + wv, 72], (px, py) => tone(c, px < x + 3 ? 2.6 : 1.8, px, py))
+      p.set(x + 4, 56, GOLD[3])
+    }
+    // The bells swinging in the towers.
+    for (const bx of [83, 173]) {
+      const sw = Math.sin(t * 4 + bx) * 3
+      p.poly([bx - 3 + sw, 34, bx + 3 + sw, 34, bx + 4 + sw * 1.2, 44, bx - 4 + sw * 1.2, 44], (x, y) => tone(GOLD, 3 - (x - bx + 4) * 0.25, x, y))
+      p.set(bx + sw * 1.3, 45, GOLD[1])
+    }
+    const fr = Math.floor(t * 3)
+    // The bride and groom, and guests cheering on the steps.
+    person(p, 122, 102, { robe: ROBE.white, hat: 'veil', hatColor: C(0xf8f8f0), pose: 'hold', skin: 0 })
+    person(p, 134, 102, { robe: ROBE.blue, hat: 'none', pose: 'hold', flip: true, skin: 1 })
+    for (const dx of [-1, 0, 1]) p.set(134 + dx, 85, GOLD[3])
+    p.set(133, 84, GOLD[4])
+    p.set(135, 84, GOLD[4])
+    const guests: [number, number, Who['robe'], number][] = [[70, 118, ROBE.red, 0], [86, 122, ROBE.ochre, 1], [100, 126, ROBE.green, 2], [160, 126, ROBE.purple, 0], [176, 122, ROBE.rose, 1], [192, 118, ROBE.teal, 2]]
+    for (const [x, y, robe, s] of guests) person(p, x, y, { robe, pose: (fr + s) % 3 === 0 ? 'wave' : 'up', frame: fr + s, flip: x > 128, skin: s, hat: s === 1 ? 'scarf' : 'none', hatColor: C(0xf0e4c8) })
+    // Petals and doves.
+    for (let i = 0; i < 60; i++) {
+      const y = (rnd(i, 1, 103) * H + t * (10 + rnd(i, 2, 103) * 8)) % H
+      const x = (rnd(i, 0, 103) * W + Math.sin(t * 2 + i) * 4) % W
+      p.set(x, y, C(i % 3 === 0 ? 0xf8f0f4 : i % 3 === 1 ? 0xf090b0 : 0xe8c050))
+    }
+    birds(p, t, 5, 30, 8, C(0xf8f8f8), 104)
+  },
+}
+
+const nomads: Scene = {
+  draw(p) {
+    sky(p, ramp(0x3a78c0, 0x5292d0, 0x78b0dc, 0xa8cce4, 0xd8e4e4), 0, 66)
+    cloud(p, 180, 16, 90, 12, ramp(0xb8c8d8, 0xd4dee6, 0xeef2f4, 0xffffff), 111)
+    land(p, (x) => 44 + Math.abs(((x * 0.6) % 90) - 45) * 0.4 + noise(x * 0.06, 0, 112) * 6, (x, y, dd) => (dd < 4 ? tone(SNOW, 3, x, y) : tone(ramp(0x5a6a8a, 0x6e7e9c, 0x8494ae), 2 - dd * 0.05, x, y)), 66)
+    // The steppe: long grass rippling in bands.
+    land(p, fields(64), (x, y, dd) => tone(ramp(0x6a6a30, 0x8a843a, 0xa8a046, 0xc4b858, 0xdcd070), 2.6 - dd * 0.012 + Math.sin(x * 0.05 + y * 0.6) * 0.3 + (noise(x * 0.2, y * 0.4, 113) - 0.5) * 0.9, x, y))
+    yurt(p, 60, 98, 18, ramp(0x6a5e4e, 0x9a8e7a, 0xc8bca4, 0xe8dcc4, 0xf6eedc), 0x9a2a28, 1)
+    p.veil(C(0xc8d0c8), 0.2, () => yurt(p, 128, 84, 12, ramp(0x6a5e4e, 0x9a8e7a, 0xc8bca4, 0xe8dcc4, 0xf6eedc), 0x2a4a9a, 2))
+    yurt(p, 196, 104, 20, ramp(0x5a4e3e, 0x8a7a64, 0xb8a888, 0xd8caa8, 0xeee2c4), 0x3a7a3a, 3)
+    // A rug and a cauldron by the fire pit.
+    p.poly([96, 116, 140, 116, 146, 124, 90, 124], (x, y) => ((x + y) % 6 < 2 ? C(0xe8b040) : (Math.floor(x / 4) + y) % 3 === 0 ? C(0x2a3a7a) : C(0x8a2424)))
+    p.line(118, 104, 112, 116, WOOD[1])
+    p.line(118, 104, 124, 116, WOOD[1])
+    // A tethering line with horses.
+    p.line(4, 82, 40, 82, C(0x5a4a32))
+  },
+  fx(p, t) {
+    const fr = Math.floor(t * 2)
+    smoke(p, 60, 72, t, { n: 4, size: 2, rise: 22, drift: 14, c: ramp(0x8a8a90, 0xa8a8b0, 0xc8c8d0, 0xe8e8f0), k: 0.55 })
+    smoke(p, 196, 76, t + 1.5, { n: 4, size: 2, rise: 22, drift: 14, c: ramp(0x8a8a90, 0xa8a8b0, 0xc8c8d0, 0xe8e8f0), k: 0.55, seed: 4 })
+    campfire(p, 118, 118, t, 1)
+    ball(p, 118, 110, 4, 3, STONE.slice(0, 4), { seed: 5 })
+    const st = (t * 0.6) % 1
+    p.tint(117 + st * 3, 104 - st * 8, C(0xffffff), 0.6 * (1 - st))
+    horse(p, 14, 96, fr % 4 === 0 ? 1 : 0, ramp(0x3a2214, 0x6a4026, 0x8e5a34, 0xb07a48))
+    horse(p, 36, 98, fr % 5 === 0 ? 1 : 0, ramp(0x2a2a2a, 0x4a4a4a, 0x7a7a78, 0xa8a8a4), true)
+    // The flock grazing its way across.
+    for (let i = 0; i < 9; i++) {
+      const x = 150 + ((i * 13 + t * 3) % 100) - 30 + (i % 3) * 4
+      const y = 112 + (i % 4) * 4
+      sheep(p, x, y, fr + i, i % 3 === 0)
+    }
+    person(p, 146, 118, { robe: ROBE.teal, hat: 'turban', hatColor: C(0xe8c050), pose: 'staff', frame: fr, skin: 1 })
+    person(p, 96, 112, { robe: ROBE.rose, hat: 'veil', hatColor: C(0x9a2a4a), pose: 'bowl', kneel: true, skin: 2 })
+    // A horsetail standard by the great tent.
+    const wv = Math.round(Math.sin(t * 4))
+    p.line(86, 98, 86, 64, WOOD[1])
+    p.poly([87, 64, 98, 66 + wv, 87, 70], C(0xa82a2a))
+    for (let k = 0; k < 6; k++) p.set(86 + Math.round(Math.sin(t * 3 + k) * 0.6), 71 + k, C(0x3a2a1a))
+  },
+}
+
+const minstrel: Scene = {
+  draw(p) {
+    sky(p, ramp(0x1a1a40, 0x2c2650, 0x4a305a, 0x7a405e, 0xb05e5a, 0xe08a58), 0, 70)
+    land(p, (x) => 58 - noise(x * 0.02, 0, 121) * 8, (x, y, dd) => tone(ramp(0x1a1626, 0x221c2e, 0x2c2436), 2 - dd * 0.1, x, y), 74)
+    land(p, () => 72, (x, y, dd) => tone(ramp(0x1e1a1c, 0x2a2426, 0x363032, 0x423a3c), 1.6 + dd * 0.02 + (noise(x * 0.25, y * 0.4, 123) - 0.5), x, y))
+    house(p, 2, 84, { w: 20, d: 28, h: 15, roof: TILE, lit: true, chimney: true })
+    house(p, 196, 82, { w: 18, d: 40, h: 14, roof: THATCH, lit: true })
+    p.veil(C(0x3a2a4a), 0.35, () => {
+      house(p, 66, 70, { w: 14, d: 22, h: 10, roof: TILE, lit: true })
+      house(p, 140, 70, { w: 12, d: 20, h: 10, roof: SLATE, lit: true })
+    })
+    // Cobbles of the square.
+    for (let y = 72; y < H; y++) {
+      const depth = y - 60
+      const row = Math.floor(160 / depth)
+      for (let x = 0; x < W; x++) {
+        if (y < 84 && (x < 52 || x > 192)) continue
+        const u = ((x - 128) / depth) * 6 + (row & 1) * 0.5
+        const su = u - Math.floor(u)
+        const sv = 160 / depth - row
+        const seam = su < 0.12 || sv < 0.15
+        p.set(x, y, seam ? C(0x2a2228) : tone(ramp(0x3a3036, 0x4c4046, 0x605058, 0x74646a), 2.4 - sv * 0.9 + rnd(Math.floor(u), row, 122) * 0.6, x, y))
+      }
+    }
+    // Lamplight pooled on the square.
+    for (let y = 70; y < H; y++) for (let x = 0; x < W; x++) {
+      const d = Math.hypot(x - 128, (y - 106) * 2)
+      if (d < 110) p.tint(x, y, C(0xe09040), 0.4 * (1 - d / 110) ** 1.5)
+    }
+    // The barrel he stands on, and his hat for coins.
+    p.box(120, 100, 136, 114, (x, y) => tone(WOOD, 3.4 - (x - 120) * 0.15 - ((y - 100) % 5 === 0 ? 1 : 0), x, y))
+    p.line(120, 103, 135, 103, STONE[2])
+    p.line(120, 110, 135, 110, STONE[2])
+    p.disc(150, 120, 5, 2, C(0x3a2418))
+    p.disc(150, 119, 3, 1.5, C(0x1a1008))
+    for (const [x, y] of [[149, 119], [151, 120]]) p.set(x, y, GOLD[3])
+    for (const lx of [40, 216]) {
+      p.line(lx, 112, lx, 72, C(0x1a1414))
+      p.rect(lx - 2, 68, 5, 5, C(0x1a1414))
+      p.rect(lx - 1, 69, 3, 3, C(0xffd070))
+    }
+  },
+  fx(p, t) {
+    for (const lx of [40, 216]) glow(p, lx, 70, 14 + Math.sin(t * 7 + lx) * 1.2, C(0xffb040), 0.45)
+    const fr = Math.floor(t * 4)
+    person(p, 128, 100, { robe: ROBE.purple, hat: 'cap', hatColor: C(0x3a7a3a), pose: 'lute', frame: fr, skin: 1 })
+    p.set(126, 82, C(0xe84a40))
+    p.set(125, 81, C(0xe84a40))
+    // Notes drifting up from the strings.
+    for (let i = 0; i < 6; i++) {
+      const a = (t * 0.4 + i / 6) % 1
+      note(p, 134 + a * 24 + Math.sin(a * 8 + i) * 4, 88 - a * 60, C([0xfff0b0, 0xf8d070, 0xffffff][i % 3]), 0.9 * (1 - a))
+    }
+    // The listeners, swaying.
+    const sway = Math.floor(t * 1.5)
+    const crowd: [number, number, Who['robe'], number, boolean][] = [[90, 116, ROBE.red, 0, true], [102, 122, ROBE.blue, 1, true], [160, 120, ROBE.ochre, 2, true], [176, 116, ROBE.green, 0, false], [68, 122, ROBE.brown, 1, false], [190, 124, ROBE.rose, 2, true]]
+    crowd.forEach(([x, y, robe, s, kneel], i) => person(p, x + ((sway + i) % 2), y, { robe, skin: s, kneel, pose: kneel ? 'hold' : (sway + i) % 3 === 0 ? 'up' : 'stand', flip: x > 128, hat: i % 2 ? 'hood' : 'none' }))
+    person(p, 112, 126, { robe: ROBE.white, pose: 'dance', frame: fr, skin: 2 })
+  },
+}
+
+const wolves: Scene = {
+  draw(p) {
+    sky(p, ramp(0x02040c, 0x060a18, 0x0c1426, 0x141e34, 0x1e2a44), 0, 76)
+    glow(p, 200, 26, 40, C(0xc0d0ff), 0.4)
+    ball(p, 200, 26, 13, 13, ramp(0x8a90a8, 0xaab0c4, 0xcad0dc, 0xe8ecf2, 0xffffff), { flat: 0.9 })
+    // The forest's dark edge.
+    land(p, (x) => 66 - noise(x * 0.02, 0, 131) * 6, (x, y, dd) => tone(ramp(0x04060a, 0x080c12, 0x0e141c), 2 - dd * 0.1, x, y), 80)
+    for (let i = 0; i < 22; i++) conifer(p, i * 12 + rnd(i, 0, 132) * 8, 80 + rnd(i, 1, 132) * 3, 16 + rnd(i, 2, 132) * 12, ramp(0x020604, 0x060c08, 0x0a140e, 0x101e16), { snow: true, seed: 130 + i })
+    land(p, (x) => 82 + Math.sin(x * 0.04) * 2, (x, y, dd) => tone(ramp(0x1e2a44, 0x2a3858, 0x38486c, 0x485a80, 0x5a6c94), 3.2 - dd * 0.02 + (noise(x * 0.15, y * 0.3, 133) - 0.5) * 0.6, x, y))
+    // A rock for the leader to howl from.
+    p.poly([196, 96, 204, 82, 220, 80, 232, 96], (x, y) => tone(ramp(0x1a1e2a, 0x262c3c, 0x343c50, 0x4a5468), 3 - (x - 196) * 0.06 + (y - 80) * -0.02, x, y))
+    for (let x = 202; x < 222; x++) p.set(x, 81 + Math.abs(x - 212) * 0.1, SNOW[3])
+    // The fold: a wattle fence round the huddled flock.
+    shadow(p, 90, 116, 46, 4, 0.4)
+    for (let i = 0; i < 12; i++) sheep(p, 62 + (i % 6) * 10 + (i > 5 ? 5 : 0), 110 + (i > 5 ? 6 : 0), i, i % 2 === 0, ramp(0x4a5068, 0x6a7088, 0x8a90a6, 0xaab0c2))
+    for (let x = 52; x < 128; x++) {
+      for (let y = 104; y < 112; y++) if ((x + Math.floor(y / 2)) % 3 !== 0) p.set(x, y + 8, tone(WOOD, 1.8 + ((x + y) % 2) * 0.6, x, y))
+      if (x % 8 === 0) p.line(x, 110, x, 120, WOOD[0])
+    }
+    house(p, 6, 104, { w: 16, d: 20, h: 11, roof: THATCH, snow: true, lit: true, chimney: true })
+  },
+  fx(p, t) {
+    stars(p, 50, 60, t, 134)
+    const fr = Math.floor(t * 5)
+    // The pack pacing the fold, the leader howling on its rock.
+    for (let i = 0; i < 3; i++) {
+      const ph = (t * 0.12 + i * 0.3) % 1
+      const back = ph > 0.5
+      const u = back ? 1 - (ph - 0.5) * 2 : ph * 2
+      wolf(p, 140 + u * 40 + i * 6, 104 + i * 8, fr + i, { flip: back })
+    }
+    const howl = t % 6 < 2.5
+    wolf(p, 212, 82, 0, { howl, fur: ramp(0x1a1a22, 0x2e2e38, 0x484852, 0x6a6a74, 0x9090a0) })
+    if (howl) for (let k = 0; k < 3; k++) {
+      const a = ((t * 1.5 + k / 3) % 1)
+      for (let s = -3; s <= 3; s++) p.tint(226 + a * 14 + Math.abs(s) * 0.5, 60 - a * 10 + s * (1 + a * 2), C(0xc0d0ff), 0.4 * (1 - a))
+    }
+    // The shepherd and his torch.
+    person(p, 46, 122, { robe: ROBE.brown, hat: 'hood', pose: 'up', frame: fr, skin: 1 })
+    flames(p, 47, 52, 104, 7, t, 135)
+    glow(p, 50, 102, 22, C(0xffa040), 0.35 + Math.sin(t * 9) * 0.05)
+    snowfall(p, t, 40, 136)
+  },
+}
+
+const mineCollapse: Scene = {
+  draw(p) {
+    sky(p, ramp(0x4a4e58, 0x5e626a, 0x74787e, 0x8c8e92, 0xa4a4a4), 0, 66)
+    const rock = ramp(0x2a2422, 0x3e3632, 0x564a42, 0x6e5e52, 0x887464, 0xa48c78)
+    land(p, (x) => (x < 170 ? 20 + (x / 170) ** 2 * 40 + noise(x * 0.1, 0, 141) * 6 : 62 + noise(x * 0.05, 0, 142) * 6), (x, y, dd) => {
+      const strata = Math.sin(y * 0.45 + noise(x * 0.05, y * 0.05, 143) * 4)
+      return tone(rock, 3 - (strata > 0.7 ? 1 : 0) - dd * 0.012 + (noise(x * 0.25, y * 0.25, 144) - 0.5) * 1.2, x, y)
+    })
+    land(p, (x) => 98 + Math.sin(x * 0.03) * 2, (x, y, dd) => tone(DIRT, 3 - dd * 0.02 + (noise(x * 0.3, y * 0.4, 145) - 0.5) * 1.2, x, y))
+    // The broken mouth of the mine: frames snapped, a heap of rubble in it.
+    p.poly([64, 98, 64, 72, 70, 66, 92, 66, 98, 72, 98, 98], (x, y) => tone(ramp(0x050404, 0x0e0a08, 0x1a1410), 1.2 - (y - 66) * 0.03, x, y))
+    p.box(60, 70, 64, 98, (x, y) => tone(WOOD, x === 60 ? 3.4 : 2, x, y))
+    p.line(98, 98, 104, 72, WOOD[2])
+    p.line(99, 98, 105, 72, WOOD[1])
+    p.line(56, 64, 104, 76, WOOD[3])
+    p.line(56, 65, 104, 77, WOOD[1])
+    cluster(p, 82, 92, 40, 16, rock, 146, 12, { rough: 0.9 })
+    for (let i = 0; i < 14; i++) p.sprite(SPRITES.boulder[i % 6], 66 + rnd(i, 0, 147) * 36, 96 + rnd(i, 1, 147) * 6, { scale: 0.35 + rnd(i, 2, 147) * 0.2 })
+    // An overturned cart, rails twisted.
+    p.line(100, 128, 92, 98, STONE[4])
+    p.line(118, 128, 98, 100, STONE[4])
+    p.poly([126, 104, 150, 100, 154, 112, 130, 116], (x, y) => tone(STONE, 3 - (x - 126) * 0.05, x, y))
+    wheel(p, 132, 100, 3, 0.3)
+    wheel(p, 150, 96, 3, 0.8)
+    for (let i = 0; i < 8; i++) p.set(156 + i * 2, 114 + (i & 1), C(0x3a3a42))
+  },
+  fx(p, t) {
+    // Dust still pouring from the mouth.
+    smoke(p, 82, 78, t, { n: 8, size: 4, rise: 50, drift: 40, c: DUST, k: 0.7 })
+    for (let i = 0; i < 6; i++) {
+      const a = (t * 0.9 + rnd(i, 0, 148)) % 1
+      p.rect(60 + rnd(i, 1, 148) * 40, 40 + a * a * 58, 1 + (i & 1), 1 + (i & 1), STONE[2])
+    }
+    const fr = Math.floor(t * 2.5)
+    person(p, 72, 118, { robe: ROBE.blue, hat: 'cap', hatColor: C(0x6a4a2e), pose: 'dig', frame: fr, skin: 1 })
+    person(p, 96, 116, { robe: ROBE.brown, hat: 'cap', hatColor: C(0x8a3030), pose: 'pick', frame: fr + 1, flip: true })
+    person(p, 46, 122, { robe: ROBE.ochre, hat: 'straw', pose: 'carry', frame: fr, skin: 2 })
+    // The injured brought out, a healer at his side.
+    cot(p, 176, 124, ROBE.grey, 1)
+    person(p, 206, 122, { robe: ROBE.white, hat: 'veil', hatColor: C(0xf0ece0), pose: 'bowl', kneel: true, flip: true })
+    person(p, 228, 118, { robe: ROBE.red, hat: 'scarf', hatColor: C(0xe8dcc0), pose: fr % 2 ? 'pray' : 'brow', flip: true, skin: 1 })
+    // A lantern hung by the mouth.
+    p.line(58, 66, 58, 74, C(0x2a2018))
+    p.rect(56, 74, 5, 6, C(0x2a2018))
+    p.rect(57, 75, 3, 4, C(0xffd070))
+    glow(p, 58, 77, 12 + Math.sin(t * 8) * 1.5, C(0xffc060), 0.4)
+  },
+}
+
+const bandits: Scene = {
+  draw(p) {
+    sky(p, ramp(0x161228, 0x281a36, 0x44223e, 0x6e2e3e, 0xa04a3a, 0xc8703a), 0, 72)
+    land(p, (x) => 62 - noise(x * 0.02, 0, 151) * 8, (x, y, dd) => tone(ramp(0x140e16, 0x1c141c, 0x261a22), 2 - dd * 0.1, x, y), 84)
+    p.veil(C(0x2a1a26), 0.4, () => house(p, 196, 72, { w: 14, d: 20, h: 10, roof: THATCH }))
+    for (let i = 0; i < 10; i++) conifer(p, [4, 16, 28, 40, 52, 112, 124, 160, 172, 248][i], 80 + (i % 3) * 2, 20 + (i % 4) * 5, ramp(0x060a08, 0x0c140e, 0x142016, 0x1c2c1e), { seed: 150 + i })
+    land(p, () => 82, (x, y, dd) => tone(ramp(0x18160e, 0x26221a, 0x363024, 0x48402e), 2.2 + dd * 0.01 + (noise(x * 0.25, y * 0.4, 152) - 0.5), x, y))
+    // The road and the plundered cart lying on its side.
+    for (let y = 82; y < H; y++) {
+      const u = (y - 82) / (H - 82)
+      const cx = 150 - u * 60
+      const half = 4 + u * 26
+      for (let x = Math.floor(cx - half); x <= cx + half; x++) p.set(x, y, tone(ramp(0x3a2e22, 0x4e3e2c, 0x625038, 0x766246), 2 - (Math.abs(x - cx) > half - 1.5 ? 1 : 0) + (noise(x * 0.4, y * 0.4, 153) - 0.5), x, y))
+    }
+    shadow(p, 120, 110, 22, 3)
+    p.poly([100, 108, 136, 100, 140, 108, 104, 116], (x, y) => tone(WOOD, 3 - (y - 100) * 0.15 - ((x - 100) % 6 === 0 ? 0.8 : 0), x, y))
+    wheel(p, 106, 98, 6, 0.4)
+    wheel(p, 136, 92, 6, 1.1)
+    p.line(140, 106, 156, 98, WOOD[2])
+    for (const [x, y, s] of [[90, 120, 1], [150, 118, 2], [160, 124, 3]] as const) sack(p, x, y, s)
+    p.disc(76, 112, 4, 3, (x, y) => tone(WOOD, 3 - (x - 72) * 0.3, x, y))
+    for (let i = 0; i < 10; i++) p.set(80 + i, 113 + (i & 1), C(0x9a2a2a))
+  },
+  fx(p, t) {
+    // The farm on the hill burning.
+    flames(p, 196, 228, 66, 14, t, 154)
+    smoke(p, 212, 54, t, { n: 6, size: 4, rise: 50, drift: -30, k: 0.8 })
+    glow(p, 212, 64, 30, C(0xff8030), 0.3 + Math.sin(t * 7) * 0.05)
+    // Masked riders of the road, running off with the loot.
+    const fr = Math.floor(t * 6)
+    const run = (t * 16) % 120
+    const hood = { robe: ROBE.black, hat: 'hood' as Hat, hatColor: C(0x1a1a20), skin: 1 }
+    person(p, 60 - run * 0.5, 104 + run * 0.1, { ...hood, pose: 'carry', frame: fr, flip: true })
+    person(p, 40 - run * 0.5, 110 + run * 0.1, { ...hood, pose: 'spear', frame: fr + 1, flip: true })
+    person(p, 180 + ((t * 10) % 30), 116, { ...hood, pose: 'walk', frame: fr, skin: 2 })
+    p.rect(176 + ((t * 10) % 30), 104, 4, 4, C(0x917650))
+    // A villager calling for help.
+    person(p, 210, 124, { robe: ROBE.blue, hat: 'straw', pose: fr % 2 ? 'wave' : 'up', frame: fr, flip: true })
+    birds(p, t * 0.8, 4, 60, 20, INK, 155)
+  },
+}
+
+const lostCaravan: Scene = {
+  draw(p) {
+    sky(p, ramp(0x1a3a2a, 0x24482e, 0x305a36, 0x3e6c3e), 0, H)
+    // Dark woods all round a sunny clearing.
+    for (let i = 0; i < 18; i++) conifer(p, i * 15 + rnd(i, 0, 161) * 8, 60 + rnd(i, 1, 161) * 6, 30 + rnd(i, 2, 161) * 20, ramp(0x08140c, 0x0e1e12, 0x16281a, 0x1e3422), { seed: 160 + i })
+    land(p, (x) => 70 + Math.sin(x * 0.04) * 3, (x, y, dd) => tone(GRASS, 2.6 + dd * 0.02 + (noise(x * 0.2, y * 0.4, 162) - 0.5) * 1.1, x, y))
+    // The clearing in sun.
+    for (let y = 66; y < H; y++) for (let x = 0; x < W; x++) {
+      const d = Math.hypot(x - 130, (y - 104) * 2)
+      if (d < 120) p.tint(x, y, C(0xf0e090), 0.45 * (1 - d / 120))
+    }
+    roundTree(p, 20, 110, 12, LEAF[0], 163)
+    roundTree(p, 236, 112, 10, LEAF[1], 164)
+    wagon(p, 98, 108, [C(0x8a3a6a), C(0xe8d8b8)])
+    // Chests and bolts of cloth fallen from the wagon.
+    for (const [x, y] of [[148, 116], [162, 120]]) {
+      p.box(x, y - 8, x + 12, y, (px, py) => tone(WOOD, 3 - (px - x) * 0.12 - ((py - y) % 4 === 0 ? 0.8 : 0), px, py))
+      p.rect(x, y - 9, 12, 2, GOLD[2])
+      p.rect(x + 5, y - 6, 2, 2, GOLD[3])
+    }
+    cluster(p, 156, 110, 10, 4, GOLD, 165, 5, { rough: 0.6, bias: 0.4 })
+    for (const [x, c] of [[176, 0x2a6aa8], [182, 0xa83a8a], [188, 0xe0a030]] as const) {
+      p.box(x, 118, x + 5, 124, (px, py) => mix(C(c), INK, ((px - x) / 5) * 0.4 + (py === 118 ? -0.2 : 0)))
+      p.line(x, 118, x + 4, 118, mix(C(c), C(0xffffff), 0.35))
+    }
+  },
+  fx(p, t) {
+    // Shafts of sun through the trees, with dust turning in them.
+    for (const [x0, w] of [[110, 18], [150, 12], [70, 10]] as const) {
+      for (let y = 0; y < 110; y++) {
+        const cx = x0 + y * 0.35
+        for (let x = Math.floor(cx - w / 2); x <= cx + w / 2; x++) p.tint(x, y, C(0xfff4c0), 0.16 + Math.sin(t * 0.8 + x0) * 0.04)
+      }
+    }
+    for (let i = 0; i < 26; i++) {
+      const a = (t * 0.05 + rnd(i, 0, 166)) % 1
+      p.tint(110 + a * 40 + Math.sin(t + i) * 4 + rnd(i, 1, 166) * 14, 20 + a * 90, C(0xfffbe0), 0.8)
+    }
+    for (let i = 0; i < 4; i++) {
+      const ph = (t * 1.1 + i * 0.37) % 1
+      glint(p, 150 + i * 5, 106 + (i & 1) * 3, Math.round(Math.sin(ph * Math.PI) * 3), C(0xfffbe0))
+    }
+    const fr = Math.floor(t * 2)
+    horse(p, 66, 110, fr % 6 === 0 ? 1 : 0, ramp(0x3a2214, 0x6a4026, 0x8e5a34, 0xb07a48), true)
+    person(p, 200, 120, { robe: ROBE.green, hat: 'hood', pose: fr % 2 ? 'point' : 'up', frame: fr, flip: true, skin: 1 })
+    person(p, 216, 124, { robe: ROBE.ochre, hat: 'straw', pose: 'hold', flip: true })
+    person(p, 136, 124, { robe: ROBE.red, hat: 'scarf', hatColor: C(0xe8dcc0), pose: 'pick', frame: fr, skin: 2 })
+    birds(p, t, 2, 40, 10, C(0x1a2a1a), 167)
+  },
+}
+
+const relic: Scene = {
+  draw(p) {
+    // Inside an old chapel: stone walls, round arches, a high window.
+    const wall = ramp(0x1a1620, 0x2a2430, 0x3c3442, 0x524858, 0x6a5e6e, 0x84788a)
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const row = Math.floor(y / 6)
+      const seam = y % 6 === 0 || (x + (row % 2) * 7) % 14 === 0
+      p.set(x, y, seam ? wall[0] : tone(wall, 2 + (noise(x * 0.1, y * 0.1, 171) - 0.5) * 1.4 - Math.abs(x - 128) * 0.008, x, y))
+    }
+    for (const ax of [20, 196]) {
+      p.box(ax, 40, ax + 40, 100, (x, y) => tone(wall, 0.6 + (y - 40) * 0.006, x, y))
+      p.disc(ax + 20, 40, 20, 14, (x, y) => (y < 40 ? tone(wall, 0.6, x, y) : undefined))
+      p.box(ax - 4, 30, ax, 104, (x, y) => tone(wall, x === ax - 4 ? 4 : 3, x, y))
+      p.box(ax + 40, 30, ax + 44, 104, (x, y) => tone(wall, 2, x, y))
+    }
+    // The window, high on the left.
+    p.box(50, 6, 64, 24, C(0xfff4c8))
+    p.disc(57, 6, 7, 5, (_, y) => (y < 6 ? C(0xfff4c8) : undefined))
+    p.line(57, 2, 57, 24, C(0x2a2018))
+    p.line(50, 14, 64, 14, C(0x2a2018))
+    // Floor.
+    for (let y = 100; y < H; y++) for (let x = 0; x < W; x++) {
+      const u = ((x - 128) / (y - 80)) * 4
+      const seam = (u - Math.floor(u)) < 0.08 || (y - 100) % 7 === 0
+      p.set(x, y, seam ? C(0x1a1418) : tone(wall, 2.6 + (rnd(Math.floor(u), Math.floor((y - 100) / 7), 172) - 0.5), x, y))
+    }
+    // The altar and the reliquary on it: a little gilded house set with stones.
+    p.box(106, 86, 150, 104, (x, y) => tone(ramp(0x5a5048, 0x7a6e62, 0x9a8e7e, 0xbcae9a, 0xd8ccb6), 3.4 - (x - 106) * 0.05 - (y === 86 ? -0.6 : 0), x, y))
+    p.box(104, 84, 152, 87, PLASTER[4])
+    p.box(116, 70, 140, 84, (x, y) => tone(GOLD, 3.4 - (x - 116) * 0.08 - (y === 77 ? 1 : 0), x, y))
+    p.poly([114, 70, 128, 60, 142, 70], (x, y) => tone(GOLD, x < 128 ? 3.8 : 2.6, x, y))
+    p.line(128, 60, 128, 54, GOLD[3])
+    p.line(125, 56, 131, 56, GOLD[3])
+    for (const [x, y, c] of [[121, 74, 0xe03050], [128, 74, 0x30c070], [135, 74, 0x4080f0], [128, 80, 0xe8e0f0]]) {
+      p.set(x, y, C(c))
+      p.set(x, y - 1, C(0xffffff))
+    }
+    // Candles.
+    for (const cx of [100, 108, 148, 156]) {
+      p.box(cx, 76, cx + 2, 86, PLASTER[4])
+      p.set(cx, 76, PLASTER[2])
+    }
+  },
+  fx(p, t) {
+    // The beam from the window falling on the reliquary.
+    const pulse = 0.22 + Math.sin(t * 0.9) * 0.05
+    for (let y = 6; y < 100; y++) {
+      const u = (y - 6) / 94
+      const cx = 57 + u * 71
+      const half = 6 + u * 16
+      for (let x = Math.floor(cx - half); x <= cx + half; x++) p.tint(x, y, C(0xfff0c0), pulse * (1 - Math.abs(x - cx) / (half + 1)))
+    }
+    for (let i = 0; i < 30; i++) {
+      const a = (t * 0.04 + rnd(i, 0, 173)) % 1
+      const u = rnd(i, 1, 173)
+      p.tint(57 + u * 71 + (a - 0.5) * 20 + Math.sin(t + i) * 2, 6 + u * 94, C(0xfffbe0), 0.7 * Math.sin(a * Math.PI))
+    }
+    glow(p, 128, 70, 26 + Math.sin(t * 1.6) * 3, C(0xfff0a0), 0.35)
+    for (let i = 0; i < 4; i++) {
+      const ph = (t * 0.8 + i * 0.3) % 1
+      glint(p, [120, 136, 128, 116][i], [64, 66, 58, 76][i], Math.round(Math.sin(ph * Math.PI) * 3), C(0xffffff))
+    }
+    for (const cx of [100, 108, 148, 156]) {
+      flames(p, cx - 1, cx + 3, 75, 4, t, cx)
+      glow(p, cx + 1, 72, 8, C(0xffb040), 0.35)
+    }
+    // Pilgrims kneeling, a monk with a censer.
+    person(p, 96, 122, { robe: ROBE.brown, hat: 'hood', pose: 'pray', kneel: true })
+    person(p, 116, 124, { robe: ROBE.white, hat: 'veil', hatColor: C(0xf0ece0), pose: 'pray', kneel: true, skin: 1 })
+    person(p, 140, 124, { robe: ROBE.grey, hat: 'hood', pose: 'pray', kneel: true, skin: 2, flip: true })
+    const sw = Math.sin(t * 2) * 3
+    person(p, 176, 118, { robe: ROBE.black, hat: 'hood', hatColor: ROBE.black[1], pose: 'hold', flip: true })
+    p.line(172, 110, 170 + sw, 116, STONE[3])
+    p.disc(170 + sw, 117, 1.5, 1.5, GOLD[2])
+    smoke(p, 170 + sw, 114, t, { n: 4, size: 1.5, rise: 20, drift: -8, c: ramp(0x8a8a90, 0xa8a8b0, 0xc8c8d0, 0xe8e8f0), k: 0.4 })
+  },
+}
+
+const tournament: Scene = {
+  draw(p) {
+    sky(p, ramp(0x3a80cc, 0x5096d6, 0x74b0e0, 0xa4cce6, 0xd0e4ee), 0, 64)
+    cloud(p, 200, 12, 70, 12, ramp(0xb8c8d8, 0xd4dee6, 0xeef2f4, 0xffffff), 181)
+    land(p, (x) => 56 - noise(x * 0.02, 0, 182) * 8, (x, y, dd) => tone(ramp(0x4a7458, 0x5a8460, 0x6a9668), 2 - dd * 0.1, x, y), 72)
+    // The stand: tiers of benches under a striped awning.
+    p.box(30, 42, 226, 70, (x, y) => tone(WOOD, 2.6 - ((y - 42) % 7 === 0 ? 1 : 0), x, y))
+    for (let i = 0; i < 70; i++) {
+      const x = 34 + (i % 35) * 5.4 + (i > 34 ? 2 : 0)
+      const y = 52 + (i > 34 ? 8 : 0)
+      const S = SKINS[i % 3]
+      p.rect(x, y - 3, 3, 3, S[1])
+      p.rect(x - 1, y, 5, 4, C([0xa83030, 0x2a4a9a, 0xe8c050, 0x3a7a3a, 0xf0e8d8][i % 5]))
+    }
+    p.poly([24, 42, 232, 42, 226, 30, 30, 30], (x) => (Math.floor((x - 24) / 8) % 2 === 0 ? (x < 128 ? C(0xb02a2a) : C(0x2a4aa8)) : C(0xf0e8d8)))
+    for (let x = 24; x < 232; x += 8) p.poly([x, 42, x + 8, 42, x + 4, 46], x < 128 ? C(0xb02a2a) : C(0x2a4aa8))
+    for (const x of [30, 128, 226]) p.box(x - 1, 30, x + 1, 70, WOOD[1])
+    // The lists: sand, and the tilt barrier down the middle.
+    land(p, () => 70, (x, y, dd) => tone(SAND, 3.4 - dd * 0.015 + (noise(x * 0.3, y * 0.4, 183) - 0.5) * 0.8, x, y))
+    for (let x = 0; x < W; x++) {
+      p.set(x, 98, WOOD[4])
+      p.set(x, 99, WOOD[3])
+      p.set(x, 100, WOOD[2])
+      if (x % 16 === 0) p.box(x, 98, x + 2, 108, WOOD[1])
+      if (Math.floor(x / 16) % 2 === 0) p.set(x, 99, C(0xe8d8b8))
+    }
+  },
+  fx(p, t) {
+    const wv = Math.round(Math.sin(t * 4))
+    for (const [x, c] of [[30, 0xb02a2a], [128, 0xe8c050], [226, 0x2a4aa8]] as const) p.poly([x + 1, 18, x + 14, 20 + wv, x + 1, 26], C(c))
+    for (const x of [30, 128, 226]) p.line(x, 18, x, 30, WOOD[1])
+    // Two knights charging along the barrier, meeting in a shower of splinters.
+    const cycle = (t % 4) / 4
+    const run = Math.min(1, cycle / 0.8)
+    const fr = Math.floor(t * 8)
+    const ax = 10 + run * 92
+    const bx = 246 - run * 92
+    knight(p, bx, 96, fr, ROBE.blue, true, 3)
+    knight(p, ax, 114, fr + 1, ROBE.red, false, -14)
+    if (cycle > 0.8) {
+      const s = (cycle - 0.8) / 0.2
+      for (let i = 0; i < 14; i++) {
+        const a = rnd(i, 0, 184) * Math.PI * 2
+        p.set(128 + Math.cos(a) * s * 20, 84 + Math.sin(a) * s * 12 - s * 6, i % 2 ? WOOD[4] : C(0xfff0b0))
+      }
+      glint(p, 128, 84, Math.round((1 - s) * 5), C(0xffffff))
+    }
+    // The crowd jumping to its feet at the clash.
+    if (cycle > 0.8) for (let i = 0; i < 70; i += 3) p.rect(34 + (i % 35) * 5.4 + (i > 34 ? 2 : 0), 47 + (i > 34 ? 8 : 0) - (fr % 2), 3, 1, SKINS[i % 3][2])
+    for (let i = 0; i < 12; i++) {
+      const y = (rnd(i, 1, 185) * 60 + t * 12) % 60 + 40
+      p.set((rnd(i, 0, 185) * W + Math.sin(t + i) * 4) % W, y, C(i % 2 ? 0xf0e8d8 : 0xe8c050))
+    }
+  },
+}
+
 // Anything else: a quiet valley with a herald on the road.
 const fallback: Scene = {
   draw(p) {
@@ -2285,6 +3319,22 @@ const SCENES: Record<string, Scene> = {
   treasure,
   coldSnap,
   pilgrims,
+  locusts,
+  hailstorm,
+  earthquake,
+  aurora,
+  eclipse,
+  rainbow,
+  dragonRumour,
+  royalWedding,
+  nomads,
+  minstrel,
+  wolves,
+  mineCollapse,
+  bandits,
+  lostCaravan,
+  relic,
+  tournament,
 }
 
 // The still layers, painted once per kind.

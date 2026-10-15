@@ -8,6 +8,7 @@ import type { Score } from '@game/shared'
 import { lastSeen } from './hud/online'
 import { Icon } from './icons'
 import { play } from '../audio/sfx'
+import { MiniBoards } from './hud/MiniGames'
 
 // The lobby chat: kept for the season, every line under the kingdom's name in its colour and its player's name. A
 // second tab lists the kingdoms of the lobby and who plays them; picking one opens it in the diplomacy tab. It folds
@@ -68,6 +69,7 @@ export function Chat({
   onKingdom,
   onLocate,
   banner,
+  lobby,
 }: {
   // Where this lobby's read marker is kept.
   storeKey: string
@@ -84,9 +86,13 @@ export function Chat({
   banner?: (kingdom: number) => ReactNode
   // Moves the camera to a kingdom's palace.
   onLocate: (site: { x: number; y: number }) => void
+  // The lobby, for the mini-game leaderboards in the ranking tab (CLAUDE.md §6.5).
+  lobby?: string
 }) {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'chat' | 'kingdoms' | 'ranking'>('chat')
+  // The ranking tab shows the lords by score or the mini-games' boards.
+  const [boards, setBoards] = useState<'lords' | 'games'>('lords')
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   // The newest message read: as remembered, or (the first time in this lobby) everything already there.
@@ -221,7 +227,25 @@ export function Chat({
         </button>
       </header>
       {tab === 'ranking' ? (
-        <Ranking kingdoms={kingdoms} mine={mine} onKingdom={onKingdom} banner={banner} />
+        <>
+          {lobby && (
+            <div className="chat-ranking-switch" role="tablist">
+              <button role="tab" aria-selected={boards === 'lords'} className="btn small" onClick={() => setBoards('lords')}>
+                Lordlar
+              </button>
+              <button role="tab" aria-selected={boards === 'games'} className="btn small" onClick={() => setBoards('games')}>
+                Mini oyunlar
+              </button>
+            </div>
+          )}
+          {lobby && boards === 'games' ? (
+            <div className="chat-minigames">
+              <MiniBoards lobby={lobby} />
+            </div>
+          ) : (
+            <Ranking kingdoms={kingdoms} mine={mine} onKingdom={onKingdom} banner={banner} />
+          )}
+        </>
       ) : tab === 'kingdoms' ? (
         <ol className="chat-kingdoms">
           {kingdoms.map((k) => (

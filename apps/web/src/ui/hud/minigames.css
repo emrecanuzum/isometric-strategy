@@ -1,0 +1,103 @@
+/* The mini-games (CLAUDE.md §6.5): the window with the game's canvas and the leaderboards. */
+
+.dialog.minigame {
+  width: min(560px, calc(100vw - var(--gap) * 2));
+  max-height: calc(100vh - var(--gap) * 4);
+  overflow: hidden auto;
+}
+
+.minigame-actions {
+  display: flex;
+  gap: calc(var(--px) * 3);
+}
+
+.minigame-actions .btn.wide {
+  flex: 1;
+}
+
+.minigame-play {
+  display: grid;
+  justify-items: center;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 4) 0;
+  touch-action: none;
+  user-select: none;
+  cursor: pointer;
+}
+
+.minigame-play canvas {
+  width: 100%;
+  max-width: 500px;
+  max-height: 55vh;
+  object-fit: contain;
+  image-rendering: pixelated;
+  box-shadow: var(--outline);
+}
+
+.minigame-score {
+  margin: 0;
+  font-size: 18px;
+}
+
+.minigame-score b {
+  color: var(--gold);
+  font-size: 28px;
+}
+
+.minigame-score small {
+  color: var(--muted);
+}
+
+.minigame-boards,
+.minigame-board {
+  display: grid;
+  gap: calc(var(--px) * 3);
+  width: 100%;
+}
+
+.minigame-games,
+.minigame-scopes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 2);
+}
+
+.minigame-games .btn[aria-selected='true'],
+.minigame-scopes .btn[aria-selected='true'],
+.chat-ranking-switch .btn[aria-selected='true'] {
+  background: var(--panel-2);
+  color: var(--gold);
+}
+
+.minigame-ranks .row {
+  display: grid;
+  grid-template-columns: 2.4ch auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 3);
+  text-align: left;
+}
+
+.minigame-ranks li.own .row {
+  background: rgb(242 209 107 / 14%);
+  box-shadow: inset 0 0 0 1px rgb(242 209 107 / 45%);
+}
+
+.minigame-board.compact .minigame-ranks {
+  max-height: 200px;
+}
+
+/* In the chat's ranking tab: the lords' ranking or the mini-games. */
+.chat-ranking-switch {
+  display: flex;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 2) calc(var(--px) * 2) 0;
+  background: var(--slot);
+}
+
+.chat-minigames {
+  flex: 1;
+  overflow: hidden auto;
+  padding: calc(var(--px) * 2);
+  background: var(--slot);
+}

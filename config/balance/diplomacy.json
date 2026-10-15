@@ -20,7 +20,7 @@
   },
   "tribute": {
     "minGold": 1,
-    "maxGold": 20,
+    "maxGold": 4,
     "accept": -5,
     "reject": -30,
     "renege": -45,

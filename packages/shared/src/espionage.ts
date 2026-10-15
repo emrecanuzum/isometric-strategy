@@ -94,9 +94,10 @@ export function estimate(value: number, strength: number, seed: number, now: num
 // ---- Operations (CK-like) -------------------------------------------------------------------------------------------
 
 // Done through a network already built in the target, the strongest on any topic: sabotage at 50, carrying off the
-// queen at 70, inciting a revolt at 90. Each costs gold; a failed one loses the spy and reveals who sent it.
-export type Operation = 'burn' | 'delay' | 'kidnap' | 'revolt'
-export const OPERATIONS: Operation[] = ['burn', 'delay', 'kidnap', 'revolt']
+// queen at 70, inciting a revolt at 90; stirring up one of the target's towns against it (CLAUDE.md §8.4) at 40. Each
+// costs gold; a failed one loses the spy and reveals who sent it.
+export type Operation = 'burn' | 'delay' | 'kidnap' | 'revolt' | 'townRevolt'
+export const OPERATIONS: Operation[] = ['burn', 'delay', 'kidnap', 'revolt', 'townRevolt']
 
 export const operationSpec = (op: Operation) => {
   const o = balance.espionage.operations
@@ -109,12 +110,14 @@ export function operationChance(op: Operation, strength: number, counter: number
   return Math.max(o.minChance, Math.min(o.maxChance, chance))
 }
 
-export type OperationError = 'strength' | 'queen' | 'cost' | 'prison'
+export type OperationError = 'strength' | 'queen' | 'cost' | 'prison' | 'town'
 
-export function operationError(op: Operation, strength: number, owner: Kingdom, target: Kingdom): OperationError | null {
+// `town`: the town to stir up (townRevolt), one the target holds.
+export function operationError(op: Operation, strength: number, owner: Kingdom, target: Kingdom, town?: number): OperationError | null {
   const spec = operationSpec(op)
   if (strength < spec.minStrength) return 'strength'
   if (op === 'kidnap' && !target.queen) return 'queen'
+  if (op === 'townRevolt' && !(target.towns ?? []).some((h) => h.id === town)) return 'town'
   // A queen carried off needs somewhere to be kept: a finished prison.
   if (op === 'kidnap' && !owner.buildings.some((b) => b.kind === 'prison' && b.doneAt <= owner.settledAt)) return 'prison'
   if (owner.stock.gold < (spec.cost.gold ?? 0)) return 'cost'

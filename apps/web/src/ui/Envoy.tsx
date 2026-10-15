@@ -73,9 +73,11 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
     case 'operation_struck':
       return {
         icon: 'warn',
-        title: p.op === 'kidnap' ? 'Kraliçen kaçırıldı!' : p.op === 'revolt' ? 'Halk ayaklandı!' : 'Sabotaj!',
+        title: p.op === 'kidnap' ? 'Kraliçen kaçırıldı!' : p.op === 'revolt' ? 'Halk ayaklandı!' : p.op === 'townRevolt' ? `${p.town ?? 'Kasaban'} kışkırtıldı!` : 'Sabotaj!',
         text:
-          p.op === 'kidnap'
+          p.op === 'townRevolt'
+            ? `Kimliği belirsiz kışkırtıcılar ${p.town ?? 'bir kasaban'} halkını sana karşı doldurdu: kasabanın sadakati ${-balance.espionage.operations.townRevolt.loyalty} düştü. Sadakat ${balance.towns.revolt.below}'in altındaysa kasaba ayaklanır; bakımını artırarak gönüllerini kazanabilirsin.`
+            : p.op === 'kidnap'
             ? `${p.by} casusları kraliçeni kaçırdı. Fidye ödeyebilir ya da savaş açabilirsin (savaş gerekçen var).`
             : p.op === 'revolt'
               ? 'Kışkırtıcılar halkı ayaklandırdı: üretim bir süre yarıya indi.'
@@ -146,8 +148,8 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       const share = Number(p.gold) > 0 ? ` (hazinenin %${Math.max(1, Math.round((Number(p.amount) / Number(p.gold)) * 100))} kadarı)` : ''
       return {
         icon: 'banner',
-        title: `${crown(p.crown)} devriyesi kapında`,
-        text: `Rakip taç ${crown(p.crown)} atlıları sarayına geldi ve ${fmt(Number(p.amount))} altın${share} haraç istiyor. Ödersen yollarına giderler. Reddedersen o tacın lordlarıyla ilişkin ${-balance.cities.crown.patrol.refuseRelation} düşer. ${Math.round(balance.cities.crown.patrol.answerSeconds / 60)} dakika içinde cevap vermezsen haracı zorla alırlar.`,
+        title: `${crown(p.crown)} haraççıları kapında`,
+        text: `Rakip taç ${crown(p.crown)} haraççıları sarayına geldi (her ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelirler) ve ${fmt(Number(p.amount))} altın${share} haraç istiyor. Ödersen yollarına giderler. Reddedersen o tacın lordlarıyla ilişkin ${-balance.cities.crown.patrol.refuseRelation} düşer. ${Math.round(balance.cities.crown.patrol.answerSeconds / 60)} dakika içinde cevap vermezsen haracı zorla alırlar.`,
       }
     }
     case 'patrol_tip':
@@ -161,9 +163,17 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       }
     }
     case 'patrol_taken':
-      return { icon: 'gold', title: 'Devriye haracı aldı', text: `${crown(p.crown)} devriyesine kimse cevap vermedi; atlılar hazineden ${fmt(Number(p.amount))} altın alıp gitti.` }
+      return { icon: 'gold', title: 'Haraççılar haracı aldı', text: `${crown(p.crown)} haraççılarına kimse cevap vermedi; hazineden ${fmt(Number(p.amount))} altın alıp gitti.` }
     case 'patrol_ignored':
       return { icon: 'warn', title: 'Haraç cevapsız kaldı', text: `${crown(p.crown)} devriyesi ${fmt(Number(p.amount))} altınını alamadan döndü. O tacın lordları bunu unutmayacak: ilişkin ${-balance.cities.crown.patrol.refuseRelation} düştü.` }
+    case 'town_revolt':
+      return {
+        icon: 'unhappy',
+        title: `${p.name} ayaklandı!`,
+        text: `${p.name} halkı sana karşı ayaklandı: ${p.minutes ?? Math.round(balance.towns.revolt.seconds / 60)} dakika boyunca hiçbir şey göndermeyecek. Ayaklanma bittiğinde sadakat hâlâ ${balance.towns.revolt.breakAwayBelow}'nin altındaysa kasaba senden kopar. Kasabanın panelinden bakımını artırabilirsin.`,
+      }
+    case 'town_lost_revolt':
+      return { icon: 'warn', title: `${p.name} senden koptu`, text: `${p.name} halkı ayaklanmayı sonuna götürdü ve sana bağlılığını bıraktı. Kasaba artık kimseye bağlı değil; küçük bir garnizonla kendini savunuyor, yeniden kuşatıp alabilirsin.` }
     case 'town_held':
       return { icon: 'warn', title: `${p.name} dayandı`, text: `${p.name} garnizonu kuşatmayı püskürttü; ordundan ${fmt(Number(p.lost))} asker düştü, kimse kalmadı.` }
     default:

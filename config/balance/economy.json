@@ -22,15 +22,16 @@
   "foodPerVillager": 0.25,
   "maxConstructions": 2,
   "trade": {
-    "tripSeconds": 10,
+    "tripSeconds": 30,
     "walkFreeTiles": 12,
-    "walkSecondsPerTile": 0.07,
+    "walkSecondsPerTile": 0.2,
     "amountStep": 5,
     "amountCooldownSeconds": 120,
+    "foodReserveRounds": 30,
     "price": {
-      "food": 1.7,
-      "materials": 2.5,
-      "arms": 3.4
+      "food": 0.4,
+      "materials": 0.6,
+      "arms": 0.8
     },
     "levels": [
       {
@@ -601,7 +602,7 @@
       "workers": 1,
       "produces": "food",
       "amount": 1,
-      "goldPerRound": 0.4
+      "goldPerRound": 0.1
     }
   },
   "maxBatch": 64,

@@ -5,6 +5,7 @@ import { KINGDOM_COLORS } from '../../game/buildingSprites'
 import type { KingdomColor } from '../../game/buildingSprites'
 import { Icon } from '../icons'
 import { RESOURCE_NAMES } from '../names'
+import { BoardDialog, MiniBoard } from './MiniGames'
 import { Section } from './primitives'
 import type { HudData } from './tabs'
 
@@ -30,7 +31,9 @@ export function FisherPanel({ data }: { data: HudData }) {
   const { kingdom, now, online } = data
   // The seed the server drew for this cast (the game is played from it), while the cast is on.
   const [seed, setSeed] = useState<number | null>(null)
-  const [result, setResult] = useState<FisherEntry | null>(null)
+  // What the catch brought, with its score on the fishing leaderboard (CLAUDE.md §6.5).
+  const [result, setResult] = useState<(FisherEntry & { score?: number }) | null>(null)
+  const [board, setBoard] = useState(false)
   // The dialog opens at once on a cast; it waits there for the server's seed, and again for its verdict.
   const [open, setOpen] = useState(false)
   const [reeling, setReeling] = useState(false)
@@ -55,7 +58,7 @@ export function FisherPanel({ data }: { data: HudData }) {
   // The presses go to the server, which plays the cast again to decide the catch.
   const finish = async (toggles: number[]) => {
     setReeling(true)
-    const entry = await online?.act<FisherEntry>({ type: 'fish', toggles })
+    const entry = await online?.act<FisherEntry & { score?: number }>({ type: 'fish', toggles })
     setReeling(false)
     setResult(entry ?? { at: Date.now(), kind: 'miss' })
   }
@@ -66,12 +69,19 @@ export function FisherPanel({ data }: { data: HudData }) {
           Kulübedeki tuhaf balıkçı oltasını sana veriyor. Basılı tut (fare, dokunma ya da boşluk tuşu) ve yeşil alanı kaçan balığın üstünde tut;
           çubuk dolarsa tutarsın. Bazen bir kese mal, bazen de bir şişe içinde başka bir lord hakkında bir not çıkar.
         </p>
-        <button className="btn wide" disabled={why !== null || open} onClick={cast}>
-          <span>
-            <Icon name="food" size={16} /> Oltayı at
-          </span>
-          {why === 'busy' && <small>{secs(castReadyAt(kingdom) - now)} sonra</small>}
-        </button>
+        <div className="minigame-actions">
+          <button className="btn wide" disabled={why !== null || open} onClick={cast}>
+            <span>
+              <Icon name="food" size={16} /> Oltayı at
+            </span>
+            {why === 'busy' && <small>{secs(castReadyAt(kingdom) - now)} sonra</small>}
+          </button>
+          {online && (
+            <button className="btn" onClick={() => setBoard(true)}>
+              <Icon name="star" size={16} /> Sıralama
+            </button>
+          )}
+        </div>
       </Section>
       <Section title="Balıkçı günlüğü" icon="scroll" aside={`${log.length} kayıt`}>
         {log.length === 0 ? (
@@ -100,7 +110,13 @@ export function FisherPanel({ data }: { data: HudData }) {
             </header>
             {result ? (
               <div className="fishing-result">
+                {!!result.score && (
+                  <p className="minigame-score">
+                    Puan <b>{result.score}</b>
+                  </p>
+                )}
                 <p className={result.kind === 'miss' ? 'down' : 'up'}>{describeCatch(result)}</p>
+                {online && result.kind !== 'miss' && <MiniBoard lobby={online.lobby.id} game="fishing" compact />}
                 <button className="btn small" onClick={close}>
                   Tamam
                 </button>
@@ -113,6 +129,7 @@ export function FisherPanel({ data }: { data: HudData }) {
           </section>
         </div>
       )}
+      {board && online && <BoardDialog lobby={online.lobby.id} first="fishing" onClose={() => setBoard(false)} />}
     </>
   )
 }

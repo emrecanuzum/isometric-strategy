@@ -21,6 +21,7 @@ export interface TownRow {
   owner_id: number | null
   garrison: number
   siege: { army: number; kingdom: number; startedAt: number; endsAt: number; lost?: number } | null
+  taken_at?: string | null
 }
 
 export async function townsOf(lobby: string): Promise<TownRow[]> {
@@ -62,16 +63,63 @@ export async function ensureTowns(lobby: string, world: LobbyWorld, given?: Row[
 // The town whose square holds the tile, if any.
 export const townAt = (towns: TownRow[], p: Point) => towns.find((t) => game.inTown(t, p))
 
-// What the holder's state keeps of its towns.
-const hold = (k: Kingdom, town: TownRow, held: boolean) => ({
+// What the holder's state keeps of its towns: a town just taken starts at the loyalty and upkeep it starts with.
+const hold = (k: Kingdom, town: TownRow, held: boolean, at: number) => ({
   ...k,
-  towns: [...(k.towns ?? []).filter((h: { id: number }) => h.id !== town.id), ...(held ? [{ id: town.id, kind: town.kind }] : [])],
+  towns: [...(k.towns ?? []).filter((h: { id: number }) => h.id !== town.id), ...(held ? [game.heldTown(town, at)] : [])],
 })
+
+// Towns rising against their lords and breaking free (CLAUDE.md §8.4). Worked out lazily in the lords' states (see
+// game.townsRound); here a lord whose towns are restless is settled now and then even while away, so a revolt is told
+// and a town broken free is set free in the lobby's table. Idempotent: a revolt is told once (revoltTold), and a town
+// is freed only while still held by the lord it broke from, since it was taken.
+async function settleRevolts(lobby: string, rows: Row[], towns: TownRow[], now: number) {
+  const r = game.balance.towns.revolt
+  for (const row of rows) {
+    const held = (row.state?.towns ?? []) as { id: number; loyalty?: number; revoltUntil?: number; revoltTold?: number }[]
+    if (held.length === 0) continue
+    const restless = held.some(
+      (h) => h.revoltUntil !== undefined || game.townLoyalty(h) < r.below + 5 || game.townLoyaltyTarget(h, { happiness: game.happinessOf(row.state), ruler: 0 }) < r.below,
+    )
+    if (!restless || now - (row.state.settledAt ?? 0) < 60_000) continue
+    const told: { id: number; name?: string }[] = []
+    const written = await mutateKingdom(row.id, now, (k) => {
+      told.length = 0
+      const towns = (k.towns ?? []).map((h: { id: number; name?: string; revoltUntil?: number; revoltTold?: number }) => {
+        if (h.revoltUntil === undefined || h.revoltUntil <= now || h.revoltTold === h.revoltUntil) return h
+        told.push(h)
+        return { ...h, revoltTold: h.revoltUntil }
+      })
+      return { ...k, towns }
+    }).catch(() => null)
+    if (written?.state) row.state = written.state
+    for (const h of told) {
+      const town = towns.find((t) => t.id === h.id)
+      await notify(lobby, [row.id], 'town_revolt', { town: h.id, name: town?.name ?? h.name ?? '?', minutes: Math.round(r.seconds / 60) }, now)
+    }
+  }
+  // Towns broken free: back to no one, with a small garrison of their own.
+  for (const town of towns) {
+    if (town.owner_id === null) continue
+    const owner = rows.find((row) => row.id === town.owner_id)
+    const lost = ((owner?.state?.townsLost ?? []) as { id: number; at: number }[]).find((l) => l.id === town.id && l.at >= (town.taken_at ? ms(town.taken_at) : 0))
+    if (!lost) continue
+    const [low, high] = r.garrison
+    const garrison = low + Math.floor(game.hash(town.idx, 7, Math.floor(lost.at / 1000)) * (high - low + 1))
+    const { data: freed } = await admin.from('lobby_towns').update({ owner_id: null, garrison }).eq('id', town.id).eq('owner_id', town.owner_id).select('id').maybeSingle()
+    if (!freed) continue
+    const before = town.owner_id
+    town.owner_id = null
+    town.garrison = garrison
+    await notify(lobby, [before], 'town_lost_revolt', { town: town.id, name: town.name }, lost.at)
+  }
+}
 
 // Sieges begun, broken off and ended, up to `now`. Called by the tick after the armies have moved.
 export async function settleTowns(lobby: string, rows: Row[], pacts: Pact[], now: number) {
   const towns = await townsOf(lobby)
   if (towns.length === 0) return
+  await settleRevolts(lobby, rows, towns, now)
   const { data: info } = await admin.from('lobbies').select('seed').eq('id', lobby).single()
   const walled = (town: TownRow) => !!info && game.townWalled(info.seed, town.idx)
   const { data } = await admin.from('armies').select('*').eq('lobby_id', lobby)
@@ -144,7 +192,7 @@ export async function settleTowns(lobby: string, rows: Row[], pacts: Pact[], now
     const { data: claimed } = await claim.select('id').maybeSingle()
     if (!claimed) continue
     if (lost > 0) {
-      await mutateKingdom(s.kingdom, at, (k) => ({ ...k, fielded: Math.max(0, (k.fielded ?? 0) - lost) }))
+      await mutateKingdom(s.kingdom, at, (k) => game.book({ ...k, fielded: Math.max(0, (k.fielded ?? 0) - lost) }, {}, { town: lost }))
       if (left <= 0) await admin.from('armies').delete().eq('id', army.id)
       else await admin.from('armies').update({ soldiers: left, units: game.takeShare(unitsOf(army), lost).left }).eq('id', army.id)
     }
@@ -156,8 +204,8 @@ export async function settleTowns(lobby: string, rows: Row[], pacts: Pact[], now
     }
     await admin.from('armies').update({ goal: { kind: 'move' } }).eq('id', army.id)
     const before = town.owner_id
-    await mutateKingdom(s.kingdom, at, (k) => hold(k, town, true))
-    if (before !== null) await mutateKingdom(before, at, (k) => hold(k, town, false))
+    await mutateKingdom(s.kingdom, at, (k) => hold(k, town, true, at))
+    if (before !== null) await mutateKingdom(before, at, (k) => hold(k, town, false, at))
     await notify(lobby, [s.kingdom, ...(before !== null ? [before] : [])], 'town_taken', { town: town.id, name: town.name, kind: town.kind, by: nameOf(rows, s.kingdom), from: before !== null ? nameOf(rows, before) : null, lost: total }, at)
   }
 }

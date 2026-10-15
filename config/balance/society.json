@@ -5,19 +5,19 @@
     "default": "normal",
     "levels": {
       "low": {
-        "goldPerVillager": 0.04,
+        "goldPerVillager": 0.008,
         "happiness": 15
       },
       "normal": {
-        "goldPerVillager": 0.1,
+        "goldPerVillager": 0.02,
         "happiness": 0
       },
       "high": {
-        "goldPerVillager": 0.18,
+        "goldPerVillager": 0.036,
         "happiness": -20
       },
       "heavy": {
-        "goldPerVillager": 0.28,
+        "goldPerVillager": 0.056,
         "happiness": -40
       }
     }

@@ -27,7 +27,7 @@ export const TABS: Tab[] = [
   { id: 'build', name: 'İnşa', icon: 'build', blurb: 'Yapı seç, hududuna yerleştir', group: 'economy', view: BuildTab },
   { id: 'store', name: 'Depo', icon: 'chest', blurb: 'Hammadde stoku ve akışı', group: 'economy', view: StoreTab },
   { id: 'trade', name: 'Ticaret', icon: 'trade', blurb: 'Tüccar ve ticaret noktası', group: 'economy', view: TradeTab },
-  { id: 'kingdom', name: 'Saray', icon: 'crown', blurb: 'Bağlılık, yapılar, hudut', group: 'realm', view: KingdomTab },
+  { id: 'kingdom', name: 'Saray', icon: 'crown', blurb: 'Seviye, hanedan, yapılar', group: 'realm', view: KingdomTab },
   { id: 'people', name: 'Halk', icon: 'people', blurb: 'Vergi, mutluluk, kraliçe', group: 'realm', view: PeopleTab },
   { id: 'army', name: 'Ordu', icon: 'swords', blurb: 'Kışla, garnizon, ordular, savaşlar', group: 'world', view: ArmyTab },
   { id: 'diplomacy', name: 'Diplomasi', icon: 'banner', blurb: 'Lordlar, ilişkiler, casusluk', group: 'world', view: DiplomacyTab },

@@ -144,7 +144,7 @@ export function TradeShares({ online }: { online: Online }) {
                 <span>{k.id === online.me ? `${k.name} (sen)` : k.name}</span>
                 <b>%{Math.round((value / total) * 100)}</b>
                 <small>
-                  {k.id === online.me ? Math.round(value) : amount(value)} {measure === 'gold' ? 'altın' : 'birim'}
+                  {k.id === online.me ? amount(value) : `~${amount(value)}`} {measure === 'gold' ? 'altın' : 'birim'}
                 </small>
               </li>
             ))}

@@ -1,6 +1,6 @@
-// The crown kingdoms' patrols on the server (CLAUDE.md §7.8): each visit is settled once, when the patrol reaches the
-// lord: a tip at the house of entertainment from its own crown, a demand for tribute from a rival one (paid or
-// refused by the lord; left unanswered, as by a lord who is away, the patrol takes it all the same).
+// The crown kingdoms' patrols on the server (CLAUDE.md §7.8): each visit is settled once, when it reaches the lord: a
+// tip at the house of entertainment from its own crown's patrol, and every tribute slot a demand from each rival
+// crown's collectors (paid or refused by the lord; left unanswered, as by a lord who is away, it is taken all the same).
 
 import * as game from './game.js'
 import { admin, changeRelation, iso, ms, mutateKingdom, notify } from './server.ts'
@@ -36,8 +36,21 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
   if (!info) return
   const spec = game.patrolSpec()
   const lords = rows.filter((r) => r.state).map((r) => ({ id: r.id, liege: r.state.liege }))
-  // Each crown's share of the power its lords give it (crowns.ts): a strong crown asks more, and gives more.
+  // Each crown's share of the power its lords give it (crowns.ts): a strong crown gives its lords more.
   const { share } = game.crownPower(rows.filter((r) => r.state).map((r) => ({ liege: r.state.liege, score: game.scoreOf(r.state, now).total })), world.cities.length)
+  // Writes a visit once: only the run that writes it acts on it.
+  const claim = async (visit: Omit<VisitRow, 'id' | 'lobby_id'>) => {
+    const { data } = await admin
+      .from('patrol_visits')
+      .upsert({ lobby_id: lobby, ...visit }, { onConflict: 'lobby_id,crown,patrol,slot,kingdom_id', ignoreDuplicates: true })
+      .select('id')
+      .maybeSingle()
+    return data as { id: number } | null
+  }
+
+  // The patrols: each rides to one of its own crown's lords, drinks at the house of entertainment and leaves a tip,
+  // with a gift once the crown thinks well enough of the lord (more from a strong crown); the visit itself warms the
+  // crown a little.
   const current = game.patrolSlotAt(now)
   for (const slot of [current - 1, current]) {
     const { arrive } = game.patrolTimes(slot)
@@ -48,67 +61,53 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
         if (target === null) continue
         const row = rows.find((r) => r.id === target)
         if (!row?.state) continue
-        // A demand whose time to answer had already run out when it was first seen (the server was away) is taken at
-        // once, without asking.
-        const late = arrive + spec.answerSeconds * 1000 <= now
-        const kind = game.visitKind(crown, row.state.liege)
         const settled = game.advance(row.state, arrive).kingdom
-        const tip = kind === 'tip' && hasTavern(settled, arrive)
-        const power = game.balance.cities.crown.power
-        const favour = game.byPower(share[crown] ?? 0.5, power.favour)
-        // A rival crown asks less of a lord it is on good terms with, and more the stronger it is.
-        const ease = 1 - (Math.max(0, game.crownRelation(settled, crown)) / 100) * game.balance.cities.crown.relation.tributeEase
-        const amount =
-          kind === 'tribute'
-            ? Math.round(game.tributeDemand(settled.stock?.gold ?? 0) * ease * game.byPower(share[crown] ?? 0.5, power.demand))
-            : tip
-              ? Math.round(spec.tip * favour)
-              : 0
-        // Settled once: only the run that writes the visit acts on it.
-        const { data: written } = await admin
-          .from('patrol_visits')
-          .upsert(
-            {
-              lobby_id: lobby,
-              crown,
-              patrol,
-              slot,
-              kingdom_id: target,
-              kind: kind === 'tribute' ? 'tribute' : tip ? 'tip' : 'visit',
-              amount,
-              status: kind === 'tribute' && !late ? 'pending' : 'done',
-              visit_at: iso(arrive),
-              expires_at: kind === 'tribute' ? iso(arrive + spec.answerSeconds * 1000) : null,
-            },
-            { onConflict: 'lobby_id,crown,patrol,slot', ignoreDuplicates: true },
-          )
-          .select('id')
-          .maybeSingle()
+        const tip = hasTavern(settled, arrive)
+        const favour = game.byPower(share[crown] ?? 0.5, game.balance.cities.crown.power.favour)
+        const amount = tip ? Math.round(spec.tip * favour) : 0
+        const written = await claim({ crown, patrol, slot, kingdom_id: target, kind: tip ? 'tip' : 'visit', amount, status: 'done', visit_at: iso(arrive), expires_at: null })
         if (!written) continue
-        if (kind === 'tribute' && late) {
-          await takeTribute(lobby, target, crown, amount, arrive + spec.answerSeconds * 1000)
-        } else if (kind === 'tribute') {
-          const gold = Math.round(settled.stock?.gold ?? 0)
-          await notify(lobby, [target], 'patrol_tribute', { visit: written.id, crown, amount, gold, expiresAt: arrive + spec.answerSeconds * 1000 }, arrive)
-        } else {
-          // Its own crown's patrol: the tip at the house of entertainment, and a gift once the crown thinks well enough
-          // of the lord (more from a strong crown); the visit itself warms the crown a little.
-          const gift = game.giftAt(game.crownRelation(settled, crown))
-          const goods: Record<string, number> = {}
-          for (const [g, v] of Object.entries(gift?.goods ?? {})) goods[g] = Math.round((v as number) * favour)
-          const giftGold = gift ? Math.round(gift.gold * favour) : 0
-          await mutateKingdom(target, arrive, (k) => {
-            const stock = { ...k.stock, gold: k.stock.gold + amount + giftGold }
-            for (const [g, v] of Object.entries(goods)) stock[g] = (stock[g] ?? 0) + v
-            return game.changeCrownRelation({ ...k, stock }, crown, game.balance.cities.crown.relation.visit)
-          })
-          if (tip) await notify(lobby, [target], 'patrol_tip', { crown, amount }, arrive)
-          if (gift) await notify(lobby, [target], 'crown_gift', { crown, name: gift.name, gold: giftGold, goods }, arrive)
-        }
+        const gift = game.giftAt(game.crownRelation(settled, crown))
+        const goods: Record<string, number> = {}
+        for (const [g, v] of Object.entries(gift?.goods ?? {})) goods[g] = Math.round((v as number) * favour)
+        const giftGold = gift ? Math.round(gift.gold * favour) : 0
+        await mutateKingdom(target, arrive, (k) => {
+          const stock = { ...k.stock, gold: k.stock.gold + amount + giftGold }
+          for (const [g, v] of Object.entries(goods)) stock[g] = (stock[g] ?? 0) + v
+          return game.book(game.changeCrownRelation({ ...k, stock }, crown, game.balance.cities.crown.relation.visit), { crownGot: amount + giftGold })
+        })
+        if (tip) await notify(lobby, [target], 'patrol_tip', { crown, amount }, arrive)
+        if (gift) await notify(lobby, [target], 'crown_gift', { crown, name: gift.name, gold: giftGold, goods }, arrive)
       }
     }
   }
-  // Demands left unanswered: the patrol takes the tribute anyway.
+
+  // Tribute: every lord sworn to a crown is called on by each rival crown's collectors once a tribute slot, and asked
+  // a fixed share of the treasury as it stands (CLAUDE.md §7.8).
+  const tributeSlot = game.tributeSlotAt(now)
+  for (const slot of [tributeSlot - 1, tributeSlot]) {
+    for (const row of rows) {
+      if (!row.state) continue
+      for (const crown of game.tributeCrowns(world.cities.length, row.state.liege)) {
+        const arrive = game.tributeVisitAt(info.seed, crown, row.id, slot)
+        // A demand missed long ago (the server was away for a while) is let go rather than taken out of the blue.
+        if (arrive > now || arrive < now - (spec.answerSeconds + 180) * 1000) continue
+        const expires = arrive + spec.answerSeconds * 1000
+        // A demand whose time to answer had already run out when it was first seen (the server was away) is taken at
+        // once, without asking.
+        const late = expires <= now
+        const gold = Math.floor(game.advance(row.state, arrive).kingdom.stock?.gold ?? 0)
+        const amount = game.tributeDemand(gold)
+        if (amount < 1) continue
+        const written = await claim({ crown, patrol: -1, slot, kingdom_id: row.id, kind: 'tribute', amount, status: late ? 'done' : 'pending', visit_at: iso(arrive), expires_at: iso(expires) })
+        if (!written) continue
+        if (late) await takeTribute(lobby, row.id, crown, amount, expires)
+        else await notify(lobby, [row.id], 'patrol_tribute', { visit: written.id, crown, amount, gold, expiresAt: expires }, arrive)
+      }
+    }
+  }
+
+  // Demands left unanswered: the collectors take the tribute anyway.
   const { data: lapsed } = await admin
     .from('patrol_visits')
     .update({ status: 'expired' })
@@ -125,7 +124,7 @@ async function takeTribute(lobby: string, kingdom: number, crown: number, amount
   await mutateKingdom(kingdom, at, (k) => {
     taken = Math.min(amount, Math.max(0, Math.floor(k.stock.gold)))
     // Taken, not given: the crown thinks the less of the lord for it.
-    return game.changeCrownRelation({ ...k, stock: { ...k.stock, gold: k.stock.gold - taken } }, crown, game.balance.cities.crown.relation.tributeTaken)
+    return game.book(game.changeCrownRelation({ ...k, stock: { ...k.stock, gold: k.stock.gold - taken } }, crown, game.balance.cities.crown.relation.tributeTaken), { crownPaid: taken })
   })
   await notify(lobby, [kingdom], 'patrol_taken', { crown, amount: taken }, at)
 }

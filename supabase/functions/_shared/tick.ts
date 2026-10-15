@@ -210,7 +210,7 @@ async function moveArmies(lobby: string, world: LobbyWorld, rows: Row[], pacts: 
     const killed = Math.min(l.army.soldiers, Math.floor(total / m.tower.secondsPerKill))
     const left = l.army.soldiers - killed
     if (killed > 0) {
-      await mutateKingdom(l.army.kingdom_id, now, (k) => ({ ...k, fielded: Math.max(0, (k.fielded ?? 0) - killed) }))
+      await mutateKingdom(l.army.kingdom_id, now, (k) => game.book({ ...k, fielded: Math.max(0, (k.fielded ?? 0) - killed) }, {}, { towers: killed }))
       await notify(lobby, [l.army.kingdom_id], 'tower_losses', { army: id, killed }, now)
     }
     if (left <= 0) await admin.from('armies').delete().eq('id', id)
@@ -336,6 +336,8 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
   const states = new Map(rows.filter((r) => r.state).map((r) => [r.id, r.state as Kingdom]))
   const report: Record<string, unknown> = { winner: plan.winner, losses: {} as Record<string, number> }
   const losses = report.losses as Record<string, number>
+  // What the dead are put down to in the lords' accounts.
+  const cause = battle.kind === 'siege' ? 'siege' : 'battle'
   const settle = async (side: Fighter[], lost: number[], morale: number, won: boolean) => {
     for (const [i, f] of side.entries()) {
       const loss = lost[i] ?? 0
@@ -343,13 +345,13 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
       if (f.army === null) {
         await mutateKingdom(f.kingdom, at, (k) => {
           const units = game.takeShare(game.garrisonOf(k), loss).left
-          return { ...k, units, soldiers: game.countOf(units) }
+          return game.book({ ...k, units, soldiers: game.countOf(units) }, {}, { [cause]: loss })
         })
         continue
       }
       const { data } = await admin.from('armies').select('*').eq('id', f.army).maybeSingle()
       const army = data as ArmyRow | null
-      if (loss > 0) await mutateKingdom(f.kingdom, at, (k) => ({ ...k, fielded: Math.max(0, (k.fielded ?? 0) - loss) }))
+      if (loss > 0) await mutateKingdom(f.kingdom, at, (k) => game.book({ ...k, fielded: Math.max(0, (k.fielded ?? 0) - loss) }, {}, { [cause]: loss }))
       if (!army) continue
       const soldiers = army.soldiers - loss
       const units = game.takeShare(unitsOf(army), loss).left

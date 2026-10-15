@@ -284,19 +284,68 @@ export function answerCrisis<K extends Seeded & Pick<Kingdom, 'units' | 'soldier
   return next
 }
 
-// What the fortunes under way add up to (a crisis warded off does nothing; villagers turned out work less a while).
+// ---- Choices: fortunes that ask the lord to pick one of two ways (CLAUDE.md §9.8) -----------------------------------
+
+// One way of meeting a fortune: what it costs and gives at once, and what it adds while the fortune lasts.
+export interface ChoiceOption extends Pick<FortuneSpec, 'output' | 'trade' | 'work' | 'happiness' | 'templeHappiness'> {
+  cost?: Cost
+  gain?: Cost
+}
+const CHOICE = I.events.choice as unknown as { decideSeconds: number; kinds: Record<string, Record<DilemmaChoice, ChoiceOption>> }
+export type DilemmaChoice = 'a' | 'b'
+export const isDilemma = (kind: string) => kind in CHOICE.kinds
+export const dilemmaOptions = (kind: string): Record<DilemmaChoice, ChoiceOption> | null => CHOICE.kinds[kind] ?? null
+export const dilemmaDecideMs = () => CHOICE.decideSeconds * 1000
+// The way the lord chose for fortune f, if any.
+export const dilemmaChoiceOf = (k: Seeded, f: Pick<Fortune, 'kind' | 'scope' | 'start'>): DilemmaChoice | null => {
+  if (!isDilemma(f.kind)) return null
+  const choice = k.responses?.[crisisKey(f)]?.choice
+  return choice === 'a' || choice === 'b' ? choice : null
+}
+
+// Why the lord cannot choose that way for fortune `key` now, if not.
+export function dilemmaError(k: Seeded & Pick<Kingdom, 'stock'>, key: string, choice: DilemmaChoice, at: number): 'none' | 'answered' | 'late' | 'afford' | null {
+  const f = fortunesAt(k, at).find((x) => crisisKey(x) === key)
+  if (!f || !isDilemma(f.kind) || (choice !== 'a' && choice !== 'b')) return 'none'
+  if (k.responses?.[key]) return 'answered'
+  if (at > f.start + dilemmaDecideMs()) return 'late'
+  const cost = CHOICE.kinds[f.kind][choice].cost ?? {}
+  if (Object.entries(cost).some(([r, v]) => (k.stock[r as keyof Kingdom['stock']] ?? 0) < (v ?? 0))) return 'afford'
+  return null
+}
+
+// Takes that way: its cost paid and its gain given at once (the next round keeps the stores within their room).
+export function answerDilemma<K extends Seeded & Pick<Kingdom, 'stock'>>(k: K, key: string, choice: DilemmaChoice, at: number): K {
+  if (dilemmaError(k, key, choice, at)) return k
+  const f = fortunesAt(k, at).find((x) => crisisKey(x) === key)!
+  const option = CHOICE.kinds[f.kind][choice]
+  const keep = at - CRISIS.keepHours * 3_600_000
+  const responses = Object.fromEntries(Object.entries(k.responses ?? {}).filter(([, r]) => r.at > keep))
+  responses[key] = { choice, at }
+  const stock = { ...k.stock }
+  for (const [r, v] of Object.entries(option.cost ?? {})) stock[r as keyof typeof stock] -= v ?? 0
+  for (const [r, v] of Object.entries(option.gain ?? {})) stock[r as keyof typeof stock] += v ?? 0
+  return { ...k, responses, stock }
+}
+
+// What the fortunes under way add up to (a crisis warded off does nothing; villagers turned out work less a while; the
+// answer to a choice adds its own effects while the fortune lasts).
 export function fortuneEffects(k: Seeded, at: number) {
   const out = { output: {} as Partial<Record<Good, number>>, trade: 0, work: 0, happiness: 0, templeHappiness: 0, sickSpread: 1 }
-  for (const r of Object.values(k.responses ?? {})) if (r.choice === 'villagers' && at >= r.at && at < r.at + CRISIS.villagers.seconds * 1000) out.work += CRISIS.villagers.work
-  for (const f of fortunesAt(k, at)) {
-    if (isCrisis(f.kind) && crisisWarded(k, f)) continue
-    const { spec } = f
+  const add = (spec: Partial<FortuneSpec>) => {
     for (const [g, v] of Object.entries(spec.output ?? {})) out.output[g as Good] = (out.output[g as Good] ?? 0) + (v ?? 0)
     out.trade += spec.trade ?? 0
     out.work += spec.work ?? 0
     out.happiness += spec.happiness ?? 0
     out.templeHappiness += spec.templeHappiness ?? 0
     out.sickSpread *= spec.sickSpread ?? 1
+  }
+  for (const r of Object.values(k.responses ?? {})) if (r.choice === 'villagers' && at >= r.at && at < r.at + CRISIS.villagers.seconds * 1000) out.work += CRISIS.villagers.work
+  for (const f of fortunesAt(k, at)) {
+    if (isCrisis(f.kind) && crisisWarded(k, f)) continue
+    add(f.spec)
+    const picked = dilemmaChoiceOf(k, f)
+    if (picked) add(CHOICE.kinds[f.kind][picked])
   }
   return out
 }

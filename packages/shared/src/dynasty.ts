@@ -235,18 +235,22 @@ export function randomName(sex: 'm' | 'f', r: number): string {
 
 // ---- The lord's say over the children ------------------------------------------------------------------------------
 
-export function nameError(k: Pick<Kingdom, 'dynasty'>, id: number, name: string): 'none' | 'rejected' | null {
+// A child is named once, by the lord: in the news of its birth or later, while it still bears only the name drawn for
+// it. The ruler and the lady keep the names they came with, and a name given is not taken back. (A young lord ruling
+// under the regents may still be named, if he was never named as a child.)
+export function nameError(k: Pick<Kingdom, 'dynasty'>, id: number, name: string): 'none' | 'named' | 'rejected' | null {
   const d = k.dynasty
-  const child = d?.children.find((c) => c.id === id) ?? [d?.king, d?.queen].find((p) => p?.id === id)
+  const child = d?.children.find((c) => c.id === id) ?? (d?.regentFor === id && d.king?.id === id ? d.king : undefined)
   if (!child) return 'none'
+  if (child.named) return 'named'
   const n = name.trim()
   return n.length < 2 || n.length > 20 ? 'rejected' : null
 }
 
 export function nameChild(k: Kingdom, id: number, name: string): Kingdom {
   if (nameError(k, id, name) || !k.dynasty) return k
-  const rename = (p: Person) => (p.id === id ? { ...p, name: name.trim(), named: true } : p)
-  return { ...k, dynasty: { ...k.dynasty, children: k.dynasty.children.map(rename), king: k.dynasty.king && rename(k.dynasty.king), queen: k.dynasty.queen && rename(k.dynasty.queen) } }
+  const give = (p: Person) => (p.id === id ? { ...p, name: name.trim(), named: true } : p)
+  return { ...k, dynasty: { ...k.dynasty, children: k.dynasty.children.map(give), king: k.dynasty.king && give(k.dynasty.king) } }
 }
 
 // The upbringing is chosen while the lord lives and the child is not yet of age.

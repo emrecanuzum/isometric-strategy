@@ -13,9 +13,8 @@
       "stay": 0.15,
       "answerSeconds": 300,
       "tribute": {
-        "share": 0.04,
-        "min": 25,
-        "max": 250
+        "everySeconds": 1800,
+        "share": 0.05
       },
       "refuseRelation": -8,
       "tip": 120
@@ -29,8 +28,7 @@
       "tributePaid": 4,
       "tributeRefused": -10,
       "tributeTaken": -5,
-      "visit": 1,
-      "tributeEase": 0.5
+      "visit": 1
     },
     "gifts": [
       {
@@ -73,10 +71,6 @@
       "favour": [
         0.7,
         1.3
-      ],
-      "demand": [
-        0.6,
-        1.4
       ]
     },
     "intro": {
@@ -103,8 +97,8 @@
   "trade": {
     "loadFactor": 3,
     "priceFactor": 1.1,
-    "baseSeconds": 10,
-    "secondsPerTile": 0.12,
+    "baseSeconds": 30,
+    "secondsPerTile": 0.36,
     "changeCooldownSeconds": 120
   }
 }

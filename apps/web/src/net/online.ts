@@ -157,13 +157,17 @@ export type Command =
   | { type: 'research'; id: string }
   | { type: 'sermon' }
   | { type: 'crisis'; key: string; choice: 'villagers' | 'army' | 'none' }
+  | { type: 'choose'; key: string; choice: 'a' | 'b' }
   | { type: 'nameChild'; id: number; name: string }
   | { type: 'educate'; id: number; focus: 'finance' | 'people' | 'military' }
   | { type: 'seen' }
-  | { type: 'operation'; target: number; op: Operation }
+  | { type: 'operation'; target: number; op: Operation; town?: number }
+  | { type: 'townUpkeep'; town: number; level: number }
   | { type: 'raid'; target: number }
   | { type: 'cast' }
   | { type: 'fish'; toggles: number[] }
+  | { type: 'play'; game: 'archery' | 'anvil' | 'caravan' }
+  | { type: 'played'; game: 'archery' | 'anvil' | 'caravan'; toggles: number[] }
   | { type: 'repairTrade' }
   | { type: 'ransom' }
   | { type: 'patrolAnswer'; visit: number; pay: boolean }

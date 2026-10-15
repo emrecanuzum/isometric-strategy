@@ -406,6 +406,59 @@
             "arms": 0.3
           },
           "gold": 30
+        },
+        "locusts": {
+          "weight": 2,
+          "output": {
+            "food": -0.3
+          }
+        },
+        "hailstorm": {
+          "weight": 2,
+          "output": {
+            "food": -0.15,
+            "materials": -0.1
+          },
+          "lose": {
+            "food": 0.05
+          }
+        },
+        "earthquake": {
+          "weight": 1,
+          "work": -0.1,
+          "happiness": -6,
+          "lose": {
+            "materials": 0.08
+          }
+        },
+        "aurora": {
+          "weight": 2,
+          "time": "night",
+          "happiness": 6,
+          "templeHappiness": 4
+        },
+        "eclipse": {
+          "weight": 1,
+          "time": "day",
+          "happiness": -8,
+          "work": -0.1
+        },
+        "rainbow": {
+          "weight": 2,
+          "time": "day",
+          "happiness": 5,
+          "output": {
+            "food": 0.1
+          }
+        },
+        "dragonRumour": {
+          "weight": 1,
+          "trade": -0.15,
+          "happiness": -4
+        },
+        "royalWedding": {
+          "weight": 1,
+          "happiness": 4
         }
       }
     },
@@ -453,6 +506,50 @@
           "weight": 2,
           "happiness": 6,
           "templeHappiness": 6
+        },
+        "nomads": {
+          "weight": 2
+        },
+        "minstrel": {
+          "weight": 2,
+          "happiness": 3
+        },
+        "wolves": {
+          "weight": 2,
+          "output": {
+            "food": -0.2
+          },
+          "happiness": -4,
+          "lose": {
+            "food": 0.04
+          }
+        },
+        "mineCollapse": {
+          "weight": 1,
+          "output": {
+            "arms": -0.4
+          },
+          "sicken": 0.04
+        },
+        "bandits": {
+          "weight": 2,
+          "trade": -0.25,
+          "lose": {
+            "materials": 0.06,
+            "arms": 0.06
+          }
+        },
+        "lostCaravan": {
+          "weight": 1
+        },
+        "relic": {
+          "weight": 1,
+          "happiness": 4,
+          "templeHappiness": 4
+        },
+        "tournament": {
+          "weight": 1,
+          "happiness": 5
         }
       }
     },
@@ -464,7 +561,13 @@
         "flood",
         "storm",
         "epidemic",
-        "coldSnap"
+        "coldSnap",
+        "locusts",
+        "hailstorm",
+        "earthquake",
+        "wolves",
+        "mineCollapse",
+        "bandits"
       ],
       "decideSeconds": 120,
       "villagers": {
@@ -478,6 +581,128 @@
         "minSoldiers": 2
       },
       "keepHours": 24
+    },
+    "choice": {
+      "decideSeconds": 120,
+      "kinds": {
+        "eclipse": {
+          "a": {
+            "cost": {
+              "gold": 40
+            },
+            "happiness": 10
+          },
+          "b": {
+            "work": 0.1
+          }
+        },
+        "dragonRumour": {
+          "a": {
+            "cost": {
+              "gold": 60
+            },
+            "happiness": 8
+          },
+          "b": {
+            "cost": {
+              "materials": 30
+            },
+            "trade": 0.15
+          }
+        },
+        "royalWedding": {
+          "a": {
+            "cost": {
+              "gold": 80
+            },
+            "happiness": 6,
+            "trade": 0.1
+          },
+          "b": {
+            "cost": {
+              "food": 40
+            },
+            "happiness": 6
+          }
+        },
+        "nomads": {
+          "a": {
+            "cost": {
+              "food": 40
+            },
+            "happiness": 6,
+            "trade": 0.15
+          },
+          "b": {
+            "cost": {
+              "materials": 30
+            },
+            "gain": {
+              "food": 25,
+              "arms": 20
+            }
+          }
+        },
+        "minstrel": {
+          "a": {
+            "cost": {
+              "gold": 40
+            },
+            "happiness": 8
+          },
+          "b": {
+            "gain": {
+              "gold": 25
+            },
+            "happiness": -2
+          }
+        },
+        "lostCaravan": {
+          "a": {
+            "gain": {
+              "food": 30,
+              "materials": 40
+            },
+            "happiness": -3
+          },
+          "b": {
+            "gain": {
+              "gold": 50
+            },
+            "happiness": 5,
+            "trade": 0.1
+          }
+        },
+        "relic": {
+          "a": {
+            "cost": {
+              "materials": 40
+            },
+            "happiness": 4,
+            "templeHappiness": 6
+          },
+          "b": {
+            "gain": {
+              "gold": 30
+            },
+            "trade": 0.2
+          }
+        },
+        "tournament": {
+          "a": {
+            "cost": {
+              "gold": 60
+            },
+            "happiness": 8
+          },
+          "b": {
+            "cost": {
+              "food": 30
+            },
+            "happiness": 5
+          }
+        }
+      }
     }
   },
   "researchCategories": [

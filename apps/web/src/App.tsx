@@ -7,7 +7,6 @@ import {
   balance,
   townCenter,
   cityCenter,
-  crisisDecideMs,
   crisisKey,
   fealtyOpen,
   townWalled,
@@ -51,7 +50,7 @@ import {
   upgradeSpec,
   upgradeTrade,
 } from '@game/shared'
-import type { Along, Lord, BuildError, CrisisChoice, EconomyEvent, BuildingKind, Good, Kingdom, PlanStep, Point, World } from '@game/shared'
+import type { Along, Lord, BuildError, BuildingKind, Good, Kingdom, PlanStep, Point, World } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { WorldMap } from './game/WorldMap'
@@ -79,9 +78,10 @@ import type { Cue } from './audio/sfx'
 import { DetailSettings, SoundSettings } from './ui/home/SettingsPanel'
 import { WarTargets } from './ui/hud/WarTargets'
 import { EnvoyDialog, describe as describeNotice } from './ui/Envoy'
-import { AwayReport, awaySince, useAwaySnapshot } from './ui/AwayReport'
+import { AwayReport, awaySince } from './ui/AwayReport'
 import { CrownIntro, introSeen } from './ui/CrownIntro'
-import { EventArt } from './ui/EventArt'
+import { FortuneDialog } from './ui/FortuneDialog'
+import type { FortuneEvent } from './ui/FortuneDialog'
 import { HouseDialog, allKnown, houseNews, readKnown, writeKnown } from './ui/hud/dynasty'
 import type { HouseNews } from './ui/hud/dynasty'
 import type { KingdomInfo, Online } from './ui/hud/online'
@@ -92,7 +92,7 @@ import { findPath, tilesAlong } from './game/town'
 import type { Path } from './game/town'
 import type { Errand, MerchantTrip } from './game/town'
 import { Icon } from './ui/icons'
-import { BUILDING_NAMES, CRISIS_TEXTS, FORTUNE_TEXTS, RESOURCE_NAMES, SCOPE_NAMES } from './ui/names'
+import { BUILDING_NAMES, FORTUNE_TEXTS, RESOURCE_NAMES } from './ui/names'
 import { Dock, Sheet, TopBar, useTabKeys } from './ui/hud/Hud'
 import type { TabId } from './ui/hud/Hud'
 import { useJournal } from './ui/hud/journal'
@@ -157,96 +157,16 @@ const REFUSALS: Record<string, string> = {
   target: 'Lord bulunamadı',
   founded: 'Önce lordluğunu kur',
   prison: 'Kraliçe kaçırmak için önce hapishane kur (2. seviye saray)',
+  town: 'Bu kasaba o lordun elinde değil',
   sworn: 'Zaten bir taç krallığına biat ettin; sezon boyunca değişmez',
   early: 'Şu an uygun değil: taçlar seninle lordluğun biraz büyüyünce ilgilenecek',
   grown: 'Bu çocuk artık reşit; eğitimi tamamlandı',
+  named: 'Bu çocuğun adı zaten konuldu',
   council: 'Naipler konseyi yönetirken bu karar verilemez',
 }
 const refusal = (e: unknown) => {
   const code = e instanceof CommandError ? e.message : 'server'
   return REFUSALS[code] ?? BUILD_ERRORS[code as BuildError] ?? 'Komut reddedildi'
-}
-
-type FortuneEvent = Extract<EconomyEvent, { kind: 'fortune' }>
-
-// A random event as it begins: a window of its own, green-edged for good fortune and red for bad.
-function FortuneDialog({ event, now, kingdom, onAnswer, onClose }: { event: FortuneEvent; now: number; kingdom: Kingdom | null; onAnswer(choice: CrisisChoice): void; onClose: () => void }) {
-  const f = FORTUNE_TEXTS[event.fortune]
-  // A crisis asks what to do (CLAUDE.md §9.8) until its time to answer runs out.
-  const crisis = event.crisis && event.start !== undefined ? CRISIS_TEXTS[event.fortune] : undefined
-  const key = event.start !== undefined ? crisisKey({ scope: event.scope ?? 'kingdom', start: event.start }) : ''
-  const answered = kingdom?.responses?.[key]?.choice
-  const deadline = (event.start ?? 0) + crisisDecideMs()
-  const c = balance.institutions.events.crisis
-  const soldiers = kingdom?.soldiers ?? 0
-  const tone = f?.tone ?? 'good'
-  const extra = [
-    ...Object.entries(event.lost ?? {})
-      .filter(([, v]) => (v ?? 0) > 0)
-      .map(([g, v]) => `${Math.round(v ?? 0)} ${RESOURCE_NAMES[g as Good].toLowerCase()} kayboldu`),
-    ...(event.gold ? [`+${event.gold} altın`] : []),
-  ]
-  return (
-    <div className="modal" role="dialog" aria-labelledby="fortune-title" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <section className={`dialog frame fortune-dialog ${tone}`}>
-        <header className="sheet-head">
-          <Icon name={f?.icon ?? 'star'} size={32} />
-          <div>
-            <small>
-              {tone === 'good' ? 'Hayırlı bir haber' : 'Kötü bir haber'} · {SCOPE_NAMES[event.scope ?? 'kingdom']}
-            </small>
-            <h2 id="fortune-title">{f?.title ?? 'Beklenmedik bir olay'}</h2>
-          </div>
-        </header>
-        <div className="event-art">
-          <EventArt kind={event.fortune} />
-        </div>
-        <p>{f?.text}</p>
-        <p className="hint">{event.scope === 'lobby' ? 'Bu olay lobideki bütün lordları etkiliyor.' : 'Bu olay yalnızca senin topraklarını etkiliyor.'}</p>
-        {extra.length > 0 && <p className={tone === 'good' ? 'up' : 'down'}>{extra.join(' · ')}</p>}
-        <p className="hint">Yaklaşık {Math.max(1, Math.round((event.until - now) / 60_000))} dakika sürecek.</p>
-        {crisis && (
-          <div className="crisis">
-            {answered ? (
-              <p className={answered === 'none' ? 'down' : 'up'}>
-                {answered === 'none' ? 'Bir şey yapılmadı; olay etkisini gösterecek.' : `${crisis[answered]}: zarar önlendi.`}
-              </p>
-            ) : now > deadline ? (
-              <p className="down">Karar vermek için geç kaldın; olay etkisini gösterdi.</p>
-            ) : (
-              <>
-                <p className="hint">Ne yapalım? {Math.max(0, Math.ceil((deadline - now) / 1000))} sn içinde karar verilmezse hiçbir şey yapılmaz.</p>
-                <button className="btn crisis-choice" onClick={() => onAnswer('villagers')}>
-                  <b>{crisis.villagers}</b>
-                  <small>
-                    Zarar önlenir; {Math.round(c.villagers.seconds / 60)} dakika iş gücü %{Math.round(-c.villagers.work * 100)} düşer.
-                  </small>
-                </button>
-                <button className="btn crisis-choice" disabled={soldiers < c.army.minSoldiers} onClick={() => onAnswer('army')}>
-                  <b>{crisis.army}</b>
-                  <small>
-                    {soldiers < c.army.minSoldiers
-                      ? `Sarayda en az ${c.army.minSoldiers} asker olmalı.`
-                      : `Zarar önlenir; ${c.army.loss}, nadiren ${c.army.loss + 1} asker kaybedilir ve ordu ${Math.round(c.army.lockSeconds / 60)} dakika sefere çıkamaz.`}
-                  </small>
-                </button>
-                <button className="btn crisis-choice" onClick={() => onAnswer('none')}>
-                  <b>{crisis.none}</b>
-                  <small>Kimse yorulmaz; ama olayın kötü etkisi tam olarak yaşanır.</small>
-                </button>
-              </>
-            )}
-          </div>
-        )}
-        <div className="row spread">
-          <span />
-          <button className="btn small" onClick={onClose}>
-            {crisis && !answered && now <= deadline ? 'Sonra' : 'Tamam'}
-          </button>
-        </div>
-      </section>
-    </div>
-  )
 }
 
 // The sound each kind of news comes with (the envoy's fanfare otherwise).
@@ -271,6 +191,8 @@ const NOTICE_CUES: Record<string, Cue> = {
   town_siege: 'war',
   town_taken: 'coin',
   town_held: 'bad',
+  town_revolt: 'bad',
+  town_lost_revolt: 'bad',
   patrol_tribute: 'war',
   patrol_tip: 'coin',
   crown_gift: 'coin',
@@ -279,7 +201,7 @@ const NOTICE_CUES: Record<string, Cue> = {
 }
 
 // News that goes against the player: kept under the journal's "Önemli" tab.
-const HURTFUL = new Set(['patrol_tribute', 'patrol_ignored', 'patrol_taken', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
+const HURTFUL = new Set(['town_revolt', 'town_lost_revolt', 'patrol_tribute', 'patrol_ignored', 'patrol_taken', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
 function noticeHurts(n: Notice, me: string | undefined) {
   if (HURTFUL.has(n.kind)) return true
   const p = n.payload as { kind?: string; accepted?: boolean; report?: { losses?: Record<string, number> } }
@@ -572,8 +494,7 @@ function App({
   const kingdomRef = useRef(kingdom)
   // Back after a while: what happened meanwhile, told before anything else (CLAUDE.md §11). The server's record of
   // when the ruler was last here, read before this visit's first command updates it.
-  const [away, setAway] = useState(() => awaySince(lobby.id, initial.id, initial.state?.lastSeenAt, serverNow()))
-  useAwaySnapshot(lobby.id, initial.id, kingdom, serverNow)
+  const [away, setAway] = useState(() => awaySince(initial.state, serverNow()))
   // The crowns introduce themselves once the lord has grown a little (CLAUDE.md §7.8), once per browser.
   const [introDone, setIntroDone] = useState(() => introSeen(lobby.id, initial.id))
   // News of the lord's house (CLAUDE.md §9.1), told from what the house holds now that was not told before; on a first
@@ -821,8 +742,8 @@ function App({
         if (event.kind === 'trade' && palace) {
           view.float(
             center(palace),
-            event.sold > 0 ? `+${event.gold} altın` : event.walledIn ? 'Tüccar surdan çıkamıyor: kapı yap' : `Satacak ${RESOURCE_NAMES[event.good].toLowerCase()} yok`,
-            event.sold > 0 ? 0xf2d16b : 0xff7a6a,
+            event.sold > 0 ? `+${event.gold} altın` : event.full ? 'Hazine dolu: tüccar bekliyor' : event.walledIn ? 'Tüccar surdan çıkamıyor: kapı yap' : `Satacak ${RESOURCE_NAMES[event.good].toLowerCase()} yok`,
+            event.sold > 0 ? 0xf2d16b : event.full ? 0xf2d16b : 0xff7a6a,
           )
         } else if (event.kind === 'built') {
           view.float(center(event.building), `${BUILDING_NAMES[event.building.kind]} tamamlandı`, 0x9ee6a0)
@@ -1526,6 +1447,7 @@ function App({
           onShow: (tile) => view.centerOn(tile),
           onImportantRead: markImportantRead,
           online,
+          towns: layer.towns,
         }
       : null
   const selectedBuilding = kingdom?.buildings.find((b) => b.id === selected) ?? null
@@ -1686,6 +1608,7 @@ function App({
         return (
           town && (
             <TownSheet
+              world={view.world}
               town={town}
               walled={townWalled(view.world.seed, town.idx)}
               kingdom={kingdom}
@@ -1697,6 +1620,7 @@ function App({
               onSend={(army, tile) => sendArmy(army, tile)}
               onShow={(tile) => view.centerOn(tile)}
               onWatch={() => setWatchingTown(town.id)}
+              onUpkeep={(level) => online?.act({ type: 'townUpkeep', town: town.id, level })}
               onClose={closeTab}
             />
           )
@@ -1860,6 +1784,7 @@ function App({
       {view && !holding && aiming === null && (
         <Chat
           storeKey={`chat-seen:${lobby.id}`}
+          lobby={lobby.id}
           username={username}
           messages={chat}
           mine={kingdom ? mine.id : null}
@@ -1946,6 +1871,7 @@ function App({
           now={now}
           kingdom={kingdom}
           onAnswer={(choice) => online.act({ type: 'crisis', key: crisisKey({ scope: fortunes[0].scope ?? 'kingdom', start: fortunes[0].start }), choice })}
+          onChoose={(choice) => online.act({ type: 'choose', key: crisisKey({ scope: fortunes[0].scope ?? 'kingdom', start: fortunes[0].start }), choice })}
           onClose={() => setFortunes((list) => list.slice(1))}
         />
       )}
