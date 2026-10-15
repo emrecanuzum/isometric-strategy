@@ -45,6 +45,9 @@ export interface PaintContext {
   // none covers a wall).
   structures: Structure[]
   occupied: Uint8Array
+  // Per tile whether a building (or field, or wall) stands right on it: the low growth of a lordship's ground keeps off
+  // only these.
+  footprint: Uint8Array
   // Per tile: distance to the nearest footpath between the player's buildings, in tiles.
   trail: Float32Array
   // Per tile near a footpath, the footpath segments passing close by ([ax, ay, bx, by] each): close to a path the
@@ -98,7 +101,11 @@ export function setStructures(context: PaintContext, structures: Structure[], tr
   const { size } = context.world
   context.structures = structures
   context.occupied = new Uint8Array(size * size)
+  context.footprint = new Uint8Array(size * size)
   for (const s of structures) {
+    for (let y = Math.max(0, s.y); y < Math.min(size, s.y + s.size); y++) {
+      for (let x = Math.max(0, s.x); x < Math.min(size, s.x + s.size); x++) context.footprint[y * size + x] = 1
+    }
     for (let y = Math.max(0, s.y - 1); y < Math.min(size, s.y + s.size + 1); y++) {
       for (let x = Math.max(0, s.x - 1); x < Math.min(size, s.x + s.size + 1); x++) context.occupied[y * size + x] = 1
     }
@@ -292,7 +299,7 @@ export function preparePaint(world: World): PaintContext {
     }
   }
   for (let i = 0; i < road.length; i++) if (road[i] === Infinity) road[i] = reach + 1
-  return { world, lit, patch, road, bridges, structures: [], occupied: new Uint8Array(size * size), trail: new Float32Array(size * size).fill(TRAIL_REACH + 1), trailNear: new Map() }
+  return { world, lit, patch, road, bridges, structures: [], occupied: new Uint8Array(size * size), footprint: new Uint8Array(size * size), trail: new Float32Array(size * size).fill(TRAIL_REACH + 1), trailNear: new Map() }
 }
 
 // How a biome border looks around a point: finely dithered, in blotches and islands, or in frayed fibres. The
@@ -610,7 +617,7 @@ function shadowOf(sprite: Sprite, foot: number, sun: SunShadow) {
 // round it whose trees are lifted too ('all' when every chunk's are), so the trees of theirs reaching into this one are
 // left to them, and those of the others painted here.
 export function paintChunk(context: PaintContext, cx: number, cy: number, k: number, lift = false, sun: SunShadow = NOON, liftedNear: number[] | 'all' = 'all'): ChunkImage {
-  const { world, lit, patch, road, bridges, structures, occupied, trail, trailNear } = context
+  const { world, lit, patch, road, bridges, structures, occupied, footprint, trail, trailNear } = context
   const { size, seed, elevation, moisture, height, levels } = world
   const S = balance.map.chunkSize
   const chunkCount = size / S
@@ -905,9 +912,26 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       const i = y * size + x
       const own = x >= x0 && y >= y0 && x < x0 + S && y < y0 + S
       const terrain = world.terrain[i]
-      if (!clear(x, y)) continue
       const spot = (n: number) =>
         [x + 0.15 + hash(x, y, seed + 21 + n) * 0.7, y + 0.15 + hash(x, y, seed + 31 + n) * 0.7] as const
+      if (!clear(x, y)) {
+        // A lordship's ground between its buildings and along its footpaths, where no tree may stand (it would hide a
+        // wall or a walker): grass tufts, wildflowers and a stone here and there, thicker along the path's verges, and
+        // a low bush where nobody walks just behind it (CLAUDE.md §6.4).
+        if ((terrain !== Terrain.Grass && terrain !== Terrain.Forest) || footprint[i] || world.feature[i] !== Feature.None) continue
+        if (road[i] < ROAD_HALF + 0.45 || trail[i] < TRAIL_HALF + 0.3) continue
+        const verge = trail[i] < TRAIL_HALF + 1.4
+        const g = hash(x, y, seed + 201)
+        const v = hash(x, y, seed + 203)
+        const grass = verge ? 0.42 : 0.24
+        if (g < grass) place(choose(SPRITES.tallGrass, v), ...spot(9), own)
+        else if (g < grass + 0.07) {
+          const k = Math.floor(hash(x, y, seed + 205) * SPRITES.wildflowers.length)
+          place(choose(SPRITES.wildflowers[k], v), ...spot(9), own)
+        } else if (g < grass + 0.13 && !walkedBehind(x, y)) place(choose(hash(x, y, seed + 207) < 0.25 ? SPRITES.berryBush : SPRITES.bush, v), ...spot(9), own)
+        else if (g < grass + 0.15) place(choose(SPRITES.pebbles, v), ...spot(9), own)
+        continue
+      }
       const roll = (n: number) => hash(x, y, seed + 11 + n)
       const kind = hash(x, y, seed + 41)
       // Rushes stand in the shallows along the banks, thick in some stretches and missing in others, and a few

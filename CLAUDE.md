@@ -590,8 +590,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   atölyesi boşta"; dokununca Depo açılır); bina menüsünde **"Üretim ağı
   tıkandı"** kutusu: neyin dolduğu, ne kadar boşa gittiği ve çare (ürünü
   değiştir, ambar kur/yükselt, malı sat ya da kullan, işçileri başka yere
-  ver). Sağdaki uyarı kartları alt alta dizilir; üst çubuğun altından
-  başlar, harita düğmelerinin solunda durur, sığmazsa kendi içinde kayar.
+  ver). Sağdaki uyarı kartları alt alta dizilir; ekranın tam sağ
+  kenarında, ayarlar ve ana menü düğmelerinin hemen altından başlar,
+  yakınlaştırma düğmelerinin üstünde biter, sığmazsa kendi içinde kayar
+  (telefonda üst çubuğun altından başlar).
 - **Hazine sınırı:** Altının da sınırı vardır: saray seviyesiyle 1000 /
   2000 / 3500 / 5500 / 7000, ve 4. seviye sarayda açılan **Hazine** binası
   ekler (seviye 1/2/3: +4000 / +8000 / +14000; 4. seviyede bir, 5.de iki
@@ -767,8 +769,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     dışarı çıkamaz: "Krallığın bir hapishane" uyarısı çıkar ve mutluluk
     hedefi düşer (`society.json` → `happiness.imprisoned`, −15).
   - **Harita uyarıları:** Süren sorunlar (hapishane, sur arkasında kalan
-    yapılar, sınırdaki düşman ordusu, ayaklanma) ekranın sağ ortasında, üst
-    çubukla harita düğmeleri arasında kırmızı kartlarla durur; dokununca
+    yapılar, sınırdaki düşman ordusu, ayaklanma) ekranın sağ kenarında,
+    ayarlar ve ana menü düğmelerinin altında kırmızı kartlarla durur; dokununca
     ilgili sekme açılır (`apps/web/src/ui/hud/MapAlerts.tsx`).
     **Savaş en üsttedir:** oyuncunun kuşattığı ya da onun kasabasını kuşatan
     kasaba kuşatmaları (kalan süreyle), askerinin bulunduğu süren

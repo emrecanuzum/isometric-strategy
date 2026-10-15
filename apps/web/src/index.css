@@ -2212,17 +2212,19 @@ small {
 /* Standing trouble (a town with no gate, buildings walled off…) on the right edge, between the top bar and the map
    buttons. */
 .map-alerts {
-  /* Under the top bar, left of the map buttons, stacked one under another; scrolls within itself when there are many
-     (it never covers the buttons or the minimap). */
+  /* On the right edge, from just under the settings and main-menu buttons down to the zoom buttons, stacked one under
+     another; scrolls within itself when there are many (it never covers the buttons). */
+  --alerts-top: calc(var(--gap) + 2 * (44px + var(--px) * 4) + var(--px) * 12);
   position: fixed;
-  right: calc(var(--gap) + 52px);
-  top: 96px;
+  right: var(--gap);
+  top: var(--alerts-top);
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: calc(var(--px) * 4);
-  width: min(280px, calc(100vw - 2 * var(--gap) - 56px));
-  max-height: calc(100dvh - 96px - 200px);
+  width: min(280px, calc(100vw - 2 * var(--gap)));
+  /* The zoom buttons stand 270px off the bottom and are 140px tall. */
+  max-height: calc(100dvh - var(--alerts-top) - 270px - 140px - var(--gap));
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -2350,6 +2352,10 @@ small {
   .zoom {
     bottom: 180px;
   }
+
+  .map-alerts {
+    max-height: calc(100dvh - var(--alerts-top) - 180px - 140px - var(--gap));
+  }
 }
 
 /* ---- Phones: the dock spans the bottom edge and tabs open as a sheet above it ---- */
@@ -2376,6 +2382,13 @@ small {
   .btn.music,
   .btn.exit {
     display: none;
+  }
+
+  /* No buttons on the right edge here: the cards start under the top bar and stop above the zoom buttons. */
+  .map-alerts {
+    --alerts-top: calc(var(--gap) + 72px);
+    width: min(260px, calc(100vw - 2 * var(--gap)));
+    max-height: calc(100dvh - var(--alerts-top) - var(--dock-h) - 20px - 140px - var(--gap) - env(safe-area-inset-bottom));
   }
 
   /* The last chip of the store bar, as wide as the others, its list dropping down under the bar's right end. */
