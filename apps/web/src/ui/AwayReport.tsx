@@ -826,6 +826,12 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
       const is = kingdom.trade.ledger
       const sold = is ? (['food', 'materials', 'arms'] as const).map((g) => [g, (is[g] ?? 0) - (before.ledger?.[g] ?? 0)] as const).filter(([, v]) => v > 0) : []
       if (trade >= 1) money.push({ icon: 'trade', text: `Tüccarın ${sold.map(([g, v]) => `${fmt(v)} ${RESOURCE_NAMES[g].toLowerCase()}`).join(', ')} sattı, ${fmt(trade)} altın getirdi.`, tone: 'up' })
+      // Stores that came near the top while away: production slowed there instead of overflowing (economy.ts).
+      const room = storageCap(kingdom, now)
+      const slowed = (['food', 'materials', 'arms'] as const).filter((g) => kingdom.stock[g] >= room * balance.economy.away.storesKnee).map((g) => RESOURCE_NAMES[g].toLowerCase())
+      if (slowed.length > 0) money.push({ icon: 'chest', text: `Sen yokken ambarcılar ${slowed.join(' ve ')} ambarını ağzına kadar doldurmadı: ambar dolmaya yaklaşınca üretim yavaşladı.` })
+      const slack = since0((b) => b.tradeSlack ?? 0)
+      if (slack > 0) money.push({ icon: 'trade', text: `Sen yokken tüccar biraz kaytardı: ${fmt(slack)} seferde yükün ancak %${Math.round(balance.economy.away.merchantLoad * 100)}'sini götürdü.`, tone: 'down' })
       const held = since0((b) => b.tradeHeld)
       if (held > 0) money.push({ icon: 'trade', text: `Hazine dolu olduğu için tüccar ${fmt(held)} sefer mal götürmeden bekledi; yer açılınca yeniden satmaya başladı.` })
       if (other >= 1) money.push({ icon: 'gold', text: `Kasabalardan, olaylardan ve balıkçıdan ${fmt(other)} altın geldi.`, tone: 'up' })

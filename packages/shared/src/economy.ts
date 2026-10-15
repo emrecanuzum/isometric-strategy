@@ -285,6 +285,8 @@ export interface Books {
   crownGot: number
   // The upkeep paid to the towns held (CLAUDE.md §8.4); absent in older books.
   townUpkeep?: number
+  // Merchant trips made with a lighter load while the lord was away.
+  tradeSlack?: number
   // Towns, the fisher's river finds, fortunes of the day.
   other: number
   wastedGold: number
@@ -593,6 +595,18 @@ export const happinessOf = (kingdom: Kingdom) => kingdom.happiness ?? balance.so
 
 // Lands without their ruler give less (CLAUDE.md §6.4): after a grace period, every hour since the player was last
 // seen takes a share off what buildings make, the taxes and the merchant's gold, down to a floor.
+// The lord counts as away a little while after last being seen (the open game reports every few minutes).
+export const isAway = (kingdom: Kingdom, at: number) => at - (kingdom.lastSeenAt ?? at) > balance.economy.away.afterMinutes * 60_000
+
+// How much of what is made goes into a store while the lord is away: all of it up to the knee, then less and less,
+// none at the top (shares of the store's room).
+export function awayStoreFactor(stock: number, room: number) {
+  const { storesKnee, storesTop } = balance.economy.away
+  const knee = room * storesKnee
+  const top = room * storesTop
+  return Math.max(0, Math.min(1, (top - stock) / (top - knee)))
+}
+
 export function idleFactor(kingdom: Kingdom, at: number) {
   const i = balance.economy.idle
   const hours = (at - (kingdom.lastSeenAt ?? at)) / 3_600_000 - i.graceHours
@@ -1209,6 +1223,15 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       }
       books.townUpkeep = (books.townUpkeep ?? 0) + upkept.cost
       books.other += (delta.gold ?? 0) - (l.tax - l.soldiersGold + tributes) + upkept.cost
+      // While the lord is away the storehouses are not filled to the brim: what is made slows as a store nears the
+      // top of its room and stops short of it (CLAUDE.md §6.4).
+      if (isAway(k, next)) {
+        const room = storageCap(k, next)
+        for (const g of GOODS) {
+          const v = delta[g] ?? 0
+          if (v > 0) delta[g] = v * awayStoreFactor(k.stock[g], room)
+        }
+      }
       for (const [r, v] of Object.entries(delta)) k.stock[r as Resource] = Math.max(0, k.stock[r as Resource] + (v ?? 0))
       // Full stores: what does not fit is lost.
       const space = storageCap(k, next)
@@ -1275,12 +1298,16 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       // and sets out again once tribute or spending makes room (CLAUDE.md §6.4).
       const room = Math.max(0, goldCap(k, next) - k.stock.gold)
       const full = room < 1
-      const sold = walledIn || damaged || full ? 0 : Math.max(0, Math.min(tradeLoad(k), Math.floor(k.stock[good] - tradeReserve(k, good, next)), perUnit > 0 ? Math.ceil(room / perUnit) : Infinity))
+      // Without the lord to keep an eye on him the merchant takes it easy and carries a lighter load.
+      const away = isAway(k, next)
+      const load = Math.floor(tradeLoad(k) * (away ? balance.economy.away.merchantLoad : 1))
+      const sold = walledIn || damaged || full ? 0 : Math.max(0, Math.min(load, Math.floor(k.stock[good] - tradeReserve(k, good, next)), perUnit > 0 ? Math.ceil(room / perUnit) : Infinity))
       const gold = Math.min(Math.round(sold * perUnit), Math.floor(room))
       if (!city) soldTotal[good] = (soldTotal[good] ?? 0) + sold
       k.stock[good] -= sold
       k.stock.gold += gold
       k.books!.trade += gold
+      if (away && sold > 0) k.books!.tradeSlack = (k.books!.tradeSlack ?? 0) + 1
       if (full && !walledIn && !damaged) k.books!.tradeHeld += 1
       k.trade.departedAt = next
       // Trade at a crown's capital warms the crown to the lord.

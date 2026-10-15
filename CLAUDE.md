@@ -742,6 +742,12 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   fiyatından gösterilir. Ticaret menüsünde satış seçimi en üsttedir;
   **pazara tıklamak da ticaret menüsünü açar** (fiyatlar ve alım tek
   satırda üç sütun).
+- **Lord yokken** (son görülmesinden 10 dakika sonra; `economy.json` →
+  `away`): tüccar biraz kaytarır, seferde yükün yarısını götürür ("Sen
+  yokken tüccar biraz kaytardı"); ambarlar ağzına kadar dolmaz: bir malın
+  stoku ambarın yarısını geçince üretimi yavaşlar, %80'inde durur (yemek,
+  yapı ve savaş malzemesi). Böylece dönen oyuncunun depoları artmış ama
+  sınırda değildir ve boşa mal gitmez.
 - **Yokluk cezası:** Oyuncunun son görülmesinden (her komut ve oyun
   açıkken birkaç dakikada bir) 1 saat sonra, geçen her saat binaların
   üretimi, vergi ve tüccarın altını %10 azalır (en az %20'ye kadar;

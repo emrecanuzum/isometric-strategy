@@ -615,6 +615,12 @@
     "farm"
   ],
   "demolishRefund": 0.5,
+  "away": {
+    "afterMinutes": 10,
+    "merchantLoad": 0.5,
+    "storesKnee": 0.5,
+    "storesTop": 0.8
+  },
   "idle": {
     "graceHours": 1,
     "perHour": 0.1,
