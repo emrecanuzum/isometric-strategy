@@ -1519,8 +1519,12 @@ mantık `packages/shared/src/navy.ts` (komutlar `realm.ts` → `shipsError`,
 - **Tersane** (**4. seviye saray**, bir tane, 3 seviye): 2×2, **suyun kıyısına**
   kurulur: karolarından en az biri kıyı, gerisi serbest kara olmalıdır (iskele
   eki de sayılır). Taşınamaz. Görseli: tahta avlu, alet ve zift sundurması,
-  suya inen kızakta kaburgalı tekne iskeleti, vinç ve kereste yığını; 2.
-  seviyede ikinci kızak, 3. seviyede kaplanmış, direkli ve flamalı bir gövde.
+  vinç ve kereste yığını; kızakta (raylar, traversler, takozlar) gerçek bir
+  gövde kabuğu olarak çizilen yapım hâlinde bir gemi: 1. seviyede omurga,
+  bodoslama ve kaburgalar, yanında dayaklar ve arka yanında iskele; 2.
+  seviyede gövde yarıya kadar kaplanmış, yanında ikinci, küçük bir kızak;
+  3. seviyede küpeşteye kadar kaplanmış, su hattının altı ziftli, ambarı
+  kemereli, direği dikilmiş ve flamalı bir gövde.
   Kızak sayısı (aynı anda yapılan parti) 1 / 2 / 3, limanın gemi sınırı
   6 / 10 / 16.
 - **Gemiler:**

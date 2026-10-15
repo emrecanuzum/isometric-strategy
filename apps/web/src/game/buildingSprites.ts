@@ -3,7 +3,6 @@ import type { BuildingKind, KingdomColorId, Point, World } from '@game/shared'
 import { BARK, Canvas, CLOTH, GLASS, ROOF, SACK, STONE, TIMBER, WALL, diamondAt, ellipseAt, pick, ramp, rgb, shadeBlobs, shadow } from './sprites'
 import type { Sprite } from './sprites'
 import { WALL_KINDS, wallLinks, wallLook } from './wallSprites'
-import { ship } from './shipSprites'
 import type { WallKind } from './wallSprites'
 
 // Buildings of the player's town, made the same way as the inn: every sprite stands on the front corner of its
@@ -2429,10 +2428,13 @@ function tavern(variant = 0): Sprite {
   return smoky(canvas.sprite(cx, base, 0), [top])
 }
 
-// The shipyard (CLAUDE.md §8.5): a plank yard at the water's edge with a shed of tools and pitch, a slipway running
-// down toward the water with a hull on it — bare ribs on a keel at level 1, a second slip at level 2, a planked hull
-// with its mast stepped and a pennant at level 3 — a timber derrick swinging a beam, and stacks of seasoned timber.
+// The shipyard (CLAUDE.md §8.5): a plank yard at the water's edge with a shed of tools and pitch, and a slipway with a
+// hull being built on it, drawn as a real shell (keel, frames, planks) seen from the corner: bare frames on the keel at
+// level 1 with staging along its far side; a second, smaller hull at level 2 while the first is planked halfway; at
+// level 3 the hull planked to the gunwale, tarred below the waterline, its mast stepped and a pennant flying. Shores
+// prop it on the near side; a timber derrick, sawn timber and barrels of pitch fill the yard.
 const PITCH = ramp(0x1a120c, 0x2a1c12, 0x3e2a1a)
+const HULL = ramp(0x3a2414, 0x5a3a20, 0x76502c, 0x93683a, 0xaa7e48)
 function shipyard(variant = 0, level = 1): Sprite {
   const v = variant % 2
   const { canvas, cx, base, h } = footprint(2, 124)
@@ -2446,57 +2448,109 @@ function shipyard(variant = 0, level = 1): Sprite {
       canvas.set(x, y, seam ? PLANK[0] : pick(PLANK, 1.4 + hash(x >> 3, y >> 1, 517) * 1.4))
     }
   }
-  // The shed at the back, its doors open on the tools and the pitch kettle.
-  const top = hall(canvas, cx - 34, base - h - 4, { w: 20, wall: 20, roof: 13, walls: WALL, roofs: v ? SLATE : ROOF, door: true, chimney: 0.5 })
-  // A slipway: rails and cradle props running down toward the water, a hull on them — the galley model itself, cut to
-  // its keel and ribs while it is being built, whole (mast stepped) once planked.
-  const slip = (sx: number, sy: number, length: number, planked: boolean, seed: number) => {
-    for (let t = -4; t < length * 22; t++) {
-      const x = sx + t
-      const y = sy + t / 2
-      for (const off of [-5, 5]) canvas.set(x, y + off, TIMBER[t % 7 === 0 ? 0 : 2])
-      if (t % 7 === 0) for (let d = -6; d <= 6; d++) canvas.set(x, y + d, TIMBER[1])
+  // Points of the yard in its own frame: u along the tile x axis (toward the lower right), w along y (lower left), z up;
+  // one unit is one screen pixel across. Hull pixels keep the nearest (u + w + z) so the shell hides itself properly.
+  const ox = cx
+  const oy = base - h
+  const near = new Float32Array(canvas.width * canvas.height).fill(-1e9)
+  const put = (u: number, w: number, z: number, color: number) => {
+    const x = Math.round(ox + u - w)
+    const y = Math.round(oy + (u + w) / 2 - z)
+    if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return
+    const d = u + w + z
+    if (d < near[y * canvas.width + x]) return
+    near[y * canvas.width + x] = d
+    canvas.set(x, y, color)
+  }
+  const line = (a: number[], b: number[], color: number) => {
+    const n = Math.ceil(Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]), Math.abs(b[2] - a[2])) * 2) + 1
+    for (let i = 0; i <= n; i++) put(a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n, a[2] + ((b[2] - a[2]) * i) / n, color)
+  }
+  // A hull on its slip: stern at u0, bow `length` further on, centred on w0. `planked` is the share of its depth planked.
+  const hull = (u0: number, w0: number, length: number, beam: number, depth: number, planked: number, seed: number) => {
+    const lift = 5
+    // The slipway: two rails on sleepers, the keel on blocks.
+    for (let u = u0 - 6; u <= u0 + length + 4; u += 0.5) for (const side of [-5, 5]) put(u, w0 + side, 0.5, TIMBER[2])
+    for (let u = u0 - 4; u <= u0 + length + 2; u += 7) line([u, w0 - 8, 0], [u, w0 + 8, 0], TIMBER[1])
+    for (let u = u0 + 6; u < u0 + length - 6; u += 9) for (let z = 0; z < lift; z++) for (let d = -1.5; d <= 1.5; d += 0.5) put(u, w0 + d, z, TIMBER[z === lift - 1 ? 2 : 1])
+    // Its shape: half-beam along the keel (a flat transom aft, fine at the bow), rocker at the ends, sheer rising there.
+    const at = (u: number) => {
+      const t = (u - u0) / length
+      const x = t < 0.42 ? (t - 0.42) / 0.42 : (t - 0.42) / 0.58
+      const half = beam * Math.max(t < 0.42 ? 0.55 : 0, Math.pow(Math.max(0, 1 - x * x), 0.7))
+      const keel = lift + 7 * Math.max(0, Math.abs(x) - 0.65) / 0.35
+      const sheer = lift + depth + 4 * x * x
+      return { half, keel, sheer }
     }
-    const hull = ship('x', false, seed, false, length)
-    const ox = Math.round(sx + length * 11 - hull.anchorX)
-    const oy = Math.round(sy + length * 5.5 - hull.anchorY - 6)
-    // The lowest and highest hull pixel of each column (below the sheer): the keel and the gunwale, kept whole.
-    const bottom = new Int32Array(hull.width).fill(-1)
-    const rail = new Int32Array(hull.width).fill(1 << 30)
-    for (let y = 0; y < hull.height; y++) {
-      for (let x = 0; x < hull.width; x++) {
-        if (!(hull.pixels[y * hull.width + x] >>> 24)) continue
-        bottom[x] = y
-        if (y >= hull.anchorY - 20) rail[x] = Math.min(rail[x], y)
+    const width = (u: number, z: number) => {
+      const { half, keel, sheer } = at(u)
+      return half * Math.pow(Math.min(1, Math.max(0, (z - keel) / (sheer - keel - depth * 0.25))), 0.45)
+    }
+    const waterline = lift + depth * 0.38
+    const plankTo = (u: number) => {
+      const { keel, sheer } = at(u)
+      return keel + (sheer - keel) * planked
+    }
+    // The keel, stem and sternpost.
+    for (let u = u0; u <= u0 + length; u += 0.5) put(u, w0, at(u).keel - 0.5, PITCH[1])
+    for (let z = at(u0 + length).keel; z <= at(u0 + length).sheer + 5; z += 0.5) put(u0 + length + (z - at(u0 + length).keel) * 0.35, w0, z, TIMBER[2])
+    for (let z = at(u0).keel; z <= at(u0).sheer + 2; z += 0.5) put(u0 - 1, w0, z, TIMBER[2])
+    // The planked shell, strake by strake, darker on the far side and in its seams, tarred below the waterline.
+    for (let u = u0; u <= u0 + length; u += 0.5) {
+      const top = plankTo(u)
+      for (let z = at(u).keel; z <= top; z += 0.5) {
+        const half = width(u, z)
+        const strake = Math.floor((z - lift) / 2.5)
+        const seam = (z - lift) % 2.5 < 0.5 || Math.round(u * 2) % Math.round(22 + strake * 6) === 0
+        const tarred = z < waterline
+        for (const side of [1, -1]) {
+          const lit = side > 0 ? 3 : 1
+          const tone = tarred ? PITCH[Math.min(2, lit - 1 + (seam ? 0 : 1))] : HULL[Math.max(0, lit - (seam ? 1 : 0) + ((strake + seed) % 2 ? 0 : 1) - 1)]
+          put(u, w0 + side * half, z, tone)
+        }
+      }
+      // Planked to the gunwale: a capping rail on top, the hold open below it, crossed by deck beams.
+      if (planked >= 1) {
+        const half = width(u, top)
+        for (const side of [1, -1]) for (let d = 0; d <= 1; d += 0.5) put(u, w0 + side * (half - d), top + 0.5, TIMBER[side > 0 ? 2 : 1])
+        const beamAt = Math.round(u - u0) % 8 === 0
+        for (let d = -half + 1; d <= half - 1; d += 0.5) put(u, w0 + d, top - (beamAt ? 1.5 : 7), beamAt ? HULL[2] : PITCH[(Math.round(d * 2) + Math.round(u)) % 4 === 0 ? 1 : 2])
       }
     }
-    for (let y = 0; y < hull.height; y++) {
-      for (let x = 0; x < hull.width; x++) {
-        const c = hull.pixels[y * hull.width + x]
-        if (!(c >>> 24)) continue
-        if (!planked) {
-          // Bare timbers: the keel and every fourth frame, nothing above the sheer (no mast, no sail).
-          if (y < hull.anchorY - 20) continue
-          const keel = bottom[x] - y <= 2
-          const gunwale = y - rail[x] <= 1
-          if (!keel && !gunwale && x % 3 !== 0) continue
-          canvas.set(ox + x, oy + y, keel ? PITCH[1] : gunwale ? TIMBER[3] : CUT[x % 6 === 0 ? 2 : 1])
-        } else canvas.set(ox + x, oy + y, c)
-      }
+    // Frames: every few units a rib from the keel up each side past the planking, and ribbands tying their heads.
+    for (let u = u0 + 2; u <= u0 + length - 2; u += 4) {
+      const { sheer } = at(u)
+      for (let z = plankTo(u); z <= sheer; z += 0.5) for (const side of [1, -1]) put(u, w0 + side * width(u, z), z, CUT[side > 0 ? 2 : 0])
+      if (planked < 1) for (let d = -width(u, sheer); d <= width(u, sheer); d += 0.5) put(u, w0 + d, sheer - 0.5, CUT[1])
     }
-    // Props under the hull.
-    for (let t = 6; t < length * 22 - 6; t += 9) for (let z = 0; z < 7; z++) canvas.set(sx + t, sy + t / 2 - z, TIMBER[1])
-    if (planked) {
-      const mx = ox + hull.anchorX
-      const my = oy + hull.anchorY - 70
-      for (let d = 0; d < 9; d++) for (let e = 0; e <= (9 - d) / 3; e++) canvas.set(mx + 1 + d, my + e, CRIMSON[2])
+    if (planked < 1)
+      for (let u = u0; u <= u0 + length; u += 0.5) for (const f of [1, 0.75]) for (const side of [1, -1]) {
+        const { keel, sheer } = at(u)
+        const z = keel + (sheer - keel) * f
+        if (z > plankTo(u)) put(u, w0 + side * width(u, z), z, TIMBER[side > 0 ? 2 : 1])
+      }
+    // Shores propping it on the near side, staging along the far side.
+    for (let u = u0 + 8; u < u0 + length - 8; u += 12) {
+      const z = lift + depth * 0.55
+      line([u, w0 + beam + 8, 0], [u, w0 + width(u, z) + 0.5, z], TIMBER[2])
+    }
+    for (let u = u0 + 4; u < u0 + length; u += 14) {
+      line([u, w0 - beam - 5, 0], [u, w0 - beam - 5, lift + depth + 6], TIMBER[1])
+      line([u, w0 - beam - 9, 0], [u, w0 - beam - 9, lift + depth + 4], TIMBER[0])
+    }
+    for (let u = u0 + 4; u <= u0 + length - 10; u += 0.5) for (let d = 5; d <= 9; d += 0.5) put(u, w0 - beam - d, lift + depth - 2, PLANK[d === 5 ? 3 : 1])
+    // Finished: the mast stepped and a pennant at its head.
+    if (planked >= 1) {
+      const mu = u0 + length * 0.55
+      const foot = at(mu).sheer
+      for (let z = foot - 4; z < foot + 40; z += 0.5) for (const d of [0, 0.5]) put(mu, w0 + d, z, z > foot + 36 ? TIMBER[2] : HULL[3 - (d ? 1 : 0)])
+      for (let d = 0; d < 9; d++) for (let e = 0; e <= (9 - d) / 3; e++) canvas.set(Math.round(ox + mu - w0) + 1 + d, Math.round(oy + (mu + w0) / 2 - foot - 38) + e, CRIMSON[2])
+      for (let t = -12; t <= 12; t += 0.5) put(mu, w0 + t, foot + 26 - Math.abs(t) * 0.08, TIMBER[2])
     }
   }
-  if (level >= 2) slip(cx - 40, base - h + 4, 1.4, false, 2 - v)
-  slip(cx - 14, base - h - 6, level >= 3 ? 2 : 1.8, level >= 3, v + 1)
-  // The derrick: two raking poles, a boom and a beam hanging from its rope.
-  const dx = cx + 34
-  const dy = base - h + 4
+  // The derrick at the back: two raking poles, a boom and a beam hanging from its rope.
+  const dx = cx + 18
+  const dy = base - h * 2 + 18
   for (let z = 0; z < 44; z++) {
     canvas.set(dx - z * 0.18, dy - z, TIMBER[2])
     canvas.set(dx + 6 - z * 0.05, dy + 3 - z, TIMBER[1])
@@ -2504,12 +2558,15 @@ function shipyard(variant = 0, level = 1): Sprite {
   for (let t = 0; t < 26; t++) canvas.set(dx - 8 - t, dy - 42 + t * 0.25, TIMBER[3])
   for (let z = 0; z < 16; z++) canvas.set(dx - 30, dy - 35 + z, ROPE)
   for (let t = 0; t < 12; t++) for (let d = 0; d < 2; d++) canvas.set(dx - 36 + t, dy - 19 + t / 2 + d, LOGS[2 + d])
-  // Seasoned timber stacked by the shed and a pile of barrels of pitch.
-  logPile(canvas, cx - 54, base - h + 14, [[0, 4], [1, 3]])
-  if (level >= 2) logPile(canvas, cx + 6, base - 12, [[0, 3]])
-  barrel(canvas, cx - 30, base - 8)
-  barrel(canvas, cx - 24, base - 5)
-  if (level >= 3) barrel(canvas, cx - 36, base - 11)
+  logPile(canvas, cx - 30, base - h * 2 + 22, [[0, 3], [1, 2]])
+  // The hulls: the main one on its slip, a second, smaller one on another at level 2 and up.
+  hull(-28, -10, 54, 8, 16, level >= 3 ? 1 : level >= 2 ? 0.55 : 0.12, v)
+  if (level >= 2) hull(-8, 16, 34, 6, 10, level >= 3 ? 0.4 : 0.05, v + 1)
+  // The shed in the left corner, its doors open on the tools and the pitch kettle.
+  const top = hall(canvas, cx - 40, base - h + 6, { w: 18, wall: 18, roof: 12, walls: WALL, roofs: v ? SLATE : ROOF, door: true, chimney: 0.5 })
+  barrel(canvas, cx - 18, base - 6)
+  barrel(canvas, cx - 12, base - 3)
+  if (level >= 3) barrel(canvas, cx - 24, base - 9)
   return smoky(canvas.sprite(cx, base, 0), [top])
 }
 
