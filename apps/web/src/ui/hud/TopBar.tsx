@@ -1,4 +1,4 @@
-import { BUILDINGS, balance, buildingOutput, gameTime, goldCap, population, storageCap } from '@game/shared'
+import { BUILDINGS, balance, buildingOutput, fishCatch, gameTime, goldCap, idleFactor, ledger, population, roundOutcome, sailorsOf, storageCap, townYield } from '@game/shared'
 import type { BuildingKind, Kingdom, Market, Resource, Stock } from '@game/shared'
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
@@ -140,6 +140,20 @@ function ResourceCard({ resource: r, kingdom, now, history, market }: { resource
   if (r === 'gold' && kingdom.trade.good) lines.push({ name: 'Tüccar', value: flow.tradeGold })
   if (r === 'food' && villagers > 0) lines.push({ name: `Köylüler (${villagers})`, value: -villagers * balance.economy.foodPerVillager })
   if (r === kingdom.trade.good) lines.push({ name: 'Tüccar satıyor', value: -flow.sold })
+  // The soldiers' pay and bread, the ships (the fishing fleets' catch, the crews' bread, their upkeep) and the towns.
+  const round = roundOutcome(kingdom, now)
+  const pay = ledger(kingdom, now)
+  const idle = idleFactor(kingdom, now)
+  const sends = townYield(kingdom.towns, now)
+  const fish = r === 'food' ? fishCatch(kingdom) : 0
+  const sailors = sailorsOf(kingdom)
+  if (fish > 0.01) lines.push({ name: 'Balık avındaki filolar', value: fish })
+  if (r === 'food' && pay.soldiersFood > 0.01) lines.push({ name: 'Askerler', value: -pay.soldiersFood })
+  if (r === 'gold' && pay.soldiersGold > 0.01) lines.push({ name: 'Asker maaşı', value: -pay.soldiersGold })
+  if (r === 'food' && round.navy.food > 0.01) lines.push({ name: `Denizciler (${sailors})`, value: -round.navy.food })
+  if (r === 'gold' && round.navy.gold > 0.01) lines.push({ name: 'Gemi bakımı', value: -round.navy.gold })
+  if ((sends[r] ?? 0) * idle > 0.01) lines.push({ name: 'Kasabalar', value: (sends[r] ?? 0) * idle })
+  if (r === 'gold' && round.towns.cost > 0.01) lines.push({ name: 'Kasaba bakımı', value: -round.towns.cost })
   // Raw goods worked into weapons in the forges.
   const worked = flow.worked[r] ?? 0
   if (worked > 0.05) lines.push({ name: 'Atölyede işleniyor', value: -worked })
