@@ -1532,9 +1532,12 @@ mantık `packages/shared/src/navy.ts` (komutlar `realm.ts` → `shipsError`,
   - **Koka** (yük): güç 0,6, yük 80, balıkta iyi, 2 denizci.
   - **Çektiri** (hızlı akıncı, 2. seviye tersane): güç 1,8, eskort 1,5, yük
     40, 3 denizci; kokaları yener.
-  Gemi altınla, malzemeyle ve süreyle yapılır; **tayfa asker havuzundan**
+  Gemi altınla, malzemeyle ve süreyle yapılır ve pahalıdır (kadırga 260
+  altın, 160 yapı, 70 savaş malzemesi; koka 170 altın, 200 yapı; çektiri 150
+  altın, 110 yapı, 40 savaş malzemesi); **tayfa asker havuzundan**
   gelir. Denizciler köylü sayılmaz (nüfustan düşer). Her gemi tur başına
-  altın bakım, her denizci yemek ister.
+  az ama sürekli bir altın bakımı ister (kadırga 0,1, koka 0,05, çektiri
+  0,07; saatte ~36 / 18 / 25 altın), her denizci yemek ister.
 - **Liman ve filolar:** Yapılan gemiler limana bağlanır. Limandaki
   gemilerden **en çok 2 filo** çıkarılır (ordular gibi). Evdeki bir filo
   ikiye **bölünebilir**, iki filo **birleşebilir**, filo limana geri
