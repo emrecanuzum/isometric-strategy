@@ -83,7 +83,7 @@ export function Lobbies({
                     {lobby.owner ? `${lobby.owner} açtı · ` : ''}sezon {date(lobby.season_end)} biter
                   </small>
                 </span>
-                <span className="lobby-count" title="Krallık sayısı">
+                <span className="lobby-count" title="Lord sayısı">
                   <Icon name="people" size={16} /> {lobby.players}/{lobby.max_players}
                 </span>
                 {admin && (
@@ -172,7 +172,7 @@ function CreateLobby({
         <div className="segmented" role="radiogroup" aria-label="Lobi büyüklüğü">
           {LOBBY_SIZES.map((size) => (
             <button key={size} type="button" role="radio" aria-checked={players === size} className="btn small" onClick={() => setPlayers(size)}>
-              {size} krallık
+              {size} lord
             </button>
           ))}
         </div>

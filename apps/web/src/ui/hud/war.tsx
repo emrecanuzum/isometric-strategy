@@ -246,6 +246,11 @@ function Garrison({ data, armies }: { data: HudData; armies: number }) {
   const step = (u: Unit, d: number) => setPicked({ ...units, [u]: Math.max(0, Math.min(garrison[u] ?? 0, (units[u] ?? 0) + d)) })
   return (
     <Section title="Garnizon" icon="crown" aside={`${total} asker sarayda`}>
+      {(kingdom.armyLockUntil ?? 0) > data.now && (
+        <p className="hint down">
+          <Icon name="warn" size={16} /> Garnizon bir felaketle uğraşıyor: {Math.ceil(((kingdom.armyLockUntil ?? 0) - data.now) / 60_000)} dakika ordu çıkarılamaz.
+        </p>
+      )}
       {total === 0 ? (
         <p className="hint">Sarayda bekleyen asker yok.</p>
       ) : (

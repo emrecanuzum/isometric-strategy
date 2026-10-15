@@ -9,7 +9,10 @@ import { addUnits, countOf, garrisonOf, unitSpec } from './units'
 import { perSpan } from './span'
 import type { SpanCache } from './span'
 import { cutOff, imprisoned } from './walls'
-import { fortuneEffects, fortunesBegun, hasResearch, hospitalHeal, levelOf, researchEffects, sermonTaxFactor, templeHappiness } from './institutions'
+import { dynastyEffects, dynastyStep } from './dynasty'
+import type { Dynasty, DynastyEvent } from './dynasty'
+import { changeCrownRelation, driftCrownRelations, fealtyOpen, stewardFactor } from './crowns'
+import { crisisDecideMs, crisisWarded, isCrisis, fortuneEffects, fortunesBegun, hasResearch, hospitalHeal, levelOf, researchEffects, sermonTaxFactor, templeHappiness } from './institutions'
 import type { FortuneKind, FortuneScope } from './institutions'
 import type { Unit, Units } from './units'
 import type { TaxLevel } from './society'
@@ -228,6 +231,14 @@ export interface Kingdom {
   // The crown kingdom this lord has sworn fealty to (its capital's index in world.cities; CLAUDE.md §7.8), for the
   // whole season.
   liege?: number
+  // The lord's house: ruler, lady and children (CLAUDE.md §9.1; dynasty.ts).
+  dynasty?: Dynasty
+  // The lord's standing with each crown kingdom, −100 to 100 (by capital index; crowns.ts). Missing: at rest.
+  crownRelations?: number[]
+  // Answers to the crises of the day (CLAUDE.md §9.8): by the fortune's key (see crisisKey), what was done and when.
+  responses?: Record<string, { choice: 'villagers' | 'army' | 'none'; at: number }>
+  // The garrison is out fighting a fire or a flood until then: no army may be led out.
+  armyLockUntil?: number
   // The lobby's number, which seeds the fortunes the whole lobby shares (set by the server; institutions.ts).
   lobbyKey?: number
   // Taken in a siege: no army may lay siege to the palace again until then (CLAUDE.md §8.3).
@@ -252,6 +263,7 @@ export type FisherEntry =
   | { at: number; kind: 'miss' }
 
 export type EconomyEvent =
+  | DynastyEvent
   | { kind: 'trade'; good: Good; sold: number; gold: number; walledIn?: boolean; damaged?: boolean; city?: number }
   | { kind: 'built'; building: Building }
   | { kind: 'produced'; delta: Partial<Stock>; weapons?: Partial<Armory> }
@@ -259,7 +271,9 @@ export type EconomyEvent =
   | { kind: 'spy' }
   | { kind: 'wasted'; lost: Partial<Record<Resource, number>> }
   | { kind: 'researched'; id: string }
-  | { kind: 'fortune'; fortune: FortuneKind; scope: FortuneScope; until: number; lost?: Partial<Stock>; gold?: number }
+  | { kind: 'fortune'; fortune: FortuneKind; scope: FortuneScope; start: number; until: number; lost?: Partial<Stock>; gold?: number; crisis?: boolean }
+  // A crisis nobody answered in time: its harm done (CLAUDE.md §9.8).
+  | { kind: 'crisis'; fortune: FortuneKind; lost?: Partial<Stock>; sick?: number }
 
 // The merchant's trip to the lobby's market: the base trip, and longer the farther the trade post lies from the
 // palace he sets out from (beyond a short walk that the base covers). Straight-line tiles between the two.
@@ -520,7 +534,9 @@ export function workRate(kingdom: Kingdom, at: number) {
   const night = isNightAt(at) && !kingdom.nightShift ? n.workRate : 1
   const revolt = (kingdom.revoltUntil ?? 0) > at ? balance.espionage.operations.revolt.workRate : 1
   const fortune = 1 + fortuneEffects(kingdom, at).work
-  return night * (1 - (kingdom.fatigue ?? 0)) * revolt * fortune
+  // A ruler with a way with the people gets more out of them (CLAUDE.md §9.1).
+  const ruler = 1 + dynastyEffects(kingdom).work
+  return night * (1 - (kingdom.fatigue ?? 0)) * revolt * fortune * ruler
 }
 
 // The most people that would take up arms: a share of the population that grows with its happiness.
@@ -545,9 +561,11 @@ export function recruitment(kingdom: Kingdom, at: number, unit: Unit = 'spear') 
 export function ledger(kingdom: Kingdom, at: number) {
   const { healthy } = population(kingdom, at)
   const upkeep = balance.military.warrior.upkeep
-  const paid = ((kingdom.soldiers ?? 0) + (kingdom.fielded ?? 0)) * (1 - researchEffects(kingdom, at).upkeep)
+  // The ruler's gifts: a head for finance raises the taxes, a soldier's eye keeps the pay down (CLAUDE.md §9.1).
+  const ruler = dynastyEffects(kingdom)
+  const paid = ((kingdom.soldiers ?? 0) + (kingdom.fielded ?? 0)) * (1 - researchEffects(kingdom, at).upkeep) * ruler.upkeep
   return {
-    tax: healthy * taxSpec(kingdom.tax).goldPerVillager * (1 + researchEffects(kingdom, at).tax) * idleFactor(kingdom, at),
+    tax: healthy * taxSpec(kingdom.tax).goldPerVillager * (1 + researchEffects(kingdom, at).tax) * ruler.tax * idleFactor(kingdom, at),
     soldiersGold: paid * upkeep.gold,
     soldiersFood: paid * upkeep.food,
     tributes: (kingdom.tributes ?? []).map((t) => ({ ...t, gold: t.dir === 'in' ? t.gold : -t.gold })),
@@ -752,7 +770,7 @@ export function demolish(kingdom: Kingdom, id: number): Kingdom {
   return { ...kingdom, stock, buildings: kingdom.buildings.filter((x) => x.id !== id) }
 }
 
-export type BuildError = 'palace' | 'unique' | 'cost' | 'queue' | 'spot' | 'top' | 'busy' | 'locked' | 'limit' | 'liege'
+export type BuildError = 'palace' | 'unique' | 'cost' | 'queue' | 'spot' | 'top' | 'busy' | 'locked' | 'limit' | 'liege' | 'queen'
 
 // The homes of every building at the level it is (or is being raised to): what the town will house once built.
 export const plannedHousing = (kingdom: Kingdom) => kingdom.buildings.reduce((n, b) => n + (levelSpec(b.kind, b.level).villagers ?? 0), 0)
@@ -903,6 +921,8 @@ export function upgradeError(kingdom: Kingdom, id: number, now: number): BuildEr
   if (!done(b, now)) return 'busy'
   // A lord swears fealty to a crown kingdom before the palace rises past its first level (CLAUDE.md §7.8).
   if (b.kind === 'palace' && (b.level ?? 1) + 1 >= balance.cities.crown.requiredForPalaceLevel && kingdom.liege === undefined) return 'liege'
+  // A lady at court before the palace's third level: the house must have a future (CLAUDE.md §9.1).
+  if (b.kind === 'palace' && (b.level ?? 1) + 1 >= balance.dynasty.queenForPalaceLevel && !kingdom.queen) return 'queen'
   if (b.kind !== 'palace' && housingFull(kingdom, now, (up.villagers ?? 0) - (levelSpec(b.kind, b.level).villagers ?? 0))) return 'limit'
   if (!affordable(kingdom.stock, up.cost)) return 'cost'
   if (queued(kingdom, now).length >= maxConstructions(kingdom, now)) return 'queue'
@@ -910,11 +930,13 @@ export function upgradeError(kingdom: Kingdom, id: number, now: number): BuildEr
 }
 
 // Fealty to a crown kingdom (CLAUDE.md §7.8): to one of the `crowns` capitals, once for the season.
-export const fealtyError = (kingdom: Kingdom, index: number, crowns: number): 'sworn' | 'rejected' | null =>
-  kingdom.liege !== undefined ? 'sworn' : Number.isInteger(index) && index >= 0 && index < crowns ? null : 'rejected'
+// Not offered before the lord has a few buildings standing (`early`; the crowns are introduced then).
+export const fealtyError = (kingdom: Kingdom, index: number, crowns: number, now = Infinity): 'sworn' | 'rejected' | 'early' | null =>
+  kingdom.liege !== undefined ? 'sworn' : !(Number.isInteger(index) && index >= 0 && index < crowns) ? 'rejected' : !fealtyOpen(kingdom, now) ? 'early' : null
 
-export const swearFealty = (kingdom: Kingdom, index: number, crowns: number): Kingdom =>
-  fealtyError(kingdom, index, crowns) ? kingdom : { ...kingdom, liege: index }
+// Sworn, the lord starts in its crown's good graces.
+export const swearFealty = (kingdom: Kingdom, index: number, crowns: number, now = Infinity): Kingdom =>
+  fealtyError(kingdom, index, crowns, now) ? kingdom : changeCrownRelation({ ...kingdom, liege: index }, index, balance.cities.crown.relation.swear)
 
 // An upgrade takes a construction slot; the building stands as a building site (and makes nothing) until it ends.
 export function upgradeBuilding(kingdom: Kingdom, id: number, now: number): Kingdom {
@@ -961,8 +983,9 @@ export const tradeTripMs = (kingdom: Kingdom) => kingdom.trade.city?.tripMs ?? l
 // What the merchant takes on one trip, and what a unit fetches before bonuses: a free city takes a bigger load at its
 // price, a little over the lobby's.
 export const tradeLoad = (kingdom: Kingdom) => tradeUnits(kingdom) * (kingdom.trade.city ? balance.cities.trade.loadFactor : 1)
+// The crown watching over the good pays more to a lord it favours, less to one it does not (crowns.ts).
 export const tradePrice = (kingdom: Kingdom, good: Good, market: Market | null | undefined, at: number) =>
-  kingdom.trade.city ? cityPrice(good, market, at) : priceAt(market, good, at)
+  (kingdom.trade.city ? cityPrice(good, market, at) : priceAt(market, good, at)) * stewardFactor(kingdom, good, at)
 
 // Trips the merchant makes in one production round.
 export const tradeTripsPerRound = (kingdom: Kingdom) => (balance.economy.productionSeconds * 1000) / tradeTripMs(kingdom)
@@ -1058,15 +1081,30 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
     if (next === k.nextProductionAt) {
       // A fortune that befell the kingdom since the last round: what it does at once.
       if (k.buildings.some((b) => b.kind === 'palace')) {
-        for (const begun of fortunesBegun(k, next - productionMs(), next)) {
+        const harm = (spec: (typeof begun)['spec']) => {
           const lost: Partial<Stock> = {}
-          for (const [g, share] of Object.entries(begun.spec.lose ?? {})) {
+          for (const [g, share] of Object.entries(spec.lose ?? {})) {
             lost[g as Good] = Math.floor(k.stock[g as Good] * (share ?? 0))
             k.stock[g as Good] -= lost[g as Good]!
           }
+          if (spec.sicken) k.sickness = Math.min(balance.institutions.sickness.max, (k.sickness ?? 0) + spec.sicken)
+          return lost
+        }
+        let begun: ReturnType<typeof fortunesBegun>[number]
+        for (begun of fortunesBegun(k, next - productionMs(), next)) {
+          // A crisis waits for the lord's answer: its harm falls only once the time to answer is over.
+          const crisis = isCrisis(begun.kind)
+          const lost = crisis ? {} : harm(begun.spec)
           if (begun.spec.gold) k.stock.gold += begun.spec.gold
-          if (begun.spec.sicken) k.sickness = Math.min(balance.institutions.sickness.max, (k.sickness ?? 0) + begun.spec.sicken)
-          events.push({ kind: 'fortune', fortune: begun.kind, scope: begun.scope, until: begun.end, ...(Object.keys(lost).length > 0 && { lost }), ...(begun.spec.gold && { gold: begun.spec.gold }) })
+          events.push({ kind: 'fortune', fortune: begun.kind, scope: begun.scope, start: begun.start, until: begun.end, ...(Object.keys(lost).length > 0 && { lost }), ...(begun.spec.gold && { gold: begun.spec.gold }), ...(crisis && { crisis }) })
+        }
+        // Crises whose time to answer ran out since the last round, unanswered or left alone: the harm is done.
+        const wait = crisisDecideMs()
+        for (const due of fortunesBegun(k, next - productionMs() - wait, next - wait)) {
+          if (!isCrisis(due.kind) || crisisWarded(k, due)) continue
+          const before = k.sickness ?? 0
+          const lost = harm(due.spec)
+          events.push({ kind: 'crisis', fortune: due.kind, ...(Object.keys(lost).length > 0 && { lost }), ...(due.spec.sicken && { sick: (k.sickness ?? 0) - before }) })
         }
       }
       const { delta, weapons } = roundOutcome(k, next)
@@ -1090,6 +1128,8 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       // The people's mood drifts toward what the taxes, the queen, the granary, the temple and the day make of it.
       const n = balance.society.night
       k.happiness = happinessStep(happinessOf(k), happinessFor(k, next))
+      // The crowns' feelings settle back toward where they rest.
+      k.crownRelations = driftCrownRelations(k).crownRelations
       // Night shifts tire the people; rest brings them back.
       k.fatigue =
         k.nightShift && isNightAt(next)
@@ -1119,11 +1159,13 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       const sold = walledIn || damaged ? 0 : Math.min(tradeLoad(k), Math.floor(k.stock[good]))
       const fortune = fortuneEffects(k, next).trade
       const price = tradePrice(k, good, market, next)
-      const gold = Math.round(sold * price * (1 + researchEffects(k, next).trade + fortune) * idleFactor(k, next))
+      const gold = Math.round(sold * price * (1 + researchEffects(k, next).trade + fortune + dynastyEffects(k).trade) * idleFactor(k, next))
       if (!city) soldTotal[good] = (soldTotal[good] ?? 0) + sold
       k.stock[good] -= sold
       k.stock.gold += gold
       k.trade.departedAt = next
+      // Trade at a crown's capital warms the crown to the lord.
+      if (city && sold > 0) k.crownRelations = changeCrownRelation(k, city.index, balance.cities.crown.relation.cityTrip).crownRelations
       if (sold > 0) {
         const ledger = k.trade.ledger ?? { food: 0, materials: 0, arms: 0, gold: 0 }
         k.trade.ledger = { ...ledger, [good]: ledger[good] + sold, gold: ledger.gold + gold }
@@ -1133,6 +1175,16 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
   }
   for (const building of finishing) events.push({ kind: 'built', building })
   if (finishing.length > 0) edit()
+  // The lord's house: births, deaths and successions up to now (only once the realm has its palace).
+  if (k.buildings.some((b) => b.kind === 'palace')) {
+    const step = dynastyStep(k, now)
+    if (step.events.length > 0 || !k.dynasty || step.kingdom.queen !== !!k.queen) {
+      edit()
+      k.dynasty = step.kingdom.dynasty
+      k.queen = step.kingdom.queen
+      events.push(...step.events)
+    }
+  }
   if (k !== kingdom) k.settledAt = now
   return { kingdom: k, events, sold: soldTotal }
 }
@@ -1151,6 +1203,7 @@ export function happinessFor(k: Kingdom, at: number) {
       (imprisoned(k.buildings, k.site, at) ? balance.society.happiness.imprisoned : 0) +
       templeHappiness(k, at) +
       researchEffects(k, at).happiness +
+      dynastyEffects(k).happiness +
       (k.sickness ?? 0) * balance.institutions.sickness.happinessPerShare +
       fortune.happiness +
       (templeLevel > 0 ? fortune.templeHappiness : 0),

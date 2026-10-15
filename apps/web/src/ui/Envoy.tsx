@@ -64,7 +64,7 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       return {
         icon: 'swords',
         title: 'Savaş ilan edildi!',
-        text: `${p.by}, ${p.on === me ? 'sana' : `${p.on} krallığına`} savaş ilan etti${p.claim ? '' : ' (hiçbir gerekçe göstermeden)'}.`,
+        text: `${p.by} savaş ilan etti${p.on === me ? '; hedef sensin' : ` (hedef: ${p.on})`}${p.claim ? '' : ', hiçbir gerekçe göstermeden'}.`,
       }
     case 'peace_enforced':
       return { icon: 'banner', title: 'Barış dayatıldı', text: `${p.from} savaşı ezici bir üstünlükle kazandı ve barışı dayattı: ${describeTerms(p.terms as PeaceTerms | null)}.` }
@@ -94,7 +94,7 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
     case 'spy_caught':
       return { icon: 'eye', title: 'Casus yakalandı', text: `Topraklarında ${p.owner} adına ${TOPIC_NAMES[p.topic as SpyTopic]} bilgisi toplayan bir casus yakalandı.` }
     case 'spy_lost':
-      return { icon: 'eye', title: 'Casusun yakalandı', text: `${p.target} krallığındaki casusun yakalandı. İlişkiniz bozuldu.` }
+      return { icon: 'eye', title: 'Casusun yakalandı', text: `${p.target} topraklarındaki casusun yakalandı. İlişkiniz bozuldu.` }
     case 'envoy_insult':
       return { icon: 'unhappy', title: `${p.from} elçisi hakaret etti!`, text: `"${INSULTS[Number(p.seed ?? 0) % INSULTS.length]}" İlişkiniz ${balance.diplomacy.insult.relation} düştü; artık onlara karşı savaş gerekçen var.` }
     case 'insult_delivered':
@@ -152,6 +152,14 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
     }
     case 'patrol_tip':
       return { icon: 'gold', title: 'Devriye eğlenip gitti', text: `${crown(p.crown)} devriyesi eğlence merkezinde soluklandı, içti, şarkı söyledi ve ${fmt(Number(p.amount))} altın bahşiş bıraktı.` }
+    case 'crown_gift': {
+      const goods = Object.entries((p.goods ?? {}) as Record<string, number>).map(([g, v]) => `${fmt(v)} ${RESOURCE_NAMES[g as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? g}`)
+      return {
+        icon: 'chest',
+        title: `${crown(p.crown)} armağan gönderdi`,
+        text: `Devriye, hükümdarın sana duyduğu yakınlığın işareti olarak «${p.name}» getirdi: ${[...(Number(p.gold) > 0 ? [`${fmt(Number(p.gold))} altın`] : []), ...goods].join(', ')}.`,
+      }
+    }
     case 'patrol_taken':
       return { icon: 'gold', title: 'Devriye haracı aldı', text: `${crown(p.crown)} devriyesine kimse cevap vermedi; atlılar hazineden ${fmt(Number(p.amount))} altın alıp gitti.` }
     case 'patrol_ignored':

@@ -720,7 +720,7 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     6 / 8 / 10, oduncu kampı 2 / 3 / 4 / 5 / 6, silah atölyesi 1 / 2 / 3 /
     3 / 4, gözcü kulesi 2 / 2 / 3 / 4 / 6, sur kapısı 2 / 2 / 3 / 4 / 5;
     pazar, kışla, casus evi, hapishane, üniversite, hastane, tapınak ve iskele birer
-    tane. Sınır İnşa sekmesinde ve Krallık sekmesindeki yapılar listesinde
+    tane. Sınır İnşa sekmesinde ve Saray sekmesindeki yapılar listesinde
     "kurulu / sınır" olarak yazar; sınırı aşan eski yapılar yerinde kalır.
   - **Saray 4. ve 5. seviye** çok pahalı ve uzundur (savaş malzemesi de
     ister; `economy.json`).
@@ -978,10 +978,24 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   kırmızı, biri mavi). Şehrin üstüne gelince çıkan etiket ve şehir paneli
   bu adı ve rengi gösterir; dünya haritasında başkentin adı yazar.
   Şehirlerin ticaret kuralları (§7.7) aynen geçerlidir.
-- **Biat:** Oyuncu Krallık sekmesindeki ya da saray menüsündeki
+- **Oyuncular krallık değil, lorddur.** Oyunda yalnızca iki krallık vardır
+  (taçlar); oyuncunun toprağı "lordluk"tur. Menüdeki sekmenin adı
+  **Saray**dır; arayüz oyuncuya "krallığın" demez, önerilen adlar
+  "Krallığı/Hükümdarlığı" ile bitmez (Beyliği, Diyarı, Hanedanı, Sancağı,
+  Yurdu, Malikânesi, Lordluğu, Hisarı).
+- **Biat:** Oyuncu Saray sekmesindeki ya da saray menüsündeki
   **Bağlılık** bölümünden iki taç krallığından birine biat eder
   ("Biat et", onay ister). Biat **sezon boyunca kalıcıdır**, değiştirilemez.
-- **Ne zaman:** Başlangıçta zorunlu değildir; krallık biatsız kurulur ve
+  Biat edilmişse Bağlılık bölümünde tacın adı büyük bir düğme olarak
+  yazar; tıklayınca kamera başkente gider ve tacın paneli açılır.
+- **Tanıtım ve seçim:** Lordluk en az 6 yapıya ulaşmadan (sur ve kapı
+  sayılmaz; `crown.intro.buildings`) biat edilemez: "Şu an uygun değil"
+  (`'early'`). Bu eşiğe ulaşınca taçlar sayfa sayfa bir pencereyle
+  kendini tanıtır (iki taç, rekabet ve güç, lord olmak ve armağanlar,
+  taçların pazarı) ve son sayfa tarafını seçmeni ister; "Sonra karar
+  vereceğim" denirse seçim Saray sekmesinden yapılır
+  (`apps/web/src/ui/CrownIntro.tsx`, tarayıcıda bir kez gösterilir).
+- **Ne zaman:** Başlangıçta zorunlu değildir; lordluk biatsız kurulur ve
   büyür. Ama **sarayı 2. seviyeye yükseltmek için biat şarttır**
   (`crown.requiredForPalaceLevel` = 2): biatsız krallığın saray yükseltmesi
   "Önce bir taç krallığına biat et" diye reddedilir (`'liege'` hatası).
@@ -1032,6 +1046,33 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
 - **Eğlence merkezi** (4. seviye saray, krallıkta bir tane; 1200 altın, 700
   yapı malzemesi, 120 sn): bayraklı, fenerli, küçük sahneli iki katlı bir
   salon. Bağlı olunan tacın devriyeleri buraya gelip bahşiş bırakır.
+- **Taçla ilişki** (`packages/shared/src/crowns.ts`, `cities.json` →
+  `crown.relation`): her lordun iki taçla ayrı ayrı −100…+100 ilişkisi
+  vardır (`crownRelations`). Zamanla dinlenme değerine döner: kendi tacıyla
+  +15, rakip taçla −15, biatsızken 0. Biat edince kendi tacıyla +20.
+  Artıranlar: tüccarı o tacın başkentine göndermek (satış yapılan her
+  sefer +1,2), kendi tacının devriyesini ağırlamak (+1), rakip tacın
+  haracını ödemek (+4). Azaltanlar: haracı reddetmek (−10), cevap vermeyip
+  zorla aldırmak (−5).
+- **Armağanlar:** Kendi tacının devriyesi her uğrayışta ilişki baremine
+  göre armağan getirir: 30+ "Teşekkür sepeti", 60+ "Saray armağanı", 85+
+  "Hükümdarın lütfu" (altın ve mallar; `crown.gifts`). Rakip tacla ilişki
+  iyiyse istediği haraç azalır (+100'de %50 az; `tributeEase`).
+- **Taçların pazarı** (`crown.stewardship`): Her taç saatte bir değişen
+  bir malın ticaretini yönetir (iki taç farklı mallar; lobi tohumu ve
+  saatten). Lord o malı sattığında (lobi pazarında da şehirde de) fiyatı o
+  taçla ilişkisine göre değişir: +100'de %25 fazla, −100'e doğru %35'e
+  kadar az; −50'nin altında o tacın tüccarları onunla alışveriş etmez ve
+  fiyat yarıya iner (`stewardFactor`, `tradePrice`).
+- **Taçların gücü** (`crown.power`): Bir tacın gücü 400 + ona bağlı
+  lordların puanlarının toplamıdır; lordları geliştikçe güçlenir. Güç payı
+  etkiler: kendi lordlarına bahşiş ve armağanlar ×0,7–1,3, rakip lordlardan
+  istenen haraç ×0,6–1,4 (eşit güçte ×1).
+- **Taç paneli** (başkente tıklayınca): hükümdar, şehrin fiyatları,
+  seninle ilişkisi (çubuk, dinlenme değeri, ilişkiyi değiştirenler ve
+  armağan baremleri), **taçların gücü** (pasta grafik ve iki tacın lordları
+  puan çubuklarıyla), **taçların pazarı** (hangi tacın hangi malı yönettiği,
+  kalan süre ve senin fiyat etkin), bağlılık ve tüccar gönderme.
 - Başka etkileri (taç savaşları) sonra eklenecek.
 
 ## 8. Askeri Sistem
@@ -1183,11 +1224,50 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
 
 ### 9.1 Hanedan ve karakterler
 
-- Her krallığın bir **hükümdarı (kral)** ve **kraliçesi** vardır.
-  İleride: varis, danışmanlar, generaller gibi ek karakterler.
-- Karakterlerin basit özellikleri olabilir (ör. "Yetenekli yönetici":
-  +%5 vergi; "Sevilen kraliçe": +moral).
-- **Kraliçe** şehrin moral kaynağıdır; varlığı bir moral bonusu sağlar.
+**Şu an uygulanan** (değerler `config/balance/dynasty.json`, mantık
+`packages/shared/src/dynasty.ts`, arayüz `apps/web/src/ui/hud/dynasty.tsx`,
+portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
+
+- Her lordluğun bir **hanedanı** vardır: **hükümdar**, **kraliçe** ve
+  **çocuklar**. Kişiler yaşlanır: **1 hanedan yılı = 6 gerçek saat**
+  (sezon ≈ 56 yıl). İlk hükümdar 26–38, kraliçe 19–28 yaşında gelir.
+  Saray sekmesindeki **Hanedan** bölümü portreleri, yaşları, yetenekleri,
+  çocukları ve ataları gösterir.
+- **Yetenekler** (0–10): **Maliye** (vergi ±%3, ticaret geliri ±%2 / puan),
+  **Halk** (mutluluk ±1,2, iş gücü ±%1,5 / puan), **Askerlik** (savaş zarı
+  ±0,12, asker maaşı ∓%2 / puan); 5 ortadır. Kraliçenin yeteneklerinin
+  ortadan farkının yarısı hükümdarınkine eklenir.
+- **Kraliçe ve doğumlar:** Kraliçe alınınca (Halk sekmesi) hanedana katılır
+  ("Kraliçe saraya geldi"). Kraliçe saraydayken (kaçırılmamışken) ilk çocuk
+  0,4–1 yıl içinde, sonrakiler 1,2–2,5 yılda bir doğar; en çok 4 çocuk,
+  kraliçe 44 yaşına kadar. %55 oğlan. Çocuğun yetenekleri %60 anne-baba
+  ortalaması, %40 yeni çekiliştir. **Sarayı 3. seviyeye yükseltmek için
+  kraliçe şarttır** (`'queen'` hatası).
+- **Kuraldan önce yükselmiş saraylar:** Sarayı 3. seviye ya da üstü olup
+  kraliçesi olmayan (ve kraliçesi rehin olmayan) lordluğun ekranının sağında
+  "Kraliçeye ihtiyacımız var" uyarısı durur; "Kraliçe getir" düğmesi tek
+  tuşla, bedelsiz ve nüfus şartı aranmadan rastgele bir kraliçe getirir
+  (`queenOwed`). Kraliçesi rehinken yeni kraliçe alınamaz.
+- **Ad üreteci:** Ad koyulan her yerde (doğum penceresi, çocuklar,
+  hükümdar ve kraliçe) "Rastgele" düğmesi bir ad önerir: eski adlardan
+  biri ya da iki yarıdan kurulan bir ad (Alptekin, Gülbike…;
+  `dynasty.json` → `names`, `nameParts`; `randomName`). Hükümdarın ve
+  kraliçenin adı da değiştirilebilir.
+- **Ad ve eğitim:** Doğumda bir haber penceresi açılır; çocuğa ad
+  konur (koyulmazsa çekilen ad kalır; sonradan da konabilir). Hükümdar
+  yaşarken reşit olmamış her çocuğun eğitimi seçilir (Maliye, Halk,
+  Askerlik); çocuk 16 yaşında reşit olunca o yetenek +3 artar.
+- **Ölüm ve tahta geçiş:** Hükümdarın ölüm yaşı doğumunda 58–80 arasında
+  çekilir. Ayrıca tarafının kaybettiği her muharebede %5 ihtimalle
+  kahrından ölür (sunucu, muharebenin ve lordluğun tohumuyla). Yerine en
+  büyük oğlu geçer; oğlu yoksa ya da reşit değilse **naipler konseyi**
+  yönetir (yetenekler 4/3/4), oğul reşit olunca tahta çıkar. Eski kraliçe
+  kraliçe ana olur: yeni hükümdar kendi kraliçesini almalıdır.
+- **Haberler:** doğum, reşit olma, ölüm, tahta çıkış, naipler konseyi ve
+  kraliçenin gelişi, oyundaki olay pencereleri gibi çizimli birer pencereyle
+  duyurulur. Haberler hanedanın o anki hâlinden çıkarılır ve tarayıcıda
+  hatırlanır (sunucu olayı önce işlese de duyurulur); "Sen yokken"
+  raporunda da bir Hanedan sayfası vardır.
 
 ### 9.2 Diplomatik durumlar
 
@@ -1599,6 +1679,20 @@ krallıkta birer tane olur ve 3 seviyelidir.
   zamandan ve tohumdan hesaplanır (lobi tohumu sunucunun krallığa yazdığı
   `lobbyKey`), anlık etkileri (kayıp, define, salgın) başladığı üretim
   turunda bir kez uygulanır.
+- **Krizler (seçimli olaylar):** Orman yangını, ambar yangını, salgın
+  (yerel ve lobi geneli), sel, fırtına ve soğuk dalgası gelince pencere üç
+  seçenek sunar (`institutions.json` → `events.crisis`):
+  **köylüleri seferber et** (zarar önlenir; 5 dakika iş gücü %30 düşer),
+  **orduyu seferber et** (zarar önlenir; garnizondan 1, %25 ihtimalle 2
+  asker ölür ve ordu 5 dakika sefere çıkamaz; en az 2 asker gerekir) ya da
+  **bir şey yapma** (olayın kötü etkisi tam yaşanır). Karar için 2 dakika
+  vardır; cevap verilmezse bir şey yapılmamış sayılır. Krizlerin anlık
+  zararı (yanan yemek, hastalanan halk) bu yüzden olay başlayınca değil,
+  karar süresi dolunca gelir; önlenmişse gelmez, süren etkileri de
+  (üretim düşüşü vb.) uygulanmaz. Cevap krallık durumunda saklanır
+  (`responses`, 24 saat), sunucu `crisis` komutuyla doğrular.
+- **Olay çizimleri:** Her olayın penceresinde oyundan daha ayrıntılı,
+  kodla çizilmiş bir piksel sahnesi vardır (`apps/web/src/ui/EventArt.tsx`).
 - **Günlük sekmeleri:** "Tümü" ve "Önemli". Önemli'de krallığı etkileyen
   olumsuz olaylar toplanır: kötü olaylar, yağma ve yağma girişimi, savaş
   ilanı, dayatılan barış, hakaret, sabotaj ve kaçırma, yakalanan casuslar,
@@ -1678,7 +1772,7 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   dönerse) oyuncunun oturumu kapatılır ve giriş ekranına döner
   (`apps/web/src/lib/supabase.ts`).
 - **Ana menü:** Giriş sonrası Lobiler / Nasıl oynanır / Ayarlar. Oyun
-  içinden Krallık sekmesindeki "Ana menü" ile dönülür. Lobi silinirse
+  içinden Saray sekmesindeki "Ana menü" ile dönülür. Lobi silinirse
   içindeki oyuncular kendiliğinden ana menüye döner (yayın + dakikalık
   yoklama).
 - Telefonda yakınlaştırma (+/−) ve üsse dön düğmeleri sağ altta, küçük

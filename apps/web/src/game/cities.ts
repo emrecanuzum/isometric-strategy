@@ -26,15 +26,21 @@ export interface CityInfo {
   color: string
 }
 
+// Each crown's ruler, drawn from its capital; never the same one for both.
+function rulerOf(world: World, index: number) {
+  const pick = (i: number) => Math.floor(hash(world.cities[i].x, world.cities[i].y, world.seed + 2017) * RULERS.length)
+  const own = pick(index)
+  return index > 0 && own === pick(0) ? (own + 1) % RULERS.length : own
+}
+
 export function cityInfo(world: World, index: number): CityInfo {
   const start = Math.floor(hash(3, 4, world.seed + 2011) * NAMES.length)
-  const c = world.cities[index]
   const capital = NAMES[(start + index * 3) % NAMES.length]
   return {
     index,
     name: `${capital} Krallığı`,
     capital,
-    ruler: RULERS[Math.floor(hash(c.x, c.y, world.seed + 2017) * RULERS.length)],
+    ruler: RULERS[rulerOf(world, index)],
     color: CROWN_COLORS[index % CROWN_COLORS.length],
   }
 }

@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { GOODS, balance, cityCenter, cityPrice, cityTripMs, lobbyTripMs, priceAt, tradeCityReadyAt, tradeUnits } from '@game/shared'
+import { GOODS, balance, byPower, cityCenter, cityPrice, cityTripMs, crownGoods, crownPower, crownRelation, crownRest, doneBuildings, fealtyOpen, giftAt, lobbyTripMs, priceAt, stewardFactor, tradeCityReadyAt, tradeUnits } from '@game/shared'
 import type { Kingdom, Market, Point, World } from '@game/shared'
 import { cityInfo } from '../../game/cities'
 import { Icon } from '../icons'
 import { RESOURCE_ICONS, RESOURCE_NAMES } from '../names'
-import { Section } from './primitives'
+import { Meter, Section, fmt } from './primitives'
+import type { Online } from './online'
 
 // The free cities (CLAUDE.md §4.2, §7.6): what they are, and the merchant's choice between the lobby's market and a
 // free city's.
@@ -69,10 +70,11 @@ export function CityTip({ world, index, at }: { world: World; index: number; at:
 }
 
 // A crown kingdom's capital (CLAUDE.md §7.8): who rules it, fealty to it, what it buys, and sending the merchant there.
-export function CitySheet({ world, index, kingdom, market, now, onCity, onSwear, onShow, onClose }: {
+export function CitySheet({ world, index, kingdom, online, market, now, onCity, onSwear, onShow, onClose }: {
   world: World
   index: number
   kingdom: Kingdom | null
+  online: Online
   market?: Market | null
   now: number
   onCity(city: number | null): void
@@ -130,7 +132,10 @@ export function CitySheet({ world, index, kingdom, market, now, onCity, onSwear,
           </div>
           <p className="hint">Tüccarın buraya seferde {loadFactor} kat yük getirir; satış lobinin fiyatlarını etkilemez.</p>
         </Section>
-        {kingdom && <Fealty world={world} kingdom={kingdom} only={index} onSwear={onSwear} />}
+        {kingdom && <CrownStanding world={world} index={index} kingdom={kingdom} />}
+        <CrownRivalry world={world} online={online} />
+        {kingdom && <Stewardship world={world} kingdom={kingdom} now={now} />}
+        {kingdom && <Fealty world={world} kingdom={kingdom} now={now} only={index} onSwear={onSwear} />}
         {kingdom && (
           <Section title="Tüccarın" icon="trade">
             {here ? (
@@ -160,12 +165,27 @@ export function CitySheet({ world, index, kingdom, market, now, onCity, onSwear,
 // Fealty to a crown kingdom (CLAUDE.md §7.8): to whom the lord is sworn, or the crowns to swear to. Not needed to
 // begin with; the palace rises past its first level only once sworn. Swearing asks to be confirmed and holds for the
 // season. `only` shows just that crown (on its capital's sheet).
-export function Fealty({ world, kingdom, only, onSwear }: { world: World; kingdom: Kingdom; only?: number; onSwear(city: number): void }) {
+export function Fealty({ world, kingdom, now, only, onSwear, onOpen }: { world: World; kingdom: Kingdom; now: number; only?: number; onSwear(city: number): void; onOpen?(city: number): void }) {
   const [asking, setAsking] = useState<number | null>(null)
   if (world.cities.length === 0) return null
   const level = balance.cities.crown.requiredForPalaceLevel
   if (kingdom.liege !== undefined && world.cities[kingdom.liege]) {
     const liege = cityInfo(world, kingdom.liege)
+    // On the palace's tab: the liege as a large button that takes the lord to its court.
+    if (onOpen) return (
+      <Section title="Bağlılık" icon="crown" aside="sezon boyunca">
+        <button className="liege-button" style={{ borderColor: liege.color }} onClick={() => onOpen(kingdom.liege!)}>
+          <CrownBanner world={world} liege={kingdom.liege} size={28} />
+          <span>
+            <b style={{ color: liege.color }}>{liege.name.toLocaleUpperCase('tr-TR')}</b>
+            <small>
+              Lordu olduğun taç · hükümdar {liege.ruler} · ilişkin {Math.round(crownRelation(kingdom, kingdom.liege))}
+            </small>
+          </span>
+          <Icon name="pin" size={16} />
+        </button>
+      </Section>
+    )
     if (only !== undefined && only !== kingdom.liege) return (
       <Section title="Bağlılık" icon="crown">
         <p className="hint">
@@ -182,6 +202,15 @@ export function Fealty({ world, kingdom, only, onSwear }: { world: World; kingdo
     )
   }
   const crowns = world.cities.map((_, index) => index).filter((index) => only === undefined || index === only)
+  // The crowns take notice of a lord once it has grown a little (they are introduced then).
+  if (!fealtyOpen(kingdom, now)) return (
+    <Section title="Bağlılık" icon="crown" aside="şu an uygun değil">
+      <p className="hint">
+        Taç krallıkları henüz seninle ilgilenmiyor. Lordluğunu biraz büyüt: {doneBuildings(kingdom, now)} / {balance.cities.crown.intro.buildings} yapı. O zaman iki taç sana
+        kendini tanıtacak ve tarafını seçeceksin.
+      </p>
+    </Section>
+  )
   return (
     <Section title="Bağlılık" icon="crown" aside="henüz biat etmedin">
       <p className="hint">
@@ -232,5 +261,151 @@ export function CrownBanner({ world, liege, size = 14 }: { world: World; liege?:
       <rect x="1" y="1" width="1.6" height="13" fill="#2a1c10" />
       <path d="M2.6 1.5 H13 L10.4 4.5 L13 7.5 H2.6 Z" fill={info.color} stroke="#120d0b" strokeWidth="0.8" />
     </svg>
+  )
+}
+
+// ---- The crowns' politics (CLAUDE.md §7.8) -------------------------------------------------------------------------
+
+const signedInt = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(Math.round(v))}`
+const signedDec = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}`
+
+// How a crown stands with the lord: the relation, where it drifts back to, what moves it, and the gifts its patrols
+// bring at each step.
+function CrownStanding({ world, index, kingdom }: { world: World; index: number; kingdom: Kingdom }) {
+  const info = cityInfo(world, index)
+  const relation = crownRelation(kingdom, index)
+  const rest = crownRest(kingdom, index)
+  const r = balance.cities.crown.relation
+  const sworn = kingdom.liege === index
+  const gift = giftAt(relation)
+  return (
+    <Section title="Seninle ilişkisi" icon="happy" aside={signedInt(relation)}>
+      <Meter value={(relation + 100) / 200} tone={relation >= 30 ? 'up' : relation <= -30 ? 'down' : 'gold'} label={`${info.name} ile ilişki`} segments={20} />
+      <p className="hint">
+        Zamanla {signedInt(rest)} düzeyine döner ({sworn ? 'kendi tacın sana sıcak bakar' : kingdom.liege !== undefined ? 'rakip taç sana soğuk bakar' : 'henüz kimseye biat etmedin'}).
+        İlişkiyi artıranlar: tüccarını {info.capital} şehrine göndermek (her sefer {signedDec(r.cityTrip)}), devriyesini ağırlamak ({signedInt(r.visit)}), istediği haracı
+        ödemek ({signedInt(r.tributePaid)}). Azaltanlar: haracı reddetmek ({signedInt(r.tributeRefused)}), devriyesine cevap vermemek ({signedInt(r.tributeTaken)}).
+      </p>
+      <ul className="tiers">
+        {balance.cities.crown.gifts.map((g) => (
+          <li key={g.at} className={relation >= g.at ? 'on' : undefined}>
+            <Icon name="chest" size={16} />
+            <span>
+              <b>{g.name}</b> · ilişki {g.at}+
+            </span>
+            <small>
+              {fmt(g.gold)} altın{Object.entries(g.goods).map(([good, v]) => `, ${fmt(v as number)} ${RESOURCE_NAMES[good as keyof typeof RESOURCE_NAMES].toLowerCase()}`).join('')}
+            </small>
+          </li>
+        ))}
+      </ul>
+      <p className="hint">
+        {sworn
+          ? gift
+            ? `Devriyesi sana her uğradığında «${gift.name}» getirir (tacın gücüyle artar ya da azalır).`
+            : `İlişkin ${balance.cities.crown.gifts[0].at}'a ulaşınca devriyesi sana armağan getirmeye başlar.`
+          : `Rakip tacın devriyesi armağan getirmez; ama ilişkin iyiyse istediği haraç azalır (en çok %${Math.round(r.tributeEase * 100)}).`}
+      </p>
+    </Section>
+  )
+}
+
+// The balance of power between the two crowns: a pie of their strength (a base of their own and their lords' scores),
+// and their lords side by side.
+export function CrownRivalry({ world, online }: { world: World; online: Online }) {
+  if (world.cities.length < 2) return null
+  const lords = online.kingdoms.map((k) => ({ id: k.id, name: k.name, liege: k.liege ?? null, score: k.score?.total ?? 0 }))
+  const { power, share } = crownPower(lords, world.cities.length)
+  const p = balance.cities.crown.power
+  const infos = world.cities.map((_, i) => cityInfo(world, i))
+  // The pie: one slice per crown, from the top, clockwise.
+  let angle = -Math.PI / 2
+  const slices = share.map((s, i) => {
+    const from = angle
+    angle += s * Math.PI * 2
+    const large = s > 0.5 ? 1 : 0
+    const at = (a: number) => `${50 + 46 * Math.cos(a)} ${50 + 46 * Math.sin(a)}`
+    return <path key={i} d={s >= 0.999 ? 'M50 4 A46 46 0 1 1 49.99 4 Z' : `M50 50 L${at(from)} A46 46 0 ${large} 1 ${at(angle)} Z`} fill={infos[i].color} stroke="#120d0b" strokeWidth="2" />
+  })
+  const unsworn = lords.filter((l) => l.liege === null).length
+  return (
+    <Section title="Taçların gücü" icon="banner" aside={share.map((v) => `%${Math.round(v * 100)}`).join(' · ')}>
+      <div className="rivalry">
+        <svg viewBox="0 0 100 100" className="pie" role="img" aria-label={infos.map((info, i) => `${info.name} %${Math.round(share[i] * 100)}`).join(', ')}>
+          {slices}
+        </svg>
+        <div className="rivalry-sides">
+          {infos.map((info, i) => {
+            const mine = lords.filter((l) => l.liege === i).sort((a, b) => b.score - a.score)
+            const top = Math.max(1, ...lords.map((l) => l.score))
+            return (
+              <div key={i} className="rivalry-side">
+                <b style={{ color: info.color }}>{info.name}</b>
+                <small>
+                  güç {fmt(power[i])} · {mine.length} lord
+                </small>
+                <ul>
+                  {mine.map((l) => (
+                    <li key={l.id}>
+                      <span>{l.name}</span>
+                      <i style={{ width: `${(l.score / top) * 100}%`, background: info.color }} />
+                      <small>{fmt(l.score)}</small>
+                    </li>
+                  ))}
+                  {mine.length === 0 && <li className="hint">Henüz lordu yok</li>}
+                </ul>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      <p className="hint">
+        Bir tacın gücü kendi {fmt(p.base)} puanı ile ona bağlı lordların puanlarının toplamıdır; lordları geliştikçe tacı güçlenir. Güçlü taç kendi lordlarına daha
+        cömerttir (bahşiş ve armağanlar ×{byPower(1, p.favour).toFixed(1).replace('.', ',')}'e kadar), rakip lordlardan daha çok haraç ister (×
+        {byPower(1, p.demand).toFixed(1).replace('.', ',')}'e kadar). {unsworn > 0 && `${unsworn} lord henüz taraf seçmedi.`}
+      </p>
+      <p className="hint">
+        Şimdi:{' '}
+        {infos.map((info, i) => `${info.name} bahşiş/armağan ×${byPower(share[i], p.favour).toFixed(2).replace('.', ',')}, haraç ×${byPower(share[i], p.demand).toFixed(2).replace('.', ',')}`).join(' · ')}
+      </p>
+    </Section>
+  )
+}
+
+// Each crown watches over the trade in one good for a while: the lord it favours sells that good dearer, the lord it
+// dislikes cheaper (or its merchants will not deal with him).
+function Stewardship({ world, kingdom, now }: { world: World; kingdom: Kingdom; now: number }) {
+  if (world.cities.length < 2) return null
+  const { goods, endsAt } = crownGoods(kingdom.lobbyKey, now)
+  const s = balance.cities.crown.stewardship
+  const minutes = Math.max(1, Math.ceil((endsAt - now) / 60_000))
+  return (
+    <Section title="Taçların pazarı" icon="trade" aside={`${minutes} dk sonra değişir`}>
+      <ul className="tiers">
+        {goods.map((good, i) => {
+          const info = cityInfo(world, i)
+          const f = stewardFactor(kingdom, good, now)
+          const relation = crownRelation(kingdom, i)
+          return (
+            <li key={i} className={f >= 1 ? 'on' : 'off'}>
+              <Icon name={RESOURCE_ICONS[good]} size={16} />
+              <span>
+                <b style={{ color: info.color }}>{info.name}</b> {RESOURCE_NAMES[good].toLowerCase()} ticaretini yönetiyor
+              </span>
+              <small>
+                {relation <= s.refuseBelow
+                  ? `tüccarları senden almıyor: fiyatın %${Math.round((1 - f) * 100)} düşük`
+                  : `ilişkin ${signedInt(relation)} → satış fiyatın ${f >= 1 ? '+' : '−'}%${Math.round(Math.abs(f - 1) * 100)}`}
+              </small>
+            </li>
+          )
+        })}
+      </ul>
+      <p className="hint">
+        Her taç dönem dönem bir malın ticaretini yönetir. O malı sattığında (lobi pazarında da, şehirde de) fiyatın taçla ilişkine göre değişir: en çok %
+        {Math.round(s.bonus * 100)} fazla ya da %{Math.round(s.penalty * 100)} az; ilişkin {s.refuseBelow}'nin altındaysa o tacın tüccarları seninle alışveriş etmez ve
+        fiyatın yarıya düşer.
+      </p>
+    </Section>
   )
 }

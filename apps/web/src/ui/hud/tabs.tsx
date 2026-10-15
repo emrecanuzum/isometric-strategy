@@ -31,6 +31,7 @@ import {
   workRate,
   priceAt,
   queenError,
+  queenOwed,
   repairCost,
   buildError,
   constructing,
@@ -58,6 +59,7 @@ import { Icon } from '../icons'
 import { BUILDING_NAMES, BUILDING_NOTES, RESOURCE_ICONS, RESOURCE_NAMES, WEAPON_ICONS, WEAPON_NAMES } from '../names'
 import { CostList, GoodChoice, Missing } from '../panels'
 import type { Journal } from './journal'
+import { DynastySection } from './dynasty'
 import type { Online } from './online'
 import { REPORT_ROUNDS, isImportant, unreadImportant } from './journal'
 import { FortuneNote, Sickness } from './institutions'
@@ -578,7 +580,7 @@ export function KingdomTab(data: HudData) {
         <SpriteView sprite={thumb('palace', kingdom.color)} scale={0.5} />
         <div>
           <b>Saray</b>
-          <p className="hint">{palace ? 'Krallığın kalbi. Hükümdar ve kraliçe burada yaşar.' : 'Sarayın henüz yerleştirilmedi.'}</p>
+          <p className="hint">{palace ? 'Lordluğun kalbi. Lord ve kraliçe burada yaşar.' : 'Sarayın henüz yerleştirilmedi.'}</p>
           {palace && (
             <button className="btn small" onClick={() => onShow(center(palace))}>
               <Icon name="home" size={16} /> Saraya git
@@ -586,7 +588,8 @@ export function KingdomTab(data: HudData) {
           )}
         </div>
       </div>
-      <Fealty world={data.world} kingdom={kingdom} onSwear={(city) => data.online?.act({ type: 'swear', city })} />
+      <Fealty world={data.world} kingdom={kingdom} now={data.now} onSwear={(city) => data.online?.act({ type: 'swear', city })} onOpen={(city) => data.online?.openCrown(city)} />
+      <DynastySection kingdom={kingdom} now={data.now} online={data.online} />
       <Section title="Yapılar" icon="build" aside={`${kingdom.buildings.length} toplam`}>
         <ul className="tally">
           {[...counts].map(([kind, n]) => (
@@ -651,7 +654,7 @@ export function KingdomTab(data: HudData) {
             <Icon name="gear" size={16} /> Ses ayarları
           </button>
           <button className={confirmReset ? 'btn small danger' : 'btn small'} onClick={onReset}>
-            {confirmReset ? 'Emin misin? Tekrar bas' : 'Krallığı sıfırla'}
+            {confirmReset ? 'Emin misin? Tekrar bas' : 'Lordluğu sıfırla'}
           </button>
           <button className="btn small" onClick={onExit}>
             <Icon name="home" size={16} /> Ana menü
@@ -717,6 +720,7 @@ const QUEEN_WHY: Record<string, string> = {
   locked: 'Sarayı 2. seviyeye yükselt',
   people: `En az ${balance.society.queen.minPopulation} nüfus gerekir`,
   cost: 'Altın yetmiyor',
+  busy: 'Kraliçen rehin',
 }
 
 function Society({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?: Online }) {
@@ -776,7 +780,7 @@ function Society({ kingdom, now, online }: { kingdom: Kingdom; now: number; onli
       )}
       {imprisoned(kingdom.buildings, kingdom.site, now) && (
         <p className="alert">
-          <Icon name="warn" size={16} /> Surlarında kapı yok, halk dışarı çıkamıyor: krallığın bir hapishane (mutluluk {balance.society.happiness.imprisoned}).
+          <Icon name="warn" size={16} /> Surlarında kapı yok, halk dışarı çıkamıyor: lordluğun bir hapishane (mutluluk {balance.society.happiness.imprisoned}).
           Sura bir kapı koy.
         </p>
       )}
@@ -803,7 +807,7 @@ function Society({ kingdom, now, online }: { kingdom: Kingdom; now: number; onli
         {kingdom.queenHeldBy ? (
           <>
             <p className="alert">
-              <Icon name="warn" size={16} /> Kraliçen {kingdom.queenHeldBy.name} krallığının elinde! Halk yas tutuyor (mutluluk{' '}
+              <Icon name="warn" size={16} /> Kraliçen {kingdom.queenHeldBy.name} lordunun elinde! Halk yas tutuyor (mutluluk{' '}
               {balance.espionage.operations.kidnap.happiness}).
             </p>
             <button className="btn small" disabled={kingdom.stock.gold < ransom} onClick={() => online?.act({ type: 'ransom' })}>
@@ -812,12 +816,17 @@ function Society({ kingdom, now, online }: { kingdom: Kingdom; now: number; onli
             <p className="hint">Ya da {kingdom.queenHeldBy.name} ile savaş: kaçırılan kraliçe sana savaş gerekçesi verir.</p>
           </>
         ) : kingdom.queen ? (
-          <p className="hint">Sarayında bir kraliçe var: halkın mutluluğu +{balance.society.happiness.queen}.</p>
+          <p className="hint">
+            Sarayında Kraliçe {kingdom.dynasty?.queen?.name ?? ''} var: halkın mutluluğu +{balance.society.happiness.queen}; hanedanın çocukları onunla doğar.
+          </p>
         ) : (
           <>
-            <p className="hint">Kraliçe halkın mutluluğunu +{balance.society.happiness.queen} artırır.</p>
+            <p className="hint">
+              Kraliçe halkın mutluluğunu +{balance.society.happiness.queen} artırır; hanedanın çocukları onunla doğar ve sarayı {balance.dynasty.queenForPalaceLevel}. seviyeye
+              yükseltmek için şarttır.
+            </p>
             <button className="btn small" disabled={!!queen} onClick={() => online?.act({ type: 'queen' })}>
-              <Icon name="crown" size={16} /> Kraliçe edin · {balance.society.queen.cost.gold} altın {queen ? `(${QUEEN_WHY[queen] ?? ''})` : ''}
+              <Icon name="crown" size={16} /> Kraliçe edin · {queenOwed(kingdom, now) ? 'hemen, bedelsiz' : `${balance.society.queen.cost.gold} altın`} {queen ? `(${QUEEN_WHY[queen] ?? ''})` : ''}
             </button>
           </>
         )}
@@ -890,7 +899,7 @@ export function JournalTab({ journal, now, onImportantRead }: HudData) {
       {shown.length === 0 ? (
         only ? (
           <Placeholder icon="happy" title="Kötü bir haber yok">
-            Krallığını etkileyen olumsuz olaylar (yağma, savaş ilanı, kayıplar, sabotaj, kötü olaylar) burada toplanır.
+            Lordluğunu etkileyen olumsuz olaylar (yağma, savaş ilanı, kayıplar, sabotaj, kötü olaylar) burada toplanır.
           </Placeholder>
         ) : (
           <Placeholder icon="scroll" title="Elçiden haber yok">

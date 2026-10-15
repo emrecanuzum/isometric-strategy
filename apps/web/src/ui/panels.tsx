@@ -159,7 +159,8 @@ const NAME_TAILS = [
 ]
 // Pairs that read badly as one word.
 const NAME_SKIP = new Set(['Taştaş', 'Kayakaya', 'Kırkır', 'Kayataş', 'Taşkaya', 'Hanhan', 'Alalan', 'Akak'])
-const NAME_KINDS = ['Krallığı', 'Beyliği', 'Diyarı', 'Hanedanı', 'Ülkesi', 'Hükümdarlığı', 'Sancağı', 'Yurdu']
+// A lord's lands, never a kingdom: the two crown kingdoms are the only kingdoms (CLAUDE.md §7.8).
+const NAME_KINDS = ['Beyliği', 'Diyarı', 'Hanedanı', 'Sancağı', 'Yurdu', 'Malikânesi', 'Lordluğu', 'Hisarı']
 const pick = <T,>(list: readonly T[]) => list[Math.floor(Math.random() * list.length)]
 // A name to start from, unlike any the lobby's other kingdoms already carry; the player may type their own.
 const suggestName = (taken: ReadonlySet<string> = new Set()) => {
@@ -205,7 +206,7 @@ export function SitePicker({
       <header className="sheet-head">
         <Icon name="crown" size={32} />
         <div>
-          <h2 id="site-title">Krallığını nereye kuracaksın?</h2>
+          <h2 id="site-title">Lordluğunu nereye kuracaksın?</h2>
           <small>Arazi, üretim çarpanlarını belirler</small>
         </div>
       </header>
@@ -237,14 +238,14 @@ export function SitePicker({
         </>
       )}
       <label className="name-field">
-        <span>Krallığının adı</span>
+        <span>Lordluğunun adı</span>
         <span className="name-row">
           <input
             value={name}
             maxLength={NAME_MAX}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && survey && trimmed && color && onFound(trimmed, color)}
-            placeholder="Ör. Akdere Krallığı"
+            placeholder="Ör. Akdere Beyliği"
             autoComplete="off"
             spellCheck={false}
           />
@@ -254,9 +255,9 @@ export function SitePicker({
         </span>
       </label>
       <div className="color-field">
-        <span>Krallığının rengi</span>
+        <span>Lordluğunun rengi</span>
         <div className="color-row">
-          <div className="swatches" role="radiogroup" aria-label="Krallık rengi">
+          <div className="swatches" role="radiogroup" aria-label="Lordluk rengi">
             {colors.map((c) => (
               <button
                 key={c}
@@ -264,7 +265,7 @@ export function SitePicker({
                 role="radio"
                 aria-checked={c === color}
                 aria-label={taken.has(c) ? `${KINGDOM_COLORS[c].name} (alınmış)` : KINGDOM_COLORS[c].name}
-                title={taken.has(c) ? `${KINGDOM_COLORS[c].name} — başka bir krallığın` : KINGDOM_COLORS[c].name}
+                title={taken.has(c) ? `${KINGDOM_COLORS[c].name} — başka bir lordun` : KINGDOM_COLORS[c].name}
                 className={c === color ? 'swatch active' : 'swatch'}
                 style={{ '--swatch': KINGDOM_COLORS[c].swatch } as React.CSSProperties}
                 disabled={taken.has(c)}

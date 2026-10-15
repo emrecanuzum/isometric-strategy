@@ -1,3 +1,4 @@
+import { dynastyEffects } from './dynasty'
 import { balance } from './balance'
 import type { Cost, Good, Kingdom } from './economy'
 import { isNightAt, phaseEndsAt } from './society'
@@ -111,10 +112,11 @@ const byLevel = (values: number[], level: number) => (level <= 0 ? 0 : values[Ma
 
 export const templeHappiness = (k: Kingdom, at: number) => byLevel(I.temple.happinessByLevel, levelOf(k, 'temple', at))
 
-// What soldiers add to their rolls: faith from the temple (more with theology) and what was learnt at the university.
+// What soldiers add to their rolls: faith from the temple (more with theology), what was learnt at the university, and
+// the ruler's head for war (dynasty.ts).
 export const battleSpirit = (k: Kingdom, at: number) => {
   const learnt = researchEffects(k, at)
-  return byLevel(I.temple.faithByLevel, levelOf(k, 'temple', at)) * (1 + learnt.faith) + learnt.battle
+  return byLevel(I.temple.faithByLevel, levelOf(k, 'temple', at)) * (1 + learnt.faith) + learnt.battle + dynastyEffects(k).dice
 }
 
 // The other study of the same tier of a branch (taking one closes the other).
@@ -163,7 +165,7 @@ export interface FortuneSpec {
 // Two kinds of fortune (CLAUDE.md §9.8): weather and the world's events fall on the whole lobby at once (seeded by
 // the lobby), the rest on one kingdom alone (seeded by the kingdom). Each has its own windows, at most one per window.
 export type FortuneScope = 'lobby' | 'kingdom'
-const TRACKS = I.events as Record<FortuneScope, { windowSeconds: number; chance: number; minSeconds: number; maxSeconds: number; kinds: Record<string, FortuneSpec> }>
+const TRACKS = { lobby: I.events.lobby, kingdom: I.events.kingdom } as Record<FortuneScope, { windowSeconds: number; chance: number; minSeconds: number; maxSeconds: number; kinds: Record<string, FortuneSpec> }>
 
 export const FORTUNES: Record<string, FortuneSpec> = { ...TRACKS.lobby.kinds, ...TRACKS.kingdom.kinds }
 export type FortuneKind = keyof typeof I.events.lobby.kinds | keyof typeof I.events.kingdom.kinds
@@ -176,7 +178,7 @@ export interface Fortune {
   spec: FortuneSpec
 }
 
-type Seeded = Pick<Kingdom, 'site' | 'foundedAt' | 'lobbyKey'>
+type Seeded = Pick<Kingdom, 'site' | 'foundedAt' | 'lobbyKey'> & Partial<Pick<Kingdom, 'responses'>>
 
 function hash(...values: number[]) {
   let h = 0x811c9dc5
@@ -242,10 +244,53 @@ export function fortunesAt(k: Seeded, at: number): Fortune[] {
   return SCOPES.map((scope) => fortuneIn(k, Math.floor(at / windowMs(scope)), scope)).filter((f): f is Fortune => !!f && f.start <= at && at < f.end)
 }
 
-// What the fortunes under way add up to.
+// ---- Crises: bad fortunes the lord can answer (CLAUDE.md §9.8) ------------------------------------------------------
+
+const CRISIS = I.events.crisis
+export type CrisisChoice = 'villagers' | 'army' | 'none'
+export const isCrisis = (kind: string) => (CRISIS.kinds as string[]).includes(kind)
+export const crisisKey = (f: Pick<Fortune, 'scope' | 'start'>) => `${f.scope}:${f.start}`
+export const crisisDecideMs = () => CRISIS.decideSeconds * 1000
+// Answered by sending the villagers or the army: the fortune's harm is warded off.
+export const crisisWarded = (k: Seeded, f: Pick<Fortune, 'scope' | 'start'>) => {
+  const choice = k.responses?.[crisisKey(f)]?.choice
+  return choice === 'villagers' || choice === 'army'
+}
+// Soldiers lost to the army's answer: one, now and then two (from the crisis itself, so it is the same everywhere).
+export const crisisArmyLoss = (key: string) => CRISIS.army.loss + (hash(...[...key].map((c) => c.charCodeAt(0)), 31) / 4294967296 < CRISIS.army.moreChance ? 1 : 0)
+
+// Why the lord cannot answer crisis `key` that way now, if not.
+export function crisisError(k: Seeded & Pick<Kingdom, 'units' | 'soldiers'>, key: string, choice: CrisisChoice, at: number): 'none' | 'answered' | 'late' | 'soldiers' | null {
+  const f = fortunesAt(k, at).find((x) => crisisKey(x) === key)
+  if (!f || !isCrisis(f.kind)) return 'none'
+  if (k.responses?.[key]) return 'answered'
+  if (at > f.start + crisisDecideMs()) return 'late'
+  if (choice === 'army' && (k.soldiers ?? 0) < CRISIS.army.minSoldiers) return 'soldiers'
+  return null
+}
+
+// Gives the answer: the villagers turned out (less work for a while), the garrison sent (a soldier or two lost, and no
+// army led out for a while), or nothing done.
+export function answerCrisis<K extends Seeded & Pick<Kingdom, 'units' | 'soldiers' | 'armyLockUntil'>>(k: K, key: string, choice: CrisisChoice, at: number, take: (units: K['units'], n: number) => K['units'], count: (units: K['units']) => number): K {
+  if (crisisError(k, key, choice, at)) return k
+  const keep = at - CRISIS.keepHours * 3_600_000
+  const responses = Object.fromEntries(Object.entries(k.responses ?? {}).filter(([, r]) => r.at > keep))
+  responses[key] = { choice, at }
+  let next: K = { ...k, responses }
+  if (choice === 'army') {
+    const units = take(k.units, Math.min(k.soldiers ?? 0, crisisArmyLoss(key)))
+    next = { ...next, units, soldiers: count(units), armyLockUntil: at + CRISIS.army.lockSeconds * 1000 }
+  }
+  return next
+}
+
+// What the fortunes under way add up to (a crisis warded off does nothing; villagers turned out work less a while).
 export function fortuneEffects(k: Seeded, at: number) {
   const out = { output: {} as Partial<Record<Good, number>>, trade: 0, work: 0, happiness: 0, templeHappiness: 0, sickSpread: 1 }
-  for (const { spec } of fortunesAt(k, at)) {
+  for (const r of Object.values(k.responses ?? {})) if (r.choice === 'villagers' && at >= r.at && at < r.at + CRISIS.villagers.seconds * 1000) out.work += CRISIS.villagers.work
+  for (const f of fortunesAt(k, at)) {
+    if (isCrisis(f.kind) && crisisWarded(k, f)) continue
+    const { spec } = f
     for (const [g, v] of Object.entries(spec.output ?? {})) out.output[g as Good] = (out.output[g as Good] ?? 0) + (v ?? 0)
     out.trade += spec.trade ?? 0
     out.work += spec.work ?? 0

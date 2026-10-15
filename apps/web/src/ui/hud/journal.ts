@@ -126,6 +126,19 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
         title: `${f?.title ?? 'Beklenmedik bir olay'} · ${SCOPE_NAMES[event.scope ?? 'kingdom']}`,
         text: [f?.text, ...extra, `Yaklaşık ${minutes} dk sürecek.`].filter(Boolean).join(' '),
       })
+    } else if (event.kind === 'crisis') {
+      const f = FORTUNE_TEXTS[event.fortune]
+      const extra = [
+        ...Object.entries(event.lost ?? {}).filter(([, v]) => (v ?? 0) > 0).map(([g, v]) => `${fmt(v ?? 0)} ${RESOURCE_NAMES[g as Good].toLowerCase()} kayboldu`),
+        ...(event.sick ? [`halkın %${Math.round(event.sick * 100)} kadarı hastalandı`] : []),
+      ]
+      j = write(j, seasonStart, at, {
+        important: true,
+        tone: 'bad',
+        icon: f?.icon ?? 'warn',
+        title: `${f?.title ?? 'Olay'}: kimse bir şey yapmadı`,
+        text: extra.length > 0 ? `${extra.join(', ')}.` : 'Olay etkisini tam olarak gösterdi.',
+      })
     } else if (event.kind === 'spy') {
       j = write(j, seasonStart, at, { tone: 'info', icon: 'lock', title: 'Casus evi yeni bir casus yetiştirdi' })
     } else {

@@ -41,7 +41,7 @@ export function rumoursAt(world: World, index: number, kind: InnKind, online: On
   const market: Market | null = online.market
   const inn = world.inns[index]
   const kingdoms = online.kingdoms
-  const named = (id: number) => kingdoms.find((k) => k.id === id)?.name ?? 'bilinmeyen bir krallık'
+  const named = (id: number) => kingdoms.find((k) => k.id === id)?.name ?? 'bilinmeyen bir lord'
   const prices: string[] = []
   for (const good of GOODS) {
     const ratio = priceAt(market, good, now) / basePrice(good)
@@ -68,7 +68,7 @@ export function rumoursAt(world: World, index: number, kind: InnKind, online: On
   ]
   const marching = new Map<number, number>()
   for (const a of online.armies) if (a.status !== 'idle') marching.set(a.kingdom_id, (marching.get(a.kingdom_id) ?? 0) + 1)
-  const roads = [...marching].filter(([id]) => id !== online.me).map(([id, n]) => `${named(id)} krallığının ${n > 1 ? `${n} ordusu` : 'bir ordusu'} yolda.`)
+  const roads = [...marching].filter(([id]) => id !== online.me).map(([id, n]) => `${named(id)} lordunun ${n > 1 ? `${n} ordusu` : 'bir ordusu'} yolda.`)
   const near = kingdoms
     .filter((k) => k.id !== online.me)
     .map((k) => ({ k, d: Math.round(Math.hypot(k.site.x - inn.x, k.site.y - inn.y)) }))

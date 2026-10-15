@@ -201,7 +201,7 @@ export function Chat({
             Sohbet
           </button>
           <button role="tab" aria-selected={tab === 'kingdoms'} className="btn small" onClick={() => setTab('kingdoms')}>
-            Krallıklar ({kingdoms.length})
+            Lordlar ({kingdoms.length})
           </button>
           <button role="tab" aria-selected={tab === 'ranking'} className="btn small" onClick={() => setTab('ranking')}>
             Sıralama
@@ -277,7 +277,7 @@ export function Chat({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           maxLength={280}
-          placeholder={canPost ? 'Mesaj yaz… (@ ile etiketle)' : 'Yazmak için krallığını kur'}
+          placeholder={canPost ? 'Mesaj yaz… (@ ile etiketle)' : 'Yazmak için lordluğunu kur'}
           disabled={!canPost}
           aria-label="Mesaj"
         />

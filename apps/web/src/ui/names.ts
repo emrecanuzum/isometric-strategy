@@ -144,7 +144,7 @@ export const RESEARCH_NAMES: Record<string, { name: string; note: string; icon: 
 }
 
 // Whether a fortune falls on the whole lobby or on the player's kingdom alone.
-export const SCOPE_NAMES = { lobby: 'Lobi geneli', kingdom: 'Krallığına özel' } as const
+export const SCOPE_NAMES = { lobby: 'Lobi geneli', kingdom: 'Topraklarına özel' } as const
 
 // Fortunes: random events and what they do (institutions.json events).
 export const FORTUNE_TEXTS: Record<string, { title: string; text: string; tone: 'good' | 'bad'; icon: IconName }> = {
@@ -168,4 +168,16 @@ export const FORTUNE_TEXTS: Record<string, { title: string; text: string; tone: 
   treasure: { title: 'Define bulundu', text: 'Köylüler tarlada eski bir define buldu.', tone: 'good', icon: 'chest' },
   coldSnap: { title: 'Soğuk dalgası', text: 'Ayaz çöktü; hastalık hızla yayılıyor, iş yavaşladı.', tone: 'bad', icon: 'moon' },
   pilgrims: { title: 'Hacılar geldi', text: 'Hacılar kasabadan geçiyor; halk sevindi (tapınak varsa daha çok).', tone: 'good', icon: 'temple' },
+}
+
+// The answers to a crisis (CLAUDE.md §9.8): what the villagers and the army do against each, and what happens if
+// nothing is done.
+export const CRISIS_TEXTS: Record<string, { villagers: string; army: string; none: string }> = {
+  forestFire: { villagers: 'Köylüler yangın şeridi açsın', army: 'Ordu alevlerle savaşsın', none: 'Ormanlar yanadursun' },
+  granaryFire: { villagers: 'Köylüler kova zinciri kursun', army: 'Askerler ambara koşsun', none: 'Ambar yanadursun' },
+  plague: { villagers: 'Köylüler hastalara baksın', army: 'Ordu hastalık bölgesini kuşatsın', none: 'Hastalık kendi yoluna gitsin' },
+  epidemic: { villagers: 'Köylüler evlerine kapansın', army: 'Ordu yolları tutsun', none: 'Salgın kendi yoluna gitsin' },
+  flood: { villagers: 'Köylüler set çeksin', army: 'Ordu seti güçlendirsin', none: 'Su çekilene kadar bekle' },
+  storm: { villagers: 'Köylüler damları bağlasın', army: 'Ordu yıkıntıları kaldırsın', none: 'Fırtına dinene kadar bekle' },
+  coldSnap: { villagers: 'Köylüler odun toplasın', army: 'Ordu odun taşısın', none: 'Ayaz geçene kadar bekle' },
 }

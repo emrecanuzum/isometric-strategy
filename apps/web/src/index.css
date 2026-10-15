@@ -4114,3 +4114,260 @@ kbd {
 .away-dots i.on {
   background: var(--gold);
 }
+
+/* ---- The crowns' court (src/ui/hud/cities.tsx) ---- */
+.liege-button {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: calc(var(--px) * 5);
+  width: 100%;
+  padding: calc(var(--px) * 6);
+  background: var(--slot);
+  border: calc(var(--px) * 2) solid var(--gold);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.liege-button:hover {
+  background: var(--panel-hi);
+}
+
+.liege-button b {
+  display: block;
+  font-size: 20px;
+  letter-spacing: 1px;
+}
+
+.liege-button small {
+  color: var(--muted);
+}
+
+.tiers {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+  margin: calc(var(--px) * 3) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tiers li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 calc(var(--px) * 4);
+  align-items: center;
+  padding: calc(var(--px) * 3) calc(var(--px) * 4);
+  background: var(--slot);
+  opacity: 0.6;
+}
+
+.tiers li.on {
+  opacity: 1;
+  box-shadow: inset calc(var(--px) * 2) 0 0 var(--up);
+}
+
+.tiers li.off {
+  opacity: 1;
+  box-shadow: inset calc(var(--px) * 2) 0 0 var(--down);
+}
+
+.tiers li small {
+  grid-column: 2;
+  color: var(--muted);
+}
+
+.rivalry {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: calc(var(--px) * 6);
+  align-items: start;
+}
+
+.rivalry .pie {
+  width: 96px;
+  height: 96px;
+}
+
+.rivalry-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--px) * 4);
+}
+
+.rivalry-side ul {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+  margin: calc(var(--px) * 2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rivalry-side li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 calc(var(--px) * 3);
+  font-size: 13px;
+}
+
+.rivalry-side li i {
+  grid-column: 1 / -1;
+  height: calc(var(--px) * 3);
+  min-width: calc(var(--px) * 2);
+}
+
+.rivalry-side small {
+  color: var(--muted);
+}
+
+/* A crisis's answers (App.tsx → FortuneDialog). */
+.crisis {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 3);
+}
+
+.crisis-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--px) * 1);
+  width: 100%;
+  height: auto;
+  padding: calc(var(--px) * 4) calc(var(--px) * 5);
+  text-align: left;
+  white-space: normal;
+}
+
+.crisis-choice small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.rivalry-side > b,
+.rivalry-side > small {
+  display: block;
+}
+
+/* The picture of a fortune (src/ui/EventArt.tsx). */
+.event-art {
+  border: calc(var(--px) * 2) solid var(--ink);
+  box-shadow: inset 0 0 0 var(--px) var(--panel-hi);
+}
+
+/* ---- The lord's house (src/ui/hud/dynasty.tsx) ---- */
+.house {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 4);
+}
+
+.person {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: calc(var(--px) * 5);
+  align-items: start;
+}
+
+.person > div,
+.children li > div {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+  min-width: 0;
+}
+
+.person small,
+.children small {
+  color: var(--muted);
+}
+
+.skills {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 1);
+}
+
+.skill {
+  display: grid;
+  grid-template-columns: 64px 1fr 22px;
+  gap: calc(var(--px) * 3);
+  align-items: center;
+  font-size: 13px;
+}
+
+.skill b {
+  text-align: right;
+}
+
+.house-title {
+  margin: calc(var(--px) * 4) 0 calc(var(--px) * 2);
+  color: var(--gold);
+  font-size: 14px;
+}
+
+.children,
+.ancestors {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.children li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 3);
+  background: var(--slot);
+}
+
+.children .chip {
+  margin-left: calc(var(--px) * 3);
+}
+
+.ancestors li {
+  display: flex;
+  gap: calc(var(--px) * 4);
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+input.text {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 calc(var(--px) * 4);
+  border: 0;
+  border-radius: 0;
+  background: var(--slot);
+  color: var(--gold);
+  font: inherit;
+  font-size: 16px;
+  box-shadow: inset var(--px) var(--px) 0 0 var(--panel-lo);
+}
+
+/* The house needs a queen (MapAlerts): it stays until one comes, with the button to bring her. */
+.map-alert.urgent {
+  flex-wrap: wrap;
+  --hi: #f2d16b;
+  --lo: #3a2408;
+  background: #5a3a10;
+  color: #fff2cc;
+  cursor: default;
+}
+
+.map-alert.urgent .btn {
+  margin-left: auto;
+}
+
+.name-edit {
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 3);
+}

@@ -1,4 +1,5 @@
 import { balance } from './balance'
+import { dynastyStep } from './dynasty'
 import { affordable, armoryOf, palaceLevel, population, recruitment } from './economy'
 import type { Cost, Good, Kingdom, Resource, Stock } from './economy'
 import { buyTotal } from './market'
@@ -24,9 +25,14 @@ export const setTax = (kingdom: Kingdom, tax: TaxLevel): Kingdom => (TAX_LEVELS.
 
 export type RealmError = 'locked' | 'cost' | 'people' | 'have' | 'building' | 'none' | 'busy' | 'research' | 'excluded' | 'prereq'
 
+// A palace already past the level that needs a queen (raised before the rule) brings one at once, free (CLAUDE.md §9.1).
+export const queenOwed = (kingdom: Kingdom, at: number) => palaceLevel(kingdom, at) >= balance.dynasty.queenForPalaceLevel
+
 export function queenError(kingdom: Kingdom, at: number): RealmError | null {
   const q = balance.society.queen
   if (kingdom.queen) return 'have'
+  if (kingdom.queenHeldBy) return 'busy'
+  if (queenOwed(kingdom, at)) return null
   if (palaceLevel(kingdom, at) < q.minPalaceLevel) return 'locked'
   const { villagers, soldiers } = population(kingdom, at)
   if (villagers + soldiers < q.minPopulation) return 'people'
@@ -34,8 +40,9 @@ export function queenError(kingdom: Kingdom, at: number): RealmError | null {
   return null
 }
 
+// The lady comes to court at once and joins the lord's house (CLAUDE.md §9.1).
 export const takeQueen = (kingdom: Kingdom, at: number): Kingdom =>
-  queenError(kingdom, at) ? kingdom : { ...kingdom, queen: true, stock: pay(kingdom.stock, balance.society.queen.cost as Cost) }
+  queenError(kingdom, at) ? kingdom : dynastyStep({ ...kingdom, queen: true, stock: queenOwed(kingdom, at) ? kingdom.stock : pay(kingdom.stock, balance.society.queen.cost as Cost) }, at).kingdom
 
 export function trainError(kingdom: Kingdom, count: number, at: number, unit: Unit = 'spear'): RealmError | null {
   const barracks = kingdom.buildings.find((b) => b.kind === 'barracks' && b.doneAt <= at)

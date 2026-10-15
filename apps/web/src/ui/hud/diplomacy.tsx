@@ -123,7 +123,7 @@ export function DiplomacyTab(data: HudData) {
     <>
       <div className="segmented" role="tablist">
         <button className="btn small" role="tab" aria-selected={view === 'kingdoms'} onClick={() => setView('kingdoms')}>
-          <Icon name="banner" size={16} /> Krallıklar
+          <Icon name="banner" size={16} /> Lordlar
         </button>
         <button className="btn small" role="tab" aria-selected={view === 'spies'} onClick={() => setView('spies')}>
           <Icon name="eye" size={16} /> Casusluk
@@ -178,9 +178,9 @@ function KingdomList({ data, online }: { data: HudData; online: Online }) {
           <ul className="places">{allies.map(row)}</ul>
         )}
       </Section>
-      <Section title="Krallıklar" icon="banner" aside={`${rest.length}`}>
+      <Section title="Lordlar" icon="banner" aside={`${rest.length}`}>
         {others.length === 0 ? (
-          <Placeholder icon="banner" title="Lobide başka krallık yok">
+          <Placeholder icon="banner" title="Lobide başka lord yok">
             Biri katılınca burada görünecek.
           </Placeholder>
         ) : (
@@ -293,7 +293,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
   return (
     <>
       <button className="btn small back" onClick={() => online.setFocus(null)}>
-        ← Krallıklar
+        ← Lordlar
       </button>
       <div className="feature kingdom-head">
         <Dot color={target.color} />
@@ -342,7 +342,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
         </span>
         <p className="hint">
           İttifak için en az +{d.alliance.minRelation} gerekir. Savaş ilanı için ilişki en fazla {d.war.maxRelation} olmalı; savaş gerekçen varsa{' '}
-          {d.casusBelli.maxRelation} yeter. Gerekçesiz savaş açan, diğer bütün krallıklarla {d.casusBelli.infamy} ilişki kaybeder.
+          {d.casusBelli.maxRelation} yeter. Gerekçesiz savaş açan, diğer bütün lordlarla {d.casusBelli.infamy} ilişki kaybeder.
         </p>
       </Section>
       <Hostility data={data} online={online} target={target} />
@@ -350,7 +350,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
         {war && <p className="hint">Savaştayken elçiler yalnızca barış götürür.</p>}
         {standing < 0.995 && (
           <p className="hint">
-            <Icon name="warn" size={16} /> İtibarın %{Math.round(standing * 100)}: başka krallıklarla aran kötü olduğu için ilişki geliştirme ve hediyeler daha az
+            <Icon name="warn" size={16} /> İtibarın %{Math.round(standing * 100)}: başka lordlarla aran kötü olduğu için ilişki geliştirme ve hediyeler daha az
             etkili.
           </p>
         )}
@@ -588,7 +588,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
             )
           })}
         </ul>
-        <p className="hint">Bir krallığın her konusuna bir casus gönderilebilir.</p>
+        <p className="hint">Bir lordun her konusuna bir casus gönderilebilir.</p>
         {spiesHome < 1 && <p className="hint">Evde casusun yok. Casus evi zamanla casus yetiştirir.</p>}
       </Section>
       <Section title="Casus operasyonları" icon="eye" aside={intel ? `en güçlü ağın %${Math.round(best)}` : 'önce raporu getir'}>
@@ -646,7 +646,7 @@ function Spies({ data, online }: { data: HudData; online: Online }) {
     return (
       <Section title="Casusluk" icon="eye">
         <Placeholder icon="lock" title="Casus evin yok">
-          Sarayı 2. seviyeye yükselt ve casus evi kur. Casus evi zamanla casus yetiştirir; casusları bir krallığa bir konuda gönderirsin (hammadde,
+          Sarayı 2. seviyeye yükselt ve casus evi kur. Casus evi zamanla casus yetiştirir; casusları bir lorda bir konuda gönderirsin (hammadde,
           ordu, diplomasi). Evde kalan casuslar karşı casusluk yapar.
         </Placeholder>
       </Section>
@@ -660,7 +660,7 @@ function Spies({ data, online }: { data: HudData; online: Online }) {
         <Stat label="Görevde" value={kingdom.spiesAway ?? 0} />
         <SpyHouseEffects kingdom={kingdom} />
         {next !== null && next > 0 && <Stat label="Sıradaki casus" value={`${Math.ceil(next / 1000)} sn`} note={`${balance.espionage.spyCost.gold} altın`} />}
-        <p className="hint">Bir krallığa casus göndermek için Krallıklar listesinden krallığı seç.</p>
+        <p className="hint">Bir lorda casus göndermek için Lordlar listesinden lordu seç.</p>
       </Section>
       <Section title="Görevler" icon="scroll" aside={`${active.length}`}>
         {active.length === 0 && <p className="hint">Görevde casus yok.</p>}

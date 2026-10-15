@@ -30,7 +30,8 @@ const UPGRADE_BLOCKED: Record<string, string> = {
   cost: 'Kaynak yetersiz',
   queue: 'İnşaat kuyruğu dolu',
   limit: 'Evler nüfus sınırını dolduruyor: önce sarayı yükselt',
-  liege: 'Önce bir taç krallığına biat et (Krallık sekmesi → Bağlılık)',
+  liege: 'Önce bir taç krallığına biat et (Saray sekmesi → Bağlılık)',
+  queen: 'Sarayı 3. seviyeye yükseltmek için sarayda bir kraliçe olmalı (Halk sekmesi → Kraliçe)',
 }
 
 const isGood = (v: string): v is Good => v === 'food' || v === 'materials' || v === 'arms'
@@ -52,7 +53,7 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
         <Icon name="build" size={32} />
         <div>
           <h2 id="building-title">{BUILDING_NAMES[b.kind]}</h2>
-          <small>{top > 1 ? `Seviye ${level} / ${top}` : 'Krallık yapısı'}</small>
+          <small>{top > 1 ? `Seviye ${level} / ${top}` : 'Lordluk yapısı'}</small>
         </div>
         <button className="btn icon-only" onClick={commands.onClose} aria-label="Kapat (Esc)" title="Kapat (Esc)">
           <Icon name="close" size={16} />
@@ -311,7 +312,7 @@ function PrisonPanel({ data }: { data: HudData }) {
     <Section title="Mahkûmlar" icon="crown" aside={hostages.length > 0 ? `${hostages.length} kraliçe` : 'boş'}>
       {hostages.length === 0 ? (
         <p className="hint">
-          Hapishane boş. Casus operasyonuyla bir krallığın kraliçesini kaçırırsan burada tutulur; fidyesi o krallığın altınının casuslarının tahminine göre
+          Hapishane boş. Casus operasyonuyla bir lordun kraliçesini kaçırırsan burada tutulur; fidyesi o lordun altınının casuslarının tahminine göre
           %{Math.round(balance.espionage.operations.kidnap.ransomShare * 100)}'ı olur (en az {balance.espionage.operations.kidnap.ransomMin} altın).
         </p>
       ) : (
@@ -331,7 +332,7 @@ function PrisonPanel({ data }: { data: HudData }) {
         </ul>
       )}
       {hostages.length > 0 && (
-        <p className="hint">Kraliçesi elinde olan krallığın halkı mutsuzdur. Fidyeyi öderse kraliçe döner ve altın sana gelir; serbest bırakırsan ilişkiniz düzelir.</p>
+        <p className="hint">Kraliçesi elinde olan lordun halkı mutsuzdur. Fidyeyi öderse kraliçe döner ve altın sana gelir; serbest bırakırsan ilişkiniz düzelir.</p>
       )}
     </Section>
   )

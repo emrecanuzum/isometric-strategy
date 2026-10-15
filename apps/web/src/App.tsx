@@ -7,6 +7,9 @@ import {
   balance,
   townCenter,
   cityCenter,
+  crisisDecideMs,
+  crisisKey,
+  fealtyOpen,
   townWalled,
   inTown,
   patrolTimes,
@@ -48,7 +51,7 @@ import {
   upgradeSpec,
   upgradeTrade,
 } from '@game/shared'
-import type { Along, Lord, BuildError, EconomyEvent, BuildingKind, Good, Kingdom, PlanStep, Point, World } from '@game/shared'
+import type { Along, Lord, BuildError, CrisisChoice, EconomyEvent, BuildingKind, Good, Kingdom, PlanStep, Point, World } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { WorldMap } from './game/WorldMap'
@@ -77,6 +80,10 @@ import { DetailSettings, SoundSettings } from './ui/home/SettingsPanel'
 import { WarTargets } from './ui/hud/WarTargets'
 import { EnvoyDialog, describe as describeNotice } from './ui/Envoy'
 import { AwayReport, awaySince, useAwaySnapshot } from './ui/AwayReport'
+import { CrownIntro, introSeen } from './ui/CrownIntro'
+import { EventArt } from './ui/EventArt'
+import { HouseDialog, allKnown, houseNews, readKnown, writeKnown } from './ui/hud/dynasty'
+import type { HouseNews } from './ui/hud/dynasty'
 import type { KingdomInfo, Online } from './ui/hud/online'
 import { BattleView, TownSiegeView, warNotes } from './ui/hud/war'
 import type { Settings } from './net/settings'
@@ -85,7 +92,7 @@ import { findPath, tilesAlong } from './game/town'
 import type { Path } from './game/town'
 import type { Errand, MerchantTrip } from './game/town'
 import { Icon } from './ui/icons'
-import { BUILDING_NAMES, FORTUNE_TEXTS, RESOURCE_NAMES, SCOPE_NAMES } from './ui/names'
+import { BUILDING_NAMES, CRISIS_TEXTS, FORTUNE_TEXTS, RESOURCE_NAMES, SCOPE_NAMES } from './ui/names'
 import { Dock, Sheet, TopBar, useTabKeys } from './ui/hud/Hud'
 import type { TabId } from './ui/hud/Hud'
 import { useJournal } from './ui/hud/journal'
@@ -128,9 +135,9 @@ const REFUSALS: Record<string, string> = {
   step: 'Bu miktar seçilemez',
   tradeWait: 'Satış miktarı az önce değişti; biraz bekle',
   full: 'Lobide yer kalmadı',
-  taken: 'Bu yer artık başka bir krallığa yakın; yeni yer keşfet',
-  color: 'Bu renk başka bir krallığın; başka bir renk seç',
-  conflict: 'Krallık başka yerden değişti, yeniden dene',
+  taken: 'Bu yer artık başka bir lordluğa yakın; yeni yer keşfet',
+  color: 'Bu renk başka bir lordun; başka bir renk seç',
+  conflict: 'Lordluk başka yerden değişti, yeniden dene',
   server: 'Sunucuya ulaşılamadı',
   relation: 'İlişkiniz bunun için uygun değil',
   already: 'Bu zaten var ya da yolda',
@@ -138,6 +145,7 @@ const REFUSALS: Record<string, string> = {
   cooldown: 'Biraz bekle, elçin yeni döndü',
   spies: 'Evde casusun yok',
   soldiers: 'Yeterli asker yok',
+  armyLocked: 'Garnizon bir felaketle uğraşıyor; ordu bir süre sefere çıkamaz',
   armies: 'Sahada en fazla 2 ordun olabilir',
   battle: 'Ordu savaşta; emir alamaz',
   route: 'Oraya yol yok',
@@ -146,10 +154,13 @@ const REFUSALS: Record<string, string> = {
   building: 'Bunun için gereken bina yok',
   have: 'Zaten var',
   none: 'Yapılacak bir şey yok',
-  target: 'Krallık bulunamadı',
-  founded: 'Önce krallığını kur',
+  target: 'Lord bulunamadı',
+  founded: 'Önce lordluğunu kur',
   prison: 'Kraliçe kaçırmak için önce hapishane kur (2. seviye saray)',
   sworn: 'Zaten bir taç krallığına biat ettin; sezon boyunca değişmez',
+  early: 'Şu an uygun değil: taçlar seninle lordluğun biraz büyüyünce ilgilenecek',
+  grown: 'Bu çocuk artık reşit; eğitimi tamamlandı',
+  council: 'Naipler konseyi yönetirken bu karar verilemez',
 }
 const refusal = (e: unknown) => {
   const code = e instanceof CommandError ? e.message : 'server'
@@ -159,8 +170,15 @@ const refusal = (e: unknown) => {
 type FortuneEvent = Extract<EconomyEvent, { kind: 'fortune' }>
 
 // A random event as it begins: a window of its own, green-edged for good fortune and red for bad.
-function FortuneDialog({ event, now, onClose }: { event: FortuneEvent; now: number; onClose: () => void }) {
+function FortuneDialog({ event, now, kingdom, onAnswer, onClose }: { event: FortuneEvent; now: number; kingdom: Kingdom | null; onAnswer(choice: CrisisChoice): void; onClose: () => void }) {
   const f = FORTUNE_TEXTS[event.fortune]
+  // A crisis asks what to do (CLAUDE.md §9.8) until its time to answer runs out.
+  const crisis = event.crisis && event.start !== undefined ? CRISIS_TEXTS[event.fortune] : undefined
+  const key = event.start !== undefined ? crisisKey({ scope: event.scope ?? 'kingdom', start: event.start }) : ''
+  const answered = kingdom?.responses?.[key]?.choice
+  const deadline = (event.start ?? 0) + crisisDecideMs()
+  const c = balance.institutions.events.crisis
+  const soldiers = kingdom?.soldiers ?? 0
   const tone = f?.tone ?? 'good'
   const extra = [
     ...Object.entries(event.lost ?? {})
@@ -180,14 +198,50 @@ function FortuneDialog({ event, now, onClose }: { event: FortuneEvent; now: numb
             <h2 id="fortune-title">{f?.title ?? 'Beklenmedik bir olay'}</h2>
           </div>
         </header>
+        <div className="event-art">
+          <EventArt kind={event.fortune} />
+        </div>
         <p>{f?.text}</p>
-        <p className="hint">{event.scope === 'lobby' ? 'Bu olay lobideki bütün krallıkları etkiliyor.' : 'Bu olay yalnızca senin krallığını etkiliyor.'}</p>
+        <p className="hint">{event.scope === 'lobby' ? 'Bu olay lobideki bütün lordları etkiliyor.' : 'Bu olay yalnızca senin topraklarını etkiliyor.'}</p>
         {extra.length > 0 && <p className={tone === 'good' ? 'up' : 'down'}>{extra.join(' · ')}</p>}
         <p className="hint">Yaklaşık {Math.max(1, Math.round((event.until - now) / 60_000))} dakika sürecek.</p>
+        {crisis && (
+          <div className="crisis">
+            {answered ? (
+              <p className={answered === 'none' ? 'down' : 'up'}>
+                {answered === 'none' ? 'Bir şey yapılmadı; olay etkisini gösterecek.' : `${crisis[answered]}: zarar önlendi.`}
+              </p>
+            ) : now > deadline ? (
+              <p className="down">Karar vermek için geç kaldın; olay etkisini gösterdi.</p>
+            ) : (
+              <>
+                <p className="hint">Ne yapalım? {Math.max(0, Math.ceil((deadline - now) / 1000))} sn içinde karar verilmezse hiçbir şey yapılmaz.</p>
+                <button className="btn crisis-choice" onClick={() => onAnswer('villagers')}>
+                  <b>{crisis.villagers}</b>
+                  <small>
+                    Zarar önlenir; {Math.round(c.villagers.seconds / 60)} dakika iş gücü %{Math.round(-c.villagers.work * 100)} düşer.
+                  </small>
+                </button>
+                <button className="btn crisis-choice" disabled={soldiers < c.army.minSoldiers} onClick={() => onAnswer('army')}>
+                  <b>{crisis.army}</b>
+                  <small>
+                    {soldiers < c.army.minSoldiers
+                      ? `Sarayda en az ${c.army.minSoldiers} asker olmalı.`
+                      : `Zarar önlenir; ${c.army.loss}, nadiren ${c.army.loss + 1} asker kaybedilir ve ordu ${Math.round(c.army.lockSeconds / 60)} dakika sefere çıkamaz.`}
+                  </small>
+                </button>
+                <button className="btn crisis-choice" onClick={() => onAnswer('none')}>
+                  <b>{crisis.none}</b>
+                  <small>Kimse yorulmaz; ama olayın kötü etkisi tam olarak yaşanır.</small>
+                </button>
+              </>
+            )}
+          </div>
+        )}
         <div className="row spread">
           <span />
           <button className="btn small" onClick={onClose}>
-            Tamam
+            {crisis && !answered && now <= deadline ? 'Sonra' : 'Tamam'}
           </button>
         </div>
       </section>
@@ -219,6 +273,7 @@ const NOTICE_CUES: Record<string, Cue> = {
   town_held: 'bad',
   patrol_tribute: 'war',
   patrol_tip: 'coin',
+  crown_gift: 'coin',
   patrol_ignored: 'bad',
   patrol_taken: 'bad',
 }
@@ -256,7 +311,8 @@ const BUILD_ERRORS: Record<BuildError, string> = {
   busy: 'Bina şu an inşaatta',
   locked: 'Önce sarayı yükselt (bu yapı daha yüksek seviye saray ister)',
   limit: 'Bu yapının sınırı dolu (evlerde nüfus sınırı); sarayı yükselt',
-  liege: 'Sarayı yükseltmek için önce bir taç krallığına biat et (Krallık sekmesi → Bağlılık)',
+  liege: 'Sarayı yükseltmek için önce bir taç krallığına biat et (Saray sekmesi → Bağlılık)',
+  queen: 'Sarayı 3. seviyeye yükseltmek için sarayda bir kraliçe olmalı (Halk sekmesi → Kraliçe)',
 }
 
 // Where something walking a path from `departAt` to `arriveAt` (evenly along its length) is at `t`.
@@ -518,6 +574,25 @@ function App({
   // when the ruler was last here, read before this visit's first command updates it.
   const [away, setAway] = useState(() => awaySince(lobby.id, initial.id, initial.state?.lastSeenAt, serverNow()))
   useAwaySnapshot(lobby.id, initial.id, kingdom, serverNow)
+  // The crowns introduce themselves once the lord has grown a little (CLAUDE.md §7.8), once per browser.
+  const [introDone, setIntroDone] = useState(() => introSeen(lobby.id, initial.id))
+  // News of the lord's house (CLAUDE.md §9.1), told from what the house holds now that was not told before; on a first
+  // visit the past is not news.
+  const [houseQueue, setHouseQueue] = useState<HouseNews[]>([])
+  const houseKnown = useRef<Set<string> | null>(null)
+  const dynasty = kingdom?.dynasty
+  useEffect(() => {
+    if (!dynasty) return
+    if (!houseKnown.current) {
+      houseKnown.current = readKnown(lobby.id, initial.id) ?? allKnown(dynasty)
+      writeKnown(lobby.id, initial.id, houseKnown.current)
+    }
+    const news = houseNews(dynasty, houseKnown.current, serverNow())
+    if (news.length === 0) return
+    for (const n of news) houseKnown.current.add(n.key)
+    writeKnown(lobby.id, initial.id, houseKnown.current)
+    setHouseQueue((q) => [...q, ...news])
+  }, [dynasty, lobby.id, initial.id])
   const setKingdom = useCallback((next: Kingdom | null) => {
     kingdomRef.current = next
     setKingdomState(next)
@@ -1272,7 +1347,7 @@ function App({
   const kingdoms: KingdomInfo[] = useMemo(
     () => [
       ...(kingdom
-        ? [{ id: mine.id, name: kingdom.name ?? 'Krallığın', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null, score: scoreOf(kingdom, now), tradeGood: kingdom.trade.idle ? null : kingdom.trade.good, tradeLedger: kingdom.trade.ledger ?? null, tradeDamaged: !!kingdom.trade.damaged, liege: kingdom.liege ?? null }]
+        ? [{ id: mine.id, name: kingdom.name ?? 'Lordluğun', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null, score: scoreOf(kingdom, now), tradeGood: kingdom.trade.idle ? null : kingdom.trade.good, tradeLedger: kingdom.trade.ledger ?? null, tradeDamaged: !!kingdom.trade.damaged, liege: kingdom.liege ?? null }]
         : []),
       ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings, shieldUntil: r.shield_until, score: r.score ?? null, tradeGood: r.trade_good ?? null, tradeLedger: r.trade_ledger ?? null, tradeDamaged: !!r.trade_damaged, liege: r.liege ?? null })),
     ],
@@ -1299,6 +1374,15 @@ function App({
     },
     watch: setWatching,
     watchTown: setWatchingTown,
+    openCrown: (index) => {
+      setPanel(null)
+      setSelected(null)
+      setInnOpen(null)
+      setTownOpen(null)
+      setCityOpen(index)
+      const c = view?.world.cities[index]
+      if (c) view!.centerOn(cityCenter(c))
+    },
     following,
     follow: setFollowing,
     crowns: view ? view.world.cities.map((_, i) => cityInfo(view.world, i).name) : [],
@@ -1557,7 +1641,7 @@ function App({
           </>
         ) : (
           <>
-            {lobby.name} · {rivals.length + (kingdom ? 1 : 0)}/{lobby.max_players} krallık
+            {lobby.name} · {rivals.length + (kingdom ? 1 : 0)}/{lobby.max_players} lord
           </>
         )}
       </div>
@@ -1588,6 +1672,7 @@ function App({
           world={view.world}
           index={cityOpen}
           kingdom={kingdom}
+          online={online}
           market={online.market}
           now={now}
           onCity={(city) => online.act({ type: 'tradeCity', city })}
@@ -1731,6 +1816,7 @@ function App({
           kingdom={kingdom}
           now={now}
           war={warNotes(online, now)}
+          onQueen={() => online.act({ type: 'queen' })}
           onOpen={(tab) => {
             setSelected(null)
             setPanel(tab)
@@ -1756,7 +1842,7 @@ function App({
           world={view.world}
           kingdoms={[
             ...(kingdom && site
-              ? [{ name: kingdom.name ?? 'Krallığın', color: hexOf(kingdom.color), rect: territoryRect(site, stage), mine: true }]
+              ? [{ name: kingdom.name ?? 'Lordluğun', color: hexOf(kingdom.color), rect: territoryRect(site, stage), mine: true }]
               : []),
             ...rivals.map((r) => ({
               name: r.name,
@@ -1805,7 +1891,7 @@ function App({
         <div className="placing frame" role="status">
           <Icon name="swords" size={24} />
           <span>
-            <b>Ordunun hedefi</b> · {touchOnly ? 'Haritada bir yere dokun' : 'Haritada bir yere tıkla'} (savaştığın bir krallığın hududu kuşatma demektir)
+            <b>Ordunun hedefi</b> · {touchOnly ? 'Haritada bir yere dokun' : 'Haritada bir yere tıkla'} (savaştığın bir lordun hududu kuşatma demektir)
           </span>
           <button className="btn small" onClick={() => setAiming(null)}>
             İptal
@@ -1847,8 +1933,22 @@ function App({
           }}
         />
       )}
-      {notice && kingdom && !away && <EnvoyDialog notice={notice} online={online} onClose={closeNotice} />}
-      {!notice && kingdom && fortunes[0] && <FortuneDialog event={fortunes[0]} now={now} onClose={() => setFortunes((list) => list.slice(1))} />}
+      {view && kingdom && !away && !introDone && kingdom.liege === undefined && view.world.cities.length > 1 && fealtyOpen(kingdom, now) && (
+        <CrownIntro world={view.world} kingdom={kingdom} online={online} lobby={lobby.id} onSwear={(city) => online.act({ type: 'swear', city })} onClose={() => setIntroDone(true)} />
+      )}
+      {kingdom && !away && houseQueue[0] && (
+        <HouseDialog news={houseQueue[0]} kingdom={kingdom} now={now} online={online} onClose={() => setHouseQueue((q) => q.slice(1))} />
+      )}
+      {notice && kingdom && !away && !houseQueue[0] && (introDone || kingdom.liege !== undefined || !fealtyOpen(kingdom, now)) && <EnvoyDialog notice={notice} online={online} onClose={closeNotice} />}
+      {!notice && kingdom && fortunes[0] && (
+        <FortuneDialog
+          event={fortunes[0]}
+          now={now}
+          kingdom={kingdom}
+          onAnswer={(choice) => online.act({ type: 'crisis', key: crisisKey({ scope: fortunes[0].scope ?? 'kingdom', start: fortunes[0].start }), choice })}
+          onClose={() => setFortunes((list) => list.slice(1))}
+        />
+      )}
       {watchedBattle && <BattleView battle={watchedBattle} online={online} now={now} onClose={() => setWatching(null)} />}
       {watchedTown && view && (
         <TownSiegeView

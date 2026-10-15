@@ -65,6 +65,8 @@ export interface Online extends Layer {
   watch(battle: number): void
   // Opens the watch over a town's siege.
   watchTown(town: number): void
+  // Takes the camera to a crown kingdom's capital and opens its court (CLAUDE.md §7.8).
+  openCrown(index: number): void
   // The army the camera is locked onto, if any.
   following: number | null
   follow(army: number | null): void

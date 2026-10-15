@@ -455,6 +455,29 @@
           "templeHappiness": 6
         }
       }
+    },
+    "crisis": {
+      "kinds": [
+        "forestFire",
+        "granaryFire",
+        "plague",
+        "flood",
+        "storm",
+        "epidemic",
+        "coldSnap"
+      ],
+      "decideSeconds": 120,
+      "villagers": {
+        "work": -0.3,
+        "seconds": 300
+      },
+      "army": {
+        "lockSeconds": 300,
+        "loss": 1,
+        "moreChance": 0.25,
+        "minSoldiers": 2
+      },
+      "keepHours": 24
     }
   },
   "researchCategories": [

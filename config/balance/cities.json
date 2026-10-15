@@ -1,5 +1,8 @@
 {
-  "count": [1, 2],
+  "count": [
+    1,
+    2
+  ],
   "lakesideCount": 2,
   "crown": {
     "requiredForPalaceLevel": 2,
@@ -9,9 +12,75 @@
       "out": 0.4,
       "stay": 0.15,
       "answerSeconds": 300,
-      "tribute": { "share": 0.04, "min": 25, "max": 250 },
+      "tribute": {
+        "share": 0.04,
+        "min": 25,
+        "max": 250
+      },
       "refuseRelation": -8,
       "tip": 120
+    },
+    "relation": {
+      "restSworn": 15,
+      "restRival": -15,
+      "driftPerRound": 0.12,
+      "swear": 20,
+      "cityTrip": 1.2,
+      "tributePaid": 4,
+      "tributeRefused": -10,
+      "tributeTaken": -5,
+      "visit": 1,
+      "tributeEase": 0.5
+    },
+    "gifts": [
+      {
+        "at": 30,
+        "name": "Teşekkür sepeti",
+        "gold": 60,
+        "goods": {
+          "food": 30
+        }
+      },
+      {
+        "at": 60,
+        "name": "Saray armağanı",
+        "gold": 150,
+        "goods": {
+          "food": 50,
+          "materials": 50
+        }
+      },
+      {
+        "at": 85,
+        "name": "Hükümdarın lütfu",
+        "gold": 300,
+        "goods": {
+          "food": 80,
+          "materials": 80,
+          "arms": 60
+        }
+      }
+    ],
+    "stewardship": {
+      "periodSeconds": 3600,
+      "bonus": 0.25,
+      "penalty": 0.35,
+      "refuseBelow": -50,
+      "refuseFactor": 0.5
+    },
+    "power": {
+      "base": 400,
+      "favour": [
+        0.7,
+        1.3
+      ],
+      "demand": [
+        0.6,
+        1.4
+      ]
+    },
+    "intro": {
+      "buildings": 6
     }
   },
   "size": 16,
@@ -25,7 +94,10 @@
   "restTiles": 22,
   "harbour": {
     "minLakeTiles": 2500,
-    "shoreTiles": [2, 6],
+    "shoreTiles": [
+      2,
+      6
+    ],
     "openWater": 14
   },
   "trade": {

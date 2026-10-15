@@ -21,7 +21,7 @@ export function describeCatch(e: FisherEntry) {
       .join(', ')
     return `Oltaya bir kese takıldı: ${goods}.`
   }
-  return `Şişeden bir not çıktı: «${e.about} krallığının ${e.atLeast.toLocaleString('tr-TR')}'den fazla ${METRIC_NAMES[e.metric]} var gibi görünüyor.»`
+  return `Şişeden bir not çıktı: «${e.about} lordunun ${e.atLeast.toLocaleString('tr-TR')}'den fazla ${METRIC_NAMES[e.metric]} var gibi görünüyor.»`
 }
 
 const secs = (ms: number) => (ms >= 60_000 ? `${Math.floor(ms / 60_000)} dk ${Math.ceil((ms % 60_000) / 1000)} sn` : `${Math.ceil(ms / 1000)} sn`)
@@ -64,7 +64,7 @@ export function FisherPanel({ data }: { data: HudData }) {
       <Section title="Balık tut" icon="food">
         <p className="hint">
           Kulübedeki tuhaf balıkçı oltasını sana veriyor. Basılı tut (fare, dokunma ya da boşluk tuşu) ve yeşil alanı kaçan balığın üstünde tut;
-          çubuk dolarsa tutarsın. Bazen bir kese mal, bazen de bir şişe içinde başka bir krallık hakkında bir not çıkar.
+          çubuk dolarsa tutarsın. Bazen bir kese mal, bazen de bir şişe içinde başka bir lord hakkında bir not çıkar.
         </p>
         <button className="btn wide" disabled={why !== null || open} onClick={cast}>
           <span>

@@ -53,7 +53,7 @@ function timersOf(kingdom: Kingdom, online: Online | undefined, now: number): Ti
   if (online) {
     for (const e of online.envoys) {
       if (e.from_id !== online.me || e.status !== 'traveling') continue
-      const to = online.kingdoms.find((k) => k.id === e.to_id)?.name ?? 'krallık'
+      const to = online.kingdoms.find((k) => k.id === e.to_id)?.name ?? 'lord'
       out.push({ key: `e:${e.id}`, icon: 'scroll', label: `${ENVOY_NAMES[e.kind]} → ${to}`, start: Date.parse(e.sent_at), end: Date.parse(e.arrive_at) })
     }
     // Envoys riding to the player's armies with orders.

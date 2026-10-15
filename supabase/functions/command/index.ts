@@ -273,9 +273,9 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       const k = need()
       const { cities } = await worldOf(lobby)
       const index = Number(cmd.city)
-      const error = game.fealtyError(k, index, cities.length)
+      const error = game.fealtyError(k, index, cities.length, now)
       if (error) refuse(error)
-      next = changed(game.swearFealty(k, index, cities.length))
+      next = changed(game.swearFealty(k, index, cities.length, now))
       break
     }
     case 'queen': {
@@ -325,6 +325,32 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       const error = game.sermonError(need(), now)
       if (error) refuse(error)
       next = changed(game.preach(need(), now))
+      break
+    }
+    case 'nameChild': {
+      // A child of the lord's house named (CLAUDE.md §9.1).
+      const k = need()
+      const error = game.nameError(k, Number(cmd.id), String(cmd.name ?? ''))
+      if (error) refuse(error)
+      next = changed(game.nameChild(k, Number(cmd.id), String(cmd.name)))
+      break
+    }
+    case 'educate': {
+      // A child's upbringing chosen: the gift its tutors work on.
+      const k = need()
+      const error = game.educateError(k, Number(cmd.id), String(cmd.focus), now)
+      if (error) refuse(error === 'grown' || error === 'council' ? error : 'rejected')
+      next = changed(game.educate(k, Number(cmd.id), cmd.focus, now))
+      break
+    }
+    case 'crisis': {
+      // A crisis answered (CLAUDE.md §9.8): the villagers or the garrison sent out, or nothing done.
+      const k = need()
+      const choice = String(cmd.choice) as 'villagers' | 'army' | 'none'
+      if (!['villagers', 'army', 'none'].includes(choice)) refuse('rejected')
+      const error = game.crisisError(k, String(cmd.key), choice, now)
+      if (error) refuse(error === 'soldiers' ? 'soldiers' : 'rejected')
+      next = changed(game.answerCrisis(k, String(cmd.key), choice, now, (units: unknown, n: number) => game.takeShare(units, n).left, game.countOf))
       break
     }
     case 'repairTrade':
@@ -622,6 +648,9 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         refuse('none')
       }
       if (!pay) await refuseDemand(visit!, rows, now)
+      // The crown remembers how it was received.
+      const r = game.balance.cities.crown.relation
+      await mutateKingdom(me.id, now, (k) => game.changeCrownRelation(k, visit!.crown, pay ? r.tributePaid : r.tributeRefused))
       return { paid: pay }
     }
     case 'ransom': {
@@ -754,6 +783,8 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       const army = await raiseArmy(me, units, now)
       const soldiers = game.countOf(units)
       await mutateKingdom(me.id, now, (k) => {
+        // The garrison is out fighting a fire or a flood (a crisis answered with the army).
+        if ((k.armyLockUntil ?? 0) > now) refuse('armyLocked')
         const garrison = game.garrisonOf(k)
         if (!game.hasUnits(garrison, units)) refuse('soldiers')
         const left = game.subtractUnits(garrison, units)

@@ -53,7 +53,7 @@ export function WarTargets({
       <button className="btn small" onClick={onHome}>
         <Icon name="home" size={16} /> Eve dön
       </button>
-      {enemies.length === 0 && <p className="hint">Savaşta olduğun krallık yok. Haritada bir yere tıkla.</p>}
+      {enemies.length === 0 && <p className="hint">Savaşta olduğun lord yok. Haritada bir yere tıkla.</p>}
       {enemies.map((k) => {
         const rival = rivals.find((r) => r.id === k.id)
         const post = rival?.buildings.find((b) => b.kind === 'tradePost')

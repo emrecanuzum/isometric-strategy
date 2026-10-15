@@ -379,6 +379,11 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
   // The winners' record, for the lobby's ranking: a field battle or a defence counts as a battle won, a palace taken
   // as a siege won.
   const winners = new Set((plan.winner === 'attackers' ? battle.attackers : battle.defenders).map((f) => f.kingdom))
+  // A lord whose side lost may die of grief, now and then (CLAUDE.md §9.1): decided once, from the battle and the realm.
+  for (const id of new Set((plan.winner === 'attackers' ? battle.defenders : battle.attackers).map((f) => f.kingdom))) {
+    if (winners.has(id)) continue
+    await mutateKingdom(id, at, (k) => (game.griefStrikes(k, battle.id) ? game.dieOfGrief(k, at) : null))
+  }
   const siegeTaken = battle.kind === 'siege' && plan.winner === 'attackers'
   for (const id of winners) {
     await mutateKingdom(id, at, (k) => {

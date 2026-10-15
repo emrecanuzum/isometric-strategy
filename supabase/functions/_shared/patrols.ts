@@ -36,6 +36,8 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
   if (!info) return
   const spec = game.patrolSpec()
   const lords = rows.filter((r) => r.state).map((r) => ({ id: r.id, liege: r.state.liege }))
+  // Each crown's share of the power its lords give it (crowns.ts): a strong crown asks more, and gives more.
+  const { share } = game.crownPower(rows.filter((r) => r.state).map((r) => ({ liege: r.state.liege, score: game.scoreOf(r.state, now).total })), world.cities.length)
   const current = game.patrolSlotAt(now)
   for (const slot of [current - 1, current]) {
     const { arrive } = game.patrolTimes(slot)
@@ -52,7 +54,16 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
         const kind = game.visitKind(crown, row.state.liege)
         const settled = game.advance(row.state, arrive).kingdom
         const tip = kind === 'tip' && hasTavern(settled, arrive)
-        const amount = kind === 'tribute' ? game.tributeDemand(settled.stock?.gold ?? 0) : tip ? spec.tip : 0
+        const power = game.balance.cities.crown.power
+        const favour = game.byPower(share[crown] ?? 0.5, power.favour)
+        // A rival crown asks less of a lord it is on good terms with, and more the stronger it is.
+        const ease = 1 - (Math.max(0, game.crownRelation(settled, crown)) / 100) * game.balance.cities.crown.relation.tributeEase
+        const amount =
+          kind === 'tribute'
+            ? Math.round(game.tributeDemand(settled.stock?.gold ?? 0) * ease * game.byPower(share[crown] ?? 0.5, power.demand))
+            : tip
+              ? Math.round(spec.tip * favour)
+              : 0
         // Settled once: only the run that writes the visit acts on it.
         const { data: written } = await admin
           .from('patrol_visits')
@@ -79,9 +90,20 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
         } else if (kind === 'tribute') {
           const gold = Math.round(settled.stock?.gold ?? 0)
           await notify(lobby, [target], 'patrol_tribute', { visit: written.id, crown, amount, gold, expiresAt: arrive + spec.answerSeconds * 1000 }, arrive)
-        } else if (tip) {
-          await mutateKingdom(target, arrive, (k) => ({ ...k, stock: { ...k.stock, gold: k.stock.gold + amount } }))
-          await notify(lobby, [target], 'patrol_tip', { crown, amount }, arrive)
+        } else {
+          // Its own crown's patrol: the tip at the house of entertainment, and a gift once the crown thinks well enough
+          // of the lord (more from a strong crown); the visit itself warms the crown a little.
+          const gift = game.giftAt(game.crownRelation(settled, crown))
+          const goods: Record<string, number> = {}
+          for (const [g, v] of Object.entries(gift?.goods ?? {})) goods[g] = Math.round((v as number) * favour)
+          const giftGold = gift ? Math.round(gift.gold * favour) : 0
+          await mutateKingdom(target, arrive, (k) => {
+            const stock = { ...k.stock, gold: k.stock.gold + amount + giftGold }
+            for (const [g, v] of Object.entries(goods)) stock[g] = (stock[g] ?? 0) + v
+            return game.changeCrownRelation({ ...k, stock }, crown, game.balance.cities.crown.relation.visit)
+          })
+          if (tip) await notify(lobby, [target], 'patrol_tip', { crown, amount }, arrive)
+          if (gift) await notify(lobby, [target], 'crown_gift', { crown, name: gift.name, gold: giftGold, goods }, arrive)
         }
       }
     }
@@ -102,7 +124,8 @@ async function takeTribute(lobby: string, kingdom: number, crown: number, amount
   let taken = 0
   await mutateKingdom(kingdom, at, (k) => {
     taken = Math.min(amount, Math.max(0, Math.floor(k.stock.gold)))
-    return { ...k, stock: { ...k.stock, gold: k.stock.gold - taken } }
+    // Taken, not given: the crown thinks the less of the lord for it.
+    return game.changeCrownRelation({ ...k, stock: { ...k.stock, gold: k.stock.gold - taken } }, crown, game.balance.cities.crown.relation.tributeTaken)
   })
   await notify(lobby, [kingdom], 'patrol_taken', { crown, amount: taken }, at)
 }

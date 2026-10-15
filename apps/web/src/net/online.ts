@@ -156,6 +156,9 @@ export type Command =
   | { type: 'nightShift'; on: boolean }
   | { type: 'research'; id: string }
   | { type: 'sermon' }
+  | { type: 'crisis'; key: string; choice: 'villagers' | 'army' | 'none' }
+  | { type: 'nameChild'; id: number; name: string }
+  | { type: 'educate'; id: number; focus: 'finance' | 'people' | 'military' }
   | { type: 'seen' }
   | { type: 'operation'; target: number; op: Operation }
   | { type: 'raid'; target: number }

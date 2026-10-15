@@ -1,0 +1,182 @@
+{
+  "yearHours": 6,
+  "king": {
+    "age": [
+      26,
+      38
+    ]
+  },
+  "queen": {
+    "age": [
+      19,
+      28
+    ]
+  },
+  "comingOfAge": 16,
+  "death": {
+    "atAge": [
+      58,
+      80
+    ]
+  },
+  "grief": 0.05,
+  "births": {
+    "firstYears": [
+      0.4,
+      1.0
+    ],
+    "everyYears": [
+      1.2,
+      2.5
+    ],
+    "max": 4,
+    "son": 0.55,
+    "queenMaxAge": 44
+  },
+  "skills": {
+    "max": 10,
+    "center": 5,
+    "inherit": 0.6,
+    "education": 3,
+    "queenWeight": 0.5,
+    "finance": {
+      "tax": 0.03,
+      "trade": 0.02
+    },
+    "people": {
+      "happiness": 1.2,
+      "work": 0.015
+    },
+    "military": {
+      "dice": 0.12,
+      "upkeep": -0.02
+    }
+  },
+  "council": {
+    "finance": 4,
+    "people": 3,
+    "military": 4
+  },
+  "queenForPalaceLevel": 3,
+  "keepDead": 8,
+  "names": {
+    "m": [
+      "Alp",
+      "Orhan",
+      "Selim",
+      "Kaya",
+      "Tolga",
+      "Murat",
+      "Cem",
+      "Bora",
+      "Aras",
+      "Doruk",
+      "Kerem",
+      "Yiğit",
+      "Batu",
+      "Ertuğrul",
+      "Oğuz",
+      "Demir",
+      "Tuğrul",
+      "Kılıç",
+      "Arslan",
+      "Togan"
+    ],
+    "f": [
+      "Ayla",
+      "Nilüfer",
+      "Selin",
+      "Gülbahar",
+      "Elif",
+      "Defne",
+      "Asya",
+      "Yasemin",
+      "Mahperi",
+      "Hürrem",
+      "Ece",
+      "Ilgın",
+      "Su",
+      "Tomris",
+      "Aybike",
+      "Lale",
+      "Gevher",
+      "Esin",
+      "Saba",
+      "Nazlı"
+    ]
+  },
+  "nameParts": {
+    "m": {
+      "first": [
+        "Alp",
+        "Kara",
+        "Ak",
+        "Gök",
+        "Er",
+        "Tuğ",
+        "Bay",
+        "Kut",
+        "Yağ",
+        "Ay",
+        "Tan",
+        "Ilg",
+        "Bil",
+        "Kür",
+        "Sun"
+      ],
+      "last": [
+        "han",
+        "tekin",
+        "arslan",
+        "bars",
+        "doğan",
+        "er",
+        "kaya",
+        "bey",
+        "tay",
+        "tuğ",
+        "alp",
+        "ay",
+        "bek",
+        "ok",
+        "boğa"
+      ]
+    },
+    "f": {
+      "first": [
+        "Ay",
+        "Gül",
+        "Nil",
+        "Su",
+        "Gön",
+        "Yıl",
+        "Al",
+        "Bal",
+        "Çiçek",
+        "Sel",
+        "Ak",
+        "Ilk",
+        "Tan",
+        "Nur",
+        "Gök"
+      ],
+      "last": [
+        "sun",
+        "bike",
+        "şen",
+        "nur",
+        "çin",
+        "ten",
+        "han",
+        "ay",
+        "can",
+        "ce",
+        "su",
+        "naz",
+        "gül",
+        "sel",
+        "bahar"
+      ]
+    }
+  }
+}

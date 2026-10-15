@@ -15,14 +15,14 @@ const PAGES: { icon: IconName; title: string; text: string[] }[] = [
     title: 'Dünya hiç durmaz',
     text: [
       'Her lobi iki haftalık bir sezondur. Oyunda bir gün gerçekte bir saat sürer; saat ve gün herkes için aynıdır.',
-      'Oyunu kapattığında da krallığın yaşamaya devam eder: inşaatlar biter, tüccarın satış yapar, köylüler üretir.',
+      'Oyunu kapattığında da lordluğun yaşamaya devam eder: inşaatlar biter, tüccarın satış yapar, köylüler üretir.',
     ],
   },
   {
     icon: 'pin',
     title: 'Yerini seç',
     text: [
-      'Lobiye girince sana rastgele bir yer gösterilir. Beğenmezsen başka bir yer keşfedebilirsin; gördüğün yerlerden birinde krallığını kurarsın.',
+      'Lobiye girince sana rastgele bir yer gösterilir. Beğenmezsen başka bir yer keşfedebilirsin; gördüğün yerlerden birinde lordluğunu kurarsın.',
       'Yerin çevresindeki arazi üretimi belirler: nehir ve çayır yemek, orman yapı malzemesi, dağ savaş malzemesi verir.',
     ],
   },
@@ -46,7 +46,7 @@ const PAGES: { icon: IconName; title: string; text: string[] }[] = [
     icon: 'trade',
     title: 'Ticaret',
     text: [
-      'Krallığın ücretsiz bir ticaret noktasıyla başlar. Satılacak malı seç; tüccar düzenli aralıklarla gidip satar ve altın getirir.',
+      'Lordluğun ücretsiz bir ticaret noktasıyla başlar. Satılacak malı seç; tüccar düzenli aralıklarla gidip satar ve altın getirir.',
       'Kıyıdaki iskele arsana iskele kurarsan balık tutarak yemek üretirsin.',
     ],
   },
@@ -54,7 +54,7 @@ const PAGES: { icon: IconName; title: string; text: string[] }[] = [
     icon: 'banner',
     title: 'Komşuların',
     text: [
-      'Lobideki diğer krallıkların hudutları haritada kendi renkleriyle görünür. Depolarını göremezsin.',
+      'Lobideki diğer lordların hudutları haritada kendi renkleriyle görünür. Depolarını göremezsin.',
       'Sol alttaki sohbetten lobiyle konuşabilirsin. Ordular, diplomasi ve entrika yakında geliyor.',
     ],
   },

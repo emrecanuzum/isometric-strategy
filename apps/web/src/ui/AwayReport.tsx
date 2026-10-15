@@ -1,4 +1,4 @@
-import { balance, idleFactor, ledger, population } from '@game/shared'
+import { balance, idleFactor, ledger, population, yearMs } from '@game/shared'
 import type { Kingdom, Pact, Resource } from '@game/shared'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { squad } from '../game/armies'
@@ -83,7 +83,7 @@ const GROUND = 84
 // The pictures are laid out on a 240 × 96 plan and spread over the wider canvas, so the sprites stand smaller in it.
 const SPREAD = W / 240
 
-interface Placed {
+export interface Placed {
   sprite: Sprite
   x: number
   y: number
@@ -92,7 +92,7 @@ interface Placed {
 const rgba = (c: number) => [c & 255, (c >> 8) & 255, (c >> 16) & 255]
 
 // A little picture: a dusky sky over rolling grass, the sprites stood on it back to front.
-function Scene({ items, sky = [0x6a8cb8, 0xb8c8d8], grass = [0x3d7c40, 0x4f9142] }: { items: Placed[]; sky?: [number, number]; grass?: [number, number] }) {
+export function Scene({ items, sky = [0x6a8cb8, 0xb8c8d8], grass = [0x3d7c40, 0x4f9142] }: { items: Placed[]; sky?: [number, number]; grass?: [number, number] }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const ctx = canvas.current?.getContext('2d')
@@ -174,9 +174,9 @@ function coins(n: number): Sprite {
   return { width: w, height: h, anchorX: 17, anchorY: 19, pixels, shadow: 0 }
 }
 
-type Picture = 'treasury' | 'battle' | 'tribute' | 'intrigue' | 'world'
+export type Picture = 'treasury' | 'battle' | 'tribute' | 'intrigue' | 'world' | 'house'
 
-function picture(kind: Picture, own: string | undefined, foe: string | undefined): Placed[] {
+export function picture(kind: Picture, own: string | undefined, foe: string | undefined): Placed[] {
   const color = (c: string | undefined) => (c ?? 'emerald') as KingdomColor
   const S = STRUCTURE_SPRITES
   switch (kind) {
@@ -210,6 +210,12 @@ function picture(kind: Picture, own: string | undefined, foe: string | undefined
         { sprite: S.prison[0], x: 170, y: 84 },
         { sprite: S.house[2], x: 120, y: 72 },
       ]
+    case 'house':
+      return [
+        { sprite: palaceIn(own, 3), x: 120, y: 84 },
+        { sprite: S.house[3], x: 40, y: 82 },
+        { sprite: S.temple[0], x: 206, y: 82 },
+      ]
     case 'world':
       return [
         { sprite: S.house[0], x: 40, y: 84 },
@@ -238,7 +244,7 @@ interface Page {
 }
 
 const MILITARY = new Set(['battle_start', 'battle_end', 'town_siege', 'town_taken', 'town_held', 'town_siege_lifted', 'tower_losses', 'army_threat', 'trade_raided', 'raid_repelled', 'war_declared', 'peace_enforced', 'order_failed'])
-const TRIBUTE = new Set(['patrol_tribute', 'patrol_taken', 'patrol_tip', 'patrol_ignored', 'tribute_ended'])
+const TRIBUTE = new Set(['patrol_tribute', 'patrol_taken', 'patrol_tip', 'patrol_ignored', 'tribute_ended', 'crown_gift'])
 
 const duration = (ms: number) => {
   const minutes = Math.round(ms / 60_000)
@@ -333,7 +339,7 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
     // Tribute: the crowns' patrols, and what was paid and received between lords.
     const tribute: Line[] = data.notices.filter((n) => TRIBUTE.has(n.kind)).map((n) => {
       const { icon, title, text } = describe(n, online)
-      return { icon, text: text ? `${title}: ${text}` : title, tone: n.kind === 'patrol_tip' ? 'up' : 'down' }
+      return { icon, text: text ? `${title}: ${text}` : title, tone: n.kind === 'patrol_tip' || n.kind === 'crown_gift' ? 'up' : 'down' }
     })
     const taken = data.notices.filter((n) => n.kind === 'patrol_taken').reduce((s, n) => s + Number((n.payload as { amount?: number }).amount ?? 0), 0)
     if (taken > 0) tribute.unshift({ icon: 'gold', text: `Sen yokken taç devriyeleri hazinenden toplam ${fmt(taken)} altın haraç aldı.`, tone: 'down' })
@@ -341,11 +347,22 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
       if (rounds <= 0) break
       tribute.push(
         t.dir === 'out'
-          ? { icon: 'gold', text: `${t.name} krallığına her tur ${fmt(t.gold)}, toplam yaklaşık ${fmt(t.gold * rounds)} altın haraç ödedin.`, tone: 'down' }
-          : { icon: 'gold', text: `${t.name} krallığından her tur ${fmt(t.gold)}, toplam yaklaşık ${fmt(t.gold * rounds)} altın haraç aldın.`, tone: 'up' },
+          ? { icon: 'gold', text: `${t.name} lordluğuna her tur ${fmt(t.gold)}, toplam yaklaşık ${fmt(t.gold * rounds)} altın haraç ödedin.`, tone: 'down' }
+          : { icon: 'gold', text: `${t.name} lordluğundan her tur ${fmt(t.gold)}, toplam yaklaşık ${fmt(t.gold * rounds)} altın haraç aldın.`, tone: 'up' },
       )
     }
     if (tribute.length > 0) out.push({ title: 'Haraçlar', picture: 'tribute', lines: tribute })
+
+    // The lord's house: births, deaths and who followed, children come of age.
+    const house: Line[] = []
+    const d = kingdom.dynasty
+    if (d) {
+      for (const c of d.children) if (c.bornAt > since) house.push({ icon: 'happy', text: `${c.sex === 'm' ? 'Bir oğlun' : 'Bir kızın'} oldu: ${c.name}.`, tone: 'up' })
+      for (const p of d.dead) if ((p.diedAt ?? 0) > since) house.push({ icon: 'unhappy', text: `Hükümdar ${p.name} ${p.cause === 'grief' ? 'kaybedilen savaşın kahrından' : 'yaşlılıktan'} öldü.`, tone: 'down' })
+      for (const c of d.children) if (c.grown && c.bornAt + balance.dynasty.comingOfAge * yearMs() > since) house.push({ icon: 'crown', text: `${c.name} reşit oldu.` })
+      if (house.length > 0) house.push({ icon: 'crown', text: d.council || !d.king ? 'Lordluğu şimdi naipler konseyi yönetiyor.' : `Şimdi hükümdar ${d.king.name}.` })
+    }
+    if (house.length > 0) out.push({ title: 'Hanedan', picture: 'house', lines: house })
 
     // Envoys and spies.
     const intrigue: Line[] = data.notices
@@ -359,7 +376,7 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
     // The lobby: wars begun and ended, battles fought, towns changing hands.
     const world: Line[] = []
     for (const p of data.wars) {
-      if (Date.parse(p.started_at) > since) world.push({ icon: 'swords', text: `${name(p.from_id)}, ${name(p.to_id)} krallığına savaş açtı.`, tone: 'down' })
+      if (Date.parse(p.started_at) > since) world.push({ icon: 'swords', text: `${name(p.from_id)}, ${name(p.to_id)} lordluğuna savaş açtı.`, tone: 'down' })
       if (p.ended_at && Date.parse(p.ended_at) > since) world.push({ icon: 'banner', text: `${name(p.from_id)} ile ${name(p.to_id)} arasındaki savaş bitti.`, tone: 'up' })
     }
     for (const b of data.battles) {
@@ -426,7 +443,7 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
                 </button>
               ) : (
                 <button className="btn primary" onClick={close}>
-                  Krallığa dön
+                  Saraya dön
                 </button>
               )}
             </div>
