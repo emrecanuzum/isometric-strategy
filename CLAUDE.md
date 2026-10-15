@@ -759,7 +759,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 - **Bina seviyeleri:** Ev, tarla, oduncu kampı, silah atölyesi ve iskele
   **1–3. seviyededir**. Yükseltme altın + yapı malzemesi ve süre ister,
   inşaat kuyruğundan bir yer tutar; sürerken bina iskeleye döner ve
-  üretmez. Her seviye daha çok üretir / daha çok köylü barındırır ve daha
+  üretmez. Ambar, hazine, ev ve saray ise yükseltme sürerken bir alt
+  seviyesinin depo, hazine ve barınak payını korur (taşınırken hepsini);
+  yükseltme yüzünden depo küçülüp mal yanmaz. Her seviye daha çok üretir / daha çok köylü barındırır ve daha
   çok işçi alabilir; her seviyenin **kendi görseli** vardır.
 - **Sayaçlar:** Süren her iş (inşaat ve yükseltme, araştırma, asker
   eğitimi, vaaz, yoldaki elçi ve ordular, orduya emir götüren elçi,

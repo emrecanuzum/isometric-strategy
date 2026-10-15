@@ -134,6 +134,8 @@ export interface Building {
   along?: Along
   // Built free as the kingdom's first of its kind (its building cost is not refunded on demolition).
   free?: boolean
+  // Being moved (until doneAt): unlike an upgrade, its level stands as it was.
+  moving?: boolean
 }
 
 // Gold that changes hands every production round under an accepted tribute (CLAUDE.md §9.7).
@@ -540,8 +542,11 @@ const storesOf = (kingdom: Kingdom, at: number) =>
     const { baseByPalaceLevel: base, goldByPalaceLevel: gold } = balance.economy.storage
     const room = { goods: base[Math.max(0, Math.min(base.length - 1, level - 1))], gold: gold[Math.max(0, Math.min(gold.length - 1, level - 1))] }
     for (const b of kingdom.buildings) {
-      if (b.doneAt > at) continue
-      const spec = levelSpec(b.kind, b.level)
+      // A store being raised keeps the room of the level below until the work is done, and one being moved keeps all
+      // of it: nothing is lost to the builders (a new one holds nothing yet).
+      const level = b.doneAt <= at || b.moving ? (b.level ?? 1) : (b.level ?? 1) - 1
+      if (level < 1) continue
+      const spec = levelSpec(b.kind, level)
       room.goods += spec.storage ?? 0
       room.gold += spec.gold ?? 0
     }
@@ -575,8 +580,11 @@ export function population(kingdom: Kingdom, at: number) {
     let housing = 0
     let jobs = 0
     for (const b of kingdom.buildings) {
+      // Homes being raised keep their folk at the level below (and ones being moved all of them); they work nowhere
+      // until the builders are done.
+      const level = done(b, at) || b.moving ? (b.level ?? 1) : (b.level ?? 1) - 1
+      if (level >= 1) housing += levelSpec(b.kind, level).villagers ?? 0
       if (!done(b, at)) continue
-      housing += levelSpec(b.kind, b.level).villagers ?? 0
       jobs += staffOf(b)
     }
     return { housing, jobs, cap: popCapFor(palaceLevel(kingdom, at)) }
@@ -852,7 +860,7 @@ export function moveError(world: World, kingdom: Kingdom, stage: number, id: num
 export function moveBuilding(world: World, kingdom: Kingdom, stage: number, id: number, spot: Point, now: number): Kingdom {
   if (moveError(world, kingdom, stage, id, spot, now)) return kingdom
   const b = kingdom.buildings.find((x) => x.id === id)!
-  const moved: Building = { ...b, x: spot.x, y: spot.y, doneAt: now + moveSeconds(b) * 1000 }
+  const moved: Building = { ...b, x: spot.x, y: spot.y, doneAt: now + moveSeconds(b) * 1000, moving: true }
   return { ...kingdom, stock: pay(kingdom.stock, moveCost(b)), buildings: kingdom.buildings.map((x) => (x.id === id ? moved : x)) }
 }
 
@@ -1042,7 +1050,7 @@ export function upgradeBuilding(kingdom: Kingdom, id: number, now: number): King
   if (upgradeError(kingdom, id, now)) return kingdom
   const b = kingdom.buildings.find((x) => x.id === id)!
   const up = upgradeSpec(b)!
-  const next: Building = { ...b, level: (b.level ?? 1) + 1, doneAt: now + (up.buildSeconds ?? 0) * 1000 }
+  const next: Building = { ...b, level: (b.level ?? 1) + 1, doneAt: now + (up.buildSeconds ?? 0) * 1000, moving: undefined }
   return { ...kingdom, stock: pay(kingdom.stock, up.cost), buildings: kingdom.buildings.map((x) => (x.id === id ? next : x)) }
 }
 
