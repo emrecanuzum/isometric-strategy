@@ -50,6 +50,11 @@ import {
   upgradeSpec,
   upgradeTrade,
   clogsOf,
+  countShips,
+  dockWater,
+  fleetAt,
+  alongPath,
+  pathLength,
   sailError,
 } from '@game/shared'
 import type { Along, Lord, BuildError, BuildingKind, Good, Kingdom, PlanStep, Point, Ships, World } from '@game/shared'
@@ -91,6 +96,7 @@ import { HouseDialog, allKnown, houseNews, readKnown, writeKnown } from './ui/hu
 import type { HouseNews } from './ui/hud/dynasty'
 import type { KingdomInfo, Online } from './ui/hud/online'
 import { BattleView, TownSiegeView, showArmyPart, warNotes } from './ui/hud/war'
+import { RivalFleetSheet } from './ui/hud/navy'
 import { showPart } from './ui/hud/Subtabs'
 import type { Settings } from './net/settings'
 import { Chat } from './ui/Chat'
@@ -643,6 +649,10 @@ function App({
   const [aiming, setAiming] = useState<number | null>(null)
   // A fleet whose destination on the water is being picked (CLAUDE.md §8.5).
   const [sailing, setSailing] = useState<number | null>(null)
+  // The fleet picked on the map or in the navy panel (its ships outlined), and another lord's fleet whose sheet is open.
+  const [fleetFocus, setFleetFocus] = useState<{ lord: number; fleet: number } | null>(null)
+  const [fleetSheet, setFleetSheet] = useState<{ lord: number; fleet: number } | null>(null)
+  useEffect(() => view?.setFleetFocus(fleetFocus), [view, fleetFocus])
   const [following, setFollowing] = useState<number | null>(null)
   const [watching, setWatching] = useState<number | null>(null)
   // A town whose siege is being watched.
@@ -930,6 +940,7 @@ function App({
     setInnOpen(null)
     setCityOpen(null)
     setTownOpen(null)
+    setFleetSheet(null)
   }, [])
   useTabKeys(toggleTab, closeTab)
   useEffect(() => {
@@ -937,8 +948,8 @@ function App({
   }, [panel, journal.unread, markRead])
   // On phones the open sheet covers the map controls; the stylesheet hides them meanwhile.
   useEffect(() => {
-    document.documentElement.dataset.sheet = panel || selected !== null || innOpen !== null || cityOpen !== null || townOpen !== null ? 'open' : 'closed'
-  }, [panel, selected, innOpen, cityOpen, townOpen])
+    document.documentElement.dataset.sheet = panel || selected !== null || innOpen !== null || cityOpen !== null || townOpen !== null || fleetSheet !== null ? 'open' : 'closed'
+  }, [panel, selected, innOpen, cityOpen, townOpen, fleetSheet])
   const [placing, setPlacing] = useState<BuildingKind | null>(null)
   // A gate turned with R (null: it follows the wall around it).
   const [turned, setTurned] = useState<Along | null>(null)
@@ -1108,8 +1119,13 @@ function App({
       }
       play('click')
       act({ type: 'fleet', action: 'sail', fleet: sailing, x: to.x, y: to.y })
+      setFleetFocus({ lord: mine.id, fleet: sailing })
       setSailing(null)
       return
+    }
+    if (aiming === null && !tool && !placingKind) {
+      setFleetFocus(ship?.fleet !== undefined ? { lord: ship.lord, fleet: ship.fleet } : null)
+      setFleetSheet(null)
     }
     // A lord's ship: one's own opens the navy at its fleets (or harbour), another's opens that lord in diplomacy.
     if (ship && aiming === null && !tool && !placingKind) {
@@ -1122,6 +1138,10 @@ function App({
         showArmyPart('sea')
         showPart('navy', ship.fleet !== undefined ? 'fleets' : 'harbour')
         setPanel('army')
+      } else if (ship.fleet !== undefined) {
+        // Another lord's fleet: its sheet (how many of which ships, what it is doing).
+        setPanel(null)
+        setFleetSheet({ lord: ship.lord, fleet: ship.fleet })
       } else {
         setFocus(ship.lord)
         setPanel('diplomacy')
@@ -1375,6 +1395,14 @@ function App({
     setFocus,
     army: armyFocus,
     setArmy: setArmyFocus,
+    fleet: fleetFocus?.lord === mine.id ? fleetFocus.fleet : null,
+    showFleet: (id) => {
+      setFleetFocus({ lord: mine.id, fleet: id })
+      const current = kingdomRef.current
+      const f = current?.navy?.fleets.find((x) => x.id === id)
+      const at = view && current && f ? fleetAt(view.world, current, f, serverNow()) : null
+      if (at && view) view.centerOn({ x: Math.floor(at.x), y: Math.floor(at.y) })
+    },
     intel,
     loadIntel,
     act,
@@ -1508,9 +1536,10 @@ function App({
       if (dock && (navy || kingdom.blockade)) {
         lords.push({
           id: mine.id,
+          color: colorOf(kingdom.color),
           dock: { x: dock.x, y: dock.y, size: dock.size },
           harbour: kindsOf(navy?.harbour),
-          fleets: (navy?.fleets ?? []).map((f) => ({ id: f.id, kinds: kindsOf(f.ships), mission: f.mission.kind, sail: f.sail, ...(f.mission.kind === 'trade' && { departedAt: f.mission.departedAt, tripMs: f.mission.tripMs }) })),
+          fleets: (navy?.fleets ?? []).map((f) => ({ id: f.id, ships: countShips(f.ships), kinds: kindsOf(f.ships), mission: f.mission.kind, sail: f.sail, ...(f.mission.kind === 'trade' && { departedAt: f.mission.departedAt, tripMs: f.mission.tripMs }) })),
           blockade: kingdom.blockade,
         })
       }
@@ -1520,10 +1549,11 @@ function App({
       if (!dock || (!r.navy && !r.blockade)) continue
       lords.push({
         id: r.id,
+        color: colorOf(r.color),
         dock: { x: dock.x, y: dock.y, size: dock.size },
-        // Others' harbours come as a count only; their fleets with how many galleys.
+        // Others' harbours come as a count only; their fleets by type, rounded (older rows: whether galleys sail).
         harbour: Array.from({ length: Math.min(4, r.navy?.harbour ?? 0) }, () => 'cog' as const),
-        fleets: (r.navy?.fleets ?? []).map((f) => ({ id: f.id, kinds: Array.from({ length: Math.min(3, f.ships) }, (_, i) => (i === 0 && f.galleys ? 'galley' : 'cog') as ShipKind), mission: f.mission, departedAt: f.departedAt, tripMs: f.tripMs, sail: f.sail })),
+        fleets: (r.navy?.fleets ?? []).map((f) => ({ id: f.id, ships: f.ships, kinds: f.kinds ? kindsOf(f.kinds) : Array.from({ length: Math.min(3, f.ships) }, (_, i) => (i === 0 && f.galleys ? 'galley' : 'cog') as ShipKind), mission: f.mission, departedAt: f.departedAt, tripMs: f.tripMs, sail: f.sail })),
         blockade: r.blockade,
       })
     }
@@ -1757,6 +1787,43 @@ function App({
               onClose={closeTab}
             />
           )
+        )
+      })()}
+      {view && kingdom && !holding && fleetSheet !== null && !panel && !selectedBuilding && (() => {
+        const owner = rivals.find((r) => r.id === fleetSheet.lord)
+        const list = owner?.navy?.fleets ?? []
+        const index = list.findIndex((f) => f.id === fleetSheet.fleet)
+        if (!owner || index < 0) return null
+        const fleet = list[index]
+        // Where it is: along its way over the water, or off its dock.
+        const where = () => {
+          const t = serverNow()
+          if (fleet.sail) {
+            const total = pathLength(fleet.sail.path)
+            const span = fleet.sail.arriveAt - fleet.sail.departAt
+            return alongPath(fleet.sail.path, span > 0 ? Math.min(1, Math.max(0, (t - fleet.sail.departAt) / span)) * total : total).at
+          }
+          const dock = owner.buildings.find((b) => b.kind === 'dock')
+          return dock ? dockWater(view.world, { x: dock.x, y: dock.y, size: dock.size }) : null
+        }
+        return (
+          <RivalFleetSheet
+            lord={owner.name}
+            color={hexOf(owner.color)}
+            index={index + 1}
+            fleet={fleet}
+            now={now}
+            onLord={() => {
+              setFleetSheet(null)
+              setFocus(owner.id)
+              setPanel('diplomacy')
+            }}
+            onShow={() => {
+              const at = where()
+              if (at) view.centerOn({ x: Math.floor(at.x), y: Math.floor(at.y) })
+            }}
+            onClose={closeTab}
+          />
         )
       })()}
       {view && kingdom && !holding && innOpen !== null && !panel && !selectedBuilding && (

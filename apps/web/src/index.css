@@ -4893,3 +4893,13 @@ input:not([type='range']):focus-visible {
 .armory .slot.full {
   outline: var(--px) solid #a83a2a;
 }
+
+/* A fleet card's head: the name, and the button that picks it on the map. */
+.fleet-head {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.fleet-head small {
+  grid-column: 1 / -1;
+}

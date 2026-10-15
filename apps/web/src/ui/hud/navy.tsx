@@ -29,7 +29,7 @@ import {
   PIRATE_SEASON_FACTOR,
   recallError,
 } from '@game/shared'
-import type { Fleet, Good, MissionOrder, NavyError, Ship, Ships } from '@game/shared'
+import type { Fleet, Good, MissionOrder, NavyError, NavyLook, Ship, Ships } from '@game/shared'
 import { useState } from 'react'
 import { cityInfo } from '../../game/cities'
 import { Icon } from '../icons'
@@ -237,12 +237,15 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
   }
   const merge = others.find((o) => !mergeFleetsError(kingdom, fleet.id, o.id))
   return (
-    <li className="army-card">
+    <li className={online.fleet === fleet.id ? 'army-card selected' : 'army-card'}>
       <div className="army-body">
-        <div className="army-head">
+        <div className="army-head fleet-head">
           <b>
             <Icon name="ship" size={16} /> {index}. filo
           </b>
+          <button className="btn small" aria-pressed={online.fleet === fleet.id} onClick={() => online.showFleet(fleet.id)} title="Haritada seç ve göster">
+            <Icon name="pin" size={16} /> Göster
+          </button>
           <small>
             {countShips(fleet.ships)} gemi · güç {shipMight(fleet.ships).toFixed(1)} · yük {cargoOf(fleet.ships)} · eskort {escortOf(fleet.ships).toFixed(1)}
           </small>
@@ -284,7 +287,7 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
               </button>
             )}
             <button className="btn small" disabled={countShips(fleet.ships) < 2 || others.length + 1 >= balance.navy.maxFleets} onClick={() => setPicking(picking === 'split' ? null : 'split')} aria-pressed={picking === 'split'}>
-              Böl
+              <Icon name="ship" size={16} /> Böl
             </button>
             {merge && (
               <button className="btn small" onClick={() => online.act({ type: 'fleet', action: 'merge', fleet: fleet.id, other: merge.id })}>
@@ -468,5 +471,65 @@ function SeaLedger({ data }: { data: HudData }) {
       <Stat label="Korsan saldırısı" value={`${l.pirates}`} note={`${fmt(l.lostUnits)} birim yük, ${l.sunk} gemi kaybı`} tone={l.pirates ? 'down' : undefined} />
       <Meter value={l.voyages ? 1 - l.pirates / l.voyages : 1} label="Güvenli sefer oranı" segments={12} />
     </Section>
+  )
+}
+
+// Another lord's fleet, picked on the map: whose, how many of which ships (rounded, as the lobby sees them), and what
+// it is doing.
+export function RivalFleetSheet({ lord, color, index, fleet, now, onLord, onShow, onClose }: {
+  lord: string
+  color: string
+  index: number
+  fleet: NavyLook['fleets'][number]
+  now: number
+  onLord(): void
+  onShow(): void
+  onClose(): void
+}) {
+  const kinds = fleet.kinds ?? (fleet.galleys ? { galley: 1 } : {})
+  const sailing = fleet.sail && fleet.sail.arriveAt > now
+  return (
+    <section className="sheet frame" aria-labelledby="fleet-title">
+      <header className="sheet-head">
+        <Icon name="ship" size={32} />
+        <div>
+          <h2 id="fleet-title">
+            <span style={{ color }}>{lord}</span> · {index}. filo
+          </h2>
+          <small>~{fleet.ships} gemi · {MISSION_NAMES[fleet.mission]}</small>
+        </div>
+        <button className="btn icon-only" onClick={onShow} aria-label="Haritada göster" title="Haritada göster">
+          <Icon name="pin" size={16} />
+        </button>
+        <button className="btn icon-only" onClick={onClose} aria-label="Kapat (Esc)" title="Kapat (Esc)">
+          <Icon name="close" size={16} />
+        </button>
+      </header>
+      <div className="sheet-body">
+        <Section title="Gemiler" icon="ship" aside="yaklaşık">
+          {SHIPS.filter((x) => (kinds[x] ?? 0) > 0).length === 0 ? (
+            <p className="hint">Gemilerin türü seçilemiyor.</p>
+          ) : (
+            SHIPS.filter((x) => (kinds[x] ?? 0) > 0).map((x) => (
+              <Stat key={x} label={SHIP_NAMES[x]} value={fleet.kinds ? `~${kinds[x]}` : 'var'} note={`güç ${shipSpec(x).might} · eskort ${shipSpec(x).escort} · yük ${shipSpec(x).cargo}`} />
+            ))
+          )}
+          {fleet.kinds && (
+            <Stat label="Tahmini güç" value={`~${shipMight(fleet.kinds).toFixed(1)}`} note={`yük ~${cargoOf(fleet.kinds)} · eskort ~${escortOf(fleet.kinds).toFixed(1)}`} />
+          )}
+          <p className="hint">Sayılar ikişer yuvarlanmıştır; kesin sayıyı casusların söyler.</p>
+        </Section>
+        <Section title="Ne yapıyor" icon="scroll">
+          <p className="hint">
+            <b>{MISSION_NAMES[fleet.mission]}</b>
+            {sailing && ` · suda yol alıyor, varış ${clock(fleet.sail!.arriveAt - now)}`}
+            {fleet.arriveAt && fleet.arriveAt > now && ` · hedefe varış ${clock(fleet.arriveAt - now)}`}
+          </p>
+          <button className="btn small" onClick={onLord}>
+            <Icon name="crown" size={16} /> Lordu aç
+          </button>
+        </Section>
+      </div>
+    </section>
   )
 }

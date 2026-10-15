@@ -58,6 +58,9 @@ export interface Online extends Layer {
   setFocus(id: number | null): void
   army: number | null
   setArmy(id: number | null): void
+  // The player's fleet picked (outlined on the map), and picking one from the panel (the map goes to it).
+  fleet: number | null
+  showFleet(id: number): void
   intel: Record<number, IntelReport | null | undefined>
   loadIntel(target: number): void
   // Sends a command; resolves to its result, or undefined when it was refused (the refusal is shown).

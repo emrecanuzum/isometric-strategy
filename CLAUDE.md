@@ -1616,6 +1616,17 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
   bölünen filonun yeni parçası aynı yoldan gider. Görevler (balık, korsan
   avı, ticaret) eskisi gibi işler; seyir yalnız filonun nerede durduğunu
   belirler.
+- **Haritada filo** (`createWorld.ts` → `drawFleets`): her filonun ilk
+  gemisinin üstünde lordluğun renginde bir etiket ("1. filo · 3") durur.
+  Yol alan filonun kalan yolu lordun renginde kesikli çizgiyle, ucunda
+  gittiği yönü gösteren bir okla çizilir. Bir filoya tıklamak onu **seçer**:
+  gemileri altın dış hatla vurgulanır. Kendi filon Ordu → Donanma →
+  Filolar'da da seçili (altın çerçeveli) görünür; karttaki **Göster** filoyu
+  seçer ve kamerayı ona götürür. Boş yere tıklamak seçimi kaldırır.
+  **Başka bir lordun filosuna** tıklamak bir pencere açar: lord ve filo,
+  türüne göre gemi sayıları (ikişer yuvarlı; `lobby_kingdoms` →
+  `navy.fleets[].kinds`), tahmini güç, eskort ve yük, ne yaptığı, varış süresi,
+  haritada göster ve "Lordu aç" (`navy.tsx` → `RivalFleetSheet`).
 - **Herkes görür:** lobi her lordun filolarını haritada görür
   (`lobby_kingdoms` → `navy.fleets[].sail`): limandaki gemiler iskelenin
   yanına yanaşmış (en çok 4); limanda bekleyen filo iskelenin açığında ya da

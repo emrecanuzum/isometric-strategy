@@ -187,6 +187,8 @@ export interface WorldView {
   setArmies(armies: MapArmy[], battles: MapBattle[]): void
   // The lords' ships at their docks and at sea (CLAUDE.md §8.5).
   setFleets(ships: FleetShip[]): void
+  // The fleet picked (its ships outlined), if any.
+  setFleetFocus(focus: { lord: number; fleet: number } | null): void
   // The player's buildings, painted into the ground like the inns.
   setStructures(structures: Structure[], trails: Point[][]): void
   // While set, the pointer shows the footprint of the building being placed, green where it fits.
@@ -329,6 +331,11 @@ export async function createWorld(
   // The territory lines lie on the ground: buildings and walkers stand over them.
   // Armies stay in sight at every zoom (the caravans' layer hides when zoomed out), their routes on the ground.
   const armyRoutes = new Graphics()
+  // The lords' fleets: the way ahead of a sailing fleet with an arrow at its end, the picked fleet's outlines, and a
+  // tag in the lord's colour over each fleet's first ship.
+  const fleetRoutes = new Graphics()
+  const fleetMarks = new Container()
+  const fleetLabels = new Container()
   const armyLabels = new Container()
   // Red silhouettes over the buildings marked to be torn down.
   const marks = new Container()
@@ -342,7 +349,7 @@ export async function createWorld(
   }
   // The target an aimed army has snapped to, outlined over everything on the ground.
   const aimLines = new Graphics()
-  camera.addChild(ground, shadows.layer, rivalLines, territory, armyRoutes, ambient.under, caravans.layer, marks, clogSigns, ambient.sky, cursor, carried, highlight, aimLines)
+  camera.addChild(ground, shadows.layer, rivalLines, territory, armyRoutes, fleetRoutes, ambient.under, caravans.layer, fleetMarks, marks, clogSigns, ambient.sky, cursor, carried, highlight, aimLines)
   app.stage.addChild(camera)
   // Day and night: the whole map is multiplied by the colour of the light at this hour of the game day. Lit windows
   // and the labels sit above it, in a layer that follows the camera, so night never dims them.
@@ -375,7 +382,7 @@ export async function createWorld(
     style: { fontFamily: "'Digits', 'Pixelify Sans', ui-monospace, monospace", fontSize: 15, fontWeight: '600', fill: 0xffffff, stroke: { color: 0x120d0b, width: 4, join: 'round' } },
   })
   aimLabel.visible = false
-  above.addChild(halo, glow, plotLabels.dock, plotLabels.trade, rivalLabels, kingdomLabel, townLayer, aimLabel, armyLabels, floats)
+  above.addChild(halo, glow, plotLabels.dock, plotLabels.trade, rivalLabels, kingdomLabel, townLayer, aimLabel, armyLabels, fleetLabels, floats)
   // Armies stand in the same layer as buildings and walkers, so a wall or a house in front of an army hides it.
   const armies = createArmies(world, caravans.layer, armyRoutes, armyLabels)
   app.stage.addChild(light, above)
@@ -498,6 +505,7 @@ export async function createWorld(
       bottom: (app.screen.height - camera.y) / scale,
     }
     ambient.update(seconds, view, scale)
+    drawFleets(scale)
     armies.update(time, scale)
     followArmies(performance.now())
     for (const text of [...floats.children] as Text[]) {
@@ -1378,6 +1386,78 @@ export async function createWorld(
   hits = innHits.slice().sort((a, b) => b.depth - a.depth)
   let structureKeys = new Set<string>()
   let marked = new Map<number, 'demolish' | 'move'>()
+  // The lords' fleets over their ships (see fleetRoutes above).
+  let fleetFocus: { lord: number; fleet: number } | null = null
+  const shipOutlines = new Map<Sprite_, Texture>()
+  const outlineTexture = (look: Sprite_) => {
+    let t = shipOutlines.get(look)
+    if (!t) shipOutlines.set(look, (t = textureOf(outlineOf(look))))
+    return t
+  }
+  const fleetTags = new Map<string, { box: Container; back: Graphics; text: Text; key: string }>()
+  function drawFleets(scale: number) {
+    const drawn = ambient.shipsDrawn()
+    fleetRoutes.clear()
+    for (const child of fleetMarks.removeChildren()) child.destroy()
+    const seen = new Set<string>()
+    for (const d of drawn) {
+      const s = d.ship
+      const color = s.color ?? 0xf2d16b
+      // The way ahead, dashed, and an arrowhead at its end pointing the way the fleet goes.
+      if (d.ahead && d.ahead.length > 1) {
+        dashes(d.ahead, 10 / scale, 7 / scale, false, (x0, y0, x1, y1) => fleetRoutes.moveTo(x0, y0).lineTo(x1, y1))
+        fleetRoutes.stroke({ width: 3 / scale, color, alpha: 0.75, cap: 'butt' })
+        const end = d.ahead[d.ahead.length - 1]
+        const from = d.ahead[d.ahead.length - 2]
+        const len = Math.hypot(end.x - from.x, end.y - from.y) || 1
+        const ux = (end.x - from.x) / len
+        const uy = (end.y - from.y) / len
+        const size = 11 / scale
+        fleetRoutes
+          .poly([end.x + ux * size * 0.4, end.y + uy * size * 0.4, end.x - ux * size + uy * size * 0.6, end.y - uy * size - ux * size * 0.6, end.x - ux * size - uy * size * 0.6, end.y - uy * size + ux * size * 0.6])
+          .fill({ color, alpha: 0.9 })
+          .stroke({ width: 1.5 / scale, color: 0x120d0b, alpha: 0.8 })
+      }
+      // The picked fleet's ships, outlined.
+      if (fleetFocus && s.fleet === fleetFocus.fleet && s.lord === fleetFocus.lord) {
+        const ring = new Sprite(outlineTexture(d.look))
+        ring.anchor.set(d.look.anchorX / d.look.width, d.look.anchorY / d.look.height)
+        ring.position.set(d.x, d.y)
+        ring.tint = 0xf2d16b
+        fleetMarks.addChild(ring)
+      }
+      // The tag over the fleet's first ship.
+      if (s.tag) {
+        seen.add(s.key)
+        let tag = fleetTags.get(s.key)
+        if (!tag || tag.key !== `${s.tag}:${color}`) {
+          if (tag) tag.box.destroy({ children: true })
+          const box = new Container()
+          const back = new Graphics()
+          const text = new Text({
+            text: s.tag,
+            resolution: window.devicePixelRatio * 2,
+            anchor: { x: 0.5, y: 0.5 },
+            style: { fontFamily: "'Digits', 'Pixelify Sans', ui-monospace, monospace", fontSize: 13, fill: 0xffffff, stroke: { color: 0x120d0b, width: 3, join: 'round' } },
+          })
+          back.roundRect(-text.width / 2 - 5, -text.height / 2 - 2, text.width + 10, text.height + 4, 3).fill({ color, alpha: 0.9 }).stroke({ width: 1.5, color: 0x120d0b })
+          box.addChild(back, text)
+          fleetLabels.addChild(box)
+          tag = { box, back, text, key: `${s.tag}:${color}` }
+          fleetTags.set(s.key, tag)
+        }
+        const top = d.y - d.look.anchorY + contentTop(d.look)
+        tag.box.position.set(d.x, top - 8 * Math.max(1, 0.6 / scale))
+        tag.box.scale.set(1 / scale)
+        tag.box.visible = true
+      }
+    }
+    for (const [key, tag] of fleetTags) {
+      if (seen.has(key)) continue
+      tag.box.destroy({ children: true })
+      fleetTags.delete(key)
+    }
+  }
   // Warning signs over clogged buildings, bobbing; drawn once per tone.
   let clogged = new Map<number, 'armory' | 'store'>()
   const signLooks = new Map<string, Texture>()
@@ -1539,6 +1619,9 @@ export async function createWorld(
     setRivals,
     setArmies: (list, fights) => armies.set(list, fights),
     setFleets: (list) => ambient.setFleets(list),
+    setFleetFocus: (focus) => {
+      fleetFocus = focus
+    },
     setStructures,
     setPlacement(next) {
       placement = next

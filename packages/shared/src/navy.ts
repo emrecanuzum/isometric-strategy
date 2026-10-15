@@ -607,5 +607,6 @@ export function nextVoyage(k: Pick<Kingdom, 'navy'>): { fleet: Fleet; end: numbe
 // How the lobby sees a lord's navy (lobby_kingdoms): its fleets' missions and rough sizes.
 export interface NavyLook {
   harbour: number
-  fleets: { id: number; ships: number; galleys: boolean; mission: MissionKind; target?: number; arriveAt?: number; departedAt?: number; tripMs?: number; sail?: Sail | null }[]
+  // `kinds`: how many of each type (rounded up to even for others, like `ships`).
+  fleets: { id: number; ships: number; kinds?: Ships; galleys: boolean; mission: MissionKind; target?: number; arriveAt?: number; departedAt?: number; tripMs?: number; sail?: Sail | null }[]
 }

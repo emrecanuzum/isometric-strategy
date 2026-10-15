@@ -270,6 +270,8 @@ export interface Ambient {
   setFleets(ships: FleetShip[]): void
   // The lord's ship drawn at this world point (screen space before the camera), if any: whose, and which fleet.
   pickShip(p: Point): { lord: number; fleet?: number } | null
+  // The lords' ships drawn this frame.
+  shipsDrawn(): readonly DrawnShip[]
 }
 
 // A lord's ship on the map: moored at `at`; or sailing the fleet's `route` (server time) and riding at anchor at its
@@ -289,6 +291,20 @@ export interface FleetShip {
   // Whose ship it is, and the fleet it sails in (none: moored in the harbour).
   lord: number
   fleet?: number
+  // The lord's colour, and the tag shown over the fleet's first ship ("1. filo · 3").
+  color?: number
+  tag?: string
+}
+
+// A lord's ship as last drawn (screen space before the camera): for picking, outlining and labelling it, and the way
+// still ahead of a fleet's first ship while it sails.
+export interface DrawnShip {
+  x: number
+  y: number
+  z: number
+  look: Sprite
+  ship: FleetShip
+  ahead: { x: number; y: number }[] | null
 }
 
 export function createAmbient(world: World, actors: Container): Ambient {
@@ -652,7 +668,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
   }
   const shipPool = new Pool(actors)
   // The lords' ships as last drawn, for picking them.
-  let drawnShips: { x: number; y: number; z: number; look: Sprite; ship: FleetShip }[] = []
+  let drawnShips: DrawnShip[] = []
 
   function updateShips(seconds: number, view: View) {
     for (const s of ships) {
@@ -697,11 +713,22 @@ export function createAmbient(world: World, actors: Container): Ambient {
         }
       }
       const route = s.route
+      let ahead: Point[] | null = null
       if (route && (ms < route.arriveAt || !s.loop)) {
         const total = pathLength(route.path)
         const f = route.arriveAt > route.departAt ? Math.min(1, Math.max(0, (ms - route.departAt) / (route.arriveAt - route.departAt))) : 1
         head(alongPath(route.path, f * total - behind))
         sailing = f < 1
+        // The way still ahead of the first ship: from where it is, through the corners it has not passed yet.
+        if (sailing && behind === 0) {
+          let walked = 0
+          const passed = f * total
+          ahead = [{ x, y }]
+          for (let i = 1; i < route.path.length; i++) {
+            walked += Math.hypot(route.path[i].x - route.path[i - 1].x, route.path[i].y - route.path[i - 1].y)
+            if (walked > passed) ahead.push(route.path[i])
+          }
+        }
       } else if (s.loop) {
         const total = pathLength(s.loop.path)
         const u = ((((ms - s.loop.start) % s.loop.period) + s.loop.period) % s.loop.period) / s.loop.period
@@ -717,7 +744,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
       const bob = Math.round(Math.sin(seconds * 1.3 + s.seed) * 1)
       sprite.position.set(Math.round(screen.x), Math.round(screen.y) + bob)
       sprite.zIndex = screen.y
-      drawnShips.push({ x: sprite.position.x, y: sprite.position.y, z: screen.y, look: look.sprite, ship: s })
+      drawnShips.push({ x: sprite.position.x, y: sprite.position.y, z: screen.y, look: look.sprite, ship: s, ahead: ahead && ahead.map((p) => toScreen(p.x, p.y, 0)) })
     }
     shipPool.finish()
   }
@@ -784,6 +811,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
     setFleets(list) {
       fleets = list
     },
+    shipsDrawn: () => drawnShips,
     pickShip(p) {
       // The nearest ship whose drawn pixels are under the point (or within a pixel or two of them).
       let best: (typeof drawnShips)[number] | null = null
