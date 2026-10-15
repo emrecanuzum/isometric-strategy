@@ -116,7 +116,6 @@ export function squad(color: string | null, frame: number, figures = 3): Sprite 
   spots.sort((a, b) => a[1] - b[1])
   // Neighbours out of step with each other, so the column ripples as it marches.
   spots.forEach(([x, y], i) => raise(y, () => soldier(x, y, frame + (i % 2) * 2)))
-  shadow(canvas, ox, base - 12, 8 + Math.ceil(figures / 4) * 3)
   return { ...canvas.sprite(ox + 2, base - 10, 0), lift }
 }
 
@@ -260,12 +259,17 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
     dashes(points, DASH / scale, GAP / scale, false, (x0, y0, x1, y1) => routes.moveTo(x0, y0).lineTo(x1, y1))
   }
 
+  // Where the armies stood at the last update (tile space), for the map to lift the trees around them.
+  let standing: Point[] = []
+
   function update(time: number, scale: number) {
     routes.clear()
+    standing = []
     for (const s of shown.values()) {
       const { army, body, ring, label } = s
       const route = { path: army.path, depart_at: new Date(army.departAt).toISOString(), arrive_at: new Date(army.arriveAt).toISOString() }
       const here = armyAt(route, time)
+      standing.push(here)
       const screen = standAt(here)
       const moving = !army.battle && time < army.arriveAt && army.path.length > 1
       // Which way it is heading: from a moment ago to now (kept when it stops).
@@ -371,5 +375,5 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
     return best
   }
 
-  return { set, update, pick }
+  return { set, update, pick, positions: () => standing }
 }

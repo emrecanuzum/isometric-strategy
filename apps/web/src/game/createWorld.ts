@@ -91,7 +91,6 @@ const DASH = 12
 const GAP = 8
 const NAME_MAX_ZOOM = 0.5
 const CITY_NAME_MAX_ZOOM = 1
-const CITY_NAME = 0xf6e3a1
 
 // Top-left tile of a footprint of `size` held under the pointer at `tile`.
 export const footprintOrigin = (tile: Point, size: number): Point => ({
@@ -214,14 +213,19 @@ interface Chunk {
   lod: number
   bytes: number
   version: number
-  // Its trees as sprites of their own (painted with detail animations on, close up), which sway in the wind.
+  // Its trees as sprites of their own (painted with detail animations on, close up, and wherever an army is), which
+  // sway in the wind.
   trees: Sprite[]
+  lift: boolean
+  // Which chunks round it had their trees lifted when it was painted (see nearFor).
+  near: string
 }
 
 interface Job {
   key: number
   lod: number
   lift: boolean
+  near: string
   // Structures version the worker painted with.
   version: number
 }
@@ -279,14 +283,15 @@ export async function createWorld(
     })
   const plotLabels = { dock: label('İskele alanı', DOCK_PLOT), trade: label('Ticaret alanı', TRADE_PLOT) }
   // The kingdom's name over its territory, shown once the map is zoomed out far enough to see the whole of it.
-  const nameLabel = (fill: number) => new Text({
+  // Lords' names a little smaller than the crown kingdoms', which are written in capitals in their crown's colour.
+  const nameLabel = (fill: number | string, fontSize = 27) => new Text({
     text: '',
     resolution: window.devicePixelRatio * 2,
     anchor: { x: 0.5, y: 0.5 },
     style: {
       fontFamily: "'Digits', 'Pixelify Sans', ui-monospace, monospace",
       // Kingdoms' and capitals' names, large enough to read the map by.
-      fontSize: 30,
+      fontSize,
       fontWeight: '600',
       fill,
       letterSpacing: 1,
@@ -487,6 +492,7 @@ export async function createWorld(
     }
     ambient.update(seconds, view, scale)
     armies.update(time, scale)
+    followArmies(performance.now())
     for (const text of [...floats.children] as Text[]) {
       const age = (performance.now() - (text as Text & { born: number }).born) / 1000
       if (age > FLOAT_SECONDS) {
@@ -500,7 +506,11 @@ export async function createWorld(
     // Zoomed far out, walkers, caravans and animals are left out but the buildings (which share their layer, to hide
     // whoever walks behind them) stay; zoomed back in, each walker's own update shows it again.
     if (scale < CARAVAN_MIN_ZOOM) {
-      for (const child of caravans.layer.children) child.visible = child.label === 'occluder' || child.label === 'inn' || child.label === 'shade' || child.label === 'ship' || child.label.startsWith('army')
+      // Trees lifted round the armies keep the visibility of their chunk.
+      for (const child of caravans.layer.children) {
+        if (child.label === 'tree') continue
+        child.visible = child.label === 'occluder' || child.label === 'inn' || child.label === 'shade' || child.label === 'ship' || child.label.startsWith('army')
+      }
       return
     }
     const margin = 40
@@ -543,6 +553,44 @@ export async function createWorld(
     chunks.delete(key)
   }
 
+  // The trees are lifted out of the ground painting close up with detail animations on, and at every zoom in the chunks
+  // where an army stands (and those round it), so an army in the woods walks behind the trees in front of it.
+  let armyChunks = new Set<number>()
+  const liftFor = (key: number, lod: number) => (detail && lod >= 1) || armyChunks.has(key)
+  // The chunks next to one whose trees are lifted (they paint the trees of theirs reaching into it, or leave them).
+  const nearOf = (key: number, lod: number): number[] | 'all' => {
+    if (detail && lod >= 1) return 'all'
+    const cx = key % chunkCount
+    const cy = Math.floor(key / chunkCount)
+    const out: number[] = []
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const n = (cy + dy) * chunkCount + cx + dx
+        if ((dx || dy) && cx + dx >= 0 && cy + dy >= 0 && cx + dx < chunkCount && cy + dy < chunkCount && armyChunks.has(n)) out.push(n)
+      }
+    }
+    return out
+  }
+  const nearFor = (key: number, lod: number) => String(nearOf(key, lod))
+  let armyChunksAt = 0
+  function followArmies(now: number) {
+    if (now - armyChunksAt < 500) return
+    armyChunksAt = now
+    const next = new Set<number>()
+    for (const p of armies.positions()) {
+      for (const dy of [-4, 0, 4]) {
+        for (const dx of [-4, 0, 4]) {
+          const cx = Math.floor((p.x + dx) / chunkSize)
+          const cy = Math.floor((p.y + dy) / chunkSize)
+          if (cx >= 0 && cy >= 0 && cx < chunkCount && cy < chunkCount) next.add(cy * chunkCount + cx)
+        }
+      }
+    }
+    if (next.size === armyChunks.size && [...next].every((k) => armyChunks.has(k))) return
+    armyChunks = next
+    refresh()
+  }
+
   // Each worker paints one chunk at a time, so the queue can follow the camera.
   const idle: Worker[] = []
   const jobs = new Map<number, Job>()
@@ -559,7 +607,8 @@ export async function createWorld(
         jobs.delete(e.data.id)
         idle.push(worker)
         const stale = job.version < (staleSince.get(job.key) ?? 0)
-        if (job.lod === lodFor(camera.scale.x) && visible.has(job.key) && !stale) show(job, e.data.bitmap, e.data.trees)
+        const current = job.lod === lodFor(camera.scale.x) && job.lift === liftFor(job.key, job.lod) && job.near === nearFor(job.key, job.lod)
+        if (current && visible.has(job.key) && !stale) show(job, e.data.bitmap, e.data.trees)
         else e.data.bitmap.close()
         // Painted before a building changed: paint it again.
         if (stale && visible.has(job.key)) wanted.unshift(job.key)
@@ -576,22 +625,23 @@ export async function createWorld(
     const lod = lodFor(camera.scale.x)
     const busy = new Set(
       [...jobs.values()]
-        .filter((job) => job.lod === lod && job.version >= (staleSince.get(job.key) ?? 0))
+        .filter((job) => job.lod === lod && job.lift === liftFor(job.key, lod) && job.near === nearFor(job.key, lod) && job.version >= (staleSince.get(job.key) ?? 0))
         .map((job) => job.key),
     )
     while (idle.length > 0 && wanted.length > 0) {
       const key = wanted.shift()!
       if (busy.has(key)) continue
       const id = nextJob++
-      const lift = detail && lod >= 1
-      jobs.set(id, { key, lod, version, lift })
+      const lift = liftFor(key, lod)
+      const liftedNear = nearOf(key, lod)
+      jobs.set(id, { key, lod, version, lift, near: String(liftedNear) })
       const sun = sunShadow(paintedSunHour + 0.5)
-      const request: PaintRequest = { id, cx: key % chunkCount, cy: Math.floor(key / chunkCount), lod, lift, sun }
+      const request: PaintRequest = { id, cx: key % chunkCount, cy: Math.floor(key / chunkCount), lod, lift, sun, liftedNear }
       idle.pop()!.postMessage(request)
     }
   }
 
-  function show({ key, lod, version }: Job, bitmap: ImageBitmap, lifted?: LiftedTree[]) {
+  function show({ key, lod, version, lift, near }: Job, bitmap: ImageBitmap, lifted?: LiftedTree[]) {
     const cx = key % chunkCount
     const cy = Math.floor(key / chunkCount)
     drop(key)
@@ -617,7 +667,7 @@ export async function createWorld(
       caravans.layer.addChild(tree)
       return tree
     })
-    chunks.set(key, { sprite, bitmap, lod, bytes, version, trees })
+    chunks.set(key, { sprite, bitmap, lod, bytes, version, trees, lift, near })
   }
 
   // The middle of the screen stays over the map (a little way into the mountains that ring it, no further), so the
@@ -672,7 +722,7 @@ export async function createWorld(
         (Math.floor(key / chunkCount) + 0.5) * chunkSize - middle.y,
       )
     wanted = [...visible]
-      .filter((key) => chunks.get(key)?.lod !== lod || (staleSince.get(key) ?? 0) > chunks.get(key)!.version)
+      .filter((key) => chunks.get(key)?.lod !== lod || chunks.get(key)!.lift !== liftFor(key, lod) || chunks.get(key)!.near !== nearFor(key, lod) || (staleSince.get(key) ?? 0) > chunks.get(key)!.version)
       .sort((a, b) => distance(a) - distance(b))
     for (const [key, chunk] of chunks) {
       chunk.sprite.visible = visible.has(key)
@@ -849,8 +899,12 @@ export async function createWorld(
     // The free cities' names stand over their walls when zoomed out.
     if (camera.scale.x > CITY_NAME_MAX_ZOOM) return
     world.cities.forEach((_, index) => {
-      const text = nameLabel(CITY_NAME)
-      text.text = cityInfo(world, index).name
+      const info = cityInfo(world, index)
+      // The crown's colour, lifted a little so it reads against the dark outline.
+      const c = parseInt(info.color.slice(1), 16)
+      const lift = (v: number) => Math.round(v + (255 - v) * 0.22)
+      const text = nameLabel((lift(c >> 16) << 16) | (lift((c >> 8) & 255) << 8) | lift(c & 255), 30)
+      text.text = info.name.toLocaleUpperCase('tr-TR')
       const middle = groundToScreen(world, cityHall(index))
       text.position.set(middle.x, middle.y - 110 - 14 / camera.scale.y)
       text.scale.set(1 / camera.scale.x)

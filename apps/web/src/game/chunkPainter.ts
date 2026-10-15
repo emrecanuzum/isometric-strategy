@@ -202,7 +202,7 @@ const PATH_NARROW = 0.3
 // Bridge shape: deck lift above the banks (pixels), half width (tiles), deck thickness and railing height (pixels),
 // length of the ramp onto each bank and the spacing of the piers (tiles).
 const BRIDGE_LIFT = 12
-const BRIDGE_HALF = 0.55
+const BRIDGE_HALF = 0.75
 const DECK_THICK = 3
 const RAIL_HEIGHT = 7
 const BRIDGE_RAMP = 1.2
@@ -210,7 +210,7 @@ const PIER_SPACING = 1.5
 // Stone bridges: hump height (pixels), half width (tiles), parapet height (pixels), abutment length on each bank and
 // the span of one arch (tiles).
 const STONE_LIFT = 14
-const STONE_HALF = 0.5
+const STONE_HALF = 0.68
 const PARAPET = 4
 const ABUTMENT = 0.9
 const ARCH_SPAN = 2.2
@@ -252,10 +252,9 @@ export function preparePaint(world: World): PaintContext {
 
   const road = new Float32Array(size * size).fill(Infinity)
   const reach = 2
-  const bridges: Bridge[] = []
-  for (const route of world.roads) {
+  const bridges = worldBridges(world)
+  for (const route of drawnRoads(world)) {
     const line = roundRoute(route.points)
-    bridges.push(...findBridges(world, resampleRoute(line)))
     for (let i = 1; i < line.length; i++) {
       const a = line[i - 1]
       const b = line[i]
@@ -274,9 +273,6 @@ export function preparePaint(world: World): PaintContext {
     }
   }
   for (const { a, b } of world.crossings) {
-    const ha = heightAt(world, a.x, a.y)
-    const hb = heightAt(world, b.x, b.y)
-    bridges.push({ from: 0, to: 0, ax: a.x, ay: a.y, bx: b.x, by: b.y, ha, hb, stone: true })
     // A short footpath leads off each end, narrower than a trade route and fading out at its tip.
     const length = Math.hypot(b.x - a.x, b.y - a.y) || 1
     for (const [end, sx, sy] of [[a, (a.x - b.x) / length, (a.y - b.y) / length], [b, (b.x - a.x) / length, (b.y - a.y) / length]] as const) {
@@ -376,12 +372,158 @@ export function deckHeight(bridge: Bridge, t: number) {
   return level + BRIDGE_LIFT * rise
 }
 
+// The trade routes as they are drawn and walked. World generation sometimes lays a route along a stream, in the water,
+// or forks it in the middle of a river; drawn as it is, that made long bridges running beside the stream and crooked
+// bridges piled on one another. So each stretch of a route through water is mended here (drawing only; the server's
+// tiles are left as they are): where it comes back out on the bank it went in by, it keeps to the land instead; where
+// it really crosses, it walks its own bank to the narrowest place nearby and crosses there, straight.
+const drawn = new WeakMap<World, World['roads']>()
+const MEND_BOX = 10
+export function drawnRoads(world: World): World['roads'] {
+  let roads = drawn.get(world)
+  if (roads) return roads
+  const { size, terrain } = world
+  const wet = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= size || y >= size) return true
+    const t = terrain[y * size + x]
+    return t === Terrain.Lake || t === Terrain.River
+  }
+  const dry = (x: number, y: number) => !wet(x, y) && terrain[y * size + x] !== Terrain.Mountain
+  const shore = (x: number, y: number) => dry(x, y) && (wet(x + 1, y) || wet(x - 1, y) || wet(x, y + 1) || wet(x, y - 1))
+  // Land reachable from a tile inside a box, with the way back to it (8 ways, no cutting a corner past water); tiles
+  // on the shore cost a little more, so a mended road keeps a tile off the water where it can.
+  const reach = (from: Point, x0: number, y0: number, x1: number, y1: number) => {
+    const w = x1 - x0 + 1
+    const cost = new Float64Array(w * (y1 - y0 + 1)).fill(Infinity)
+    const came = new Int32Array(cost.length).fill(-1)
+    const key = (x: number, y: number) => (y - y0) * w + (x - x0)
+    const start = key(from.x, from.y)
+    cost[start] = 0
+    const open = [start]
+    while (open.length > 0) {
+      let k = 0
+      for (let q = 1; q < open.length; q++) if (cost[open[q]] < cost[open[k]]) k = q
+      const i = open[k]
+      open[k] = open[open.length - 1]
+      open.pop()
+      const x = x0 + (i % w)
+      const y = y0 + Math.floor(i / w)
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < x0 || ny < y0 || nx > x1 || ny > y1 || !dry(nx, ny)) continue
+          if (dx && dy && (!dry(x + dx, y) || !dry(x, y + dy))) continue
+          const j = key(nx, ny)
+          const g = cost[i] + (dx && dy ? Math.SQRT2 : 1) + (shore(nx, ny) ? 0.6 : 0)
+          if (g >= cost[j]) continue
+          cost[j] = g
+          came[j] = i
+          open.push(j)
+        }
+      }
+    }
+    const pathTo = (to: Point) => {
+      const out: Point[] = []
+      for (let i = key(to.x, to.y); i >= 0; i = came[i]) out.push({ x: x0 + (i % w) + 0.5, y: y0 + Math.floor(i / w) + 0.5 })
+      return out.reverse()
+    }
+    return { cost, key, pathTo, has: (p: Point) => Number.isFinite(cost[key(p.x, p.y)]) }
+  }
+  // A path of tiles thinned to every other one (the corners are rounded later), its ends kept.
+  const thin = (path: Point[]) => path.filter((_, i) => i % 2 === 0 || i === path.length - 1)
+
+  roads = world.roads.map((road) => {
+    // The route tile by tile.
+    const tiles: Point[] = []
+    for (let i = 0; i < road.points.length; i++) {
+      const a = road.points[Math.max(0, i - 1)]
+      const b = road.points[i]
+      const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 2))
+      for (let k = i === 0 ? steps : 1; k <= steps; k++) {
+        const t = { x: Math.floor(a.x + ((b.x - a.x) * k) / steps), y: Math.floor(a.y + ((b.y - a.y) * k) / steps) }
+        const last = tiles[tiles.length - 1]
+        if (!last || last.x !== t.x || last.y !== t.y) tiles.push(t)
+      }
+    }
+    if (!tiles.some((t) => wet(t.x, t.y))) return road
+    // Walked tile by tile: dry tiles kept a few apart, each stretch in the water replaced by its mended way.
+    const points: Point[] = []
+    let since = 0
+    for (let i = 0; i < tiles.length; i++) {
+      const tile = tiles[i]
+      if (!wet(tile.x, tile.y) || i === 0) {
+        if (since++ % 3 === 0) points.push({ x: tile.x + 0.5, y: tile.y + 0.5 })
+        continue
+      }
+      let j = i
+      while (j + 1 < tiles.length && wet(tiles[j + 1].x, tiles[j + 1].y)) j++
+      if (j + 1 >= tiles.length) break
+      const P = tiles[i - 1]
+      const Q = tiles[j + 1]
+      const x0 = Math.max(0, Math.min(P.x, Q.x) - MEND_BOX)
+      const y0 = Math.max(0, Math.min(P.y, Q.y) - MEND_BOX)
+      const x1 = Math.min(size - 1, Math.max(P.x, Q.x) + MEND_BOX)
+      const y1 = Math.min(size - 1, Math.max(P.y, Q.y) + MEND_BOX)
+      const at = (p: Point) => ({ x: p.x + 0.5, y: p.y + 0.5 })
+      // The tile before the water is always kept, so the mended way starts from it.
+      const head = points[points.length - 1]
+      if (!head || head.x !== P.x + 0.5 || head.y !== P.y + 0.5) points.push(at(P))
+      const fromP = reach(P, x0, y0, x1, y1)
+      const run = Math.hypot(Q.x - P.x, Q.y - P.y)
+      if (fromP.has(Q) && fromP.cost[fromP.key(Q.x, Q.y)] <= run * 2.5 + 6) {
+        // Out on the bank it went in by, and not far round by land: keep to the land.
+        points.push(...thin(fromP.pathTo(Q)).slice(1))
+      } else {
+        // A crossing: from the shore of P's bank to the shore of Q's, the narrowest place, not far from where it was.
+        const fromQ = reach(Q, x0, y0, x1, y1)
+        const shores = (r: ReturnType<typeof reach>) => {
+          const list: Point[] = []
+          for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (shore(x, y) && r.has({ x, y })) list.push({ x, y })
+          return list
+        }
+        const near = shores(fromP)
+        const far = shores(fromQ)
+        let best: [Point, Point] | null = null
+        let bestCost = Infinity
+        for (const L of near) {
+          for (const M of far) {
+            const c = Math.hypot(M.x - L.x, M.y - L.y) * 3 + (fromP.cost[fromP.key(L.x, L.y)] + fromQ.cost[fromQ.key(M.x, M.y)]) * 0.25
+            if (c < bestCost) {
+              bestCost = c
+              best = [L, M]
+            }
+          }
+        }
+        if (best) {
+          const [L, M] = best
+          points.push(...thin(fromP.pathTo(L)).slice(1))
+          points.push(...thin(fromQ.pathTo(M)).reverse())
+        } else points.push(at(Q))
+      }
+      since = 1
+      i = j + 1
+    }
+    const last = road.points[road.points.length - 1]
+    return { ...road, points: [road.points[0], ...points.slice(1), last] }
+  })
+  drawn.set(world, roads)
+  return roads
+}
+
 // Every bridge of a world (on the trade routes and the stone crossings), worked out once.
 const bridgesOf = new WeakMap<World, Bridge[]>()
 export function worldBridges(world: World): Bridge[] {
   let list = bridgesOf.get(world)
   if (!list) {
-    list = world.roads.flatMap((route) => findBridges(world, resampleRoute(roundRoute(route.points))))
+    // Routes sharing a stretch (they often do) find the same bridge: it is built once.
+    const same = (p: Bridge, q: Bridge) =>
+      (Math.hypot(p.ax - q.ax, p.ay - q.ay) < 1.5 && Math.hypot(p.bx - q.bx, p.by - q.by) < 1.5) || (Math.hypot(p.ax - q.bx, p.ay - q.by) < 1.5 && Math.hypot(p.bx - q.ax, p.by - q.ay) < 1.5)
+    list = []
+    for (const bridge of drawnRoads(world).flatMap((route) => findBridges(world, resampleRoute(roundRoute(route.points))))) {
+      if (!list.some((b) => same(b, bridge))) list.push(bridge)
+    }
     for (const { a, b } of world.crossings) list.push({ from: 0, to: 0, ax: a.x, ay: a.y, bx: b.x, by: b.y, ha: heightAt(world, a.x, a.y), hb: heightAt(world, b.x, b.y), stone: true })
     bridgesOf.set(world, list)
   }
@@ -400,7 +542,7 @@ export function surfaceHeight(world: World, p: Point) {
     const t = ((p.x - bridge.ax) * dx + (p.y - bridge.ay) * dy) / lengthSq
     if (t < 0 || t > 1) continue
     const across = Math.abs((p.x - bridge.ax) * dy - (p.y - bridge.ay) * dx) / Math.sqrt(lengthSq)
-    if (across > 1) continue
+    if (across > 0.75) continue
     best = Math.max(best, deckHeight(bridge, t))
   }
   return best
@@ -464,8 +606,10 @@ function shadowOf(sprite: Sprite, foot: number, sun: SunShadow) {
 // Paints one chunk at `k` texture pixels per screen pixel. Each ground point is colored from the continuous
 // elevation and moisture fields and drawn lifted by its height, back to front, so nearer ground covers
 // farther ground. Sprites are then composited against the depth of the ground they stand behind.
-// `lift`: leave the trees out and hand back where they stand instead (see ChunkImage.trees).
-export function paintChunk(context: PaintContext, cx: number, cy: number, k: number, lift = false, sun: SunShadow = NOON): ChunkImage {
+// `lift`: leave the trees out and hand back where they stand instead (see ChunkImage.trees). `liftedNear`: the chunks
+// round it whose trees are lifted too ('all' when every chunk's are), so the trees of theirs reaching into this one are
+// left to them, and those of the others painted here.
+export function paintChunk(context: PaintContext, cx: number, cy: number, k: number, lift = false, sun: SunShadow = NOON, liftedNear: number[] | 'all' = 'all'): ChunkImage {
   const { world, lit, patch, road, bridges, structures, occupied, trail, trailNear } = context
   const { size, seed, elevation, moisture, height, levels } = world
   const S = balance.map.chunkSize
@@ -793,8 +937,8 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       const grow = (set: TreeSet, n: number, at: readonly [number, number]) => {
         const list = SPRITES[set]
         const index = Math.floor(hash(x, y, seed + 47 + n) * list.length)
-        if (lift) {
-          // Each tree once, by the chunk it stands in.
+        // Each lifted tree once, by the chunk it stands in.
+        if (own ? lift : liftedNear === 'all' ? lift : liftedNear.includes(Math.floor(y / S) * (size / S) + Math.floor(x / S))) {
           if (own) lifted.push({ set, index, tx: at[0], ty: at[1] })
           return
         }

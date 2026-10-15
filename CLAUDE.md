@@ -244,7 +244,16 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   **düz** bir ahşap güverte, iki yanda korkuluk ve dikmeler, suya inen
   **ayak çiftleri** (dibinde köpük halkası). Güverte kıyılardan rampayla
   yükselir; parçalar piksel bazında derinlik testiyle çizilir, öndeki kıyı
-  köprünün ucunu örter.
+  köprünün ucunu örter. Güverte yaklaşık 1,5 karo, taş köprü 1,35 karo
+  geniştir.
+- **Yol onarımı (yalnız çizim):** Dünya üretimi bazen yolu derenin içinden,
+  ona paralel geçirir ya da yolları nehrin ortasında çatallar; bu, dereye
+  paralel uzun köprüler ve iç içe çarpık köprüler doğuruyordu. Çizilen ve
+  yürünen yollar onarılır (`chunkPainter.ts` → `drawnRoads`): suya girip
+  aynı yakadan çıkan kesim karadan, kıyıyı izleyerek dolanır; gerçekten
+  karşıya geçen kesim kendi yakasında yürüyüp yakındaki en dar yerden düz
+  bir köprüyle geçer. Aynı kesimi paylaşan yollar aynı köprüyü bir kez
+  kurar. Sunucunun yol karoları değişmez.
 - **Taş köprüler:** Yol geçmeyen nehir kesimlerine de rastgele aralıklarla
   (tohumdan, `World.crossings`) kemerli **taş köprü** kurulur; iki yaka
   yürüyerek birbirine bağlanır. Kambur güverte, iki yanda korkuluk duvarı,
@@ -355,8 +364,9 @@ uzaklık olmalı; kimse tamamen dezavantajlı başlamamalı.
   **Kızıl ve lacivert** taç krallıklarınındır (başkentler, devriyeler); hiçbir
   lord bu renkleri seçemez. Sarayın
   çatıları bu renkte çizilir. Harita uzaklaştırıldığında (½× ve altı)
-  krallığın adı **sarayın üstünde**, haritayı okutacak kadar **büyük** (30
-  piksel) yazar (saray yoksa hududun ortasında); taç başkentlerinin adları da.
+  krallığın adı **sarayın üstünde**, haritayı okutacak kadar **büyük** (27
+  piksel) yazar (saray yoksa hududun ortasında). Taç krallıklarının adları
+  biraz daha büyük (30 piksel), **büyük harfle** ve tacın renginde yazar.
 - **1 parsel = 4×4 karo** (yani 32×32 karodan 64×64 karoya). Değerler
   `config/balance/territory.json` içindedir.
 - Karenin içinde **yerleşim tamamen oyuncuya aittir**: neyi nereye inşa
@@ -1501,6 +1511,11 @@ mertebesindedir.
   yakınlaştırmada ağaçlar zemine işlenmek yerine ayrı çizilir ve rüzgârda
   hafifçe sallanır; yürüyenler, hayvanlar ve binalarla aynı derinlik
   sırasındadır (ormandaki geyik önündeki ağacın arkasında kalır). Kapatılınca harita onlarsız yeniden çizilir.
+  Bir ordunun bulunduğu parçalarda (ve hemen çevresinde) ağaçlar **her
+  yakınlaştırmada** ve bu ayardan bağımsız olarak ayrı çizilir; ordu
+  ormanda önündeki ağaçların arkasında kalır. Komşu parçalar sınırdan taşan
+  ağaçları buna göre ya boyar ya da bırakır (`createWorld.ts` → `liftFor`,
+  `nearOf`).
 - Gece yanan pencerelerin çevresinde yumuşak bir **parıltı** vardır (aynı
   ışıklar bulanıklaştırılıp gecenin üstüne eklenir).
 - Ordular (ve devriyeler) köprüden geçerken güvertenin üstünde yürür,

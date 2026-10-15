@@ -1,6 +1,6 @@
 import { balance, findRoute, routeLength } from '@game/shared'
 import type { Blocked, Point, World } from '@game/shared'
-import { roundRoute } from './chunkPainter'
+import { ROUTE_STEP, drawnRoads, findBridges, resampleRoute, roundRoute } from './chunkPainter'
 import { cityStructures } from './cities'
 
 // The crowns' patrols ride the trade routes (CLAUDE.md §7.8): out of the capital by a road's gate (so through the
@@ -36,8 +36,20 @@ function graphOf(world: World): Graph {
   // Inside a capital's outer wall the roads run close by its towers and houses: patrols find their own way there.
   const S = balance.cities.size
   const walledIn = (p: Point) => world.cities.some((c) => p.x > c.x - OUTER - 1 && p.y > c.y - OUTER - 1 && p.x < c.x + S + OUTER + 1 && p.y < c.y + S + OUTER + 1)
-  for (const road of world.roads) {
-    const line = roundRoute(road.points)
+  for (const road of drawnRoads(world)) {
+    // Over water the road is a straight bridge deck (as the caravans walk it), not the road's curve beside it; a point
+    // every tile or so elsewhere.
+    const fine = resampleRoute(roundRoute(road.points))
+    const onDeck = new Uint8Array(fine.length)
+    for (const bridge of findBridges(world, fine)) {
+      for (let i = bridge.from; i <= bridge.to; i++) {
+        const t = (i - bridge.from) / Math.max(1, bridge.to - bridge.from)
+        fine[i] = { x: bridge.ax + (bridge.bx - bridge.ax) * t, y: bridge.ay + (bridge.by - bridge.ay) * t }
+        onDeck[i] = 1
+      }
+    }
+    const every = Math.round(1 / ROUTE_STEP)
+    const line = fine.filter((_, i) => i % every === 0 || i === fine.length - 1 || (onDeck[i] && (!onDeck[i - 1] || !onDeck[i + 1])))
     const first = points.length
     let last = -1
     for (const p of line) {

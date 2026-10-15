@@ -2,7 +2,7 @@ import { TILE_HEIGHT, TILE_WIDTH, hash, heightAt } from '@game/shared'
 import type { World } from '@game/shared'
 import { Container, Sprite as PixiSprite } from 'pixi.js'
 import type { Texture } from 'pixi.js'
-import { ROUTE_STEP, deckHeight, findBridges, resampleRoute, roundRoute } from './chunkPainter'
+import { ROUTE_STEP, deckHeight, drawnRoads, findBridges, resampleRoute, roundRoute } from './chunkPainter'
 import { innLook } from './innSprites'
 import { SPRITES } from './sprites'
 import type { Sprite } from './sprites'
@@ -93,7 +93,7 @@ export function createCaravans(world: World): Caravans {
     })
 
   const caravans: Caravan[] = []
-  world.roads.forEach((road, r) => {
+  drawnRoads(world).forEach((road, r) => {
     const track = buildTrack(world, road.points)
     const count = Math.max(1, Math.round(track.length / TILES_PER_CARAVAN))
     for (let c = 0; c < count; c++) {
