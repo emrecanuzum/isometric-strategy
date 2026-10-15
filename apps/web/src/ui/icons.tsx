@@ -64,6 +64,8 @@ const MAPS = {
   bell: ['...yy...', '..yyyy..', '.yyyyyy.', '.yyyyyy.', '.yyyyyy.', 'yyyyyyyy', '...kk...', '........'],
   menu: ['........', 'wwwwwwww', 'wwwwwwww', '........', 'wwwwwwww', 'wwwwwwww', '........', 'wwwwwwww'],
   gear: ['...ww...', '.w.ww.w.', '..wwww..', 'www..www', 'www..www', '..wwww..', '.w.ww.w.', '...ww...'],
+  ship: ['...k....', '...kw...', '..kkww..', '...kwww.', '...k....', 'kbbbbbbk', '.kbtttk.', 'CCcCCcCC'],
+  anchor: ['...kk...', '..k..k..', '...kk...', 'kkkkkkkk', '...kk...', 'k..kk..k', '.k.kk.k.', '..kkkk..'],
   star: ['...yy...', '...yy...', 'yyywwyyy', '.yywwyy.', '..yyyy..', '.yy..yy.', '.y....y.', '........'],
 } as const
 

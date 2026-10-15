@@ -7,7 +7,10 @@
   "innGap": 18,
   "kingdomGap": 24,
   "roadGap": 2,
-  "garrison": [6, 12],
+  "garrison": [
+    6,
+    12
+  ],
   "siegeSeconds": 900,
   "siegeRoundSeconds": 300,
   "lossPerDefender": 0.6,
@@ -17,16 +20,31 @@
     "siegeFactor": 1.3
   },
   "kinds": {
-    "gold": { "perRound": 1.5 },
-    "food": { "perRound": 5 },
-    "materials": { "perRound": 4 },
-    "arms": { "perRound": 3.5 },
-    "people": { "villagers": 14 }
+    "gold": {
+      "perRound": 1.5
+    },
+    "food": {
+      "perRound": 2.0
+    },
+    "materials": {
+      "perRound": 1.6
+    },
+    "arms": {
+      "perRound": 1.4
+    },
+    "people": {
+      "villagers": 14
+    }
   },
   "loyalty": {
     "start": 50,
     "tauSeconds": 1800,
-    "upkeepTargets": [15, 45, 65, 85],
+    "upkeepTargets": [
+      15,
+      45,
+      65,
+      85
+    ],
     "happinessWeight": 0.2,
     "rulerWeight": 1,
     "yieldMin": 0.5,
@@ -34,13 +52,21 @@
   },
   "upkeep": {
     "default": 1,
-    "goldPerRound": [0, 0.3, 0.7, 1.2]
+    "goldPerRound": [
+      0,
+      0.3,
+      0.7,
+      1.2
+    ]
   },
   "revolt": {
     "below": 25,
     "seconds": 600,
     "breakAwayBelow": 12,
-    "garrison": [3, 6]
+    "garrison": [
+      3,
+      6
+    ]
   },
   "score": {
     "perTown": 40

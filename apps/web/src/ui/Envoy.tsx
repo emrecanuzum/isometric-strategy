@@ -111,6 +111,57 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       }
     case 'raid_repelled':
       return { icon: 'shield', title: 'Yağmacılar püskürtüldü', text: `${p.by} askerleri ticaret yolunu basmaya çalıştı ama geri püskürtüldü. Savaş gerekçen var.` }
+    case 'naval_battle': {
+      const mine = p.attacker === me
+      const won = (p.winner === 'attackers') === mine
+      const lost = (x: unknown) => {
+        const n = Object.values((x ?? {}) as Record<string, number>).reduce((a, b) => a + b, 0)
+        return n ? `${n} gemi` : 'kayıpsız'
+      }
+      const what = p.kind === 'blockade' ? 'Abluka' : p.kind === 'raid' ? 'Kıyı akını' : 'Ablukayı yarma'
+      const loot = p.loot ? Object.entries(p.loot as Record<string, number>).map(([g, v]) => `${fmt(v)} ${RESOURCE_NAMES[g as keyof typeof RESOURCE_NAMES]?.toLowerCase()}`).join(', ') : ''
+      const outcome =
+        p.kind === 'blockade'
+          ? p.winner === 'attackers'
+            ? mine
+              ? `İskelesi artık abluka altında: balığı, deniz ticareti durdu.`
+              : `İskelen abluka altında: balık tutulamıyor, deniz ticareti durdu. Bir filoyla ablukayı yarabilirsin.`
+            : mine
+              ? 'Filon püskürtüldü ve eve dönüyor.'
+              : 'Saldıranlar geri püskürtüldü.'
+          : p.kind === 'raid'
+            ? p.winner === 'attackers'
+              ? mine
+                ? `Filon ${loot || 'ganimetle'} dönüyor.`
+                : `Akıncılar depolarından ${loot || 'mal'} götürdü.`
+              : mine
+                ? 'Akın püskürtüldü; filo eve dönüyor.'
+                : 'Akıncılar geri püskürtüldü.'
+            : p.winner === 'attackers'
+              ? mine
+                ? 'Abluka kırıldı!'
+                : 'Ablukacı filon yenildi ve eve dönüyor.'
+              : mine
+                ? 'Abluka sürüyor.'
+                : 'Ablukayı yarma girişimi püskürtüldü.'
+      return {
+        icon: 'ship',
+        title: `Deniz muharebesi: ${what} · ${won ? 'kazandın' : 'kaybettin'}`,
+        text: `${p.attacker} (${lost(p.attackerLoss)} kayıp) — ${p.defender} (${lost(p.defenderLoss)} kayıp). Zarlar ${(p.rolls as number[])?.join('–')}. ${outcome}`,
+      }
+    }
+    case 'blockade_lifted':
+      return {
+        icon: 'anchor',
+        title: 'Abluka kalktı',
+        text: p.why === 'peace' ? 'Savaş bitti; düşman filosu iskelenin önünden çekildi.' : p.why === 'sortie' ? 'Filon ablukayı yardı!' : `${p.by} filosu iskelenin önünden çekildi.`,
+      }
+    case 'fleet_turned':
+      return {
+        icon: 'ship',
+        title: 'Filo geri döndü',
+        text: `Filon ${p.target} iskelesine vardı ama ${p.why === 'dock' ? 'orada iskele yok' : p.why === 'taken' ? 'başka bir donanma zaten abluka ediyor' : 'artık savaşta değilsiniz'}; eve dönüyor.`,
+      }
     case 'battle_start':
       return {
         icon: 'swords',

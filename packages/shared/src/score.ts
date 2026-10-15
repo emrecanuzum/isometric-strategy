@@ -3,6 +3,7 @@ import { armoryOf, population, soldiersOf } from './economy'
 import type { Kingdom } from './economy'
 import { RESEARCH } from './institutions'
 import { townScore } from './towns'
+import { allShips, shipMight } from './navy'
 
 // The lobby's ranking (CLAUDE.md §10): a kingdom's score from its wealth, what it has built, its people, its army, the
 // battles it has won and what it has learnt. Worked out by the server whenever it writes a kingdom, so every member
@@ -37,7 +38,8 @@ export function scoreOf(k: Kingdom, at: number): Score {
   const { villagers } = population(k, at)
   const people = (villagers + soldiersOf(k)) * s.perPerson
   const armory = armoryOf(k)
-  const army = soldiersOf(k) * s.perSoldier + (armory.sword + armory.shield + armory.bow) / s.weaponsPer
+  // Ships count by their might, as soldiers do by their heads (CLAUDE.md §8.5).
+  const army = soldiersOf(k) * s.perSoldier + (armory.sword + armory.shield + armory.bow) / s.weaponsPer + shipMight(allShips(k)) * s.perSoldier
   const glory =
     (k.record?.battlesWon ?? 0) * s.battleWon + (k.record?.siegesWon ?? 0) * s.siegeWon + (k.queen ? s.queen : 0) + (k.hostages?.length ?? 0) * s.hostage +
     // Towns held: known to all, more for the loyal ones (CLAUDE.md §8.4).

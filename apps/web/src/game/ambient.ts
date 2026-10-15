@@ -1,11 +1,11 @@
 import { Feature, MAX_HEIGHT, TILE_HEIGHT, TILE_WIDTH, Terrain, balance, hash, heightAt } from '@game/shared'
-import type { World } from '@game/shared'
+import type { Point, World } from '@game/shared'
 import { Container, Sprite as PixiSprite } from 'pixi.js'
 import type { Texture } from 'pixi.js'
 import { ROUTE_STEP, resampleRoute } from './chunkPainter'
 import { SMOKE_PUFFS, innLook } from './innSprites'
 import { harbourOf } from './cities'
-import { ship } from './shipSprites'
+import { SHIP_LENGTH, ship } from './shipSprites'
 import { SPRITES, cloudShapes } from './sprites'
 import type { Sprite } from './sprites'
 import { textureOf } from './textures'
@@ -265,6 +265,23 @@ export interface Ambient {
   setBlocked(blocked: (x: number, y: number) => boolean): void
   // Chimney tops of the player's buildings (screen points, and the depth to sort the smoke at).
   setChimneys(points: { x: number; y: number; depth: number }[]): void
+  // The lords' ships (CLAUDE.md §8.5; see fleetShips.ts).
+  setFleets(ships: FleetShip[]): void
+}
+
+// A lord's ship on the map: moored at `at`, or under way from `at` to `to` and back once every `period` ms from
+// `start` (server time), out of sight at sea for the `away` share of it.
+export interface FleetShip {
+  key: string
+  at: Point
+  to?: Point
+  start?: number
+  period?: number
+  away?: number
+  along: 'x' | 'y'
+  reverse: boolean
+  seed: number
+  length: number
 }
 
 export function createAmbient(world: World, actors: Container): Ambient {
@@ -615,11 +632,12 @@ export function createAmbient(world: World, actors: Container): Ambient {
     return harbour ? harbour.ships.map((s) => ({ ...s, reverse: harbour.reverse })) : []
   })
   const shipLooks = new Map<string, { sprite: Sprite; texture: Texture }>()
-  const shipLook = (along: 'x' | 'y', sailing: boolean, seed: number, reverse: boolean) => {
-    const key = `${along}:${sailing}:${seed % 3}:${reverse}`
+  let fleets: FleetShip[] = []
+  const shipLook = (along: 'x' | 'y', sailing: boolean, seed: number, reverse: boolean, length = SHIP_LENGTH) => {
+    const key = `${along}:${sailing}:${seed % 3}:${reverse}:${length}`
     let look = shipLooks.get(key)
     if (!look) {
-      const sprite = ship(along, sailing, seed % 3, reverse)
+      const sprite = ship(along, sailing, seed % 3, reverse, length)
       look = { sprite, texture: textureOf(sprite) }
       shipLooks.set(key, look)
     }
@@ -648,6 +666,36 @@ export function createAmbient(world: World, actors: Container): Ambient {
       sprite.label = 'ship'
       anchored(sprite, look.sprite)
       const bob = Math.round(Math.sin(seconds * 1.1 + s.seed) * 1)
+      sprite.position.set(Math.round(screen.x), Math.round(screen.y) + bob)
+      sprite.zIndex = screen.y
+    }
+    // The lords' ships: moored ones rock at their docks, ships under way sail out of sight and come back.
+    const ms = seconds * 1000
+    for (const s of fleets) {
+      let { x, y } = s.at
+      let reverse = s.reverse
+      let sailing = false
+      if (s.to && s.period) {
+        const u = ((((ms - (s.start ?? 0)) % s.period) + s.period) % s.period) / s.period
+        const away = s.away ?? 0
+        const leg = (1 - away) / 2
+        // Out of sight at sea in the middle of the voyage.
+        if (u > leg && u < 1 - leg) continue
+        const outward = u <= leg
+        const f = outward ? u / leg : (1 - u) / leg
+        const e = f * f * (3 - 2 * f)
+        x += (s.to.x - x) * e
+        y += (s.to.y - y) * e
+        if (!outward) reverse = !reverse
+        sailing = true
+      }
+      const screen = toScreen(x, y, 0)
+      if (!inView(view, screen.x, screen.y, 160)) continue
+      const look = shipLook(s.along, sailing, s.seed, reverse, s.length)
+      const sprite = shipPool.take(look.texture)
+      sprite.label = 'ship'
+      anchored(sprite, look.sprite)
+      const bob = Math.round(Math.sin(seconds * 1.3 + s.seed) * 1)
       sprite.position.set(Math.round(screen.x), Math.round(screen.y) + bob)
       sprite.zIndex = screen.y
     }
@@ -712,6 +760,9 @@ export function createAmbient(world: World, actors: Container): Ambient {
       // New buildings change which walks are clear.
       waypoints.clear()
       detours.clear()
+    },
+    setFleets(list) {
+      fleets = list
     },
     setChimneys(points) {
       chimneys = [...innChimneys, ...points.map((c, i) => ({ ...c, phase: hash(i, Math.round(c.x), seed + 953) }))]

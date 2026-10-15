@@ -42,8 +42,9 @@ diğer krallıklarla diplomasi, entrika veya savaş.
   olaylar, rapor özetleri ve bazı kontrat süreleri için.
 - **Saat ve gece-gündüz:** Oyun saati duvar saatinden hesaplanır (gerçek
   saatin başı = gece yarısı), yani herkes aynı anda aynı saati görür.
-  Saatler aynı hızda akmaz: **gece hızlı geçer** (22:00–04:00 gerçekte ~10
-  dk), kazanılan süre **şafağa ve gün batımına** eklenir (her biri ~12 dk);
+  Saatler aynı hızda akmaz: **gece hızlı geçer** (23:00–03:00 gerçekte ~6,5
+  dk), kazanılan süre **şafağa ve gün batımına** eklenir (şafak 03:00–07:00
+  ~12,5 dk, akşam 18:30–23:00 ~14 dk; `society.json` → `night`);
   gün yine tam 1 gerçek saattir (`config/balance/time.json` → `pace`). Arayüzde saat, gün (sezon başından),
   ay ve sezon ilerlemesi gösterilir. Harita saate göre renklenir: şafak,
   gündüz, gün batımı ve gece (loş mavi, harita okunur kalır). Akşamdan itibaren binaların
@@ -576,9 +577,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   nehir/göl (balık) ve çayır (tarım) → yemek; orman → yapı malzemesi;
   dağ → savaş malzemesi; bataklık hepsini biraz düşürür, kurak yemeği
   düşürür. Çarpanlar kuruluşta sabitlenir.
-- **Yemek üretimi** (tur başına, arazi çarpanından önce): tarla 1,5 / 2,25 /
-  3,5, iskele 1,5 / 3 / 4,5 (seviye 1/2/3). Su payının yemek çarpanına
-  katkısı 3,5'tir (`economy.json` → `yield.foodPerWater`; yalnızca yeni
+- **Yemek üretimi** (tur başına, arazi çarpanından önce): tarla 0,6 / 0,9 /
+  1,4, iskele 0,6 / 1,2 / 1,8 (seviye 1/2/3); oduncu kampı 1,2 / 2 / 3, silah
+  atölyesi (demir) 0,8 / 1,2 / 2. Köylü tur başına 0,1, asker 0,1 yemek
+  yer. Su payının yemek çarpanına katkısı 3,5'tir (`economy.json` → `yield.foodPerWater`; yalnızca yeni
   kurulan krallıkları etkiler).
 - **İskele:** Krallığın önceden belirli iskele arsasına kurulur (yer
   seçilmez, tek tane). Balık tutar (yemek). İskelenin ahşap kısmı arsanın
@@ -727,8 +729,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   - **Yapı sınırları** saray seviyesiyle artar (saray 1→5): tarla 3 / 4 /
     6 / 8 / 10, oduncu kampı 2 / 3 / 4 / 5 / 6, silah atölyesi 1 / 2 / 3 /
     3 / 4, gözcü kulesi 2 / 2 / 3 / 4 / 6, sur kapısı 2 / 2 / 3 / 4 / 5;
-    pazar, kışla, casus evi, hapishane, üniversite, hastane, tapınak ve iskele birer
-    tane. Sınır İnşa sekmesinde ve Saray sekmesindeki yapılar listesinde
+    pazar, kışla, casus evi, hapishane, üniversite, hastane, tapınak, tersane ve
+    iskele birer tane. Sınır İnşa sekmesinde ve Saray sekmesindeki yapılar listesinde
     "kurulu / sınır" olarak yazar; sınırı aşan eski yapılar yerinde kalır.
   - **Saray 4. ve 5. seviye** çok pahalı ve uzundur (savaş malzemesi de
     ister; `economy.json`).
@@ -738,7 +740,7 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 - **Ticaret noktası:** satılacak mal yerine **hiçbir şey satma** da
   seçilebilir (tüccar evde bekler). **Sefer başına satış** miktarı
   ayarlanabilir: 5'er birimlik adımlarla, en fazla seviyenin sınırı kadar
-  (10 / 20 / 35); değiştirildikten sonra 2 dakika yeniden değiştirilemez
+  (40 / 80 / 140); değiştirildikten sonra 2 dakika yeniden değiştirilemez
   (`economy.json` → `trade.amountStep`, `amountCooldownSeconds`). Tam yük
   seçiliyse ticaret noktası yükselince yük de büyür. Sefer başına kazanç lobinin anlık
   fiyatından gösterilir. Ticaret menüsünde satış seçimi en üsttedir;
@@ -1007,10 +1009,13 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   çarpışmaz. Ordular şehrin `restTiles` karo yakınında handaki gibi moral
   toplar.
 - **Ticaret:** Ticaret sekmesinde "Tüccar nereye gitsin": lobi pazarı ya
-  da bir serbest şehir. Şehre giden tüccar sefer başına **3 kat yük**
-  (`loadFactor`) götürür ve **lobinin o anki fiyatının %10 fazlasından**
-  (`priceFactor` 1,1) satar; sabit fiyat yoktur, lobi fiyatı düşünce
-  şehrin ödediği de düşer. Bu satış **lobi fiyatlarını düşürmez**. Ama
+  da bir serbest şehir. Şehre giden tüccar sefer başına **2 kat yük**
+  (`loadFactor`) götürür ve **lobinin o anki fiyatının %5 fazlasından**
+  (`priceFactor` 1,05) satar; sabit fiyat yoktur, lobi fiyatı düşünce
+  şehrin ödediği de düşer. Bu satış lobi fiyatlarını lobi pazarınınkinin
+  **yarısı** kadar düşürür (`marketImpact` 0,5). (Deniz ticareti gelince
+  hafifletildi: önce 3 kat yük ve %10 fazla fiyattı, fiyata dokunmuyordu ve
+  lobi pazarından 3–4 kat kârlıydı.) Ama
   sefer her zaman lobi pazarınınkinden (30 sn) uzundur: 30 sn + ticaret
   noktası ile şehir arasındaki her karo için 0,36 sn (ör. 200 karo ≈ 102
   sn; hudutlar şehre 40 karodan yaklaşmadığı için en az ~45 sn). Şehir
@@ -1140,6 +1145,15 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   taçla ilişkisine göre değişir: +100'de %25 fazla, −100'e doğru %35'e
   kadar az; −50'nin altında o tacın tüccarları onunla alışveriş etmez ve
   fiyat yarıya iner (`stewardFactor`, `tradePrice`).
+- **Taç siparişleri** (`crown.orders`; `crowns.ts` → `crownOrder`,
+  `fulfilOrder`; sunucuda `order` komutu; Ticaret sekmesi): her taç her
+  saat bir mal siparişi verir (lobi tohumundan: bir mal, 240–960 birim).
+  Lord siparişi deposundan hemen teslim eder; taç malı **olağan fiyatının
+  %25 fazlasına** alır (biat edilen taç %20 daha fazla öder; hazine sınırı
+  aşılmaz) ve ilişki artar (kendi tacı +3, öbürü +1,5). Her lord her tacın
+  siparişini saatte bir kez teslim edebilir; 2. seviye saray ister, ilişki
+  −50'nin altındaysa taç almaz. Satış lobi fiyatlarına dokunmaz. Böylece
+  ambarı taşan lord fazlasını değerlendirebilir.
 - **Taçların gücü** (`crown.power`): Bir tacın gücü 400 + ona bağlı
   lordların puanlarının toplamıdır; lordları geliştikçe güçlenir. Güç payı
   kendi lordlarına bahşiş ve armağanları ×0,7–1,3 etkiler (eşit güçte ×1).
@@ -1263,7 +1277,7 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
   oduncu, demirhane, tapınak), çevresinde evler, köşede gözcü kulesi, önünde
   bir patika. Adı üstünde yazar; sahibi varsa sahibinin renginde ve adıyla.
 - **Türler ve katkı** (tur başına, yokluk cezasına tabi): vergi kasabası
-  +1,5 altın, tarım +5 yemek, kereste +4 yapı malzemesi, demirci +3,5 savaş
+  +1,5 altın, tarım +2 yemek, kereste +1,6 yapı malzemesi, demirci +1,4 savaş
   malzemesi; kalabalık kasaba **+14 köylü** (nüfus sınırı ve barınak birlikte
   artar). Türler kasabalar arasında dağıtılır; her tür en az bir kez vardır.
 - **Kuşatma:** Kasabaya tıklayınca panel açılır; "Gönder" ile bir ordu
@@ -1324,6 +1338,87 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
     sadakat çarpanı (ayaklanmada yarısı); bu puan bağlı olunan taç krallığının
     gücüne de eklenir (§7.8).
 - **İleride:** kasabaya asker yerleştirme, kasaba yükseltme.
+
+### 8.5 Donanma (şu an uygulanan)
+
+Değerler `config/balance/navy.json` (tersane `economy.json` → `buildings.shipyard`);
+mantık `packages/shared/src/navy.ts` (komutlar `realm.ts` → `shipsError`,
+`orderShips`); sunucuda gemi buluşmaları `supabase/functions/_shared/navy.ts`
+(`settleNavy`, tick'te); arayüz `apps/web/src/ui/hud/navy.tsx` (Ordu sekmesi →
+**Donanma**; tersaneye tıklamak da açar), haritada `apps/web/src/game/fleetShips.ts`.
+
+- **Tersane** (3. seviye saray, bir tane, 3 seviye): 2×2, **suyun kıyısına**
+  kurulur: karolarından en az biri kıyı, gerisi serbest kara olmalıdır (iskele
+  eki de sayılır). Taşınamaz. Görseli: tahta avlu, alet ve zift sundurması,
+  suya inen kızakta kaburgalı tekne iskeleti, vinç ve kereste yığını; 2.
+  seviyede ikinci kızak, 3. seviyede kaplanmış, direkli ve flamalı bir gövde.
+  Kızak sayısı (aynı anda yapılan parti) 1 / 2 / 3, limanın gemi sınırı
+  6 / 10 / 16.
+- **Gemiler:**
+  - **Kadırga** (savaş): güç 3, eskort 2, yük 24, 4 denizci; çektirileri yener.
+  - **Koka** (yük): güç 0,6, yük 80, balıkta iyi, 2 denizci.
+  - **Çektiri** (hızlı akıncı, 2. seviye tersane): güç 1,8, eskort 1,5, yük
+    40, 3 denizci; kokaları yener.
+  Gemi altınla, malzemeyle ve süreyle yapılır; **tayfa asker havuzundan**
+  gelir. Denizciler köylü sayılmaz (nüfustan düşer). Her gemi tur başına
+  altın bakım, her denizci yemek ister.
+- **Liman ve filolar:** Yapılan gemiler limana bağlanır. Limandaki
+  gemilerden **en çok 2 filo** çıkarılır (ordular gibi). Evdeki bir filo
+  ikiye **bölünebilir**, iki filo **birleşebilir**, filo limana geri
+  bağlanabilir. Limandaki gemiler ve limanda bekleyen filolar iskeleyi savunur.
+- **Görevler** (evdeyken anında değişir):
+  - **Limanda bekle:** iskeleyi savunur.
+  - **Deniz ticareti:** filo seçilen malı bir taç başkentinin limanına
+    taşır, satar, döner ve yeniden çıkar. Sefer 90 sn + iskele ile başkent
+    arasındaki her karo için 0,18 sn. Yük filonun yük kapasitesi kadardır
+    (lord yokken yarısı). Fiyat **lobi fiyatının %85'i** (limandaki aracılar)
+    × tacın pazar etkisi (§7.8); satış lobi fiyatını tüccarınkinin **yarısı**
+    kadar düşürür. Satış yapılan taçla ilişki her seferde +0,6. Hazine doluysa
+    yalnızca dolduracak kadar satar.
+  - **Balık avı:** gemiler iskele önünde balık tutar (tur başına koka 0,36,
+    çektiri 0,2, kadırga 0,12 yemek × arazinin yemek çarpanı).
+  - **Korsan avı:** savaş gemileri korsan arar; arada bir bir tayfa
+    yakalanır (30 altın ödül), arada bir bir gemi batar. Yakalama sıklığı
+    filonun gücüyle artar ama bir tavanı vardır (tur başına en çok %3);
+    büyük filo daha az gemi kaybeder. Bir filo korsan avındayken ticaret
+    seferlerine korsan saldırısı olasılığı yarıya iner.
+  - **Abluka** (savaşta, hedefin iskelesi olmalı): filo hedefin iskelesine
+    yol alır (iki iskele arası uzaklık × 0,15 sn, en az 45 sn). Varınca oradaki
+    gemilerle **deniz muharebesi** olur. Kazanırsa iskele **abluka** altına
+    girer: hedefin iskelesi balık tutmaz, balıkçı kulübesi altın bulmaz, deniz
+    ticareti ve balık avı durur, gemileri yalnızca ablukayı yarmak için
+    çıkabilir, halkın mutluluğu −6. Abluka filo geri çağrılınca, ablukayı yarma
+    başarılı olunca ya da savaş bitince kalkar. Bir iskeleyi aynı anda tek
+    donanma abluka edebilir.
+  - **Kıyı akını** (savaşta, 10 dk'da bir): varınca oradaki gemilerle
+    çarpışır; kazanırsa hedefin depolarından her malın %12'sini gemilerin
+    taşıyabildiği kadar alıp döner (ganimet dönüşte depoya girer).
+  - **Ablukayı yar** (yalnızca abluka altındayken, savaş gemisi gerekir):
+    30 sn sonra ablukacı filoyla çarpışır; kazanırsa abluka kalkar ve
+    ablukacı filonun kalanı eve döner.
+  Uzaktaki (abluka, akın, yarma) filo **geri çağrılabilir**: yol aldığı kadar
+  geri döner.
+- **Deniz muharebesi** (`navalBattle`): iki taraf gücünün üstüne zar atar
+  (kadırga çektiriyi, çektiri kokayı yener: +%25); kendi iskelesindeki
+  savunan +%15 güçlüdür. Kaybeden gemilerinin %15–40'ını, kazanan %5–20'sini
+  (çarpışma ne kadar çetinse o kadar) kaybeder; en hafif gemiler önce gider.
+  Sonuç tohumdan belirlenir; iki taraf da elçiden haber alır (günlükte
+  Önemli sayılır).
+- **Korsanlar:** Her ticaret seferinde korsan saldırısı olasılığı %16 ×
+  (1 − 0,13 × eskort gücü, en az %15'i); fırtınada ×1,8, siste ×0,7.
+  **Korsan mevsimi** (lobi tohumundan; iki saatlik pencerelerin dörtte
+  birinde 30–50 dk) olasılığı ×2,5 yapar ve Donanma bölümünde yazar. Eskort
+  korsanları yenerse yük güvende ve 35 altın ödül; yenemezse yük gider ve
+  bir gemi batabilir (eskortsuz %25, eskortlu %35 — eskort çatışmaya girer).
+  Seferler, saldırılar, av ve dönüşler günlükte yazar.
+- **Herkes görür:** lobi her lordun filolarını haritada görür: limanda bekleyen
+  gemiler iskelenin yanında demirli (en çok 4), ticaretteki filonun gemisi
+  iskeleden açığa çıkıp gözden kaybolur ve sefer sonunda döner, korsan avı ve
+  balık filoları açıkta gezinir, abluka eden filonun kadırgaları hedefin
+  iskelesinin önünde demirler. Başkalarının gemi sayısı çifte yuvarlanır
+  (`lobby_kingdoms` → `navy`, `blockade`). Abluka ve yoldaki filolar harita
+  uyarılarında ve sayaçlarda görünür.
+- **Puan:** gemilerin gücü ordu puanına asker gibi sayılır.
 
 ## 9. Krallıklar Arası İlişkiler (Crusader Kings tarzı)
 
@@ -1484,6 +1579,13 @@ mertebesindedir.
   ~4–5 saatte dolar; dolunca tüccar bekler, haraççılar 30 dakikada bir %5
   alır. Asker maaşı tur başına 0,04 altın, lordlar arası haraç tur başına
   en fazla 4 altındır.
+- **Mal dengesi:** Tüccar bir malı tam yükle satıyorsa, o malın en yüksek
+  üretimi (en çok yapı, 3. seviye, en iyi arazi) bile satışa yetmez; stok
+  azalır. 3. seviye ticaret noktası seferde 140 birim, tur başına ~47
+  birim satar; en iyi arazide en çok oduncu kampı tur başına ~44 yapı
+  malzemesi, silah atölyeleri ~19 savaş malzemesi, tarlalar halkı
+  doyurduktan sonra ~27 yemek üretir. Bu yüzden mal fiyatları düşüktür
+  (yemek 0,13, yapı 0,2, savaş 0,27) ve tüccarın geliri ürettiğin kadardır.
 - **Mutluluk** (0–100) her tur bir hedefe doğru yavaşça kayar. Hedef:
   taban + vergi etkisi (düşük +, ağır −−) + kraliçe + gıda (açlık −).
 - Mutluluk **asker olmaya gönüllü** halkı ve asker maliyetini belirler:
@@ -1499,7 +1601,7 @@ mertebesindedir.
 
 **Gece ve gece mesaisi**
 
-- Oyun saatinde **gece** (22:00–04:00, haritanın karardığı saatler) halk
+- Oyun saatinde **gece** (23:00–03:00, haritanın karardığı saatler) halk
   dinlenir: binalar **%50** hızla üretir.
 - Halk sekmesinden **gece mesaisi** açılabilir: gece de tam çalışılır ama
   mutluluk hedefi düşer ve her gece turunda **yorgunluk** birikir;
@@ -1511,11 +1613,11 @@ mertebesindedir.
 - Her lobinin **ortak bir fiyat tablosu** vardır. Ticaret noktası mal
   sattıkça o malın fiyatı lobi genelinde düşer; pazardan alındıkça artar.
   Fiyatlar zamanla taban değerlerine geri döner. **Fiyat yükselmesi
-  düşmesinden zordur:** satılan her birim fiyatı %0,15 düşürür, alınan her
-  birim yalnızca %0,08 yükseltir; tabanın altına düşmüş fiyat yarı yolunu
+  düşmesinden zordur:** satılan her birim fiyatı %0,0375 düşürür, alınan her
+  birim yalnızca %0,02 yükseltir; tabanın altına düşmüş fiyat yarı yolunu
   40 dakikada toplar, tabanın üstüne çıkmış fiyat yarı yolunu 15 dakikada
-  iner (`market.json`). Taban fiyatlar: yemek 0,4, yapı malzemesi 0,6,
-  savaş malzemesi 0,8 (`economy.json` → `trade.price`); pazarın alış
+  iner (`market.json`). Taban fiyatlar: yemek 0,13, yapı malzemesi 0,2,
+  savaş malzemesi 0,27 (`economy.json` → `trade.price`); pazarın alış
   fiyatı lobi fiyatının 1,4 katıdır.
 - Fiyat **olağan fiyatının %30'unun** altına inmez (`minFactor`); oraya inen
   malın kutusunda "en dipte" yazar ve satış onu daha fazla düşürmez.
@@ -1523,7 +1625,7 @@ mertebesindedir.
   inebildiği için "taban" yanıltıcıdır).
 - **Taç krallıkları alır:** İki taç krallığı her 20 dakikalık pencerede
   saatten belirlenen birer malı lobi piyasasından alır (iki taç aynı malı da
-  isteyebilir). Tam talep dakikada 120 birimdir; mal ucuzken tamamını, olağan
+  isteyebilir). Tam talep dakikada 480 birimdir; mal ucuzken tamamını, olağan
   fiyatına yaklaştıkça daha azını alırlar, olağan fiyatın %20 üstünde hiç
   almazlar (`market.json` → `crowns`). Böylece kimse satmazsa fiyat yaklaşık
   bir saatte olağan fiyatına toparlanır, dibe kilitlenmez; çok satılan mal
@@ -1536,7 +1638,7 @@ mertebesindedir.
   alış fiyatı lobi fiyatının biraz üstündedir. Her alınan birim bir
   sonrakinin fiyatını yükseltir; büyük bir alım, aynı malı parça parça almakla
   aynı tutar. "Al" tıklamaları bir **sepette** toplanır (tık başına en fazla
-  100, sepette en fazla 400 birim); tıklama durunca ya da sepet dolunca tek
+  400, sepette en fazla 1.600 birim); tıklama durunca ya da sepet dolunca tek
   komut olarak gider, bu sırada "Fiyat güncelleniyor, lütfen bekle" yazar.
 
 **İlişkiler ve diplomasi**
@@ -1847,12 +1949,14 @@ krallıkta birer tane olur ve 3 seviyelidir.
   olumsuz olaylar toplanır: kötü olaylar, yağma ve yağma girişimi, savaş
   ilanı, dayatılan barış, hakaret, sabotaj ve kaçırma, yakalanan casuslar,
   kule kayıpları, asker kaybedilen muharebeler, reddedilen teklifler, haraç
-  isteği, yerine getirilemeyen emirler, ambar boşalıyor uyarıları. Önemli
+  isteği, yerine getirilemeyen emirler, ambar boşalıyor uyarıları (en çok 10
+  dakikada bir), korsan baskınları, deniz muharebeleri. Önemli
   kayıtlar diğerlerinden daha uzun saklanır ve kırmızı kenarlıdır. Sekmedeki
   rozet okunmamış önemli kayıt sayısıdır; sekme açılınca sıfırlanır.
 - **Hesap defteri:** Krallık sezon boyunca bir defter tutar (`books`,
   `economy.ts`): vergi, asker maaşı, tüccar geliri, hazine dolu diye
-  bekleyen tüccar seferleri, lordlar arası haraç, taç haraççılarına ödenen
+  bekleyen tüccar seferleri, deniz ticareti, korsan ödülleri ve gemi bakımı,
+  lordlar arası haraç, taç haraççılarına ödenen
   ve devriyenin bıraktığı, kasaba/olay/balıkçı geliri, dolu hazinede ve
   ambarda boşa giden, ve **kaybedilen askerler nedeniyle** (meydan
   muharebesi, saray kuşatması, kasaba kuşatması, gözcü kuleleri, yağma,
@@ -1903,7 +2007,8 @@ krallıkta birer tane olur ve 3 seviyelidir.
 - **Gelişim:** saray seviyesi × 120, kurum binaları (üniversite, hastane,
   tapınak, kışla, casus evi, pazar, ambar) seviye × 30, diğer binalar
   seviye × 10, sur ve kapı 1.
-- **Nüfus:** köylü + asker × 3. **Ordu:** asker × 2 + cephanelik / 10.
+- **Nüfus:** köylü + asker × 3. **Ordu:** asker × 2 + cephanelik / 10 +
+  gemi gücü × 2.
 - **Zafer:** kazanılan muharebe × 40, alınan saray (kuşatma) × 120,
   kraliçe 40, rehine × 60, elde tutulan kasaba × 40 × sadakat çarpanı (§8.4).
 - **Bilgi:** öğrenilen araştırma × kademe × 50.

@@ -3,6 +3,7 @@ import type { BuildingKind, KingdomColorId, Point, World } from '@game/shared'
 import { BARK, Canvas, CLOTH, GLASS, ROOF, SACK, STONE, TIMBER, WALL, diamondAt, ellipseAt, pick, ramp, rgb, shadeBlobs, shadow } from './sprites'
 import type { Sprite } from './sprites'
 import { WALL_KINDS, wallLinks, wallLook } from './wallSprites'
+import { ship } from './shipSprites'
 import type { WallKind } from './wallSprites'
 
 // Buildings of the player's town, made the same way as the inn: every sprite stands on the front corner of its
@@ -2446,47 +2447,53 @@ function shipyard(variant = 0, level = 1): Sprite {
     }
   }
   // The shed at the back, its doors open on the tools and the pitch kettle.
-  const top = hall(canvas, cx - 22, base - h - 2, { w: 24, wall: 22, roof: 15, walls: WALL, roofs: v ? SLATE : ROOF, door: true, chimney: 0.5 })
-  // A slipway: two rails running from the back right down toward the front, the hull on them.
+  const top = hall(canvas, cx - 34, base - h - 4, { w: 20, wall: 20, roof: 13, walls: WALL, roofs: v ? SLATE : ROOF, door: true, chimney: 0.5 })
+  // A slipway: rails and cradle props running down toward the water, a hull on them — the galley model itself, cut to
+  // its keel and ribs while it is being built, whole (mast stepped) once planked.
   const slip = (sx: number, sy: number, length: number, planked: boolean, seed: number) => {
-    for (let t = 0; t < length; t++) {
+    for (let t = -4; t < length * 22; t++) {
       const x = sx + t
       const y = sy + t / 2
-      for (const off of [-3, 3]) canvas.set(x, y + off, TIMBER[t % 6 === 0 ? 0 : 2])
-      if (t % 6 === 0) for (let d = -4; d <= 4; d++) canvas.set(x, y + d, TIMBER[1])
+      for (const off of [-5, 5]) canvas.set(x, y + off, TIMBER[t % 7 === 0 ? 0 : 2])
+      if (t % 7 === 0) for (let d = -6; d <= 6; d++) canvas.set(x, y + d, TIMBER[1])
     }
-    // The keel, raised on blocks.
-    for (let t = 4; t < length - 2; t++) canvas.set(sx + t, sy + t / 2 - 3, PITCH[1])
-    // Ribs: arcs across the keel, tallest amidships.
-    for (let i = 0; i < Math.floor((length - 8) / 4); i++) {
-      const t = 6 + i * 4
-      const mid = 1 - Math.abs(t / length - 0.5) * 1.6
-      const tall = 7 + Math.round(9 * mid)
-      for (let z = 0; z < tall; z++) {
-        const spread = Math.round(Math.sqrt(z / tall) * (4 + 3 * mid))
-        for (const side of [-1, 1]) canvas.set(sx + t + side * spread * 0.5, sy + t / 2 - 3 - z + side * spread * 0.25, TIMBER[side < 0 ? 3 : 1])
-      }
-      if (!planked) continue
-      // Planking over the ribs: a dark hull with a painted strake.
-      for (let z = 0; z < tall; z++) {
-        for (let d = 0; d < 4; d++) {
-          const spread = Math.round(Math.sqrt(z / tall) * (4 + 3 * mid))
-          const color = z === tall - 3 ? (seed ? CRIMSON[2] : CANOPY_BLUE[1]) : pick(PITCH, z < tall / 3 ? 0.5 : 1.6)
-          canvas.set(sx + t + d - spread * 0.5, sy + t / 2 - 3 - z + d / 2 - spread * 0.25, color)
-        }
+    const hull = ship('x', false, seed, false, length)
+    const ox = Math.round(sx + length * 11 - hull.anchorX)
+    const oy = Math.round(sy + length * 5.5 - hull.anchorY - 6)
+    // The lowest and highest hull pixel of each column (below the sheer): the keel and the gunwale, kept whole.
+    const bottom = new Int32Array(hull.width).fill(-1)
+    const rail = new Int32Array(hull.width).fill(1 << 30)
+    for (let y = 0; y < hull.height; y++) {
+      for (let x = 0; x < hull.width; x++) {
+        if (!(hull.pixels[y * hull.width + x] >>> 24)) continue
+        bottom[x] = y
+        if (y >= hull.anchorY - 20) rail[x] = Math.min(rail[x], y)
       }
     }
+    for (let y = 0; y < hull.height; y++) {
+      for (let x = 0; x < hull.width; x++) {
+        const c = hull.pixels[y * hull.width + x]
+        if (!(c >>> 24)) continue
+        if (!planked) {
+          // Bare timbers: the keel and every fourth frame, nothing above the sheer (no mast, no sail).
+          if (y < hull.anchorY - 20) continue
+          const keel = bottom[x] - y <= 2
+          const gunwale = y - rail[x] <= 1
+          if (!keel && !gunwale && x % 3 !== 0) continue
+          canvas.set(ox + x, oy + y, keel ? PITCH[1] : gunwale ? TIMBER[3] : CUT[x % 6 === 0 ? 2 : 1])
+        } else canvas.set(ox + x, oy + y, c)
+      }
+    }
+    // Props under the hull.
+    for (let t = 6; t < length * 22 - 6; t += 9) for (let z = 0; z < 7; z++) canvas.set(sx + t, sy + t / 2 - z, TIMBER[1])
     if (planked) {
-      // The mast, its yard and a pennant.
-      const mx = sx + length / 2
-      const my = sy + length / 4 - 18
-      for (let z = 0; z < 34; z++) canvas.set(mx, my - z, TIMBER[z % 9 === 0 ? 3 : 1])
-      for (let d = -7; d <= 7; d++) canvas.set(mx + d, my - 26 + d / 4, TIMBER[2])
-      for (let d = 0; d < 7; d++) for (let e = 0; e <= (7 - d) / 3; e++) canvas.set(mx + 1 + d, my - 33 + e, CRIMSON[2])
+      const mx = ox + hull.anchorX
+      const my = oy + hull.anchorY - 70
+      for (let d = 0; d < 9; d++) for (let e = 0; e <= (9 - d) / 3; e++) canvas.set(mx + 1 + d, my + e, CRIMSON[2])
     }
   }
-  slip(cx - 6, base - h - 4, 40, level >= 3, v)
-  if (level >= 2) slip(cx - 34, base - h + 8, 30, false, 1 - v)
+  if (level >= 2) slip(cx - 40, base - h + 4, 1.4, false, 2 - v)
+  slip(cx - 14, base - h - 6, level >= 3 ? 2 : 1.8, level >= 3, v + 1)
   // The derrick: two raking poles, a boom and a beam hanging from its rope.
   const dx = cx + 34
   const dy = base - h + 4

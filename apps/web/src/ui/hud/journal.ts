@@ -9,6 +9,8 @@ import { BUILDING_NAMES, FORTUNE_TEXTS, RESEARCH_NAMES, RESOURCE_NAMES, SCOPE_NA
 // A prototype "day" is REPORT_ROUNDS production rounds, so reports come at a readable pace.
 
 export const REPORT_ROUNDS = 6
+const HUNGER_EVERY_MS = 10 * 60_000
+const SHIP_WORDS = { galley: 'kadırga', cog: 'koka', corsair: 'çektiri' } as const
 const KEEP_ENTRIES = 60
 const KEEP_HISTORY = 24
 
@@ -40,7 +42,7 @@ export interface Journal {
   unread: number
   nextId: number
   // What has come in during the current day.
-  tally: { rounds: number; produced: Partial<Stock>; tradeGold: number; trips: number; emptyTrip: boolean; wasted?: Partial<Stock> }
+  tally: { rounds: number; produced: Partial<Stock>; tradeGold: number; trips: number; emptyTrip: boolean; wasted?: Partial<Stock>; seaGold?: number; voyages?: number }
   // Stores after each production round, oldest first, for the storehouse charts.
   history: Stock[]
   // The envoy's notices already written down.
@@ -49,6 +51,8 @@ export interface Journal {
   importantSeen?: number
   // The stores that have been overflowing since it was last reported: told once, again only after they have had room.
   overflowing?: string[]
+  // When the granary was last said to be running low (said again only after a while).
+  hungerToldAt?: number
 }
 
 export const unreadImportant = (j: Journal) => j.entries.filter((e) => isImportant(e) && e.id > (j.importantSeen ?? 0)).length
@@ -140,6 +144,35 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
         title: `${f?.title ?? 'Olay'}: kimse bir şey yapmadı`,
         text: extra.length > 0 ? `${extra.join(', ')}.` : 'Olay etkisini tam olarak gösterdi.',
       })
+    } else if (event.kind === 'launched') {
+      j = write(j, seasonStart, at, { tone: 'good', icon: 'ship', title: `Tersane ${event.count} ${SHIP_WORDS[event.ship]} denize indirdi`, text: 'Gemiler limanda; Ordu sekmesinin Donanma bölümünden filo çıkarabilirsin.' })
+    } else if (event.kind === 'voyage') {
+      const tally = { ...j.tally, seaGold: (j.tally.seaGold ?? 0) + event.gold, voyages: (j.tally.voyages ?? 0) + 1 }
+      j = { ...j, tally }
+      const p = event.pirates
+      if (p && !p.won) {
+        j = write(j, seasonStart, at, {
+          tone: 'bad',
+          icon: 'warn',
+          title: 'Korsanlar ticaret gemilerine saldırdı!',
+          text: `Korsanlar ${p.lost ? `${fmt(p.lost)} ${RESOURCE_NAMES[event.good].toLowerCase()} yükünü` : 'yükü'} ele geçirdi${p.sunk ? ` ve bir ${SHIP_WORDS[p.sunk]} batırdı` : ''}. Filoya kadırga ya da çektiri kat, ya da başka bir filoyu korsan avına gönder.`,
+        })
+      } else if (p?.won) {
+        j = write(j, seasonStart, at, { tone: 'good', icon: 'shield', title: 'Eskort korsanları püskürttü', text: `Savaş gemilerin korsanları geri püskürttü; yük güvende.${p.bounty ? ` Ödül: +${fmt(p.bounty)} altın.` : ''}` })
+      } else if (event.blocked && !j.tally.emptyTrip) {
+        j = write({ ...j, tally: { ...j.tally, emptyTrip: true } }, seasonStart, at, { tone: 'bad', icon: 'lock', title: 'Gemiler limandan çıkamıyor', text: 'İskelen abluka altında; deniz ticareti durdu.' })
+      }
+    } else if (event.kind === 'hunt') {
+      j = write(j, seasonStart, at, {
+        tone: event.sunk ? 'bad' : 'good',
+        icon: event.sunk ? 'warn' : 'eye',
+        important: false,
+        title: event.sunk ? `Korsan avında bir ${SHIP_WORDS[event.sunk]} battı` : 'Korsan tayfası yakalandı',
+        text: `Ödül: +${fmt(event.bounty)} altın.${event.sunk ? ' Çarpışmada bir gemi kaybedildi.' : ''}`,
+      })
+    } else if (event.kind === 'fleetHome') {
+      const cargo = Object.entries(event.cargo ?? {}).filter(([, v]) => (v ?? 0) > 0)
+      j = write(j, seasonStart, at, { tone: 'info', icon: 'anchor', title: 'Filo limana döndü', text: cargo.length ? `Getirdiği ganimet depolara kondu: ${cargo.map(([g, v]) => `${fmt(v ?? 0)} ${RESOURCE_NAMES[g as Good].toLowerCase()}`).join(', ')}.` : 'Gemiler limanda bekliyor.' })
     } else if (event.kind === 'spy') {
       j = write(j, seasonStart, at, { tone: 'info', icon: 'lock', title: 'Casus evi yeni bir casus yetiştirdi' })
     } else {
@@ -161,6 +194,7 @@ function closeDay(j: Journal, kingdom: Kingdom, at: number, seasonStart: number)
     .filter((g) => Math.abs(produced[g] ?? 0) >= 0.5)
     .map((g) => `${RESOURCE_NAMES[g]} ${signed(produced[g] ?? 0)}`)
   if (trips > 0) lines.push(`Tüccar ${trips} sefer, ${signed(tradeGold)} altın`)
+  if (j.tally.voyages) lines.push(`Gemiler ${j.tally.voyages} sefer, ${signed(j.tally.seaGold ?? 0)} altın`)
   const hungry = (produced.food ?? 0) < 0
   j = write(j, seasonStart, at, {
     tone: hungry ? 'bad' : 'info',
@@ -168,7 +202,9 @@ function closeDay(j: Journal, kingdom: Kingdom, at: number, seasonStart: number)
     title: 'Elçi raporu',
     text: lines.length > 0 ? lines.join(' · ') : 'Sakin bir gün; ne üretim ne ticaret.',
   })
-  if (hungry) {
+  // Running low is said once in a while, not every report (CLAUDE.md §9.8).
+  if (hungry && at - (j.hungerToldAt ?? -Infinity) >= HUNGER_EVERY_MS) {
+    j = { ...j, hungerToldAt: at }
     const rounds = Math.floor(kingdom.stock.food / Math.max(0.01, -(produced.food ?? 0) / REPORT_ROUNDS))
     j = write(j, seasonStart, at, {
       tone: 'bad',

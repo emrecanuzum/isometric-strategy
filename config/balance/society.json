@@ -44,8 +44,10 @@
     }
   },
   "night": {
-    "startHour": 22,
-    "endHour": 4,
+    "startHour": 23,
+    "endHour": 3,
+    "dawnEndHour": 7,
+    "duskStartHour": 18.5,
     "workRate": 0.5,
     "shiftHappiness": -15,
     "fatiguePerNightRound": 0.004,

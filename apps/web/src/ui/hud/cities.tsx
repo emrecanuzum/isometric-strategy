@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { GOODS, balance, byPower, cityCenter, cityPrice, cityTripMs, crownGoods, crownPower, crownRelation, crownRest, doneBuildings, fealtyOpen, giftAt, lobbyTripMs, priceAt, stewardFactor, tradeCityReadyAt, tradeUnits } from '@game/shared'
+import { GOODS, balance, crownOrder, crownOrderError, orderPay, palaceLevel, byPower, cityCenter, cityPrice, cityTripMs, crownGoods, crownPower, crownRelation, crownRest, doneBuildings, fealtyOpen, giftAt, lobbyTripMs, priceAt, stewardFactor, tradeCityReadyAt, tradeUnits } from '@game/shared'
 import type { Kingdom, Market, Point, World } from '@game/shared'
 import { cityInfo } from '../../game/cities'
 import { Icon } from '../icons'
@@ -51,7 +51,7 @@ export function TradeDestination({ world, kingdom, market, now, onCity }: {
         })}
       </div>
       <p className="hint">
-        Serbest şehir {loadFactor} kat yük alır ve lobinin o anki fiyatının %{premium} fazlasını öder; lobinin fiyatlarını düşürmez. Ama yol uzundur: sefer şehrin uzaklığıyla uzar.
+        Serbest şehir {loadFactor} kat yük alır ve lobinin o anki fiyatının %{premium} fazlasını öder; lobinin fiyatlarını lobi pazarının yarısı kadar düşürür. Ama yol uzundur: sefer şehrin uzaklığıyla uzar.
         Değiştirince tüccar yeni sefere başlar; {Math.round(changeCooldownSeconds / 60)} dakika yeniden değiştiremezsin.
       </p>
     </Section>
@@ -404,6 +404,41 @@ function Stewardship({ world, kingdom, now }: { world: World; kingdom: Kingdom; 
         Her taç dönem dönem bir malın ticaretini yönetir. O malı sattığında (lobi pazarında da, şehirde de) fiyatın taçla ilişkine göre değişir: en çok %
         {Math.round(s.bonus * 100)} fazla ya da %{Math.round(s.penalty * 100)} az; ilişkin {s.refuseBelow}'nin altındaysa o tacın tüccarları seninle alışveriş etmez ve
         fiyatın yarıya düşer.
+      </p>
+    </Section>
+  )
+}
+
+// The crowns' commissions (CLAUDE.md §7.8): each crown orders a lot of one good every hour; delivering it from the
+// stores pays over the usual price (more from one's own crown) and warms the crown.
+export function CrownOrders({ world, kingdom, now, online }: { world: World; kingdom: Kingdom; now: number; online?: Online }) {
+  if (world.cities.length === 0) return null
+  const palace = palaceLevel(kingdom, now)
+  return (
+    <Section title="Taç siparişleri" icon="scroll" aside="saatte bir yenilenir">
+      <ul className="queue-list">
+        {world.cities.map((_, crown) => {
+          const info = cityInfo(world, crown)
+          const order = crownOrder(kingdom.lobbyKey, crown, now)
+          const why = crownOrderError(kingdom, crown, now, world.cities.length, palace)
+          const pay = orderPay(kingdom, order)
+          const text = why === 'done' ? 'Teslim edildi' : why === 'have' ? `Depoda ${fmt(kingdom.stock[order.good])} var` : why === 'relation' ? 'Taç seninle alışveriş etmiyor' : why === 'locked' ? `${balance.cities.crown.orders.minPalace}. seviye saray gerekir` : 'Teslim et'
+          return (
+            <li key={crown} className="queue-item">
+              <Icon name={RESOURCE_ICONS[order.good]} size={16} />
+              <span>
+                <b style={{ color: info.color }}>{info.capital}</b> {fmt(order.units)} {RESOURCE_NAMES[order.good].toLowerCase()} istiyor · <b>{fmt(pay)} altın</b>
+                <small> · {Math.ceil((order.endsAt - now) / 60_000)} dk kaldı</small>
+              </span>
+              <button className="btn small" disabled={!!why || !online} onClick={() => online?.act({ type: 'order', crown })}>
+                {text}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      <p className="hint">
+        Siparişi depondan hemen teslim edersin; taç malı olağan fiyatının %{Math.round((balance.cities.crown.orders.payFactor - 1) * 100)} fazlasına alır (biat ettiğin taç %{Math.round(balance.cities.crown.orders.swornBonus * 100)} daha fazla öder) ve ilişkiniz iyileşir. Satış lobi fiyatlarına dokunmaz.
       </p>
     </Section>
   )

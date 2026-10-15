@@ -19,7 +19,7 @@
     "swampPenalty": -1.5
   },
   "productionSeconds": 10,
-  "foodPerVillager": 0.25,
+  "foodPerVillager": 0.1,
   "maxConstructions": 2,
   "trade": {
     "tripSeconds": 30,
@@ -29,24 +29,24 @@
     "amountCooldownSeconds": 120,
     "foodReserveRounds": 30,
     "price": {
-      "food": 0.4,
-      "materials": 0.6,
-      "arms": 0.8
+      "food": 0.13,
+      "materials": 0.2,
+      "arms": 0.27
     },
     "levels": [
       {
-        "units": 10,
+        "units": 40,
         "cost": {}
       },
       {
-        "units": 20,
+        "units": 80,
         "cost": {
           "gold": 150,
           "materials": 60
         }
       },
       {
-        "units": 35,
+        "units": 140,
         "cost": {
           "gold": 400,
           "materials": 150
@@ -139,7 +139,7 @@
       "buildSeconds": 6,
       "workers": 2,
       "produces": "food",
-      "amount": 1.5,
+      "amount": 0.6,
       "products": {
         "wheat": {
           "makes": "food",
@@ -159,7 +159,7 @@
           },
           "buildSeconds": 8,
           "workers": 3,
-          "amount": 2.25
+          "amount": 0.9
         },
         {
           "cost": {
@@ -168,7 +168,7 @@
           },
           "buildSeconds": 12,
           "workers": 4,
-          "amount": 3.5
+          "amount": 1.4
         }
       ],
       "maxByPalaceLevel": [
@@ -188,7 +188,7 @@
       "buildSeconds": 10,
       "workers": 3,
       "produces": "materials",
-      "amount": 3,
+      "amount": 1.2,
       "levels": [
         {
           "cost": {
@@ -197,7 +197,7 @@
           },
           "buildSeconds": 12,
           "workers": 4,
-          "amount": 5
+          "amount": 2
         },
         {
           "cost": {
@@ -206,7 +206,7 @@
           },
           "buildSeconds": 16,
           "workers": 5,
-          "amount": 8
+          "amount": 3
         }
       ],
       "maxByPalaceLevel": [
@@ -226,7 +226,7 @@
       "buildSeconds": 12,
       "workers": 2,
       "produces": "food",
-      "amount": 1.5,
+      "amount": 0.6,
       "levels": [
         {
           "cost": {
@@ -235,7 +235,7 @@
           },
           "buildSeconds": 14,
           "workers": 3,
-          "amount": 3
+          "amount": 1.2
         },
         {
           "cost": {
@@ -244,7 +244,7 @@
           },
           "buildSeconds": 18,
           "workers": 4,
-          "amount": 4.5
+          "amount": 1.8
         }
       ]
     },
@@ -257,7 +257,7 @@
       "buildSeconds": 14,
       "workers": 3,
       "produces": "arms",
-      "amount": 2,
+      "amount": 0.8,
       "products": {
         "iron": {
           "makes": "arms",
@@ -294,7 +294,7 @@
           },
           "buildSeconds": 16,
           "workers": 4,
-          "amount": 3
+          "amount": 1.2
         },
         {
           "cost": {
@@ -303,7 +303,7 @@
           },
           "buildSeconds": 20,
           "workers": 5,
-          "amount": 5
+          "amount": 2.0
         }
       ],
       "maxByPalaceLevel": [
@@ -601,7 +601,7 @@
       "buildSeconds": 40,
       "workers": 1,
       "produces": "food",
-      "amount": 1,
+      "amount": 0.4,
       "goldPerRound": 0.1
     },
     "shipyard": {

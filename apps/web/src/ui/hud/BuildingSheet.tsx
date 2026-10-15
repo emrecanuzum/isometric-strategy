@@ -1,3 +1,4 @@
+import { NavyTab } from './navy'
 import { BUILDINGS, balance, movable, moveCost, moveSeconds, buildingOutput, cutOff, goldCap, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
 import type { Building, BuildingKind, Good, Product, Resource } from '@game/shared'
 import { looksOf } from '../../game/buildingSprites'
@@ -93,6 +94,7 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
             {!building && b.kind === 'fisherHut' && <FisherPanel data={data} />}
             {!building && b.kind === 'barracks' && <GamePanel game="archery" data={data} />}
             {!building && b.kind === 'forge' && <GamePanel game="anvil" data={data} />}
+            {!building && b.kind === 'shipyard' && <NavyTab {...data} />}
             {BUILDINGS[b.kind].products && <Products building={b} data={data} onProduct={commands.onProduct} />}
             {workerSlots(b) > 0 && <Workers building={b} data={data} onWorkers={commands.onWorkers} />}
             {top > 1 && <Levels building={b} data={data} onUpgrade={commands.onUpgrade} />}

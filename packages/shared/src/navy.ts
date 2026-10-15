@@ -445,8 +445,10 @@ export function huntRound(k: Kingdom, fleet: Fleet, round: number): { bounty: nu
   const h = N.hunt
   const seed = [k.lobbyKey ?? 0, k.site.x, k.site.y, fleet.id, round]
   const might = shipMight({ galley: fleet.ships.galley, corsair: fleet.ships.corsair })
-  if (might <= 0 || mix(...seed, 21) >= h.catchPerRoundPerMight * might) return null
-  const sunk = mix(...seed, 22) < h.lossChance ? (fleet.ships.corsair ? 'corsair' : 'galley') : undefined
+  // There are only so many pirates about: more ships find them more often, up to a ceiling; a bigger fleet loses
+  // fewer ships doing it.
+  if (might <= 0 || mix(...seed, 21) >= h.maxPerRound * (1 - Math.exp(-might / h.mightScale))) return null
+  const sunk = mix(...seed, 22) < Math.min(h.maxLoss, h.lossPerMight / might) ? (fleet.ships.corsair ? 'corsair' : 'galley') : undefined
   return { bounty: h.bounty, ...(sunk && { sunk }) }
 }
 
@@ -511,9 +513,11 @@ export function navalBattle(attackers: Ships, defenders: Ships, seed: number, de
   return { winner, attackerLoss, defenderLoss, rolls: [ra, rd] }
 }
 
-// The ships at home that meet an enemy at the dock: the harbour and the fleets near it.
+// The ships at home that meet an enemy at the dock: the harbour and the fleets near it (not a trade fleet, which is
+// out at sea most of the time).
+const DEFENDING: MissionKind[] = ['port', 'fish', 'hunt', 'sortie']
 export const defendersOf = (k: Pick<Kingdom, 'navy'>): Ships =>
-  navyOf(k).fleets.filter((f) => atHome(f) || f.mission.kind === 'sortie').reduce((s, f) => addShips(s, f.ships), navyOf(k).harbour)
+  navyOf(k).fleets.filter((f) => DEFENDING.includes(f.mission.kind)).reduce((s, f) => addShips(s, f.ships), navyOf(k).harbour)
 
 // Losses at home: from the harbour first, then from the fleets near home; empty fleets are gone.
 export function takeHomeLosses<K extends Pick<Kingdom, 'navy'>>(k: K, loss: Ships): K {
@@ -527,7 +531,7 @@ export function takeHomeLosses<K extends Pick<Kingdom, 'navy'>>(k: K, loss: Ship
   }
   const fleets = n.fleets
     .map((f) => {
-      if (!(atHome(f) || f.mission.kind === 'sortie')) return f
+      if (!DEFENDING.includes(f.mission.kind)) return f
       const t: Ships = {}
       for (const x of SHIPS) {
         const take = Math.min(f.ships[x] ?? 0, left[x] ?? 0)

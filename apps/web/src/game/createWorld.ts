@@ -18,6 +18,7 @@ import type { Point, Rect, World } from '@game/shared'
 import { Application, BlurFilter, Container, Graphics, ImageSource, Sprite, Text, Texture } from 'pixi.js'
 import { createAmbient } from './ambient'
 import { createArmies } from './armies'
+import type { FleetShip } from './ambient'
 import { dashes } from './dashes'
 import type { MapArmy, MapBattle } from './armies'
 import { createCaravans } from './caravans'
@@ -183,6 +184,8 @@ export interface WorldView {
   setRivals(rivals: RivalTerritory[]): void
   // Every army in the lobby and the battles being fought (see armies.ts).
   setArmies(armies: MapArmy[], battles: MapBattle[]): void
+  // The lords' ships at their docks and at sea (CLAUDE.md §8.5).
+  setFleets(ships: FleetShip[]): void
   // The player's buildings, painted into the ground like the inns.
   setStructures(structures: Structure[], trails: Point[][]): void
   // While set, the pointer shows the footprint of the building being placed, green where it fits.
@@ -1490,6 +1493,7 @@ export async function createWorld(
     setTerritory,
     setRivals,
     setArmies: (list, fights) => armies.set(list, fights),
+    setFleets: (list) => ambient.setFleets(list),
     setStructures,
     setPlacement(next) {
       placement = next

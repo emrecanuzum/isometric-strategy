@@ -4,15 +4,16 @@ import { balance } from '@game/shared'
 // dim blue at night (never so dark that the map cannot be read), and the name of that part of the day.
 
 // [hour, colour] keyframes around the clock; colours are blended between them. Full night runs from the night's start
-// to its end on the game clock (balance.society.night), with dusk and dawn either side.
-const { startHour, endHour } = balance.society.night
+// to its end on the game clock (balance.society.night), with dawn running on to dawnEndHour and dusk setting in from
+// duskStartHour.
+const { startHour, endHour, dawnEndHour, duskStartHour } = balance.society.night
 const KEYS: [number, number][] = [
   [0, 0x6a78b8],
   [endHour - 0.5, 0x6a78b8],
   [endHour + 0.5, 0xb898b8],
   [endHour + 1.5, 0xffc8a0],
-  [endHour + 3, 0xffffff],
-  [startHour - 3.5, 0xffffff],
+  [dawnEndHour, 0xffffff],
+  [duskStartHour, 0xffffff],
   [startHour - 2, 0xffb488],
   [startHour - 1, 0xa890c0],
   [startHour, 0x6a78b8],

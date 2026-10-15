@@ -1,5 +1,5 @@
 import { relationTerms } from '@game/shared'
-import type { Good, Point, Score, TradeLedger } from '@game/shared'
+import type { Blockade, Good, NavyLook, Point, Score, TradeLedger } from '@game/shared'
 import type { Layer } from '../../net/layer'
 import type { Command, IntelReport, Lobby } from '../../net/online'
 
@@ -32,6 +32,9 @@ export interface KingdomInfo {
   tradeDamaged?: boolean
   // The crown kingdom its lord is sworn to (CLAUDE.md §7.8; null when not yet).
   liege?: number | null
+  // Its fleets as the map shows them, and who blockades its dock (CLAUDE.md §8.5).
+  navy?: NavyLook | null
+  blockade?: Blockade | null
   // Its buildings as seen on the map.
   buildings?: { kind: string; x: number; y: number; size: number; doneAt: number; broken?: boolean }[]
 }

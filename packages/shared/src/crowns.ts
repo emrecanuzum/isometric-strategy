@@ -1,4 +1,5 @@
 import { balance } from './balance'
+import { book } from './economy'
 import type { Good, Kingdom } from './economy'
 
 // The politics of the two crown kingdoms (CLAUDE.md §7.8): every lord stands somewhere with each crown (a relation from
@@ -110,3 +111,61 @@ export const byPower = (share: number, range: readonly number[]) => range[0] + (
 // Fealty is offered once the lord has a few buildings standing (the crowns are introduced then).
 export const doneBuildings = (kingdom: Pick<Kingdom, 'buildings'>, at: number) => kingdom.buildings.filter((b) => b.doneAt <= at && b.kind !== 'wall' && b.kind !== 'gate').length
 export const fealtyOpen = (kingdom: Pick<Kingdom, 'buildings'>, at: number) => doneBuildings(kingdom, at) >= spec().intro.buildings
+
+// ---- Commissions: each crown orders goods every hour (CLAUDE.md §7.8) -----------------------------------------------
+
+export interface CrownOrder {
+  crown: number
+  // The window the order belongs to (its number), when it ends.
+  window: number
+  endsAt: number
+  good: Good
+  units: number
+  // What the crown pays for the lot (before the bonus to its own lords), and the standing it brings.
+  gold: number
+}
+
+const orders = () => spec().orders
+
+// The order of crown `crown` in the window around `at`: a lot of one good, paid over its usual price. Seeded by the
+// lobby, so every lord sees the same order and the server can check it.
+export function crownOrder(lobbyKey: number | undefined, crown: number, at: number): CrownOrder {
+  const o = orders()
+  const ms = o.windowSeconds * 1000
+  const window = Math.floor(at / ms)
+  const h = mix(lobbyKey ?? 0, window, crown, 4421)
+  const good = GOODS_ORDER[h % 3]
+  const steps = Math.floor((o.units[1] - o.units[0]) / o.step)
+  const units = o.units[0] + ((h >>> 4) % (steps + 1)) * o.step
+  const base = (balance.economy.trade.price as Record<Good, number>)[good]
+  return { crown, window, endsAt: (window + 1) * ms, good, units, gold: Math.round(units * base * o.payFactor) }
+}
+
+// What the lord is paid for it: more by its own crown.
+export const orderPay = (kingdom: Pick<Kingdom, 'liege'>, order: CrownOrder) => Math.round(order.gold * (kingdom.liege === order.crown ? 1 + orders().swornBonus : 1))
+
+export type OrderError = 'done' | 'have' | 'relation' | 'locked' | 'crown'
+
+export function crownOrderError(kingdom: Kingdom, crown: number, at: number, crowns: number, palace: number): OrderError | null {
+  if (!Number.isInteger(crown) || crown < 0 || crown >= crowns) return 'crown'
+  if (palace < orders().minPalace) return 'locked'
+  const order = crownOrder(kingdom.lobbyKey, crown, at)
+  if ((kingdom.ordersDone ?? [])[crown] === order.window) return 'done'
+  if (crownRelation(kingdom, crown) < orders().minRelation) return 'relation'
+  if (kingdom.stock[order.good] < order.units) return 'have'
+  return null
+}
+
+// Delivers the order: the goods go, the crown's gold comes in (as much as the treasury holds) and the crown warms to
+// the lord (its own crown more).
+export function fulfilOrder(kingdom: Kingdom, crown: number, at: number, crowns: number, palace: number, goldRoom: number): Kingdom {
+  if (crownOrderError(kingdom, crown, at, crowns, palace)) return kingdom
+  const order = crownOrder(kingdom.lobbyKey, crown, at)
+  const pay = Math.min(orderPay(kingdom, order), Math.max(0, Math.floor(goldRoom)))
+  const done = [...(kingdom.ordersDone ?? [])]
+  done[crown] = order.window
+  const stock = { ...kingdom.stock, [order.good]: kingdom.stock[order.good] - order.units, gold: kingdom.stock.gold + pay }
+  const r = orders().relation
+  const warmed = changeCrownRelation({ ...kingdom, stock, ordersDone: done }, crown, kingdom.liege === crown ? r.own : r.other)
+  return book(warmed, { other: pay })
+}

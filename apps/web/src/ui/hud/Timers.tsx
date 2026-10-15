@@ -1,4 +1,4 @@
-import { BUILDINGS, RESEARCH, balance, unitSpec } from '@game/shared'
+import { BUILDINGS, RESEARCH, balance, shipSpec, unitSpec, voyageMs } from '@game/shared'
 import type { Kingdom } from '@game/shared'
 import { useRef, useState } from 'react'
 import { Icon } from '../icons'
@@ -42,6 +42,17 @@ function timersOf(kingdom: Kingdom, online: Online | undefined, now: number): Ti
   for (const t of kingdom.training ?? []) {
     const unit = t.unit ?? 'spear'
     out.push({ key: `t:${t.doneAt}`, icon: 'people', label: `${t.count} ${UNIT_NAMES[unit].toLowerCase()}`, start: t.doneAt - t.count * unitSpec(unit).trainSeconds * 1000, end: t.doneAt })
+  }
+  // Ships on the slipways and fleets at sea (CLAUDE.md §8.5).
+  const SHIP = { galley: 'kadırga', cog: 'koka', corsair: 'çektiri' } as const
+  for (const b of kingdom.navy?.building ?? []) {
+    out.push({ key: `y:${b.doneAt}:${b.ship}`, icon: 'ship', label: `${b.count} ${SHIP[b.ship]}`, start: b.doneAt - b.count * shipSpec(b.ship).buildSeconds * 1000, end: b.doneAt })
+  }
+  for (const f of kingdom.navy?.fleets ?? []) {
+    const m = f.mission
+    if (m.kind === 'blockade' && !m.resolved) out.push({ key: `f:${f.id}:${m.arriveAt}`, icon: 'ship', label: `Abluka → ${m.name}`, start: m.arriveAt - voyageMs(kingdom.dockPlot, null), end: m.arriveAt })
+    else if (m.kind === 'raid') out.push({ key: `f:${f.id}:${m.arriveAt}`, icon: 'ship', label: `Akın → ${m.name}`, start: m.arriveAt - voyageMs(kingdom.dockPlot, null), end: m.arriveAt })
+    else if (m.kind === 'return' || m.kind === 'sortie') out.push({ key: `f:${f.id}:${m.arriveAt}`, icon: 'ship', label: m.kind === 'return' ? 'Filo dönüyor' : 'Ablukayı yarma', start: m.arriveAt - balance.navy.sortieSeconds * 1000, end: m.arriveAt })
   }
   if ((kingdom.sermonUntil ?? 0) > now - FLASH_MS && kingdom.lastSermonAt) {
     out.push({ key: `s:${kingdom.lastSermonAt}`, icon: 'temple', label: 'Vaaz', start: kingdom.lastSermonAt, end: kingdom.sermonUntil! })

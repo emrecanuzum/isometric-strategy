@@ -76,6 +76,22 @@
     },
     "intro": {
       "buildings": 6
+    },
+    "orders": {
+      "windowSeconds": 3600,
+      "units": [
+        240,
+        960
+      ],
+      "step": 40,
+      "payFactor": 1.25,
+      "swornBonus": 0.2,
+      "relation": {
+        "own": 3,
+        "other": 1.5
+      },
+      "minRelation": -50,
+      "minPalace": 2
     }
   },
   "size": 16,
@@ -96,8 +112,9 @@
     "openWater": 14
   },
   "trade": {
-    "loadFactor": 3,
-    "priceFactor": 1.1,
+    "loadFactor": 2,
+    "priceFactor": 1.05,
+    "marketImpact": 0.5,
     "baseSeconds": 30,
     "secondsPerTile": 0.36,
     "changeCooldownSeconds": 120

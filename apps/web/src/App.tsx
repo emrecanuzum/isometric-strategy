@@ -49,6 +49,7 @@ import {
   upgradeError,
   upgradeSpec,
   upgradeTrade,
+  countShips,
 } from '@game/shared'
 import type { Along, Lord, BuildError, BuildingKind, Good, Kingdom, PlanStep, Point, World } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -63,6 +64,8 @@ import type { MinimapFlag, MinimapPatrol, MinimapTown } from './game/Minimap'
 import { patrolBlocker, patrolRoute } from './game/patrolRoutes'
 import type { Structure } from './game/chunkPainter'
 import type { StructureLook } from './game/buildingSprites'
+import { fleetShips } from './game/fleetShips'
+import type { NavyOnMap } from './game/fleetShips'
 import { createWorld, footprintOrigin } from './game/createWorld'
 import type { MapTool } from './game/createWorld'
 import type { AimMark, Hover, RivalTerritory, WorldView } from './game/createWorld'
@@ -164,6 +167,23 @@ const REFUSALS: Record<string, string> = {
   grown: 'Bu çocuk artık reşit; eğitimi tamamlandı',
   named: 'Bu çocuğun adı zaten konuldu',
   council: 'Naipler konseyi yönetirken bu karar verilemez',
+  // The crowns' commissions.
+  done: 'Bu siparişi zaten teslim ettin; sonraki saati bekle',
+  crown: 'Böyle bir taç yok',
+  // The navy (CLAUDE.md §8.5).
+  count: 'Geçersiz gemi sayısı',
+  crew: 'Gemilere tayfa yok: asker havuzu boş',
+  fleet: 'Böyle bir filo yok',
+  fleets: 'En fazla 2 filon olabilir',
+  ships: 'Önce gemi seç',
+  away: 'Filo uzakta; önce geri çağır',
+  dock: 'Önce iskeleni kur',
+  cargo: 'Filoda yük taşıyacak gemi yok',
+  warships: 'Bunun için savaş gemisi (kadırga ya da çektiri) gerekir',
+  blockaded: 'İskelen abluka altında',
+  notBlockaded: 'İskelen abluka altında değil',
+  city: 'Bir liman seç',
+  good: 'Taşınacak malı seç',
 }
 const refusal = (e: unknown) => {
   const code = e instanceof CommandError ? e.message : 'server'
@@ -199,10 +219,13 @@ const NOTICE_CUES: Record<string, Cue> = {
   crown_gift: 'coin',
   patrol_ignored: 'bad',
   patrol_taken: 'bad',
+  naval_battle: 'battle',
+  blockade_lifted: 'good',
+  fleet_turned: 'bad',
 }
 
 // News that goes against the player: kept under the journal's "Önemli" tab.
-const HURTFUL = new Set(['town_revolt', 'town_lost_revolt', 'patrol_tribute', 'patrol_ignored', 'patrol_taken', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
+const HURTFUL = new Set(['fleet_turned', 'town_revolt', 'town_lost_revolt', 'patrol_tribute', 'patrol_ignored', 'patrol_taken', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
 function noticeHurts(n: Notice, me: string | undefined) {
   if (HURTFUL.has(n.kind)) return true
   const p = n.payload as { kind?: string; accepted?: boolean; report?: { losses?: Record<string, number> } }
@@ -211,6 +234,8 @@ function noticeHurts(n: Notice, me: string | undefined) {
   if (n.kind === 'envoy_answer') return p.accepted === false
   if (n.kind === 'envoy_proposal') return p.kind === 'tribute'
   // Sieges of towns, laid or suffered, lifted, won or beaten off: war is always important.
+  // Sea battles are war too.
+  if (n.kind === 'naval_battle') return true
   if (n.kind === 'town_siege' || n.kind === 'town_taken' || n.kind === 'town_held' || n.kind === 'town_siege_lifted') return true
   return false
 }
@@ -1288,9 +1313,9 @@ function App({
   const kingdoms: KingdomInfo[] = useMemo(
     () => [
       ...(kingdom
-        ? [{ id: mine.id, name: kingdom.name ?? 'Lordluğun', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null, score: scoreOf(kingdom, now), tradeGood: kingdom.trade.idle ? null : kingdom.trade.good, tradeLedger: kingdom.trade.ledger ?? null, tradeDamaged: !!kingdom.trade.damaged, liege: kingdom.liege ?? null }]
+        ? [{ id: mine.id, name: kingdom.name ?? 'Lordluğun', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null, score: scoreOf(kingdom, now), tradeGood: kingdom.trade.idle ? null : kingdom.trade.good, tradeLedger: kingdom.trade.ledger ?? null, tradeDamaged: !!kingdom.trade.damaged, liege: kingdom.liege ?? null, blockade: kingdom.blockade ?? null }]
         : []),
-      ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings, shieldUntil: r.shield_until, score: r.score ?? null, tradeGood: r.trade_good ?? null, tradeLedger: r.trade_ledger ?? null, tradeDamaged: !!r.trade_damaged, liege: r.liege ?? null })),
+      ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings, shieldUntil: r.shield_until, score: r.score ?? null, tradeGood: r.trade_good ?? null, tradeLedger: r.trade_ledger ?? null, tradeDamaged: !!r.trade_damaged, liege: r.liege ?? null, navy: r.navy ?? null, blockade: r.blockade ?? null })),
     ],
     // Palace levels only change with the buildings.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1419,6 +1444,40 @@ function App({
         .map((b) => ({ id: b.id, at: { x: b.x, y: b.y }, startedAt: Date.parse(b.started_at), endsAt: Date.parse(b.ends_at) })),
     )
   }, [view, layer.armies, layer.battles, kingdoms, mine.id, armyFocus, patrols])
+
+  // The lords' ships at their docks and at sea (CLAUDE.md §8.5).
+  const fleetKey = JSON.stringify([kingdom?.navy?.harbour, kingdom?.navy?.fleets.map((f) => [f.id, f.mission.kind, f.mission.kind === 'trade' ? f.mission.departedAt : 0]), kingdom?.blockade?.by, rivals.map((r) => [r.id, r.navy, r.blockade?.by])])
+  useEffect(() => {
+    if (!view) return
+    const lords: NavyOnMap[] = []
+    const dockOf = (buildings: { kind: string; x: number; y: number; size: number; doneAt: number }[]) => buildings.find((b) => b.kind === 'dock' && b.doneAt <= serverNow())
+    if (kingdom) {
+      const dock = dockOf(kingdom.buildings)
+      const navy = kingdom.navy
+      if (dock && (navy || kingdom.blockade)) {
+        lords.push({
+          id: mine.id,
+          dock: { x: dock.x, y: dock.y, size: dock.size },
+          harbour: countShips(navy?.harbour),
+          fleets: (navy?.fleets ?? []).map((f) => ({ id: f.id, ships: countShips(f.ships), mission: f.mission.kind, ...(f.mission.kind === 'trade' && { departedAt: f.mission.departedAt, tripMs: f.mission.tripMs }) })),
+          blockade: kingdom.blockade,
+        })
+      }
+    }
+    for (const r of rivals) {
+      const dock = dockOf(r.buildings)
+      if (!dock || (!r.navy && !r.blockade)) continue
+      lords.push({
+        id: r.id,
+        dock: { x: dock.x, y: dock.y, size: dock.size },
+        harbour: r.navy?.harbour ?? 0,
+        fleets: (r.navy?.fleets ?? []).map((f) => ({ id: f.id, ships: f.ships, mission: f.mission, departedAt: f.departedAt, tripMs: f.tripMs })),
+        blockade: r.blockade,
+      })
+    }
+    view.setFleets(fleetShips(view.world, lords))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, fleetKey])
 
   // The envoy's dialogs, one at a time, once their moment has come.
   const notice = layer.notices.find((n) => Date.parse(n.show_at) <= now) ?? null

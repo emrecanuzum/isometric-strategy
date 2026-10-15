@@ -10,6 +10,7 @@ import type { ArmyRow, Order } from './armies.ts'
 import { answer, arrive } from './diplomacy.ts'
 import { ensureTowns, settleTowns } from './towns.ts'
 import { settlePatrols } from './patrols.ts'
+import { settleNavy } from './navy.ts'
 import type { EnvoyRow } from './diplomacy.ts'
 import { admin, changeRelation, grantClaim, iso, loadKingdoms, ms, mutateKingdom, nameOf, notify, pactsOf, worldOf } from './server.ts'
 import type { Kingdom, LobbyWorld, Point, Row } from './server.ts'
@@ -109,6 +110,8 @@ export async function tick(lobby: string, simAt: number, now: number) {
   await settleTowns(lobby, await loadKingdoms(lobby), await pactsOf(lobby), now)
   // The crown kingdoms' patrols reaching lords.
   await settlePatrols(lobby, world, await loadKingdoms(lobby), now)
+  // Fleets meeting at the lords' docks: blockades, raids and sorties (CLAUDE.md §8.5).
+  await settleNavy(lobby, await loadKingdoms(lobby), await pactsOf(lobby), now)
 }
 
 // ---- Armies on the move -------------------------------------------------------------------------------------------

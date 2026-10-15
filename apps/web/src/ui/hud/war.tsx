@@ -1,7 +1,7 @@
 import { BattleScene } from './BattleScene'
 import { startBattleMusic } from '../../audio/sfx'
 import { duckMusic } from '../../net/settings'
-import { UNITS, armoryOf, armyAt, nearCity, townSiegeRounds, townRoundsDone, townRoundMs, balance, countOf, familiarityAt, familiarityBonus, garrisonOf, moraleAt, nearInn, recruitment, territoryRect, territoryStage, trainError, unitSpec } from '@game/shared'
+import { UNITS, allShips, countShips, armoryOf, armyAt, nearCity, townSiegeRounds, townRoundsDone, townRoundMs, balance, countOf, familiarityAt, familiarityBonus, garrisonOf, moraleAt, nearInn, recruitment, territoryRect, territoryStage, trainError, unitSpec } from '@game/shared'
 import type { Army, Kingdom, Point, Town, Unit, Units, World } from '@game/shared'
 import { useEffect, useState } from 'react'
 import { KINGDOM_COLORS } from '../../game/buildingSprites'
@@ -14,6 +14,7 @@ import type { HudData } from './tabs'
 import type { Online } from './online'
 import { kingdomName } from './online'
 import { Meter, Placeholder, Section, Stat, fmt } from './primitives'
+import { NavyTab } from './navy'
 
 // The army tab (CLAUDE.md §9.7): training at the barracks, the garrison, the armies in the field with their morale and
 // knowledge of the ground, and the battles; and the battle view that plays a battle out round by round.
@@ -120,14 +121,26 @@ function WarNow({ online, now }: { online: Online; now: number }) {
 
 export function ArmyTab(data: HudData) {
   const { kingdom, now, world, online } = data
+  const [part, setPart] = useArmyPart()
   if (!online) return null
   const barracks = kingdom.buildings.find((b) => b.kind === 'barracks' && b.doneAt <= now)
   const rest = restOf(world, kingdom, now)
   // Numbered by when they were raised.
   const mine = online.armies.filter((a) => a.kingdom_id === online.me).sort((a, b) => a.id - b.id)
+  const ships = countShips(allShips(kingdom))
   return (
     <>
       <WarNow online={online} now={now} />
+      <div className="palace-tabs" role="tablist" aria-label="Ordu">
+        <button className="btn small" role="tab" aria-selected={part === 'land'} aria-pressed={part === 'land'} onClick={() => setPart('land')}>
+          <Icon name="swords" size={16} /> Kara ordusu
+        </button>
+        <button className="btn small" role="tab" aria-selected={part === 'sea'} aria-pressed={part === 'sea'} onClick={() => setPart('sea')}>
+          <Icon name="ship" size={16} /> Donanma{ships > 0 ? ` · ${ships}` : ''}
+          {kingdom.blockade && <span className="dot" aria-label="Abluka" />}
+        </button>
+      </div>
+      {part === 'sea' ? <NavyTab {...data} /> : <>
       {/* The armies first: most orders are given here. */}
       <Section title="Ordularım" icon="swords" aside={`${mine.length} / ${balance.military.maxArmies}`}>
         {mine.length === 0 && <p className="hint">Sahada ordun yok. Garnizondan bir ordu çıkar.</p>}
@@ -140,8 +153,37 @@ export function ArmyTab(data: HudData) {
       <Garrison data={data} armies={mine.length} />
       <Training data={data} has={!!barracks} />
       <Battles online={online} now={now} />
+      </>}
     </>
   )
+}
+
+// The army tab's two parts, land and sea, the last one looked at remembered in this browser.
+type ArmyPart = 'land' | 'sea'
+const ARMY_PART_KEY = 'army:part'
+const ARMY_PART_EVENT = 'army-part'
+export function showArmyPart(part: ArmyPart) {
+  try {
+    localStorage.setItem(ARMY_PART_KEY, part)
+  } catch {
+    // Not remembered.
+  }
+  window.dispatchEvent(new CustomEvent(ARMY_PART_EVENT, { detail: part }))
+}
+function useArmyPart(): [ArmyPart, (part: ArmyPart) => void] {
+  const [part, setPart] = useState<ArmyPart>(() => {
+    try {
+      return localStorage.getItem(ARMY_PART_KEY) === 'sea' ? 'sea' : 'land'
+    } catch {
+      return 'land'
+    }
+  })
+  useEffect(() => {
+    const on = (e: Event) => setPart((e as CustomEvent<ArmyPart>).detail)
+    window.addEventListener(ARMY_PART_EVENT, on)
+    return () => window.removeEventListener(ARMY_PART_EVENT, on)
+  }, [])
+  return [part, showArmyPart]
 }
 
 // Soldiers by kind, as a row of small counts.

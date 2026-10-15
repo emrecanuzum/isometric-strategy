@@ -1,17 +1,17 @@
 {
-  "sellImpactPerUnit": 0.0015,
-  "buyImpactPerUnit": 0.0008,
+  "sellImpactPerUnit": 0.000375,
+  "buyImpactPerUnit": 0.0002,
   "minFactor": 0.3,
   "maxFactor": 3,
   "recoverUpSeconds": 2400,
   "recoverDownSeconds": 900,
   "buyMarkup": 1.4,
-  "maxBuy": 400,
-  "buyPerClick": 100,
+  "maxBuy": 1600,
+  "buyPerClick": 400,
   "crowns": {
     "count": 2,
     "windowMinutes": 20,
-    "unitsPerMinute": 120,
+    "unitsPerMinute": 480,
     "upToFactor": 1.2,
     "stepSeconds": 60,
     "catchUpHours": 12

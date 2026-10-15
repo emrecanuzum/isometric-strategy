@@ -52,7 +52,7 @@ import {
   upgradeSpec,
 } from '@game/shared'
 import { TradeShares } from './inns'
-import { CrownBanner, Fealty, TradeDestination } from './cities'
+import { CrownBanner, Fealty, TradeDestination, CrownOrders } from './cities'
 import { cityInfo } from '../../game/cities'
 import type { BuildingKind, Good, Kingdom, Market, Plot, Point, Resource, Stock, TaxLevel, Town, World } from '@game/shared'
 import { useEffect, useRef, useState } from 'react'
@@ -360,7 +360,7 @@ const BASKET_WAIT_MS = 900
 
 function MarketSection({ world, kingdom, now, online }: HudData) {
   const [good, setGood] = useState<Good>('food')
-  const [units, setUnits] = useState(10)
+  const [units, setUnits] = useState(50)
   const [basket, setBasket] = useState<{ good: Good; units: number } | null>(null)
   const [sending, setSending] = useState(false)
   const basketRef = useRef(basket)
@@ -429,13 +429,13 @@ function MarketSection({ world, kingdom, now, online }: HudData) {
             ))}
           </div>
           <div className="stepper">
-            <button className="btn icon-only" disabled={units <= 10} onClick={() => setUnits(units - 10)} aria-label="Azalt">
+            <button className="btn icon-only" disabled={units <= 50} onClick={() => setUnits(units - 50)} aria-label="Azalt">
               <Icon name="minus" size={16} />
             </button>
             <span className="stepper-value">
               <b>{units}</b> birim
             </span>
-            <button className="btn icon-only" disabled={units >= buyPerClick} onClick={() => setUnits(units + 10)} aria-label="Artır">
+            <button className="btn icon-only" disabled={units >= buyPerClick} onClick={() => setUnits(Math.min(buyPerClick, units + 50))} aria-label="Artır">
               <Icon name="plus" size={16} />
             </button>
             <button className="btn small" disabled={!!why} onClick={add}>
@@ -519,6 +519,7 @@ function TradePost(data: HudData) {
         <GoodChoice kingdom={kingdom} selected={trade.good} onGood={onGood} market={online?.market} now={now} />
       </Section>
       <TradeDestination world={world} kingdom={kingdom} market={online?.market} now={now} onCity={(city) => online?.act({ type: 'tradeCity', city })} />
+      <CrownOrders world={world} kingdom={kingdom} now={now} online={online} />
       <div className="feature">
         <SpriteView sprite={thumb('tradePost')} scale={0.5} />
         <div>

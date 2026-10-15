@@ -380,6 +380,16 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
     case 'repairWalls':
       next = changed(game.repairWalls(need()))
       break
+    case 'order': {
+      // A crown's commission delivered (CLAUDE.md §7.8).
+      const k = need()
+      const crowns = lobbyWorld.cities.length
+      const palace = game.palaceLevel(k, now)
+      const error = game.crownOrderError(k, cmd.crown, now, crowns, palace)
+      if (error) refuse(error)
+      next = changed(game.fulfilOrder(k, cmd.crown, now, crowns, palace, game.goldCap(k, now) - k.stock.gold))
+      break
+    }
     case 'ships': {
       // Ships laid down at the shipyard (CLAUDE.md §8.5).
       const count = whole(cmd.count, 1, 20)
@@ -1002,7 +1012,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
   }
 }
 
-const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'townUpkeep', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'nameChild', 'educate', 'crisis', 'choose', 'seen', 'reset', 'ships', 'fleet'])
+const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'townUpkeep', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'nameChild', 'educate', 'crisis', 'choose', 'seen', 'reset', 'ships', 'fleet', 'order'])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

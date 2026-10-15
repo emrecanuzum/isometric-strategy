@@ -1,4 +1,4 @@
-import type { PlanStep, Good, TradeLedger, Town, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units } from '@game/shared'
+import type { PlanStep, Good, TradeLedger, Town, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units, Ship, Ships, MissionOrder, NavyLook, Blockade } from '@game/shared'
 import { supabase } from '../lib/supabase'
 
 // The lobby as the client sees it: the player's own kingdom in full, the others only as they show on the map, and the
@@ -48,6 +48,9 @@ export interface Rival {
   // What its merchant sells now, and all it has sold this season (rounded for others).
   trade_good?: Good | null
   trade_ledger?: TradeLedger | null
+  // Its fleets as the map shows them, and another lord's fleet blockading its dock (CLAUDE.md §8.5).
+  navy?: NavyLook | null
+  blockade?: Blockade | null
 }
 
 export interface ChatMessage {
@@ -188,6 +191,15 @@ export type Command =
   | { type: 'intel'; target: number }
   | { type: 'raise'; units: Units }
   | { type: 'army'; army: number; order: ArmyOrderPayload }
+  // A crown's commission delivered (CLAUDE.md §7.8).
+  | { type: 'order'; crown: number }
+  // The navy (CLAUDE.md §8.5).
+  | { type: 'ships'; ship: Ship; count: number }
+  | { type: 'fleet'; action: 'form'; ships: Ships }
+  | { type: 'fleet'; action: 'split'; fleet: number; ships: Ships }
+  | { type: 'fleet'; action: 'merge'; fleet: number; other: number }
+  | { type: 'fleet'; action: 'dock' | 'recall'; fleet: number }
+  | { type: 'fleet'; action: 'mission'; fleet: number; order: MissionOrder }
 
 export class CommandError extends Error {}
 

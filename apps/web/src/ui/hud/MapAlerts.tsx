@@ -1,4 +1,5 @@
-import { balance, cutOff, imprisoned, palaceLevel } from '@game/shared'
+import { balance, cutOff, imprisoned, navyOf, palaceLevel } from '@game/shared'
+import { showArmyPart } from './war'
 import type { Kingdom } from '@game/shared'
 import { Icon } from '../icons'
 import type { TabId } from './Hud'
@@ -8,7 +9,7 @@ import type { WarNote } from './war'
 // is put right. Tapping one opens the tab where it is dealt with.
 export function MapAlerts({ kingdom, now, war = [], onOpen, onQueen }: { kingdom: Kingdom; now: number; war?: WarNote[]; onOpen: (tab: TabId) => void; onQueen?: () => void }) {
   // The fighting first: war is what matters most (see warNotes).
-  const alerts: { key: string; tab: TabId; text: string }[] = war.map((n) => ({ key: n.key, tab: 'army', text: n.text }))
+  const alerts: { key: string; tab: TabId; text: string; sea?: boolean }[] = war.map((n) => ({ key: n.key, tab: 'army', text: n.text }))
   if (imprisoned(kingdom.buildings, kingdom.site, now)) {
     alerts.push({
       key: 'prison',
@@ -20,6 +21,13 @@ export function MapAlerts({ kingdom, now, war = [], onOpen, onQueen }: { kingdom
   if (cut > 0) alerts.push({ key: 'cut', tab: 'build', text: `${cut} yapı sur arkasında kaldı: köylüler ulaşamıyor, çalışmıyor.` })
   if ((kingdom.fearUntil ?? 0) > now) {
     alerts.push({ key: 'fear', tab: 'people', text: `Sınırında düşman ordusu bekliyor: halk korkuyor (mutluluk ${balance.military.fear.happiness}).` })
+  }
+  // The navy at war (CLAUDE.md §8.5): a blockade of our dock, our fleets out against an enemy.
+  if (kingdom.blockade) alerts.push({ key: 'blockade', tab: 'army', sea: true, text: `${kingdom.blockade.name} filosu iskeleni abluka ediyor: balık ve deniz ticareti durdu.` })
+  for (const f of navyOf(kingdom).fleets) {
+    const m = f.mission
+    if (m.kind === 'blockade') alerts.push({ key: `fleet${f.id}`, tab: 'army', sea: true, text: m.arriveAt > now ? `Filon ${m.name} iskelesine yol alıyor.` : `Filon ${m.name} iskelesini abluka ediyor.` })
+    if (m.kind === 'raid') alerts.push({ key: `fleet${f.id}`, tab: 'army', sea: true, text: `Filon ${m.name} kıyısına akına gidiyor.` })
   }
   if ((kingdom.revoltUntil ?? 0) > now) alerts.push({ key: 'revolt', tab: 'people', text: 'Halk ayaklandı: üretim yarıda, mutluluk düşük.' })
   // A palace past its second level and no lady at court (raised before the rule): the house needs a queen, at once.
@@ -37,7 +45,7 @@ export function MapAlerts({ kingdom, now, war = [], onOpen, onQueen }: { kingdom
         </div>
       )}
       {alerts.map((a) => (
-        <button key={a.key} className="map-alert frame" onClick={() => onOpen(a.tab)}>
+        <button key={a.key} className="map-alert frame" onClick={() => (a.sea && showArmyPart('sea'), onOpen(a.tab))}>
           <Icon name="warn" size={16} />
           <span>{a.text}</span>
         </button>

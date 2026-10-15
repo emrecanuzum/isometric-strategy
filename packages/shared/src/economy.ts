@@ -269,6 +269,8 @@ export interface Kingdom {
   // The season's accounts: every gold piece that came in or went out and why, the soldiers lost and to what (see
   // Books). Absent in older saves.
   books?: Books
+  // The crowns' commissions delivered: by crown, the window last delivered in (crowns.ts, crownOrder).
+  ordersDone?: number[]
   // The lord's ships: the harbour, the fleets and the slipways (navy.ts; CLAUDE.md §8.5).
   navy?: Navy
   // Another lord's fleet blockading this lord's dock (set and cleared by the server).
@@ -1405,7 +1407,8 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       const load = Math.floor(tradeLoad(k) * (away ? balance.economy.away.merchantLoad : 1))
       const sold = walledIn || damaged || full ? 0 : Math.max(0, Math.min(load, Math.floor(k.stock[good] - tradeReserve(k, good, next)), perUnit > 0 ? Math.ceil(room / perUnit) : Infinity))
       const gold = Math.min(Math.round(sold * perUnit), Math.floor(room))
-      if (!city) soldTotal[good] = (soldTotal[good] ?? 0) + sold
+      // A crown city's trade moves the lobby's prices too, if less than the lobby's market (CLAUDE.md §7.7).
+      if (sold > 0) soldTotal[good] = (soldTotal[good] ?? 0) + sold * (city ? balance.cities.trade.marketImpact : 1)
       k.stock[good] -= sold
       k.stock.gold += gold
       k.books!.trade += gold

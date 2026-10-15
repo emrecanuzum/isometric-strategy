@@ -7,8 +7,8 @@
       "crew": 4,
       "might": 3,
       "escort": 2,
-      "cargo": 10,
-      "fish": 0.3,
+      "cargo": 24,
+      "fish": 0.12,
       "upkeep": 0.06,
       "shipyardLevel": 1
     },
@@ -18,8 +18,8 @@
       "crew": 2,
       "might": 0.6,
       "escort": 0,
-      "cargo": 30,
-      "fish": 0.9,
+      "cargo": 80,
+      "fish": 0.36,
       "upkeep": 0.03,
       "shipyardLevel": 1
     },
@@ -29,8 +29,8 @@
       "crew": 3,
       "might": 1.8,
       "escort": 1.5,
-      "cargo": 15,
-      "fish": 0.5,
+      "cargo": 40,
+      "fish": 0.2,
       "upkeep": 0.04,
       "shipyardLevel": 2
     }
@@ -46,9 +46,9 @@
   "speedSecondsPerTile": 0.15,
   "minVoyageSeconds": 45,
   "trade": {
-    "baseSeconds": 70,
+    "baseSeconds": 90,
     "secondsPerTile": 0.18,
-    "priceFactor": 1.0,
+    "priceFactor": 0.85,
     "marketImpact": 0.5,
     "crownRelation": 0.6,
     "goodCooldownSeconds": 120
@@ -64,9 +64,11 @@
     "sinkChance": { "escorted": 0.35, "alone": 0.25 }
   },
   "hunt": {
-    "catchPerRoundPerMight": 0.012,
+    "maxPerRound": 0.03,
+    "mightScale": 4,
     "bounty": 30,
-    "lossChance": 0.08
+    "lossPerMight": 0.25,
+    "maxLoss": 0.3
   },
   "fishing": {
     "foodFactorFromYield": true
