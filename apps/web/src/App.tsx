@@ -1551,9 +1551,9 @@ function App({
         id: r.id,
         color: colorOf(r.color),
         dock: { x: dock.x, y: dock.y, size: dock.size },
-        // Others' harbours come as a count only; their fleets by type, rounded (older rows: whether galleys sail).
+        // Others' harbours and fleets come only roughly sized (whether galleys sail among them; types are for spies).
         harbour: Array.from({ length: Math.min(4, r.navy?.harbour ?? 0) }, () => 'cog' as const),
-        fleets: (r.navy?.fleets ?? []).map((f) => ({ id: f.id, ships: f.ships, kinds: f.kinds ? kindsOf(f.kinds) : Array.from({ length: Math.min(3, f.ships) }, (_, i) => (i === 0 && f.galleys ? 'galley' : 'cog') as ShipKind), mission: f.mission, departedAt: f.departedAt, tripMs: f.tripMs, sail: f.sail })),
+        fleets: (r.navy?.fleets ?? []).map((f) => ({ id: f.id, ships: f.ships, rough: true, kinds: f.kinds ? kindsOf(f.kinds) : Array.from({ length: Math.min(3, f.ships) }, (_, i) => (i === 0 && f.galleys ? 'galley' : 'cog') as ShipKind), mission: f.mission, departedAt: f.departedAt, tripMs: f.tripMs, sail: f.sail })),
         blockade: r.blockade,
       })
     }
@@ -1812,7 +1812,9 @@ function App({
             color={hexOf(owner.color)}
             index={index + 1}
             fleet={fleet}
+            intel={online?.intel[owner.id]}
             now={now}
+            onSpy={() => online?.loadIntel(owner.id)}
             onLord={() => {
               setFleetSheet(null)
               setFocus(owner.id)

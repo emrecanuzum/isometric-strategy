@@ -37,6 +37,7 @@ import type { IconName } from '../icons'
 import { RESOURCE_NAMES } from '../names'
 import type { HudData } from './tabs'
 import type { Online } from './online'
+import type { IntelReport } from '../../net/online'
 import { Meter, Placeholder, Section, Stat, fmt } from './primitives'
 import { Subtabs, usePart } from './Subtabs'
 import type { Part } from './Subtabs'
@@ -350,7 +351,7 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
                   <b>{k.name}</b>
                   <small>
                     yol {clock(voyageMs(kingdom.dockPlot, ctx.target.dockPlot))}
-                    {k.navy && ` · limanında ~${k.navy.harbour} gemi`}
+                    {k.navy && ` · limanı ${roughShips(k.navy.harbour)}`}
                     {k.blockade && ' · zaten abluka altında'}
                   </small>
                   <button className="btn small danger" disabled={!!why} title={why ? WHY[why] : undefined} onClick={() => mission({ kind: picking, target: k.id })}>
@@ -474,20 +475,28 @@ function SeaLedger({ data }: { data: HudData }) {
   )
 }
 
-// Another lord's fleet, picked on the map: whose, how many of which ships (rounded, as the lobby sees them), and what
-// it is doing.
-export function RivalFleetSheet({ lord, color, index, fleet, now, onLord, onShow, onClose }: {
+// How big another lord's fleet or harbour looks to the lobby (rough_ships: 3, 8 or 16; CLAUDE.md §8.5).
+export const roughShips = (n: number) => (n <= 0 ? 'gemisiz' : n <= 3 ? 'birkaç gemi' : n <= 8 ? 'orta boy' : 'büyük')
+
+// Another lord's fleet, picked on the map: whose, roughly how big, what it is doing, and — through the spies' army
+// network — how many of which ships.
+export function RivalFleetSheet({ lord, color, index, fleet, intel, now, onSpy, onLord, onShow, onClose }: {
   lord: string
   color: string
   index: number
   fleet: NavyLook['fleets'][number]
+  // The latest spy report on that lord (undefined: not asked yet).
+  intel: IntelReport | null | undefined
   now: number
+  onSpy(): void
   onLord(): void
   onShow(): void
   onClose(): void
 }) {
-  const kinds = fleet.kinds ?? (fleet.galleys ? { galley: 1 } : {})
   const sailing = fleet.sail && fleet.sail.arriveAt > now
+  const spied = intel?.navy?.fleets.find((f) => f.id === fleet.id) ?? null
+  const network = intel?.strength.army ?? 0
+  const range = (e: { lo: number; hi: number }) => (e.lo === e.hi ? `${e.lo}` : `${e.lo}–${e.hi}`)
   return (
     <section className="sheet frame" aria-labelledby="fleet-title">
       <header className="sheet-head">
@@ -496,7 +505,9 @@ export function RivalFleetSheet({ lord, color, index, fleet, now, onLord, onShow
           <h2 id="fleet-title">
             <span style={{ color }}>{lord}</span> · {index}. filo
           </h2>
-          <small>~{fleet.ships} gemi · {MISSION_NAMES[fleet.mission]}</small>
+          <small>
+            {roughShips(fleet.ships)} · {MISSION_NAMES[fleet.mission]}
+          </small>
         </div>
         <button className="btn icon-only" onClick={onShow} aria-label="Haritada göster" title="Haritada göster">
           <Icon name="pin" size={16} />
@@ -506,18 +517,26 @@ export function RivalFleetSheet({ lord, color, index, fleet, now, onLord, onShow
         </button>
       </header>
       <div className="sheet-body">
-        <Section title="Gemiler" icon="ship" aside="yaklaşık">
-          {SHIPS.filter((x) => (kinds[x] ?? 0) > 0).length === 0 ? (
-            <p className="hint">Gemilerin türü seçilemiyor.</p>
+        <Section title="Gemiler" icon="ship" aside={spied ? `casus ağı %${network}` : 'uzaktan'}>
+          {spied ? (
+            <>
+              {SHIPS.filter((x) => spied.ships[x].hi > 0).map((x) => (
+                <Stat key={x} label={SHIP_NAMES[x]} value={range(spied.ships[x])} note={`güç ${shipSpec(x).might} · eskort ${shipSpec(x).escort} · yük ${shipSpec(x).cargo}`} />
+              ))}
+              <p className="hint">Casusların tahmini; ağ güçlendikçe aralık daralır.</p>
+            </>
           ) : (
-            SHIPS.filter((x) => (kinds[x] ?? 0) > 0).map((x) => (
-              <Stat key={x} label={SHIP_NAMES[x]} value={fleet.kinds ? `~${kinds[x]}` : 'var'} note={`güç ${shipSpec(x).might} · eskort ${shipSpec(x).escort} · yük ${shipSpec(x).cargo}`} />
-            ))
+            <>
+              <p className="hint">
+                Uzaktan yalnız filonun ne kadar büyük olduğu görünür: <b>{roughShips(fleet.ships)}</b>
+                {fleet.galleys && ', aralarında kadırga var'}. Hangi gemiden kaç tane olduğunu casusların söyler: bu lordda <b>Ordu</b> konusunda en az %30 ağın olmalı
+                {intel ? ` (şu an %${network})` : ''}.
+              </p>
+              <button className="btn small" onClick={onSpy}>
+                <Icon name="eye" size={16} /> Casus raporunu getir
+              </button>
+            </>
           )}
-          {fleet.kinds && (
-            <Stat label="Tahmini güç" value={`~${shipMight(fleet.kinds).toFixed(1)}`} note={`yük ~${cargoOf(fleet.kinds)} · eskort ~${escortOf(fleet.kinds).toFixed(1)}`} />
-          )}
-          <p className="hint">Sayılar ikişer yuvarlanmıştır; kesin sayıyı casusların söyler.</p>
         </Section>
         <Section title="Ne yapıyor" icon="scroll">
           <p className="hint">

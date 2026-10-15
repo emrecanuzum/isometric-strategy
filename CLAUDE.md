@@ -1623,10 +1623,13 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
   gemileri altın dış hatla vurgulanır. Kendi filon Ordu → Donanma →
   Filolar'da da seçili (altın çerçeveli) görünür; karttaki **Göster** filoyu
   seçer ve kamerayı ona götürür. Boş yere tıklamak seçimi kaldırır.
-  **Başka bir lordun filosuna** tıklamak bir pencere açar: lord ve filo,
-  türüne göre gemi sayıları (ikişer yuvarlı; `lobby_kingdoms` →
-  `navy.fleets[].kinds`), tahmini güç, eskort ve yük, ne yaptığı, varış süresi,
-  haritada göster ve "Lordu aç" (`navy.tsx` → `RivalFleetSheet`).
+  **Başka bir lordun filosuna** tıklamak bir pencere açar
+  (`navy.tsx` → `RivalFleetSheet`): lord ve filo, filonun kaba büyüklüğü,
+  ne yaptığı, varış süresi, haritada göster ve "Lordu aç". **Hangi gemiden
+  kaç tane** olduğunu yalnız casuslar söyler: o lordda **Ordu** konusunda en
+  az %30 ağın varsa casus raporu limanın ve her filonun tür tür tahminini
+  getirir (`intel` → `navy`; ağ güçlendikçe aralık daralır); pencerede
+  "Casus raporunu getir" düğmesi vardır.
 - **Herkes görür:** lobi her lordun filolarını haritada görür
   (`lobby_kingdoms` → `navy.fleets[].sail`): limandaki gemiler iskelenin
   yanına yanaşmış (en çok 4); limanda bekleyen filo iskelenin açığında ya da
@@ -1636,8 +1639,11 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
   geniş (12 karo) dolaşır; **ticaretteki** filo her seferde suda en uzağa
   (26 karoya kadar) açılıp döner; hiçbiri gözden kaybolmaz. Abluka eden
   filonun kadırgaları hedefin iskelesinin önünde demirler; akına giden ve
-  dönen filolar görünmez. Başkalarının gemi sayısı çifte yuvarlanır
-  (`lobby_kingdoms` → `navy`, `blockade`). Abluka ve yoldaki filolar harita
+  dönen filolar görünmez. Başkalarının limanı ve filoları yalnız **kaba
+  büyüklükle** görünür: birkaç (1–3), orta (4–8) ya da büyük (9+;
+  `rough_ships`), türleri görünmez (yalnız kadırga olup olmadığı); kendi
+  filonun etiketinde kesin sayı, başkasınınkinde "birkaç / orta / büyük"
+  yazar (`lobby_kingdoms` → `navy`, `blockade`). Abluka ve yoldaki filolar harita
   uyarılarında ve sayaçlarda görünür.
 - **Puan:** gemilerin gücü ordu puanına asker gibi sayılır.
 

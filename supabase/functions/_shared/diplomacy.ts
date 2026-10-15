@@ -193,6 +193,16 @@ export async function intel(lobby: string, me: number, targetId: number, now: nu
     // What kinds of soldier they field, once the network is fairly strong.
     units: strength.army >= 30 ? Object.fromEntries(game.UNITS.map((u: string, i: number) => [u, est(allUnits[u] ?? 0, 'army', 20 + i)])) : null,
   }
+  // Their ships by type, harbour and each fleet, once the army network is fairly strong (CLAUDE.md §8.5): the lobby
+  // only sees how big their fleets roughly are.
+  if (strength.army >= 30) {
+    const navy = game.navyOf(state)
+    const byType = (ships: Record<string, number>, salt: number) => Object.fromEntries(game.SHIPS.map((x: string, i: number) => [x, est(ships[x] ?? 0, 'army', salt + i)]))
+    report.navy = {
+      harbour: byType(navy.harbour, 40),
+      fleets: navy.fleets.map((f: { id: number; ships: Record<string, number> }) => ({ id: f.id, ships: byType(f.ships, 50 + f.id * 7) })),
+    }
+  }
   if (strength.diplomacy >= game.balance.espionage.minStrength) {
     const { data: envoys } = await admin.from('envoys').select('to_id, kind, status').eq('from_id', targetId).in('status', ['traveling', 'pending'])
     const { data: spies } = await admin.from('spy_missions').select('target_id, topic').eq('owner_id', targetId).is('ended_at', null)

@@ -315,6 +315,8 @@ export interface IntelReport {
   stores: Record<'gold' | 'food' | 'materials' | 'arms', Estimate | null>
   army: Record<'garrison' | 'field' | 'might' | 'happiness', Estimate | null> & { units: Record<Unit, Estimate | null> | null }
   diplomacy?: { envoys: { to: string; kind: string; status: string }[]; spies: { target: string; topic: string }[] | null; spyCount: number }
+  // Their ships by type (harbour and each fleet), once the army network is at 30 or more.
+  navy?: { harbour: Record<Ship, Estimate>; fleets: { id: number; ships: Record<Ship, Estimate> }[] }
 }
 
 export async function loadDiplomacy(lobby: string) {

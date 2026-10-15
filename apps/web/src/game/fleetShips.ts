@@ -18,7 +18,8 @@ export interface NavyOnMap {
   // The harbour's ships by type, as many as are drawn.
   harbour: ShipKind[]
   // Each fleet with how many ships it has (rough for others).
-  fleets: { id: number; ships: number; kinds: ShipKind[]; mission: MissionKind; departedAt?: number; tripMs?: number; sail?: Sail | null }[]
+  // (`rough`: another lord's, sized only as a few, middling or big.)
+  fleets: { id: number; ships: number; rough?: boolean; kinds: ShipKind[]; mission: MissionKind; departedAt?: number; tripMs?: number; sail?: Sail | null }[]
   blockade?: Blockade | null
 }
 
@@ -120,12 +121,12 @@ export function fleetShips(world: World, lords: NavyOnMap[]): FleetShip[] {
               : null
       if (anchor && (f.sail || loop)) {
         for (const [i, kind] of kinds.entries()) {
-          out.push({ key: `s${lord.id}:${f.id}:${i}`, at: anchor, along, reverse, seed: seed + i, length: SHIP_LENGTHS[kind], kind, lord: lord.id, fleet: f.id, color: lord.color, ...(i === 0 && { tag: tag(n, f.ships) }), ...(f.sail && { route: f.sail }), ...(loop && { loop }), behind: i * 2.8 })
+          out.push({ key: `s${lord.id}:${f.id}:${i}`, at: anchor, along, reverse, seed: seed + i, length: SHIP_LENGTHS[kind], kind, lord: lord.id, fleet: f.id, color: lord.color, ...(i === 0 && { tag: tag(n, f.ships, f.rough) }), ...(f.sail && { route: f.sail }), ...(loop && { loop }), behind: i * 2.8 })
         }
         continue
       }
       // Never sent anywhere: at anchor off the jetty's tip, apart from the harbour, a few ships in a knot.
-      for (const [i, kind] of kinds.entries()) add({ key: `p${lord.id}:${f.id}:${i}`, reverse, seed: seed + i, kind, fleet: f.id, color: lord.color, ...(i === 0 && { tag: tag(n, f.ships) }) }, off(2.5 + n * 2.5 + i * 0.8, (n % 2 === 0 ? 1.5 : -1.5) * (i % 2 === 0 ? 1 : -0.4)))
+      for (const [i, kind] of kinds.entries()) add({ key: `p${lord.id}:${f.id}:${i}`, reverse, seed: seed + i, kind, fleet: f.id, color: lord.color, ...(i === 0 && { tag: tag(n, f.ships, f.rough) }) }, off(2.5 + n * 2.5 + i * 0.8, (n % 2 === 0 ? 1.5 : -1.5) * (i % 2 === 0 ? 1 : -0.4)))
     }
     // An enemy fleet riding off this dock: its galleys, broadside on if the water lets them.
     if (lord.blockade) {
@@ -138,7 +139,7 @@ export function fleetShips(world: World, lords: NavyOnMap[]): FleetShip[] {
   return out
 }
 
-const tag = (index: number, ships: number) => `${index + 1}. filo · ${ships}`
+const tag = (index: number, ships: number, rough?: boolean) => `${index + 1}. filo · ${rough ? (ships <= 3 ? 'birkaç' : ships <= 8 ? 'orta' : 'büyük') : ships}`
 
 const SECONDS_PER_TILE = balance.navy.sail.secondsPerTile
 
