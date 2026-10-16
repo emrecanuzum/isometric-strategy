@@ -8,6 +8,7 @@ import {
   generateWorld,
   groundToScreen,
   WORLD_REV,
+  hash,
   heightAt,
   screenToGround,
   tileToScreen,
@@ -23,7 +24,7 @@ import { dashes } from './dashes'
 import type { MapArmy, MapBattle } from './armies'
 import { createCaravans } from './caravans'
 import { cityArea, cityAreaAt, cityAt, cityInfo, cityStructures, cityTrails } from './cities'
-import { CHIMNEYS, linkWalls, structureParts } from './buildingSprites'
+import { BUILDER_SPRITES, CHIMNEYS, VILLAGER_SPRITES, linkWalls, structureParts } from './buildingSprites'
 import { openGate } from './wallSprites'
 import { Canvas, SPRITES, lightsOf, outlineOf, rgb, silhouetteOf } from './sprites'
 import { daylight, nightness, sunShadow } from './daylight'
@@ -56,6 +57,9 @@ export const FEATURE_COLORS: Record<number, number> = {
 }
 
 const HOVER = 0xffffff
+// Builders carrying planks across a site: tiles a second, and seconds of rest at each end.
+const BUILDER_SPEED = 0.35
+const BUILDER_REST = 1.2
 const TERRITORY = 0xf2d16b
 const DOCK_PLOT = 0x7fd4ff
 const TRADE_PLOT = 0xffa24a
@@ -539,6 +543,7 @@ export async function createWorld(
     }
     caravans.update(seconds, padded)
     town.update(time, padded)
+    updateBuilders(time / 1000, padded)
     sortWalkers()
   })
 
@@ -1325,6 +1330,7 @@ export async function createWorld(
       }
       for (const l of lights) l.depth = redepth.get(l.depth) ?? l.depth
     }
+    placeBuilders(structures)
     // Lit windows shine in the glow layer above everything, so the buildings in front of a house would not hide them:
     // each one is cut down to the pixels no building drawn after it covers.
     for (const { lit, sx, sy, depth } of lights) {
@@ -1372,9 +1378,85 @@ export async function createWorld(
   }
   // How far from a gate's tile (in tiles) a walker swings it open: a step before the gateway and a step after.
   const GATE_REACH = 0.9
+  // Builders at work on the sites under construction: some hammering, some carrying planks across. Only to look at;
+  // they move with the clock and stand on the site, drawn just above its scaffolding.
+  interface Builder {
+    sprite: Sprite
+    frames: Texture[]
+    back: Texture[]
+    from: Point
+    to: Point
+    z: number
+    carry: boolean
+    offset: number
+  }
+  let builders: Builder[] = []
+  function placeBuilders(structures: Structure[]) {
+    for (const b of builders) b.sprite.destroy()
+    builders = []
+    for (const s of structures) {
+      if (s.look !== 'scaffold') continue
+      const site = occluders.filter((o) => o.x === s.x && o.y === s.y).at(-1)
+      if (!site) continue
+      const roll = (k: number) => hash(s.x * 31 + s.y, k, world.seed + 313)
+      const at = (u: number, v: number): Point => ({ x: s.x + s.size * u, y: s.y + s.size * v })
+      const spots = [at(0.75, 0.3), at(0.3, 0.75), at(0.78, 0.78)].slice(0, s.size === 1 ? 1 : s.size === 2 ? 2 : 3)
+      const carriers = s.size === 3 ? 2 : 1
+      const crew = [
+        ...spots.map((p) => ({ from: p, to: p, carry: false })),
+        ...Array.from({ length: carriers }, (_, i) => ({ from: at(0.15 + 0.1 * i, 0.85), to: at(0.85, 0.15 + 0.1 * i), carry: true })),
+      ]
+      crew.forEach((c, i) => {
+        const look = BUILDER_SPRITES[Math.floor(roll(i) * BUILDER_SPRITES.length)]
+        const plain = VILLAGER_SPRITES[Math.floor(roll(i + 9) * VILLAGER_SPRITES.length)]
+        const sprite = new Sprite(textureOf(look[0]))
+        sprite.anchor.set(look[0].anchorX / look[0].width, look[0].anchorY / look[0].height)
+        sprite.label = 'builder'
+        sprite.zIndex = site.sprite.zIndex + 0.01 + i * 0.0001
+        // A hammerer faces either way.
+        if (!c.carry) sprite.scale.x = roll(i + 20) < 0.5 ? -1 : 1
+        caravans.layer.addChild(sprite)
+        builders.push({ sprite, frames: look.map(textureOf), back: plain.map(textureOf), ...c, z: site.lift, offset: roll(i + 40) * 10 })
+      })
+    }
+  }
+  function updateBuilders(seconds: number, view: { left: number; top: number; right: number; bottom: number }) {
+    for (const b of builders) {
+      const t = seconds + b.offset
+      let p = b.from
+      let frame: Texture
+      if (b.carry) {
+        // Across the site with a plank and back without, resting a moment at each end.
+        const length = Math.hypot(b.to.x - b.from.x, b.to.y - b.from.y)
+        const walk = length / BUILDER_SPEED
+        const u = t % ((walk + BUILDER_REST) * 2)
+        const out = u < walk + BUILDER_REST
+        const w = out ? u : u - walk - BUILDER_REST
+        const f = Math.min(1, w / walk)
+        const d = out ? f : 1 - f
+        p = { x: b.from.x + (b.to.x - b.from.x) * d, y: b.from.y + (b.to.y - b.from.y) * d }
+        const step = Math.floor(w * BUILDER_SPEED * 6) % 2
+        frame = out ? b.frames[2 + (w < walk ? step : 0)] : b.back[w < walk ? step : 0]
+        // Out the plank goes toward the site's right on screen, back to its left.
+        const heading = (b.to.x - b.from.x - (b.to.y - b.from.y)) * (out ? 1 : -1)
+        b.sprite.scale.x = heading < 0 ? -1 : 1
+      } else {
+        // A few blows, then a breath with the hammer down.
+        const u = t % 3.2
+        frame = b.frames[u < 2.4 && u % 0.5 < 0.36 ? 0 : 1]
+      }
+      const sx = (p.x - p.y) * (TILE_WIDTH / 2)
+      const sy = (p.x + p.y) * (TILE_HEIGHT / 2) - b.z
+      b.sprite.visible = sx > view.left && sx < view.right && sy > view.top && sy < view.bottom
+      if (!b.sprite.visible) continue
+      b.sprite.position.set(Math.round(sx), Math.round(sy))
+      b.sprite.texture = frame
+    }
+  }
+
   function sortWalkers() {
     if (occluders.length === 0) return
-    const walkers = caravans.layer.children.filter((c) => c.visible && c.label !== 'occluder' && c.label !== 'shade' && c.label !== 'army-ring' && c.label !== 'tree' && c.label !== 'inn')
+    const walkers = caravans.layer.children.filter((c) => c.visible && c.label !== 'occluder' && c.label !== 'shade' && c.label !== 'army-ring' && c.label !== 'tree' && c.label !== 'inn' && c.label !== 'builder')
     for (const o of occluders) {
       if (!o.gate) continue
       const open = walkers.some(({ position: { x: px, y: py } }) => {
@@ -1391,7 +1473,7 @@ export async function createWorld(
       }
     }
     for (const child of caravans.layer.children) {
-      if (!child.visible || child.label === 'occluder' || child.label === 'shade' || child.label === 'army-ring' || child.label === 'tree' || child.label === 'inn') continue
+      if (!child.visible || child.label === 'occluder' || child.label === 'shade' || child.label === 'army-ring' || child.label === 'tree' || child.label === 'inn' || child.label === 'builder') continue
       const { x: px, y: py } = child.position
       for (const o of occluders) {
         if (o.walked || px < o.left || px > o.right || py < o.top || py > o.sy + 2) continue

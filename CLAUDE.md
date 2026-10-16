@@ -497,8 +497,11 @@ değerler `society.json` → `growth`). Tur başına gelen: (0,08 + boş yerin
   çarpanı nedeniyle ve dolmaya kalan süreyi gösterir. Büyümenin yanındaki
   **(i)** düğmesi büyümenin nasıl işlediğini lordun kendi sayılarıyla
   anlatır (`GrowthExplained`: yer, boş yer, formül, mutluluk çarpanı, göç,
-  hizmetliler). Üst çubuktaki nüfus kartı da saatlik büyümeyi, yerleşimi
-  (köylü / yer, dolmaya kalan süre) ve denizcileri gösterir.
+  hizmetliler). Üst çubuktaki nüfus kartı **nüfus / sınır** yazar (köylü + asker,
+  saray seviyesinin nüfus sınırı; sınırdayken kırmızı); açılan kartı da
+  saatlik büyümeyi, yerleşimi (köylü / yer, dolmaya kalan süre),
+  denizcileri ve **inşaat ustalarını** (aynı anda yürüyebilecek inşaat
+  sayısı ve kaçının çalıştığı) gösterir.
 - Sunucu, savaşta olan lordları (`atWar`) savaş ilanında, barışta ve her
   tick'te işaretler; kuşatılan sarayın `besiegedUntil` değeri kuşatma
   başlayınca yazılır.
@@ -668,7 +671,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   olmayabilir.
 - **İnşa menüsü:** Altın (ve yapı malzemesi) harcanarak ev, tarla, oduncu
   kampı, silah atölyesi kurulur. Yapılar süreyle inşa edilir (iskele
-  görünür), aynı anda en fazla 2 inşaat yürür. Yalnızca hudut içinde,
+  görünür; iskelede **ustalar çalışır**: bir kısmı çekiç sallar, bir kısmı
+  omzunda kalasla şantiyenin bir ucundan öbürüne taşır ve boş döner;
+  yapının boyuna göre 2–5 usta; yalnızca görsel, saatten hesaplanır,
+  `createWorld.ts` → `placeBuilders`), aynı anda en fazla 2 inşaat yürür. Yalnızca hudut içinde,
   serbest karoya kurulur; altındaki ağaçlar temizlenir.
 - **Nüfus:** Evler köylüye yer verir, köylüler o yere zamanla gelir (§5.2);
   üretim binaları işçi ister; köylü yetmezse binalar orantılı daha az

@@ -1491,6 +1491,57 @@ function peasant(frame: number, tunic: Uint32Array): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
+// A builder at a building site, facing right: hammer raised (0) and struck (1), or walking with a plank on the
+// shoulder (2, 3). A leather apron over the tunic and a cloth cap.
+function builder(frame: number, tunic: Uint32Array, cap: Uint32Array): Sprite {
+  const canvas = new Canvas(18, 24)
+  const cx = 8
+  const base = 22
+  const SKIN = rgb(0xb88458)
+  const walking = frame >= 2
+  const stride = !walking ? 0 : frame === 2 ? 1 : -1
+  // Feet apart while hammering, striding while carrying.
+  canvas.set(cx - 1 - stride, base, TIMBER[0])
+  canvas.set(cx + 1 + stride, base, TIMBER[0])
+  if (!walking) canvas.set(cx + 2, base, TIMBER[0])
+  for (let y = base - 8; y < base; y++) {
+    const half = y > base - 3 ? 1.5 : 1
+    for (let x = Math.round(cx - half); x <= Math.round(cx + half); x++) canvas.set(x, y, tunic[x < cx ? 2 : x === cx ? 1 : 0])
+  }
+  for (let y = base - 6; y < base - 1; y++) canvas.set(cx + 1, y, PLANK[y === base - 6 ? 3 : 2])
+  canvas.set(cx, base - 9, SKIN)
+  canvas.set(cx + 1, base - 9, rgb(0x93633f))
+  for (let x = cx - 1; x <= cx + 1; x++) canvas.set(x, base - 10, cap[x < cx ? 2 : 1])
+  canvas.set(cx - 1, base - 11, cap[2])
+  canvas.set(cx, base - 11, cap[1])
+  if (frame === 0) {
+    // The arm up, the hammer over the head.
+    canvas.set(cx + 2, base - 7, SKIN)
+    canvas.set(cx + 2, base - 8, SKIN)
+    for (let z = 9; z <= 12; z++) canvas.set(cx + 2, base - z, TIMBER[3])
+    for (let x = cx + 1; x <= cx + 4; x++) canvas.set(x, base - 13, STEEL_GREY[x === cx + 4 ? 1 : 2])
+    canvas.set(cx + 4, base - 14, STEEL_GREY[3])
+  } else if (frame === 1) {
+    // The arm down and out, the hammer on the timber.
+    canvas.set(cx + 2, base - 6, SKIN)
+    canvas.set(cx + 3, base - 5, SKIN)
+    canvas.set(cx + 4, base - 4, TIMBER[3])
+    canvas.set(cx + 5, base - 3, TIMBER[3])
+    for (let y = base - 4; y <= base - 1; y++) canvas.set(cx + 6, y, STEEL_GREY[y === base - 4 ? 3 : 2])
+    canvas.set(cx + 7, base - 2, rgb(0xe8d8a8))
+  } else {
+    // A plank across the shoulder.
+    for (let x = cx - 7; x <= cx + 7; x++) {
+      const dip = x > cx + 3 ? 1 : x < cx - 4 ? -1 : 0
+      canvas.set(x, base - 8 + dip, PLANK[x < cx ? 3 : 4])
+      canvas.set(x, base - 7 + dip, PLANK[1])
+    }
+    canvas.set(cx + 2, base - 6, SKIN)
+  }
+  shadow(canvas, cx, base, 3)
+  return canvas.sprite(cx, base, 0)
+}
+
 // A small tent on four posts under a canopy of `cloth`, standing on (x, base), with goods under it.
 function tent(canvas: Canvas, x: number, base: number, w: number, cloth: Uint32Array, plain = false) {
   hall(canvas, x, base, { w, wall: 14, roof: Math.round(w * 0.7), walls: WALL, roofs: ROOF, open: true, cloth, plain })
@@ -3011,6 +3062,12 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
 }
 
 export const VILLAGER_SPRITES = [SACK, CLOTH[2], CLOTH[1], CLOTH[3]].map((tunic) => [peasant(0, tunic), peasant(1, tunic)])
+// Builders at work on a site, in a few tunics and caps: hammer up, hammer down, two walking steps with a plank.
+export const BUILDER_SPRITES = [
+  [SACK, CLOTH[0]],
+  [CLOTH[2], CLOTH[1]],
+  [CLOTH[3], SACK],
+].map(([tunic, cap]) => [0, 1, 2, 3].map((frame) => builder(frame, tunic, cap)))
 
 const FOUNDATION = ramp(0x4a4650, 0x625e68, 0x7a7680, 0x928e96, 0xaaa6aa)
 const BANK = ramp(0x3a2818, 0x4e3620, 0x64472a, 0x7a5834, 0x5f8c3a)

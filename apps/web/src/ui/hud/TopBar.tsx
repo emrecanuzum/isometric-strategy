@@ -1,4 +1,4 @@
-import { BUILDINGS, balance, buildingOutput, fishCatch, gameTime, goldCap, growthTerms, idleFactor, ledger, population, timeToFill, roundOutcome, sailorsOf, storageCap, townYield } from '@game/shared'
+import { BUILDINGS, balance, buildingOutput, constructing, maxConstructions, fishCatch, gameTime, goldCap, growthTerms, idleFactor, ledger, population, timeToFill, roundOutcome, sailorsOf, storageCap, townYield } from '@game/shared'
 import type { BuildingKind, Kingdom, Market, Resource, Stock } from '@game/shared'
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
@@ -31,7 +31,8 @@ interface Props {
 
 export function TopBar({ kingdom, now, seasonStart, history, onOpen, market, menu }: Props) {
   const flow = flows(kingdom, now, market)
-  const { villagers, jobs } = population(kingdom, now)
+  const { villagers, soldiers, cap } = population(kingdom, now)
+  const people = villagers + soldiers
   const [open, setOpen] = useState<string | null>(null)
   const bar = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -70,7 +71,7 @@ export function TopBar({ kingdom, now, seasonStart, history, onOpen, market, men
         )
       })}
       <Chip
-        label={`Köylü ${villagers}, iş gücü ihtiyacı ${jobs}`}
+        label={`Nüfus ${people}, sınır ${cap}`}
         open={open === 'people'}
         onClick={tap('people', 'people')}
         card={<PeopleCard kingdom={kingdom} now={now} />}
@@ -78,8 +79,8 @@ export function TopBar({ kingdom, now, seasonStart, history, onOpen, market, men
       >
         <Icon name="villager" size={24} />
         <span className="res-value">
-          <b>{villagers}</b>
-          <small className={villagers < jobs ? 'down' : ''}>/{jobs}</small>
+          <b>{people}</b>
+          <small className={people >= cap ? 'down' : ''}>/{cap}</small>
         </span>
       </Chip>
       <Clock now={now} seasonStart={seasonStart} nextRound={kingdom.nextProductionAt} open={open === 'clock'} onTap={() => setOpen((o) => (o === 'clock' ? null : 'clock'))} />
@@ -213,6 +214,9 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
   const grow = growthTerms(kingdom, now)
   const fill = timeToFill(kingdom, now)
   const most = Math.max(villagers, jobs, 1)
+  // The builders: one per building site that may run at once (CLAUDE.md §5.3).
+  const slots = maxConstructions(kingdom, now)
+  const busy = constructing(kingdom, now).length
   return (
     <>
       <header className="pop-head">
@@ -271,6 +275,12 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
           <span>Barınak (ev, saray)</span>
           <b>
             {homes} · {housing} kişilik
+          </b>
+        </li>
+        <li>
+          <span>İnşaat ustası</span>
+          <b>
+            {slots} · {busy > 0 ? `${busy} çalışıyor` : 'boşta'}
           </b>
         </li>
         <li>
