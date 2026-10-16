@@ -239,6 +239,23 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   taşlardır.
 - **Yollar ve nehirler kıvrımlıdır**; uzun dümdüz hatlar izometrik görünümü
   bozduğu için rota üretimi bilerek sapma ekler.
+- **Geniş nehirler** (dünya sürümü 6): her şey (hanlar, şehirler, yollar)
+  yerleştikten sonra nehirlerin iki kıyısı da nehrin genişliğinin %60'ı
+  kadar geri çekilir (derelerde kaynağa doğru daha az); nehirler aşağı
+  yukarı iki kat geniştir, ortası daha derindir. Yeni sudan geçen yol
+  köprü olur, taş köprüler geniş suya göre kurulur (en fazla 14 karo).
+  Bir kıyının yakınında korunması gereken bir şey varsa (han, şehrin 30
+  karo çevresi, canlı lobide lordların binaları, iskele arsaları ve
+  kasabalar) o kıyı yerinde kalır, **karşı kıyı iki kat çekilir**; iki
+  kıyı da tutulmuşsa nehir orada eski genişliğindedir. Geçişler nehir
+  boyunca yumuşaktır; çekilen kıyının ardındaki yamaç 8 karoda suya iner,
+  arazi türü değişmez (`worldgen.ts` → `widenRivers`, `world.json` →
+  `riverWiden`). Genişlemeden önce açılmış lobiler (sürüm 5) sürüm 6'ya
+  `scripts/widen-rivers.ts` ile taşınır: korunan dikdörtgenler
+  `lobbies.river_keep`'e yazılır, istemci dünyayı tohum, sürüm ve bunlarla
+  üretir; sunucunun `lobby_worlds` karoları da yenilenir (betik önce
+  saklanan karoların sürüm 5'le aynı olduğunu ve hiçbir korunan karonun
+  suya düşmediğini denetler).
 - **Nehir ve göl aynı sudur**, hepsi aynı su seviyesindedir. Nehir araziyi
   **vadi** olarak oyar: yatağından uzaklaştıkça zemin en fazla sabit bir
   eğimle yükselebilir. Böylece dağdan geçen ya da dağda doğan nehir
@@ -246,7 +263,8 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
 - **Köprüler** yolun sudan geçtiği her yerde kurulur: kıyıdan kıyıya
   **düz** bir ahşap güverte, iki yanda korkuluk ve dikmeler, suya inen
   **ayak çiftleri** (dibinde köpük halkası). Güverte kıyılardan rampayla
-  yükselir; parçalar piksel bazında derinlik testiyle çizilir, öndeki kıyı
+  yükselir (suyun 30 piksel üstünde, altından gemi geçecek kadar yüksek;
+  taş köprünün kamburu 34 piksel); parçalar piksel bazında derinlik testiyle çizilir, öndeki kıyı
   köprünün ucunu örter. Güverte yaklaşık 1,5 karo, taş köprü 1,35 karo
   geniştir.
 - **Yol onarımı (yalnız çizim):** Dünya üretimi bazen yolu derenin içinden,
@@ -649,7 +667,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   kurulan krallıkları etkiler).
 - **İskele:** Krallığın önceden belirli iskele arsasına kurulur (yer
   seçilmez, tek tane). Balık tutar (yemek). İskelenin ahşap kısmı arsanın
-  en açık suya bakan kenarından nehre/göle doğru uzanır.
+  en açık suya bakan kenarından nehre/göle doğru en fazla 2 karo uzanır
+  (`dockPier`); üstünde kıyı ucunda sandıklar ve fıçı, ortada kangal
+  halat ve balık sepeti, kenarından sarkan kurumaya asılmış ağ, öbür
+  ucunda direkte bir fener durur.
 - **Eğim:** Yokuşa kurulan yapı, en yüksek köşesi hizasında düz bir taş
   kaide üzerinde durur (tarlada toprak set); kaide aşağıdaki zemine iner.
   Kıyı yapıları (iskele binası, balıkçı kulübesi) kaideye çıkmaz: dik
@@ -1098,7 +1119,9 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   tapınaklar dolu bir dış şehir uzanır (yollardan ve surlardan uzak,
   arazinin izin verdiği yerde). Sur her yerde kesintisizdir; yalnızca suya
   düştüğü yerde açıktır. Bir yol (ya da liman yolu) suru kestiği her yerde
-  tek bir kapı açılır, yol sur boyunca uzansa bile; kuleler köşelerde,
+  tek bir kapı açılır, yol sur boyunca uzansa bile; kapı karadadır (yol
+  suru köprüyle su üstünde kesiyorsa kapı yoktur, sur orada zaten açıktır)
+  ve suyun kestiği üç parçadan kısa sur kırıntıları çizilmez; kuleler köşelerde,
   kapıların iki yanında ve 9 karoda bir durur
   (`apps/web/src/game/cities.ts` → `outskirts`).
 - **Ordu karargâhı:** Dış surun 3 karo dışında, limanın karşı tarafında
@@ -1142,8 +1165,10 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   geçirirken sunucudaki `lobby_worlds` karoları da 3'ün karolarıyla
   değiştirilir (yalnızca şehir ve yeni yol karoları farklıdır); önce
   krallıkların hududuna değen karo olmadığı denetlenir. **4**, 2'nin
-  aynısıdır ama şehirler göl kıyısına ve birbirinden en uzağa kurulur;
-  yeni lobiler 4'tür (`command` lobiyi açarken `world_rev`'i yazar).
+  aynısıdır ama şehirler göl kıyısına ve birbirinden en uzağa kurulur.
+  **5** her zaman iki şehir kurar, **6** 5'in nehirleri genişletilmiş
+  hâlidir (§4.2); yeni lobiler 6'dır (`command` lobiyi açarken
+  `world_rev`'i yazar).
 - **İleride:** paralı asker kiralama, barış görüşmelerinde arabuluculuk,
   rehine/fidye takası, kara borsa, şehirden mal satın alma.
 
@@ -2409,7 +2434,7 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
 
 | Tablo | İçerik |
 | --- | --- |
-| `lobbies` | tohum, `world_rev` (dünya üretim sürümü), `season_start`, ayarlar |
+| `lobbies` | tohum, `world_rev` (dünya üretim sürümü), `river_keep` (genişleyen nehrin kuru bıraktığı alanlar), `season_start`, ayarlar |
 | `kingdoms` | `state jsonb`, `version`, `updated_at`, ad, renk |
 | `armies` | sahibi, birlikler, `path`, `depart_at`, `arrive_at` |
 | `orders` | elçi emirleri: `issued_at`, `effective_at`, içerik |

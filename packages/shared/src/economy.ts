@@ -1682,7 +1682,7 @@ const isWater = (world: World, x: number, y: number) =>
 
 // The jetty of a dock on `plot`: of the lanes leaving each side of the plot (one per edge tile), it takes the one
 // running furthest over open water.
-export function dockPier(world: World, plot: Rect, maxLength = 3) {
+export function dockPier(world: World, plot: Rect, maxLength = 2) {
   const across = 0.8
   let best: { x: number; y: number; w: number; h: number; along: 'x' | 'y' } | null = null
   let bestLength = 0

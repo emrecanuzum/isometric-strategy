@@ -25,8 +25,13 @@ export const Feature = {
 // lobbies opened before the cities). 4: as 2, but the cities stand on the shore of a big lake (a harbour, see
 // cityHarbour) and as far from one another as the land allows. 5: as 4, but always two cities, the two lakeside spots
 // farthest apart however close that is (one lakeside and the farthest open spot, or two open ones, when the lakes
-// have less room).
-export const WORLD_REV = 5
+// have less room). 6: as 5, but the rivers are widened once everything else is laid (widenRivers), each bank drawn
+// back by a share of the river's width; next to whatever must stay dry (`keep`: a running lobby's buildings and plots
+// when it moved to this revision) that bank stays and the other is drawn back twice as far.
+export const WORLD_REV = 6
+
+// A rectangle of tiles the widened rivers leave dry: [x, y, width, height].
+export type RiverKeep = [number, number, number, number]
 
 export interface Polyline {
   points: Point[]
@@ -237,7 +242,7 @@ function pickSpaced(
   return picked
 }
 
-export function generateWorld(seed: number, rev = WORLD_REV): World {
+export function generateWorld(seed: number, rev = WORLD_REV, keep: RiverKeep[] = []): World {
   const cfg = balance.world
   const size = balance.map.chunkSize * balance.map.worldChunks
   const random = mulberry32(seed)
@@ -675,6 +680,14 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
   }
   endAtWalls()
 
+  // Revision 6: the rivers widen. Everything laid so far (inns, cities, roads) stays where it is: a road over new water
+  // becomes a bridge, and the stone bridges below are laid over the wider water.
+  if (rev >= 6) {
+    widenRivers({ size, terrain, feature, elevation, height, rivers, inns, cities, lake: lakeLevel, riverDistance, keep })
+    for (const river of rivers) river.width *= 1 + 2 * cfg.riverWiden.bankShare
+  }
+  const maxSpan = rev >= 6 ? cfg.stoneBridgeMaxSpanWide : cfg.stoneBridgeMaxSpan
+
   // Stone bridges cross the rivers here and there away from the trade routes, so both banks can be walked to.
   const crossings: Crossing[] = []
   const spans: Point[] = []
@@ -692,7 +705,7 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
     const nx = -dy / length
     const ny = dx / length
     const reachBank = (side: number) => {
-      for (let s = 0; s <= cfg.stoneBridgeMaxSpan / 2; s += 0.25) {
+      for (let s = 0; s <= maxSpan / 2; s += 0.25) {
         const q = { x: p.x + nx * s * side, y: p.y + ny * s * side }
         if (!wet(q)) return s
       }
@@ -706,6 +719,8 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
     for (const q of [a, b]) {
       // Not in the gorges where rivers leave through the mountain ring.
       if (Math.min(q.x, q.y, size - q.x, size - q.y) < cfg.borderTiles || wet(q)) return null
+      // On firm ground, not a lone tile in the water.
+      if (rev >= 6 && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => wet({ x: q.x + dx, y: q.y + dy }))) return null
       const i = Math.floor(q.y) * size + Math.floor(q.x)
       if (terrain[i] === Terrain.Mountain || height[i] > cfg.stoneBridgeMaxRise * 2) return null
     }
@@ -792,6 +807,183 @@ export function generateWorld(seed: number, rev = WORLD_REV): World {
     roads,
     rivers,
     crossings,
+  }
+}
+
+// Widens the rivers of a world laid out (CLAUDE.md §4.2): each bank is drawn back by `bankShare` of the river's width
+// (thinner toward a stream's spring). Where something to be kept dry (`keep`, the inns, the cities and the land round
+// them) stands near a bank, that bank stays as it is and the one across is drawn back twice as far; with both banks
+// held the river keeps its width there. The change fades in and out along the river. The ground rising from a moved
+// bank is lowered toward the water over `slopeTiles`, so the valley side still meets it; land keeps its terrain.
+function widenRivers(w: {
+  size: number
+  terrain: Uint8Array
+  feature: Uint8Array
+  elevation: Float32Array
+  height: Float32Array
+  rivers: Polyline[]
+  inns: Point[]
+  cities: Point[]
+  lake: number
+  // Distance to the nearest bank as the rivers were carved: negative in the water, positive on land.
+  riverDistance: Float32Array
+  keep: RiverKeep[]
+}) {
+  const cfg = balance.world
+  const opt = cfg.riverWiden
+  const { size, terrain, feature, elevation, height, rivers } = w
+  const kept = new Uint8Array(size * size)
+  const mark = (x0: number, y0: number, x1: number, y1: number) => {
+    for (let y = Math.max(0, Math.floor(y0)); y < Math.min(size, Math.ceil(y1)); y++) {
+      for (let x = Math.max(0, Math.floor(x0)); x < Math.min(size, Math.ceil(x1)); x++) kept[y * size + x] = 1
+    }
+  }
+  for (const [x, y, dx, dy] of w.keep) mark(x, y, x + dx, y + dy)
+  for (const inn of w.inns) mark(inn.x - opt.innGap, inn.y - opt.innGap, inn.x + 2 + opt.innGap, inn.y + 2 + opt.innGap)
+  const S = balance.cities.size
+  for (const c of w.cities) mark(c.x - opt.cityGap, c.y - opt.cityGap, c.x + S + opt.cityGap, c.y + S + opt.cityGap)
+
+  // How far each bank of river `r` moves at its point `j`, when nothing holds it.
+  const bankOf = (r: number, j: number) =>
+    opt.bankShare * rivers[r].width * (r > 0 ? Math.min(1, 0.55 + j / cfg.springTaperPoints) : 1)
+
+  // Each tile's nearest point of a river's center line, and which side of it the tile lies on.
+  const nearD = new Float32Array(size * size).fill(Infinity)
+  const nearRiver = new Int16Array(size * size).fill(-1)
+  const nearPoint = new Int32Array(size * size)
+  const nearSide = new Uint8Array(size * size)
+  rivers.forEach((river, r) => {
+    const line = river.points
+    const reach = Math.ceil(river.width * 0.8 + 2 * opt.bankShare * river.width + Math.max(opt.keepGap, opt.slopeTiles) + 2)
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1]
+      const b = line[i]
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const lengthSq = dx * dx + dy * dy || 1
+      const xEnd = Math.min(size - 1, Math.floor(Math.max(a.x, b.x)) + reach)
+      const yEnd = Math.min(size - 1, Math.floor(Math.max(a.y, b.y)) + reach)
+      for (let y = Math.max(0, Math.floor(Math.min(a.y, b.y)) - reach); y <= yEnd; y++) {
+        for (let x = Math.max(0, Math.floor(Math.min(a.x, b.x)) - reach); x <= xEnd; x++) {
+          const px = x + 0.5 - a.x
+          const py = y + 0.5 - a.y
+          const t = Math.min(1, Math.max(0, (px * dx + py * dy) / lengthSq))
+          const d = Math.hypot(px - dx * t, py - dy * t)
+          const index = y * size + x
+          if (d >= nearD[index]) continue
+          nearD[index] = d
+          nearRiver[index] = r
+          nearPoint[index] = t < 0.5 ? i - 1 : i
+          nearSide[index] = dx * py - dy * px > 0 ? 1 : 0
+        }
+      }
+    }
+  })
+
+  // The points where something kept stands near a bank, per side; then how far each bank moves along the river.
+  const blocked = rivers.map((river) => new Uint8Array(river.points.length * 2))
+  for (let i = 0; i < size * size; i++) {
+    const r = nearRiver[i]
+    if (r < 0 || !kept[i] || terrain[i] === Terrain.River || terrain[i] === Terrain.Lake) continue
+    const j = nearPoint[i]
+    if (w.riverDistance[i] <= 2 * bankOf(r, j) + opt.keepGap) blocked[r][j * 2 + nearSide[i]] = 1
+  }
+  const extra = rivers.map((river, r) => {
+    const n = river.points.length
+    const held = [0, 1].map((side) => {
+      const out = new Uint8Array(n)
+      for (let j = 0; j < n; j++) {
+        if (!blocked[r][j * 2 + side]) continue
+        for (let k = Math.max(0, j - opt.blockSpread); k <= Math.min(n - 1, j + opt.blockSpread); k++) out[k] = 1
+      }
+      return out
+    })
+    return [0, 1].map((side) => {
+      const raw = new Float32Array(n)
+      for (let j = 0; j < n; j++) raw[j] = held[side][j] ? 0 : held[1 - side][j] ? 2 * bankOf(r, j) : bankOf(r, j)
+      const out = new Float32Array(n)
+      for (let j = 0; j < n; j++) {
+        let sum = 0
+        let count = 0
+        for (let k = Math.max(0, j - opt.smooth); k <= Math.min(n - 1, j + opt.smooth); k++) {
+          sum += raw[k]
+          count++
+        }
+        out[j] = sum / count
+      }
+      return out
+    })
+  })
+
+  const slope = (d: number) => 1 - (1 - Math.min(d, opt.slopeTiles) / opt.slopeTiles) ** 2
+  for (let i = 0; i < size * size; i++) {
+    const r = nearRiver[i]
+    if (r < 0 || terrain[i] === Terrain.Lake) continue
+    const e = extra[r][nearSide[i]][nearPoint[i]]
+    const d = w.riverDistance[i]
+    if (terrain[i] === Terrain.River) {
+      // The water deepens toward the middle of the wider bed.
+      elevation[i] = w.lake - 0.0015 - Math.min(0.012, (e - d) * 0.01)
+      continue
+    }
+    if (e <= 0 || kept[i]) continue
+    if (d <= e && feature[i] !== Feature.Inn && feature[i] !== Feature.City) {
+      terrain[i] = Terrain.River
+      elevation[i] = w.lake - 0.0015 - Math.min(0.012, (e - d) * 0.01)
+      height[i] = 0
+      if (feature[i] === Feature.Road) feature[i] = Feature.Bridge
+    } else if (d < e + opt.slopeTiles) height[i] *= slope(Math.max(0, d - e)) / slope(d)
+  }
+
+  // Scraps of land the wider water leaves (a tile or two of a spit between a river and a lake) go under too: the ground
+  // painting would show them as water anyway, and a bridge must not end on one.
+  const isWet = (j: number) => terrain[j] === Terrain.River || terrain[j] === Terrain.Lake
+  for (let pass = 0; pass < 3; pass++) {
+    let sunk = 0
+    for (let y = 1; y < size - 1; y++) {
+      for (let x = 1; x < size - 1; x++) {
+        const i = y * size + x
+        if (isWet(i) || nearRiver[i] < 0 || kept[i] || feature[i] === Feature.Inn || feature[i] === Feature.City) continue
+        const wet = +isWet(i - 1) + +isWet(i + 1) + +isWet(i - size) + +isWet(i + size)
+        if (wet < 3) continue
+        terrain[i] = Terrain.River
+        elevation[i] = w.lake - 0.0015
+        height[i] = 0
+        if (feature[i] === Feature.Road) feature[i] = Feature.Bridge
+        sunk++
+      }
+    }
+    if (sunk === 0) break
+  }
+
+  // Where a river meets a lake, the lake's shallow rim would show in the middle of the wider water (it was its shore):
+  // the lake deepens toward the river's depth over `mouthTiles` from it, so the two waters run into one another.
+  const reach = opt.mouthTiles
+  const step = new Uint8Array(size * size)
+  const source = new Float32Array(size * size)
+  let front: number[] = []
+  for (let i = 0; i < size * size; i++) {
+    if (terrain[i] !== Terrain.River) continue
+    const x = i % size
+    if ((x > 0 && terrain[i - 1] === Terrain.Lake) || (x < size - 1 && terrain[i + 1] === Terrain.Lake) || terrain[i - size] === Terrain.Lake || terrain[i + size] === Terrain.Lake) {
+      front.push(i)
+      source[i] = elevation[i]
+    }
+  }
+  for (let k = 1; k <= reach && front.length > 0; k++) {
+    const next: number[] = []
+    for (const i of front) {
+      const x = i % size
+      for (const j of [x > 0 ? i - 1 : -1, x < size - 1 ? i + 1 : -1, i - size, i + size]) {
+        if (j < 0 || j >= size * size || terrain[j] !== Terrain.Lake || step[j]) continue
+        step[j] = k
+        source[j] = source[i]
+        const t = k / (reach + 1)
+        elevation[j] = Math.min(elevation[j], source[i] * (1 - t) + elevation[j] * t)
+        next.push(j)
+      }
+    }
+    front = next
   }
 }
 

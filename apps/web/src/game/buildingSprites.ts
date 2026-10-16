@@ -1107,13 +1107,14 @@ function dock(variant = 0, level = 1): Sprite {
 }
 
 // Plank jetty `w`×`h` tiles over the water, its planks across direction `along`; the deck stands `lift` pixels above
-// the water. Anchored at its front corner on the water surface.
+// the water; `outward` when it leaves the bank at its low end (toward +x or +y). Anchored at its front corner on the
+// water surface.
 const ROPE = rgb(0xc8b07a)
-function pier(w: number, h: number, along: 'x' | 'y', lift: number): Sprite {
-  // Room round the deck for what stands on a big jetty (its crane reaches out past the end).
+function pier(w: number, h: number, along: 'x' | 'y', lift: number, outward = true): Sprite {
+  // Room round the deck for what stands on a big jetty (its crane reaches out past the end), or above a small one.
   const room = w * h >= 6 ? 72 : 0
   const width = Math.ceil((w + h) * (TILE_WIDTH / 2)) + 8 + room * 2
-  const height = Math.ceil((w + h) * (TILE_HEIGHT / 2)) + lift + 8 + room
+  const height = Math.ceil((w + h) * (TILE_HEIGHT / 2)) + lift + 8 + room + (room ? 0 : 18)
   const canvas = new Canvas(width, height)
   const ax = Math.round(w * (TILE_WIDTH / 2)) + 4 + room
   const ay = height - 3
@@ -1170,6 +1171,79 @@ function pier(w: number, h: number, along: 'x' | 'y', lift: number): Sprite {
     bollard(long - 0.12, c)
     for (let a = 1.2; a < long - 0.6; a += 1.6) bollard(a, c)
   }
+  // Crates (`size` tiles from the middle to a side, `tall` pixels) and barrels standing on the deck.
+  const box = (a: number, c: number, size: number, tall: number, z0 = 0) => {
+    const step = Math.min(1 / 40, size / 6)
+    for (let z = 0; z < tall; z++) {
+      for (let da = -size; da <= size; da += step) {
+        for (let dc = -size; dc <= size; dc += step) {
+          const [u, v] = uv(a + da, c + dc)
+          const p = at(u, v, lift + z0 + z)
+          const edge = Math.abs(da) > size - 0.03 || Math.abs(dc) > size - 0.03 || z === tall - 1
+          canvas.set(p.x, p.y, z === tall - 1 ? PLANK[edge ? 2 : 4] : edge ? PLANK[0] : (along === 'x') === (dc > 0) ? PLANK[3] : PLANK[2])
+        }
+      }
+    }
+  }
+  const keg = (a: number, c: number, tall = 9, half = 3) => {
+    const [u, v] = uv(a, c)
+    const p = at(u, v, lift)
+    for (let z = 0; z < tall; z++) for (let dx = -half; dx <= half; dx++) canvas.set(p.x + dx, p.y - z, z === tall - 1 ? PLANK[4] : z % 3 === 1 ? LOGS[0] : PLANK[dx < 0 ? 3 : 1])
+  }
+  // A small jetty (a lord's dock) is a fisher's landing: a crate or two and a barrel by the bank, a coil of rope, a
+  // basket of the catch and nets drying, a lantern on a post at the far end.
+  if (long * across < 6) {
+    const things: [number, () => void][] = []
+    // Measured from the bank.
+    const from = (a: number) => (outward ? a : long - a)
+    const put = (a: number, c: number, draw: () => void) => {
+      const [u, v] = uv(a, c)
+      things.push([u + v, draw])
+    }
+    put(from(0.35), across * 0.3, () => {
+      box(from(0.35), across * 0.3, 0.13, 7)
+      box(from(0.35), across * 0.3, 0.1, 5, 7)
+    })
+    put(from(0.38), across * 0.72, () => keg(from(0.38), across * 0.72, 8, 3))
+    // Rope coiled in rings on the planks.
+    put(from(long * 0.55), across * 0.28, () => {
+      const [u, v] = uv(from(long * 0.55), across * 0.28)
+      const p = at(u, v, lift)
+      for (let ring = 0; ring < 2; ring++) {
+        for (let k = 0; k < 24; k++) {
+          const t = (k / 24) * Math.PI * 2
+          canvas.set(p.x + Math.round(Math.cos(t) * (5 - ring * 2)), p.y - ring + Math.round(Math.sin(t) * (2.5 - ring)), ring ? ROPE : PLANK[1])
+        }
+      }
+      canvas.set(p.x, p.y - 1, ROPE)
+    })
+    // A wicker basket of silver fish.
+    put(from(long * 0.62), across * 0.7, () => {
+      const [u, v] = uv(from(long * 0.62), across * 0.7)
+      const p = at(u, v, lift)
+      for (let z = 0; z < 5; z++) for (let dx = -4; dx <= 4; dx++) canvas.set(p.x + dx, p.y - z, (dx + z) % 2 === 0 ? LOGS[2] : LOGS[1])
+      for (let dx = -3; dx <= 3; dx++) canvas.set(p.x + dx, p.y - 5, dx % 2 === 0 ? STEEL_GREY[3] : STEEL_GREY[2])
+      canvas.set(p.x - 1, p.y - 6, STEEL_GREY[2])
+      canvas.set(p.x + 2, p.y - 6, STEEL_GREY[3])
+    })
+    // A net hung over the deck's edge to dry.
+    put(from(long * 0.8), across - 0.04, () => {
+      for (let a = Math.min(from(long * 0.7), from(long * 0.9)); a < Math.min(from(long * 0.7), from(long * 0.9)) + long * 0.2; a += 1 / 48) {
+        const [u, v] = uv(a, across)
+        const p = at(u, v, lift)
+        for (let z = 0; z < 5; z++) if ((Math.floor(a * 48) + z) % 2 === 0) canvas.set(p.x, p.y + 2 + z, z === 0 ? ROPE : PLANK[1])
+      }
+    })
+    // The lantern on its post at the far end.
+    put(from(long - 0.3), 0.14, () => {
+      const [u, v] = uv(from(long - 0.3), 0.14)
+      const p = at(u, v, lift)
+      for (let z = 0; z < 15; z++) for (const dx of [0, 1]) canvas.set(p.x + dx, p.y - z, LOGS[dx ? 1 : 2])
+      for (let dx = 1; dx <= 4; dx++) canvas.set(p.x + dx, p.y - 15, LOGS[2])
+      for (let z = 0; z < 4; z++) for (const dx of [3, 4, 5]) canvas.set(p.x + dx, p.y - 13 + z, z === 0 || z === 3 ? LOGS[0] : EMBER[dx === 4 ? 2 : 1])
+    })
+    things.sort((p, q) => p[0] - q[0]).forEach(([, draw]) => draw())
+  }
   // A big jetty (a city's harbour) is a working quay: worn planks, a rope rail along one side, stacks of crates and
   // barrels, lamp posts and a cargo crane at its end.
   if (long * across >= 6) {
@@ -1199,18 +1273,6 @@ function pier(w: number, h: number, along: 'x' | 'y', lift: number): Sprite {
       canvas.set(p.x, p.y - 7 + sag, ROPE)
     }
     // Stacks of crates and barrels.
-    const box = (a: number, c: number, size: number, tall: number) => {
-      for (let z = 0; z < tall; z++) {
-        for (let da = -size; da <= size; da += 1 / 40) {
-          for (let dc = -size; dc <= size; dc += 1 / 40) {
-            const [u, v] = uv(a + da, c + dc)
-            const p = at(u, v, lift + z)
-            const edge = Math.abs(da) > size - 0.03 || Math.abs(dc) > size - 0.03 || z === tall - 1
-            canvas.set(p.x, p.y, z === tall - 1 ? PLANK[edge ? 2 : 4] : edge ? PLANK[0] : (along === 'x') === (dc > 0) ? PLANK[3] : PLANK[2])
-          }
-        }
-      }
-    }
     for (let k = 0; k < Math.floor(long / 2.5); k++) {
       const a = 1 + k * 2.5 + hash(k, 1, 91) * 0.6
       const c = across * (0.25 + hash(k, 2, 91) * 0.25)
@@ -2921,6 +2983,7 @@ function pierPart(s: Structure, p: NonNullable<Structure['pier']>, at: (x: numbe
   // The deck starts level with the bank it leaves from.
   const shore = p.along === 'x' ? { x: p.x < s.x ? p.x + p.w : p.x, y: p.y + p.h / 2 } : { x: p.x + p.w / 2, y: p.y < s.y ? p.y + p.h : p.y }
   const lift = Math.max(5, Math.min(14, at(shore.x, shore.y) + 2))
-  const sprite = once(`pier:${p.w}:${p.h}:${p.along}:${lift}`, () => pier(p.w, p.h, p.along, lift))
+  const outward = p.along === 'x' ? p.x >= s.x : p.y >= s.y
+  const sprite = once(`pier:${p.w}:${p.h}:${p.along}:${lift}:${outward}`, () => pier(p.w, p.h, p.along, lift, outward))
   return { sprite, fx: p.x + p.w, fy: p.y + p.h, z: 0, solid: false }
 }

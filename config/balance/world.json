@@ -38,5 +38,16 @@
   "stoneBridgeGap": [45, 120],
   "stoneBridgeMaxSpan": 9,
   "stoneBridgeMaxRise": 30,
-  "stoneBridgeClearance": 20
+  "stoneBridgeClearance": 20,
+  "stoneBridgeMaxSpanWide": 14,
+  "riverWiden": {
+    "bankShare": 0.6,
+    "keepGap": 2,
+    "innGap": 3,
+    "cityGap": 30,
+    "blockSpread": 12,
+    "smooth": 6,
+    "slopeTiles": 8,
+    "mouthTiles": 10
+  }
 }

@@ -491,6 +491,7 @@ function App({
       },
       serverNow,
       lobby.world_rev ?? 1,
+      lobby.river_keep ?? [],
     ).then((v) => {
       if (cancelled) return v.destroy()
       created = v

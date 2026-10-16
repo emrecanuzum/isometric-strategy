@@ -14,7 +14,7 @@ import {
   screenToTile,
   tileRule,
 } from '@game/shared'
-import type { Point, Rect, World } from '@game/shared'
+import type { Point, Rect, RiverKeep, World } from '@game/shared'
 import { Application, BlurFilter, Container, Graphics, ImageSource, Sprite, Text, Texture } from 'pixi.js'
 import { createAmbient } from './ambient'
 import { createArmies } from './armies'
@@ -246,6 +246,8 @@ export async function createWorld(
   clock: () => number = Date.now,
   // How the lobby's world is made from its seed (see WORLD_REV).
   rev = WORLD_REV,
+  // What its widened rivers leave dry, for a lobby that was running when they came.
+  keep: RiverKeep[] = [],
 ): Promise<WorldView> {
   const app = new Application()
   await app.init({
@@ -259,7 +261,7 @@ export async function createWorld(
   app.canvas.style.imageRendering = 'pixelated'
   host.appendChild(app.canvas)
 
-  const world = generateWorld(seed, rev)
+  const world = generateWorld(seed, rev, keep)
   const chunkSize = balance.map.chunkSize
   const chunkCount = world.size / chunkSize
 

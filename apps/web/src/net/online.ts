@@ -1,4 +1,4 @@
-import type { PlanStep, Good, TradeLedger, Town, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units, Ship, Ships, MissionOrder, NavyLook, Blockade } from '@game/shared'
+import type { PlanStep, Good, TradeLedger, Town, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, RiverKeep, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units, Ship, Ships, MissionOrder, NavyLook, Blockade } from '@game/shared'
 import { supabase } from '../lib/supabase'
 
 // The lobby as the client sees it: the player's own kingdom in full, the others only as they show on the map, and the
@@ -16,6 +16,8 @@ export interface Lobby {
   market: Market | null
   // How its world was made from the seed (worldgen WORLD_REV; absent before the column existed: 1).
   world_rev?: number
+  // The rectangles its widened rivers leave dry, for a lobby that was running when they came (worldgen RiverKeep).
+  river_keep?: RiverKeep[] | null
 }
 
 // The player's row: the sites shown before founding, then the economy.
@@ -104,7 +106,7 @@ export async function listLobbies(): Promise<LobbyListing[]> {
   return data as LobbyListing[]
 }
 
-const LOBBY_COLUMNS = 'id, name, seed, is_public, max_players, season_start, season_end, has_password, market, world_rev'
+const LOBBY_COLUMNS = 'id, name, seed, is_public, max_players, season_start, season_end, has_password, market, world_rev, river_keep'
 
 export async function getLobby(id: string): Promise<Lobby | null> {
   const { data } = await supabase.from('lobbies').select(LOBBY_COLUMNS).eq('id', id).maybeSingle()

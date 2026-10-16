@@ -208,18 +208,18 @@ const PATH_LENGTH = 3.2
 const PATH_NARROW = 0.3
 // Bridge shape: deck lift above the banks (pixels), half width (tiles), deck thickness and railing height (pixels),
 // length of the ramp onto each bank and the spacing of the piers (tiles).
-const BRIDGE_LIFT = 12
+const BRIDGE_LIFT = 30
 const BRIDGE_HALF = 0.75
 const DECK_THICK = 3
 const RAIL_HEIGHT = 7
-const BRIDGE_RAMP = 1.2
+const BRIDGE_RAMP = 2.2
 const PIER_SPACING = 1.5
 // Stone bridges: hump height (pixels), half width (tiles), parapet height (pixels), abutment length on each bank and
 // the span of one arch (tiles).
-const STONE_LIFT = 14
+const STONE_LIFT = 34
 const STONE_HALF = 0.68
 const PARAPET = 4
-const ABUTMENT = 0.9
+const ABUTMENT = 1.3
 const ARCH_SPAN = 2.2
 const NO_GROUND = -32768
 // The sun painted when none is given (headless previews).

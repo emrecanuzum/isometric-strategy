@@ -380,7 +380,12 @@ function outskirts(world: World, index: number): Structure[] {
       if (!crossing(line[t].x, line[t].y)) continue
       let end = t
       while (end + 1 < line.length && crossing(line[end + 1].x, line[end + 1].y)) end++
-      gates.add(Math.floor((t + end) / 2))
+      // On land, the nearest to the middle of the crossing: a road bridging water where the wall runs has no gate (the
+      // wall is open over the water anyway).
+      const mid = (t + end) / 2
+      let gate = -1
+      for (let k = t; k <= end; k++) if (land(line[k].x, line[k].y) && (gate < 0 || Math.abs(k - mid) < Math.abs(gate - mid))) gate = k
+      if (gate >= 0) gates.add(gate)
       t = end
     }
     for (let t = 0; t < line.length; t++) {
@@ -395,6 +400,16 @@ function outskirts(world: World, index: number): Structure[] {
       const corner = t === 0 || t === line.length - 1
       const byGate = gates.has(t - 1) || gates.has(t + 1)
       pieces.set(i, { x: p.x, y: p.y, size: 1, look: corner || byGate || t % 9 === 4 ? 'towerWall' : 'wall', variant: 0, city: index })
+    }
+    // A scrap of wall the water cuts off (shorter than three pieces, no gate, not at a corner) is left out.
+    for (let t = 0; t < line.length; t++) {
+      if (!pieces.has(at(line[t].x, line[t].y))) continue
+      let end = t
+      while (end + 1 < line.length && pieces.has(at(line[end + 1].x, line[end + 1].y))) end++
+      let gate = false
+      for (let k = t; k <= end; k++) gate ||= gates.has(k)
+      if (end - t < 2 && !gate && t > 0 && end < line.length - 1) for (let k = t; k <= end; k++) pieces.delete(at(line[k].x, line[k].y))
+      t = end
     }
   }
   out.push(...pieces.values())
