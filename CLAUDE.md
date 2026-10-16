@@ -1762,6 +1762,9 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   kraliçe 44 yaşına kadar. %55 oğlan. Çocuğun yetenekleri %60 anne-baba
   ortalaması, %40 yeni çekiliştir. **Sarayı 3. seviyeye yükseltmek için
   kraliçe şarttır** (`'queen'` hatası).
+  Saray sekmesinde yükseltme bu yüzden kapalıysa düğmenin altında bunu
+  söyleyen bir uyarı ve oradan kraliçe getiren **"Kraliçe bul"** düğmesi
+  durur (kraliçe rehinse fidye yolu yazar).
 - **Kuraldan önce yükselmiş saraylar:** Sarayı 3. seviye ya da üstü olup
   kraliçesi olmayan (ve kraliçesi rehin olmayan) lordluğun ekranının sağında
   "Kraliçeye ihtiyacımız var" uyarısı durur; "Kraliçe getir" düğmesi tek

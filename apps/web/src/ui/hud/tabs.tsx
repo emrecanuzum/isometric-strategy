@@ -701,6 +701,7 @@ export function KingdomTab(data: HudData) {
                   </button>
                   <Missing cost={upgradeSpec(palace)?.cost} stock={kingdom.stock} />
                   {upgradeError(kingdom, palace.id, now) === 'liege' && <p className="hint down">Önce aşağıdaki Bağlılık bölümünden bir taç krallığına biat et.</p>}
+                  {upgradeError(kingdom, palace.id, now) === 'queen' && <QueenNeeded kingdom={kingdom} now={now} online={data.online} />}
                   </>
                 )}
               </>
@@ -964,6 +965,24 @@ function Health({ data }: { data: HudData }) {
             Tapınak (3. seviye saray) halkın mutluluğunu artırır, askerlerine iman gücü verir; rahipleri vaaz verince vergiler halka daha az ağır gelir.
           </p>
         </Section>
+      )}
+    </>
+  )
+}
+
+// The palace will not rise past this level without a queen: say so where the upgrade is, and fetch one from there.
+function QueenNeeded({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?: Online }) {
+  const why = queenError(kingdom, now)
+  return (
+    <>
+      <p className="hint down">
+        Sarayı {balance.dynasty.queenForPalaceLevel}. seviyeye yükseltmek için sarayda bir kraliçe olmalı.
+        {kingdom.queenHeldBy && ` Kraliçen ${kingdom.queenHeldBy.name} lordunun elinde: Halk sekmesi → Kraliçe'den fidyesini öde.`}
+      </p>
+      {!kingdom.queenHeldBy && (
+        <button className="btn small" disabled={!!why} onClick={() => online?.act({ type: 'queen' })}>
+          <Icon name="crown" size={16} /> Kraliçe bul · {queenOwed(kingdom, now) ? 'hemen, bedelsiz' : `${balance.society.queen.cost.gold} altın`} {why ? `(${QUEEN_WHY[why] ?? ''})` : ''}
+        </button>
       )}
     </>
   )
