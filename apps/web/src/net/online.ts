@@ -309,7 +309,7 @@ export interface Battle {
   defenders: Fighter[]
   besieged: number | null
   // A revolt's battle names the town whose rebels it is fought against.
-  plan: BattlePlan & { defense?: { towers: number; walls: number; attackerTowers?: number }; town?: number }
+  plan: BattlePlan & { defense?: { towers: number; walls: number; attackerTowers?: number; keep?: number }; town?: number }
   resolved: boolean
   report: { winner: 'attackers' | 'defenders'; losses: Record<string, number>; loot?: Record<string, number> } | null
 }

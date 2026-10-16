@@ -1,8 +1,9 @@
-import { TILE_HEIGHT, TILE_WIDTH, hash, heightAt } from '@game/shared'
+import { TILE_HEIGHT, TILE_WIDTH, gameTime, hash, heightAt } from '@game/shared'
 import type { Point, World } from '@game/shared'
 import { Container, Sprite as PixiSprite } from 'pixi.js'
 import type { Texture } from 'pixi.js'
 import { VILLAGER_SPRITES } from './buildingSprites'
+import { isNight } from './daylight'
 import { SPRITES } from './sprites'
 import type { Sprite } from './sprites'
 import { textureOf } from './textures'
@@ -12,6 +13,8 @@ import { textureOf } from './textures'
 // follow from the clock and are never stored.
 
 const VILLAGER_SPEED = 0.6
+// At night the town sleeps: only this many villagers are out and about.
+const NIGHT_WALKERS = 2
 const REST_SECONDS = [2, 6]
 const STRIDES_PER_TILE = 3
 // Paths are searched within this many tiles around the box spanned by their two ends.
@@ -236,8 +239,14 @@ export function createTown(world: World, layer: Container): Town {
     },
     update(now, view) {
       const seconds = now / 1000
-      // Each villager walks out, rests at work, walks back and rests at home; out of sight while indoors.
-      for (const v of villagers) {
+      // Each villager walks out, rests at work, walks back and rests at home; out of sight while indoors. At night all
+      // but a couple stay in.
+      const night = isNight(gameTime(now, 0).hour)
+      for (const [i, v] of villagers.entries()) {
+        if (night && i >= NIGHT_WALKERS) {
+          v.sprite.visible = false
+          continue
+        }
         const walk = v.path.length / VILLAGER_SPEED
         const loop = (walk + v.rest) * 2
         const u = (seconds + v.offset) % loop

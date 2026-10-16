@@ -888,8 +888,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   - **Yapı sınırları** saray seviyesiyle artar (saray 1→5): tarla 3 / 4 /
     6 / 8 / 10, oduncu kampı 2 / 3 / 4 / 5 / 6, silah atölyesi 1 / 2 / 3 /
     3 / 4, gözcü kulesi 2 / 2 / 3 / 4 / 6, sur kapısı 2 / 2 / 3 / 4 / 5;
-    pazar, kışla, casus evi, hapishane, üniversite, hastane, tapınak, tersane ve
-    iskele birer tane. Sınır İnşa sekmesinde ve Saray sekmesindeki yapılar listesinde
+    pazar, kışla, casus evi, hapishane, üniversite, hastane, tapınak, tersane,
+    iskele ve 5. seviye sarayın üç büyük yapısı (hisar, hanedan anıtı, lonca
+    konağı; §9.8) birer tane. Sınır İnşa sekmesinde ve Saray sekmesindeki yapılar listesinde
     "kurulu / sınır" olarak yazar; sınırı aşan eski yapılar yerinde kalır.
   - **Saray 4. ve 5. seviye** çok pahalı ve uzundur (savaş malzemesi de
     ister; `economy.json`).
@@ -939,6 +940,19 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   da bina menüsü açıkken gizlenir. Başlığına ("Süren işler · N") dokununca
   liste daralır; daralmışken yalnızca sayı ve ilk bitecek işin kalan süresi
   görünür (tercih tarayıcıda hatırlanır).
+  Bir saatten uzun süre "s:dd:ss" yazar. Sayaca tıklamak ilgili yeri açar:
+  inşaat, araştırma ve vaaz o binanın menüsünü (kamera binaya gider), asker
+  eğitimi Ordu → Kışla'yı, sefer Saray → Seferler'i, taç kervanı Ticaret →
+  Siparişler'i, gemiler ve filolar Ordu → Donanma'yı, orduya giden elçi ve
+  yoldaki ordular Ordu → Ordular'ı, lorda giden elçi o lordu Diplomasi'de,
+  kraliyet isteği Diplomasi → Krallık'ı açar.
+- **Haritada ilerleme çubukları** (`createWorld.ts` → `setProgress`):
+  inşaatı ya da yükseltmesi süren her binanın üstünde, kasaba kuşatması
+  gibi bir çubuk dolar. Kuşatılan bir sarayın (her lordun) üstünde
+  kuşatanın renginde **"Kuşatma"** çubuğu muharebenin sonuna doğru dolar;
+  saray düşünce kalkan süresince açık mavi **"Kuşatma kalkanı"** çubuğu
+  durur. Sarayın savunması kuşatma muharebesidir (garnizon, gözcü
+  kuleleri, surlar; §9.7).
 - **Ses efektleri kısadır** (hepsi 1 saniyenin altında).
 - Ana menüde müzik daha kısık çalar (haritadaki sesin yaklaşık %45'i).
   Her düğme hafif bir tık sesiyle cevap verir; lobiye girerken yükselen,
@@ -1452,8 +1466,8 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   sınırda işler karışık. Yarına kadar yetişir mi?"). Elçi gelince pencere
   açılır: **"Elimden geleni yaparım"** (üstlen; miktar ve ödeme sabitlenir)
   ya da **"Bu sefer olmaz"** (taçla ilişki −2). İstek süresince ekranın
-  sağında, yakınlaştırma düğmelerinin üstündeki katlanır **Görevler**
-  kutusunda durur (katlı hâli tarayıcıda hatırlanır): eldeki / istenen
+  solunda, "Süren işler"in üstündeki katlanır **Görevler** kutusunda durur
+  (ikisi sohbet düğmesinin üstünde tek bir sütundur, `.side-stack`) (katlı hâli tarayıcıda hatırlanır): eldeki / istenen
   çubuğu, kalan süre, ödül ve stok yetince açılan **"Teslim et"**; alınmış
   taç görevleri de aynı kutuda ilerleme ve "Ödülü al" ile görünür. Teslimde
   mallar çıkar, taç **piyasa değerinin 1,3 katını** öder (mal: lobi fiyatı;
@@ -2292,7 +2306,7 @@ mertebesindedir.
   `growth.siege`). Kaçış için kuşatanların en az **10 asker** olması gerekir
   (bir avuç asker kimseyi korkutmaz) ve bir lordun halkı **15 dakikada en
   fazla bir kez** kaçar (`minAttackers`, `cooldownSeconds`, `Kingdom.fledAt`);
-  böylece tek askerlik kuşatmalarla nüfus eritilemez; elçi haber getirir (`siege_people`). Düşen saray **15 dakika kuşatma kalkanı** kazanır: bu sürede kapıya
+  böylece tek askerlik kuşatmalarla nüfus eritilemez; elçi haber getirir (`siege_people`). Düşen saray **15 dakika kuşatma kalkanı** kazanır (hisarla 25 dakikaya kadar, §9.8): bu sürede kapıya
   varan ordu savaşmadan bekler, kalkan bitince kuşatma kendiliğinden
   başlar. Kalan süre Krallıklar sekmesinde, ordu kartında ve sayaçlarda
   görünür.
@@ -2405,6 +2419,44 @@ krallıkta birer tane olur ve 3 seviyelidir.
 - **Tapınak:** Mutluluk hedefini yükseltir; askerler **iman gücüyle** zara
   bonus ekler (seviyeyle artar). **Vaaz:** altınla, bekleme süresiyle;
   bir süre verginin mutluluğa olumsuz etkisi azalır ("vergiler iyidir").
+- **5. seviye sarayın büyük yapıları** (`economy.json` → `buildings`,
+  etkileri `institutions.json` → `landmarks`; mantık
+  `packages/shared/src/landmarks.ts`, menüler `apps/web/src/ui/hud/landmarks.tsx`):
+  5. seviye saray üç yapı açar, her biri bir tane ve 3 seviyelidir; çok
+  pahalıdır (savaş malzemesi de ister).
+
+  | Yapı | 1. sv. maliyet | 1 / 2 / 3. seviye etkisi |
+  | --- | --- | --- |
+  | **Hisar** (3×3) | 3500 altın, 2400 yapı, 800 savaş, 300 sn | saray kuşatmasında savunanın zarı +0,5 / +0,9 / +1,3, garnizonun morali +8 / +12 / +16, düşen sarayın kalkanı +5 / +7,5 / +10 dk |
+  | **Hanedan anıtı** (2×2) | 3000 altın, 2200 yapı, 300 savaş, 240 sn | mutluluk hedefi +4 / +6 / +8; puanda seviye × 100 Gelişim |
+  | **Lonca konağı** (2×2) | 3200 altın, 1800 yapı, 200 savaş, 240 sn | tüccarın ve deniz ticaretinin sattığı her birim +%4 / +%6 / +%8 altın, pazar binasının fiyatı −%5 / −%8 / −%12 |
+
+  Yükseltmeler: hisar 5000/3200/1200 ve 7000/4000/1600, anıt 4500/3000/500
+  ve 6500/3800/800, lonca 4800/2600/400 ve 6800/3400/600 (altın / yapı /
+  savaş). Hisarın zarı sur bonusunun tavanının (+3) üstüne eklenir,
+  mancınıklar onu silmez; yalnızca saray kuşatmasında savaşır (meydan
+  muharebesi ve kasaba kuşatmasında değil). Savaş izlemede savunanların zar
+  bonusunda "hisar +N" yazar. Lonca konağının payı tüccar gelirine (Ticaret
+  sekmesi, sefer başına kazanç) ve pazarın "N altına al" fiyatına işlenir;
+  anıtın mutluluğu Halk → Mutluluk'ta yazar. Kabaca değerleri: 3. seviye
+  lonca gelişmiş bir lordun ~1.200–1.600 altınlık saatlik tüccar gelirine
+  ~100–130 altın ekler (toplam gelirin ~%5'i); anıtın +8 mutluluğu ağır
+  olmayan bir yüksek vergiyi taşımaya yeter (100 köylüde yüksek vergi
+  saatte ~575 altın fazladır ama −20 mutluluk); 3. seviye hisarla 30
+  askerlik garnizon, 50 askerlik bir kuşatmayı %28 yerine ~%76 püskürtür.
+  Görselleri: hisar koyu taştan kare bir burç (mazgallı korkuluk, gece
+  yanan iki sıra mazgal penceresi), önünde perde sur ve kuleler; 2. seviyede
+  sur her yanı çevirir, kapı kulesi ve mangallar, burçta kızıl sancaklar;
+  3. seviyede çatılı üst kat, külahlı ve flamalı kuleler, yaldızlı parmaklıklı
+  kapı ve zırhlı muhafızlar. Anıt kurucunun tunç heykeli (taçlı, pelerinli;
+  2. seviyeden kılıcı havada) çiçek tarhları ve mangallar arasında; 2.
+  seviyede arkada yaldızlı başlıklı sütun dizisi; 3. seviyede yaldızlı attikalı
+  zafer takı ve taç, kara dikilitaşlar, sönmeyen ateş, heykel yaldızlı. Lonca
+  konağı bacalı yarı ahşap bir hol, tenteli kumaş tezgâhı ve yaldızlı terazi
+  tabelası; 2. seviyede taş zemin katın üstünde çıkmalı ahşap kat, arkada
+  çan kulesi, sancaklar ve araba; 3. seviyede yaldızlı süslemeler, altın
+  kubbeli kule, altın tenteli tezgâh ve altın sandıkları
+  (`buildingSprites.ts` → `citadel`, `memorial`, `guildHall`).
 - **Günün olayları:** İki ayrı kanal vardır, her biri 15 dakikalık
   pencerelerde en fazla bir olay, 8–14 dakika sürer:
   - **Lobi geneli** (%55): hava ve dünya olayları lobideki herkese aynı
@@ -2540,8 +2592,8 @@ krallıkta birer tane olur ve 3 seviyelidir.
 - **Elçi (danışman ve öğretici)** (`apps/web/src/ui/advisor/`): Elçinin kodla
   çizilmiş bir portresi vardır (tüylü şapka, fırfırlı yaka, sivri ak sakal,
   bir kaşı kalkık, elinde mühürlü parşömen; göz kırpar, konuşurken ağzı
-  oynar; `EnvoyPortrait.tsx`). Haritada yakınlaştırma düğmelerinin üstündeki
-  elçi düğmesi onu çağırır. Elçi haritayı kapatmayan küçük bir konuşma
+  oynar; `EnvoyPortrait.tsx`). Sohbet düğmesinin hemen sağındaki
+  **Elçi** düğmesi onu çağırır. Elçi haritayı kapatmayan küçük bir konuşma
   panelinde gelir: portre, harf harf yazılan söz ve 1–3 cevap. Kendiliğinden
   oynanan her birkaç dakikada bir gelir (başka bir pencere açıkken, bir şey
   yerleştirilirken ya da bir sekme açıkken gelmez, üst üste binmez); lordun
@@ -2556,8 +2608,13 @@ krallıkta birer tane olur ve 3 seviyelidir.
   verir). **Öğretici:** yeni lordda açık başlar; adımlar durumdan anlaşılır
   ve bitince elçi kutlayıp sonrakine geçer: saray → oduncu kampı → ev →
   tarla → tüccara mal → 6 yapı → biat → 2. seviye saray → kışla → kraliçe →
-  casus evi → 3. seviye saray. Beklenen adımın sekmesi alttaki menüde yanıp
-  söner. **"Bana oyunu anlat":** Zaman, İnşa, Ekonomi, Ticaret, Nüfus,
+  casus evi → 3. seviye saray → üniversite → ilk araştırma → tapınak →
+  hastane → ilk sefer → 4. seviye saray → eğlence merkezi → hazine →
+  tersane ve ilk gemi → 5. seviye saray → bir büyük yapı (hisar, anıt ya da
+  lonca konağı). Beklenen adımın sekmesi alttaki
+  menüde yanıp söner. Her adımda **"Bu adımı geç"** cevabı o adımı atlar
+  (atlanan adım kutlanmaz); öğretici ayarlardan yeniden açılınca atlananlar
+  da sıfırlanır. Ayarlardaki düğme Açık / Kapalı / Tamamlandı yazar. **"Bana oyunu anlat":** Zaman, İnşa, Ekonomi, Ticaret, Nüfus,
   Mutluluk, Ordu, Savaş, Kasabalar, Taçlar, Diplomasi, Casusluk, Donanma,
   Hanedan, Mini oyunlar ve Olaylar konularını sayıları denge dosyalarından
   okuyarak anlatır. Sözler `lines.ts`'te, panel `Advisor.tsx`'tedir. Ayarlar
@@ -2655,8 +2712,8 @@ içerik. Değerler `config/balance/expeditions.json`, `goals.json` ve
 (`packages/shared/src/score.ts`, ağırlıklar `society.json` → `score`):
 - **Hazine:** altın / 10 + depodaki mallar / 25.
 - **Gelişim:** saray seviyesi × 120, kurum binaları (üniversite, hastane,
-  tapınak, kışla, casus evi, pazar, ambar) seviye × 30, diğer binalar
-  seviye × 10, sur ve kapı 1.
+  tapınak, kışla, casus evi, pazar, ambar, hisar, lonca konağı) seviye × 30,
+  hanedan anıtı seviye × 100, diğer binalar seviye × 10, sur ve kapı 1.
 - **Nüfus:** köylü + asker × 3. **Ordu:** asker × 2 + cephanelik / 10 +
   gemi gücü × 2.
 - **Zafer:** kazanılan muharebe × 40, alınan saray (kuşatma) × 120,

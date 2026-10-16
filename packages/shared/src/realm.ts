@@ -2,6 +2,7 @@ import { balance } from './balance'
 import { dynastyStep } from './dynasty'
 import { affordable, armoryOf, palaceLevel, population, recruitment, withPeople } from './economy'
 import type { Cost, Good, Kingdom, Resource, Stock } from './economy'
+import { guildOf } from './landmarks'
 import { buyTotal } from './market'
 import type { Market } from './market'
 import { RESEARCH, hasResearch, levelOf, researchEffects, researching, rivalOf, sermonReadyAt, taken, tierOpen } from './institutions'
@@ -90,20 +91,21 @@ export function disbandUnits(kingdom: Kingdom, units: Units, at: number): Kingdo
   return { ...withPeople(kingdom, at, n), units: left, soldiers: countOf(left), manpower: (kingdom.manpower ?? 0) + n }
 }
 
-export const buyCost = (market: Market | null | undefined, good: Good, units: number, at: number) =>
-  Math.ceil(buyTotal(market, good, units, at))
+// `discount`: the share the guild hall takes off (landmarks.ts, guildOf).
+export const buyCost = (market: Market | null | undefined, good: Good, units: number, at: number, discount = 0) =>
+  Math.ceil(buyTotal(market, good, units, at) * (1 - discount))
 
 export function buyError(kingdom: Kingdom, market: Market | null | undefined, good: Good, units: number, at: number): RealmError | null {
   if (!standing(kingdom, 'market', at)) return 'building'
   if (units < 1 || units > balance.market.maxBuy) return 'none'
-  if (kingdom.stock.gold < buyCost(market, good, units, at)) return 'cost'
+  if (kingdom.stock.gold < buyCost(market, good, units, at, guildOf(kingdom, at).discount)) return 'cost'
   return null
 }
 
 export function buy(kingdom: Kingdom, market: Market | null | undefined, good: Good, units: number, at: number): Kingdom {
   units = Math.floor(units)
   if (buyError(kingdom, market, good, units, at)) return kingdom
-  const stock = { ...kingdom.stock, gold: kingdom.stock.gold - buyCost(market, good, units, at) }
+  const stock = { ...kingdom.stock, gold: kingdom.stock.gold - buyCost(market, good, units, at, guildOf(kingdom, at).discount) }
   stock[good] += units
   return { ...kingdom, stock }
 }

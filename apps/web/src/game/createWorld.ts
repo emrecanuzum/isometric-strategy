@@ -169,6 +169,18 @@ export interface TownMark {
   siege: { startedAt: number; endsAt: number; color: number } | null
 }
 
+// A bar over the map showing how far something has come: a building going up, a palace under siege, its shield.
+// `at` is the ground point it stands over and `lift` how many pixels above the ground it floats.
+export interface ProgressMark {
+  key: string
+  at: Point
+  lift: number
+  startedAt: number
+  endsAt: number
+  color: number
+  label?: string
+}
+
 // A target an army is about to be sent to, as drawn while aiming: its square on the map, colour and name.
 export interface AimMark {
   rect: { x: number; y: number; size: number }
@@ -207,6 +219,8 @@ export interface WorldView {
   setTown(errands: Errand[], merchants: MerchantTrip[]): void
   // The towns' names over them (in their holder's colour) and, while one is besieged, how far the siege has come.
   setTowns(marks: TownMark[]): void
+  // Progress bars over buildings going up and palaces under siege or shielded.
+  setProgress(marks: ProgressMark[]): void
   // While an army is being sent: the target the pointer has snapped to (a lord, a crown city or a town), outlined in
   // dashes with its name over it; null for none.
   setAimMark(mark: AimMark | null): void
@@ -459,6 +473,32 @@ export async function createWorld(
       bar.rect(-w / 2, 0, Math.round(w * f), 1).fill({ color: 0xffffff, alpha: 0.35 })
       bar.position.set(top.x, top.y - 70 + 2 * k)
       bar.scale.set(k)
+    }
+  })
+  // Progress bars (buildings going up, palace sieges and shields), at a fixed size on screen like the towns'.
+  let progressMarks: { mark: ProgressMark; bar: Graphics; text: Text | null }[] = []
+  app.ticker.add(() => {
+    const now = clock()
+    const k = 1 / camera.scale.x
+    for (const { mark, bar, text } of progressMarks) {
+      const ground = groundToScreen(world, mark.at)
+      const y = ground.y - mark.lift
+      const f = Math.min(1, Math.max(0, (now - mark.startedAt) / Math.max(1, mark.endsAt - mark.startedAt)))
+      bar.visible = f < 1
+      if (text) text.visible = f < 1
+      if (f >= 1) continue
+      const w = 48
+      bar.clear()
+      bar.rect(-w / 2 - 2, -2, w + 4, 8).fill(0x120d0b)
+      bar.rect(-w / 2, 0, w, 4).fill(0x3a2a20)
+      bar.rect(-w / 2, 0, Math.round(w * f), 4).fill(mark.color)
+      bar.rect(-w / 2, 0, Math.round(w * f), 1).fill({ color: 0xffffff, alpha: 0.35 })
+      bar.position.set(ground.x, y)
+      bar.scale.set(k)
+      if (text) {
+        text.position.set(ground.x, y - 4 * k)
+        text.scale.set(k)
+      }
     }
   })
   // The camera following something (see follow): it glides onto the target each frame.
@@ -1136,7 +1176,27 @@ export async function createWorld(
   app.stage.on('pointerup', release)
   app.stage.on('pointerupoutside', release)
   app.stage.on('pointercancel', release)
+  // The pointer leaving the map for a window or panel on top of it: nothing on the map stays pointed at.
+  const leaveMap = () => {
+    if (press || stroke || touches.size > 0) return
+    highlight.visible = false
+    clearCursor()
+    onHover(null)
+    lastPointer = null
+  }
+  app.canvas.addEventListener('pointerleave', leaveMap)
   app.stage.on('pointermove', (e) => {
+    // Pixi hears the pointer over the whole page: over a window or panel on top of the map nothing on the map is
+    // pointed at (no outline, no label), unless a drag on the map is under way.
+    if (e.nativeEvent.target !== app.canvas && !press && !stroke && touches.size === 0) {
+      if (highlight.visible || lastPointer) {
+        highlight.visible = false
+        clearCursor()
+        onHover(null)
+        lastPointer = null
+      }
+      return
+    }
     if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.global.x, y: e.global.y })
     if (stroke && placement) {
       const end = footprintOrigin(tileAt({ x: e.global.x, y: e.global.y }), placement.size)
@@ -1816,10 +1876,36 @@ export async function createWorld(
         return { mark, text, bar }
       })
     },
+    setProgress(marks) {
+      for (const { bar, text } of progressMarks) {
+        bar.destroy()
+        text?.destroy()
+      }
+      progressMarks = marks.map((mark) => {
+        const bar = new Graphics()
+        const text = mark.label
+          ? new Text({
+              text: mark.label,
+              resolution: window.devicePixelRatio * 2,
+              anchor: { x: 0.5, y: 1 },
+              style: {
+                fontFamily: "'Digits', 'Pixelify Sans', ui-monospace, monospace",
+                fontSize: 12,
+                fontWeight: '600',
+                fill: mark.color,
+                stroke: { color: 0x120d0b, width: 4, join: 'round' },
+              },
+            })
+          : null
+        townLayer.addChild(bar, ...(text ? [text] : []))
+        return { mark, bar, text }
+      })
+    },
     float,
     zoomBy: (step) => zoomTo(zoomIndex + step, { x: app.screen.width / 2, y: app.screen.height / 2 }),
     destroy() {
       app.canvas.removeEventListener('wheel', onWheel)
+      app.canvas.removeEventListener('pointerleave', leaveMap)
       for (const worker of workers) worker.terminate()
       for (const key of [...chunks.keys()]) drop(key)
       // Walker, animal and cloud textures are shared by every scene (see textures.ts), so they are kept.

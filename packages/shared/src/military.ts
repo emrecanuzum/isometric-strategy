@@ -513,6 +513,9 @@ export interface Fighter {
 export interface Defense {
   towers: number
   walls: number
+  // A besieged palace's citadel: added to the defenders' roll, past the walls' cap and untouched by catapults
+  // (landmarks.ts, citadelOf).
+  keep?: number
   attackerTowers?: number
 }
 
@@ -606,7 +609,8 @@ export function planBattle(attackers: Fighter[], defenders: Fighter[], seed: num
     defenderCounter +
     defenderFaith +
     Math.min(b.maxTowerBonus, dTowers * b.towerBonus) +
-    Math.min(b.maxWallBonus, Math.floor(walls / b.wallsForBonus))
+    Math.min(b.maxWallBonus, Math.floor(walls / b.wallsForBonus)) +
+    (defense.keep ?? 0)
   // Soldiers strike as hard as their kinds: cavalry harder, catapults weakly in the field.
   const weight = (units: Units) => mightOf(units) / Math.max(1, Object.values(units).reduce((s, n) => s + (n ?? 0), 0))
   const aWeight = weight(aUnits) || 1

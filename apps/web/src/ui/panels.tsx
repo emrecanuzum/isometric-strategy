@@ -1,4 +1,4 @@
-import { BUILDINGS, GOODS, atFloor, balance, basePrice, constructing, fortuneEffects, idleFactor, lobbyTripMs, priceAt, researchEffects, tradeLoad, tradePrice } from '@game/shared'
+import { BUILDINGS, GOODS, atFloor, balance, basePrice, constructing, fortuneEffects, guildOf, idleFactor, lobbyTripMs, priceAt, researchEffects, tradeLoad, tradePrice } from '@game/shared'
 import type { Cost, Good, Kingdom, Market, Resource, Survey } from '@game/shared'
 import { useState } from 'react'
 import type React from 'react'
@@ -74,7 +74,7 @@ export function GoodChoice({
 }) {
   // A trip's load (bigger to a free city), as much of it as the stores hold, at the price the merchant is paid.
   const load = tradeLoad(kingdom)
-  const bonus = (1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade) * idleFactor(kingdom, now)
+  const bonus = (1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade + guildOf(kingdom, now).trade) * idleFactor(kingdom, now)
   const idle = selected === null && !!kingdom.trade.idle
   return (
     <div className="goods" role="radiogroup" aria-label="Satılacak mal">

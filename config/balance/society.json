@@ -111,6 +111,7 @@
     "siegeWon": 120,
     "queen": 40,
     "hostage": 60,
-    "researchPerTier": 50
+    "researchPerTier": 50,
+    "memorialPerLevel": 100
   }
 }

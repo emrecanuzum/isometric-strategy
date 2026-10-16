@@ -70,6 +70,7 @@ export function Chat({
   onLocate,
   banner,
   lobby,
+  aside,
 }: {
   // Where this lobby's read marker is kept.
   storeKey: string
@@ -88,6 +89,8 @@ export function Chat({
   onLocate: (site: { x: number; y: number }) => void
   // The lobby, for the mini-game leaderboards in the ranking tab (CLAUDE.md §6.5).
   lobby?: string
+  // Shown beside the chat button while the chat is closed (the envoy's button).
+  aside?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'chat' | 'kingdoms' | 'ranking'>('chat')
@@ -192,10 +195,13 @@ export function Chat({
             </span>
           </button>
         )}
-        <button className="btn chat-toggle" onClick={() => setOpen(true)} title="Lobi sohbeti">
-          <Icon name="scroll" size={16} slash={muted} /> Sohbet
-          {called > 0 ? <span className="badge mention-badge">@{called}</span> : unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
-        </button>
+        <div className="chat-bar">
+          <button className="btn chat-toggle" onClick={() => setOpen(true)} title="Lobi sohbeti">
+            <Icon name="scroll" size={16} slash={muted} /> Sohbet
+            {called > 0 ? <span className="badge mention-badge">@{called}</span> : unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
+          </button>
+          {aside}
+        </div>
       </>
     )
   }

@@ -1,5 +1,5 @@
 import {
-  ARCADE_GAMES, BUILDINGS, balance, buildingCount, clogsOf, crownQuest, fealtyOpen, fishError, gameError, goldCap, hasPalace,
+  ARCADE_GAMES, BUILDINGS, allShips, balance, countShips, buildingCount, clogsOf, crownQuest, fealtyOpen, fishError, gameError, goldCap, hasPalace,
   hasTradePost, palaceLevel, popCapFor, population, queenError, questProgress, storageCap, upgradeError,
 } from '@game/shared'
 import type { BuildingKind, Kingdom } from '@game/shared'
@@ -39,6 +39,8 @@ export interface Reply {
   // The tip it puts off, and a change to the tutorial.
   id?: string
   tutorial?: 'on' | 'off'
+  // Skips this tutorial step (a lord who does not want that building).
+  skip?: string
 }
 
 export interface Tip {
@@ -426,6 +428,105 @@ export const STEPS: Step[] = [
     hint: 'kingdom',
     cheer: 'Üç kat saray! Merdivenleri çıkarken dizlerim ağlıyor, ama gururdan.',
   },
+  {
+    id: 'university',
+    title: 'Bir üniversite kur',
+    say: () => 'Üniversite araştırma yapar: dört dalda (Hammadde, Savaş, Devlet, Din ve halk) kademe kademe ilerlersiniz ve her kademede iki yoldan birini seçersiniz; öbürüne bir daha dönülmez. Bilgi pahalıdır, cehalet daha da pahalı.',
+    done: ({ kingdom: k }) => count(k, 'university') > 0,
+    go: { label: 'Üniversite seç', act: build('university') },
+    hint: 'build',
+    cheer: 'Üniversite açıldı! İlk dersi ben vermek istedim, "Uzun konuşmanın faydaları". Kimse gelmedi.',
+  },
+  {
+    id: 'research',
+    title: 'İlk araştırmayı bitir',
+    say: () => 'Üniversiteye tıklayıp bir dal seçin ve ilk kademeden bir araştırma başlatın: sulama, kalkan duvarı, mimarlık, şenlikler... Aynı anda bir araştırma yürür; bitince etkisi hemen başlar.',
+    done: ({ kingdom: k, now }) => (k.researches ?? []).some((r) => r.doneAt <= now),
+    go: { label: 'Üniversiteye git', act: open('university') },
+    hint: 'kingdom',
+    cheer: 'İlk buluş! Âlimler o kadar sevindi ki cübbelerini ters giydiler.',
+  },
+  {
+    id: 'temple',
+    title: 'Bir tapınak kur',
+    say: () => 'Tapınak halkın mutluluğunu artırır, askerlerinize iman gücü verir; rahipler vaaz verince vergiler halka daha az ağır gelir. Mutlu halk daha hızlı büyür, daha çok asker olmaya razı olur.',
+    done: ({ kingdom: k }) => count(k, 'temple') > 0,
+    go: { label: 'Tapınak seç', act: build('temple') },
+    hint: 'build',
+    cheer: 'Tapınağın çanları çaldı! Ben de dua ettim: daha az haraççı, daha çok bahşiş.',
+  },
+  {
+    id: 'hospital',
+    title: 'Bir hastane kur',
+    say: () => 'Hasta köylü çalışmaz, vergi vermez ve keyfi kaçar; kışın hastalık daha hızlı yayılır. Hastanenin doktorları hastaları çok daha çabuk iyileştirir.',
+    done: ({ kingdom: k }) => count(k, 'hospital') > 0,
+    go: { label: 'Hastane seç', act: build('hospital') },
+    hint: 'build',
+    cheer: 'Hastane hazır! Doktor bana baktı, "dilin biraz yorgun" dedi. Ne bilir.',
+  },
+  {
+    id: 'expedition',
+    title: 'İlk seferi gönder',
+    say: () => 'Boşta köylünüz varsa onları sefere gönderin: ava, keşfe, hacca ya da define peşine. Siz yokken de yol alırlar ve dönüşte başlarından geçeni anlatırlar. Çalışan köylüyü göndermeyin; tarlası boş kalır.',
+    done: ({ kingdom: k }) => (k.expeditions ?? []).length > 0,
+    go: { label: 'Seferler', act: tab('kingdom', 'palace', 'expeditions') },
+    hint: 'kingdom',
+    cheer: 'Kafile yola çıktı! Onlara bir harita verdim. Ters tutuyorlardı, düzelttim.',
+  },
+  {
+    id: 'palace4',
+    title: 'Sarayı 4. seviyeye yükselt',
+    say: () => '4. seviye saray eğlence merkezini, tersaneyi ve hazineyi açar; hudut da genişler. Bedeli ağırdır, savaş malzemesi de ister: tüccarı bir süre o maldan uzak tutun.',
+    done: ({ kingdom: k }) => (palaceOf(k)?.level ?? 1) >= 4,
+    go: { label: 'Saraya git', act: open('palace') },
+    hint: 'kingdom',
+    cheer: 'Dördüncü kat! Buradan bakınca rakiplerin sarayları ne kadar küçük görünüyor, değil mi?',
+  },
+  {
+    id: 'tavern',
+    title: 'Bir eğlence merkezi kur',
+    say: () => 'Eğlence merkezi kendi tacınızın devriyesini ağırlar: her uğrayışta bahşiş bırakırlar. Mini oyunların hepsi de orada oynanır. Biraz müzik kimseye zarar vermez; ozan hariç.',
+    done: ({ kingdom: k }) => count(k, 'tavern') > 0,
+    go: { label: 'Eğlence merkezi seç', act: build('tavern') },
+    hint: 'build',
+    cheer: 'Fıçılar açıldı! Devriye yolunu şimdiden şaşırdı bile; bize doğru.',
+  },
+  {
+    id: 'treasury',
+    title: 'Bir hazine kur',
+    say: () => 'Hazine dolunca tüccar mal götürmez, vergi de boşa gider. Hazine binası altın yerini büyütür; her seviyesi daha çok tutar.',
+    done: ({ kingdom: k }) => count(k, 'treasury') > 0,
+    go: { label: 'Hazine seç', act: build('treasury') },
+    hint: 'build',
+    cheer: 'Hazinenin kapısına üç kilit vurdum. Anahtarlardan birini kaybettim ama iki tane kaldı.',
+  },
+  {
+    id: 'shipyard',
+    title: 'Bir tersane kur ve gemi yap',
+    say: () => 'Tersane suyun kıyısına kurulur ve gemi yapar: kadırga savaşır, koka yük taşır, çektiri akın eder. Gemilerle deniz ticareti, balık avı ve korsan avı yapılır; savaşta abluka.',
+    done: ({ kingdom: k }) => count(k, 'shipyard') > 0 && countShips(allShips(k)) > 0,
+    go: { label: 'Tersane seç', act: build('shipyard') },
+    hint: 'build',
+    cheer: 'İlk gemi suya indi! Adını sizin koymanızı isterdim ama tayfa "Elçinin Sesi" demiş. Gurur duydum.',
+  },
+  {
+    id: 'palace5',
+    title: 'Sarayı 5. seviyeye yükselt',
+    say: () => 'Son basamak: 5. seviye saray hududu en geniş hâline getirir ve en büyük yapıları açar. Bedeli bir krallık fidyesi kadardır; ama hanedan kitapları bunu yazar.',
+    done: ({ kingdom: k }) => (palaceOf(k)?.level ?? 1) >= 5,
+    go: { label: 'Saraya git', act: open('palace') },
+    hint: 'kingdom',
+    cheer: 'Beş kat! Lordum, artık ozanlar sizden söz ediyor. Benden de söz etsinler diye para verdim.',
+  },
+  {
+    id: 'landmark',
+    title: 'Büyük bir yapı kur',
+    say: () => '5. seviye saray üç büyük yapı açar: kuşatmada sarayı koruyan Hisar, halkı gururlandıran Hanedan anıtı ve tüccarlarınıza pazarlık öğreten Lonca konağı. Biriyle başlayın; hepsi pahalıdır, hepsi kalıcıdır.',
+    done: ({ kingdom: k }) => count(k, 'citadel') + count(k, 'memorial') + count(k, 'guildHall') > 0,
+    go: { label: 'İnşa menüsü', act: tab('build') },
+    hint: 'build',
+    cheer: 'İşte bir eser! Yüz yıl sonra da duracak. Ben de altına adımı kazıdım, küçük harflerle.',
+  },
 ]
 
 export const TUTORIAL_DONE = 'Öğreteceklerim bu kadar, lordum; gerisini zaman ve komşularınız öğretecek. Yine de bana "Bana oyunu anlat" diye sorarsanız her köşesini anlatırım.'
@@ -438,8 +539,8 @@ export const TOPICS: Topic[] = [
     name: 'Zaman',
     icon: 'time',
     text: () => [
-      `Bir oyun günü bir gerçek saattir; sezon ${balance.time.seasonGameDays} oyun günü, yani iki hafta sürer, sonra dünya sıfırlanır.`,
-      'Takvimde her gerçek saat bir yıldır: saatin başı gece yarısı ve 1 Ocak. Aylar beşer dakikada geçer, mevsimler yaklaşık çeyrek saat sürer. Kışın tarla ve iskele az, yazın çok yemek verir; hastalık kışın hızlı yayılır. Hanedan da bu yılla yaşlanır.',
+      `Her gerçek saat oyunda bir yıldır: haritada bir gündüz-gece döngüsü geçer (saatin başı gece yarısı ve 1 Ocak), takvim bir yıl ilerler, hanedan bir yaş büyür. Sezon ${balance.time.seasonGameDays} yıl, yani iki hafta sürer; sonra dünya sıfırlanır.`,
+      'Aylar beşer dakikada geçer, mevsimler yaklaşık çeyrek saat sürer: gece yarısı kış, şafakta ilkbahar, öğlen yaz, akşama doğru sonbahar. Kışın tarla ve iskele az, yazın çok yemek verir; hastalık kışın hızlı yayılır.',
       `Ekonomi üretim turlarıyla işler: her ${balance.economy.productionSeconds} gerçek saniyede bir tur. Binalar üretir, halk yer, vergi ve maaş ödenir.`,
       `Gece (${balance.society.night.startHour}:00–0${balance.society.night.endHour}:00) hızlı geçer ve halk dinlenir: binalar yarı hızla çalışır. Gece mesaisi tam çalıştırır ama yorar.`,
       'Siz çevrimdışıyken de dünya akar: inşaatlar biter, tüccar sefer yapar, ordular yürür. Döndüğünüzde "Sen yokken" raporunu okursunuz.',

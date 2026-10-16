@@ -2941,6 +2941,258 @@ function fisherHut(variant = 0): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
+// ---- The great works of a 5th-level palace (CLAUDE.md §9.8) ---------------------------------------------------------
+
+// A crenellated parapet along the two front edges of the top of a hall on (cx, hb) with half-width w.
+function parapet(canvas: Canvas, cx: number, hb: number, w: number, wall: number, walls: Uint32Array) {
+  const h = w / 2
+  for (const side of [-1, 1]) {
+    for (let t = 0; t <= w; t++) {
+      if (t % 6 >= 3 && t > 1 && t < w - 1) continue
+      for (let z = 1; z <= 4; z++) canvas.set(cx + side * (w - t), hb - h + t / 2 - wall - z, walls[z === 4 ? (side < 0 ? 4 : 3) : side < 0 ? 3 : 1])
+    }
+  }
+  canvas.solid(diamondAt(cx, hb - h, w), wall, wall + 4)
+}
+
+// Narrow lit windows in two rows up both walls of a hall on (cx, hb): a keep's arrow slits.
+function slits(canvas: Canvas, cx: number, hb: number, w: number, wall: number) {
+  const h = w / 2
+  for (const side of [-1, 1]) {
+    for (let t = 8; t <= w - 6; t += 10) {
+      for (const row of [0.3, 0.64]) {
+        const z0 = Math.round(wall * row)
+        for (let z = z0; z < z0 + 8; z++) {
+          for (let d = 0; d < 2; d++) canvas.set(cx + side * (w - t - d), hb - h + (t + d) / 2 - z, z === z0 + 7 ? DARK_STONE[0] : GLASS[side < 0 ? 2 : 1])
+        }
+      }
+    }
+  }
+}
+
+// The citadel: a great square donjon of dark stone under a low lead roof behind a crenellated parapet, lit slits up
+// its walls, with a curtain wall along the front edges and open towers at its ends (level 1); the curtain wall all
+// round with a gatehouse between two towers, crimson drapes on the donjon and braziers at the gate (level 2); a taller
+// donjon with a roofed upper tier, roofed towers with gilded finials and banners, a gilded portcullis and guards in
+// armour at the gate (level 3). The second look roofs the towers in moss-grown slate.
+function citadel(variant = 0, level = 1): Sprite {
+  const v = variant % 2
+  const { canvas, cx, base, w, h } = footprint(3, 150 + level * 26)
+  yard(canvas, cx, base, h, DARK_STONE, 131)
+  const ring = w - 12
+  const corner = (dx: number, dy: number) => ({ x: cx + dx * ring, y: base - h + dy * (ring / 2) })
+  const back = corner(0, -1)
+  const left = corner(-1, 0)
+  const right = corner(1, 0)
+  const curtain = 10 + level * 3
+  const r = 6 + level
+  const roofs = level >= 3 ? (v ? MOSSY : SLATE) : null
+  const tops: { x: number; y: number }[] = []
+  if (level >= 2) {
+    rampart(canvas, left.x + r, left.y - r / 2, back.x - r, back.y + r / 2, curtain, DARK_STONE, false)
+    rampart(canvas, back.x + r, back.y + r / 2, right.x - r, right.y - r / 2, curtain, DARK_STONE, true)
+    tops.push(tower(canvas, back.x, back.y, r, curtain + 16, DARK_STONE, roofs, true))
+  }
+  // The donjon, and at level 3 the upper tier rising out of its roof.
+  const kw = [34, 40, 44][level - 1]
+  const kwall = [58, 72, 84][level - 1]
+  const keepBase = base - h + Math.round(kw / 2) + 2
+  let top = hall(canvas, cx, keepBase, { w: kw, wall: kwall, roof: 6, walls: DARK_STONE, roofs: SLATE, masonry: true })
+  slits(canvas, cx, keepBase, kw, kwall)
+  parapet(canvas, cx, keepBase, kw, kwall, DARK_STONE)
+  if (level >= 2) for (const side of [-1, 1]) drape(canvas, cx, keepBase, kw, side, Math.round(kw * 0.4), kwall - 8, 22)
+  if (level >= 3) {
+    top = hall(canvas, cx, keepBase - kwall - 2, { w: 20, wall: 22, roof: 24, walls: DARK_STONE, roofs: v ? MOSSY : SLATE, masonry: true, bay: 8, trim: BRASS[2] })
+    finial(canvas, top.x, top.y, 6)
+  }
+  banner(canvas, top.x, top.y - (level >= 3 ? 6 : 2), 13)
+  // The side towers, then the curtain wall along the two front edges, then the gate.
+  tops.push(tower(canvas, left.x, left.y, r + 1, curtain + 14, DARK_STONE, roofs, true))
+  tops.push(tower(canvas, right.x, right.y, r + 1, curtain + 14, DARK_STONE, roofs, true))
+  const gate = { x: cx, y: base - 6 }
+  const gw = level >= 2 ? 14 : 9
+  rampart(canvas, left.x + r, left.y + r / 2, gate.x - gw, gate.y - gw / 2, curtain, DARK_STONE, true)
+  rampart(canvas, right.x - r, right.y + r / 2, gate.x + gw, gate.y - gw / 2, curtain, DARK_STONE, false)
+  const gateTall = curtain + 8 + level * 2
+  const half = level >= 2 ? 12 : 7
+  for (let x = -half; x <= half; x++) {
+    const ground = gate.y - 6 + Math.abs(x) * 0.15
+    for (let z = 0; z <= gateTall; z++) {
+      const arch = Math.abs(x) <= 5 && z < 12 + Math.sqrt(Math.max(0, 25 - x * x)) * 0.8
+      let color = pick(DARK_STONE, (x < 0 ? 3 : 1.6) - (z % 3 === 0 || (x + (Math.floor(z / 3) & 1) * 2) % 5 === 0 ? 0.8 : 0))
+      if (arch) color = level >= 3 ? (Math.abs(x) % 3 === 0 && z > 2 ? BRASS[1] : z % 4 === 0 && z > 2 ? BRASS[0] : TIMBER[0]) : z > 1 && Math.abs(x) < 5 ? PLANK[x < 0 ? 3 : 1] : TIMBER[0]
+      if (z > gateTall - 3 && (x + half) % 5 >= 3) continue
+      canvas.set(cx + x, ground - z, color)
+    }
+  }
+  canvas.solid(diamondAt(cx, gate.y - 6, half), 0, gateTall)
+  if (level >= 2) {
+    for (const side of [-1, 1]) tops.push(tower(canvas, gate.x + side * 15, gate.y, 6, gateTall + 8, DARK_STONE, roofs))
+    for (const side of [-1, 1]) brazier(canvas, cx + side * 26, base - 4)
+  }
+  if (level >= 3) {
+    for (const dx of [-8, 8]) armour(canvas, cx + dx, base - 1)
+    for (const [i, t] of tops.entries()) {
+      finial(canvas, t.x, t.y, 4)
+      if (i === tops.length - 3 || i === tops.length - 4) banner(canvas, t.x, t.y - 4, 9)
+    }
+  }
+  return canvas.sprite(cx, base, 0)
+}
+
+// The founder in bronze (gilded at level 3) on a pedestal standing on (x, pb): a crowned figure in a long cloak, his
+// sword raised at level 2 and up, a gilded plaque on the pedestal.
+function founder(canvas: Canvas, x: number, pb: number, level: number) {
+  const tall = 12 + level * 3
+  hall(canvas, x, pb, { w: 11, wall: tall, roof: 1, walls: KEEP, roofs: KEEP, masonry: true, trim: BRASS[1] })
+  for (let t = 3; t <= 7; t++) for (let z = Math.round(tall * 0.35); z < Math.round(tall * 0.7); z++) canvas.set(x - 11 + t, pb - 5.5 + t / 2 - z, BRASS[z % 3 === 0 ? 1 : 2])
+  const metal = level >= 3 ? BRASS : VERDIGRIS
+  const foot = pb - 6 - tall
+  const tone = (d: number, half: number) => metal[d < 0 ? 3 : d < half / 2 ? 2 : 1]
+  for (let z = 0; z < 22; z++) {
+    // Legs, a cloak flaring to the feet, broad shoulders, a neck and a head.
+    const half = z < 4 ? 2 : z < 15 ? Math.round(4 - (z - 4) / 5) : z < 17 ? 4 : z < 18 ? 1 : z === 18 || z === 21 ? 1 : 2
+    for (let d = -half; d <= half; d++) {
+      if (z < 4 && d === 0) continue
+      const cloak = level >= 2 && z >= 4 && z < 17 && (d === -half || d === half)
+      canvas.set(x + d, foot - z, cloak ? CRIMSON[d < 0 ? 3 : 1] : tone(d, half))
+    }
+  }
+  // The crown.
+  for (let d = -2; d <= 2; d++) canvas.set(x + d, foot - 22, BRASS[d < 0 ? 3 : 2])
+  for (const d of [-2, 0, 2]) canvas.set(x + d, foot - 23, BRASS[3])
+  if (level >= 2) {
+    // A sword held high in the right hand.
+    for (let z = 0; z < 14; z++) canvas.set(x + 5, foot - 14 - z, z < 2 ? BRASS[2] : BLADE[z < 13 ? 1 : 2])
+    for (const d of [4, 6]) canvas.set(x + d, foot - 16, BRASS[2])
+    canvas.set(x + 4, foot - 14, tone(1, 4))
+  }
+  canvas.solid(diamondAt(x, pb - 5.5, 5), tall, tall + 25)
+}
+
+// A small obelisk of black stone with a gilded tip standing on (x, base).
+function obelisk(canvas: Canvas, x: number, base: number, tall = 34) {
+  for (let z = 0; z < 3; z++) for (let d = -4; d <= 4; d++) canvas.set(x + d, base - z, KEEP[d < 0 ? 3 : 1])
+  for (let z = 3; z < tall; z++) {
+    const half = Math.round(3 - (z / tall) * 1.6)
+    for (let d = -half; d <= half; d++) canvas.set(x + d, base - z, z % 9 === 0 ? BRASS[d < 0 ? 3 : 1] : pick(BASALT, d < 0 ? 3.2 : 1.4))
+  }
+  for (let y = 0; y < 4; y++) for (let d = -Math.floor(y / 2); d <= Math.floor(y / 2); d++) canvas.set(x + d, base - tall - 3 + y, BRASS[d < 0 ? 3 : 2])
+  canvas.solid(diamondAt(x, base - 1, 3), 0, tall + 3)
+}
+
+// The dynasty's memorial: the founder's statue on a pedestal in a paved square between flower beds and two braziers
+// (level 1); a colonnade with a gilded architrave curving round behind it, crimson drapes and clipped hedges (level 2);
+// a triumphal arch with a gilded attic and the dynasty's crown behind a gilded statue, black obelisks at the sides and
+// an eternal flame before it (level 3). The second look plants roses in the beds.
+function memorial(variant = 0, level = 1): Sprite {
+  const v = variant % 2
+  const { canvas, cx, base, h } = footprint(2, 100 + (level - 1) * 30)
+  yard(canvas, cx, base, h, KEEP, 97)
+  const blooms = v ? [CRIMSON[3], rgb(0xf6f2e2)] : [BRASS[3], rgb(0x9a5ab0)]
+  const bed = (x: number, y: number, r: number, seed: number) => {
+    shadeBlobs(canvas, [{ x, y, r }], GREENS, seed, 0.5)
+    for (let i = 0; i < r * 3; i++) canvas.set(x - r + Math.round(hash(i, 1, seed) * r * 2), y - Math.round(hash(i, 2, seed) * r * 0.8), blooms[i % 2])
+  }
+  if (level === 2) {
+    // The colonnade along the two back edges, columns under a gilded architrave.
+    for (const side of [-1, 1]) {
+      const x0 = cx + side * 50
+      const y0 = base - h - 6
+      const x1 = cx
+      const y1 = base - h * 2 + 9
+      canvas.solid([x0, y0 - 1.5, x1, y1 - 1.5, x1, y1 + 1.5, x0, y0 + 1.5], 0, 34)
+      for (let i = 0; i <= 44; i++) {
+        const f = i / 44
+        const x = Math.round(x0 + (x1 - x0) * f)
+        const g = y0 + (y1 - y0) * f
+        if (i % 8 <= 2) for (let z = 0; z < 30; z++) canvas.set(x, g - z, KEEP[i % 8 === 0 ? (side < 0 ? 4 : 2) : side < 0 ? 3 : 1])
+        for (let z = 30; z < 35; z++) canvas.set(x, g - z, z === 34 ? BRASS[3] : z === 30 ? BRASS[1] : KEEP[side < 0 ? 3 : 2])
+      }
+    }
+  }
+  if (level >= 3) {
+    // The triumphal arch: a block of pale stone with an arched way through each face and a gilded attic.
+    const aw = 28
+    const ab = base - h + 10
+    const wall = 50
+    hall(canvas, cx, ab, { w: aw, wall, roof: 3, walls: KEEP, roofs: KEEP, masonry: true, trim: BRASS[2] })
+    for (const side of [-1, 1]) {
+      for (let t = 7; t <= aw - 7; t++) {
+        const mid = aw / 2
+        const span = mid - 7
+        const rise = Math.sqrt(Math.max(0, 1 - ((t - mid) / span) ** 2)) * span * 0.8
+        for (let z = 0; z < 26 + rise; z++) canvas.set(cx + side * (aw - t), ab - aw / 2 + t / 2 - z, z > 24 + rise ? BRASS[1] : SHADOW_WALLS[side < 0 ? 1 : 0])
+        for (let z = wall - 9; z < wall - 4; z++) canvas.set(cx + side * (aw - t), ab - aw / 2 + t / 2 - z, BRASS[z === wall - 9 ? 1 : side < 0 ? 3 : 2])
+      }
+    }
+    // The dynasty's crown over the attic.
+    const ty = ab - aw / 2 - wall - 6
+    for (let d = -5; d <= 5; d++) for (let z = 0; z < 4; z++) canvas.set(cx + d, ty - z, BRASS[d < 0 ? 3 : 2])
+    for (const d of [-5, 0, 5]) for (let z = 4; z < 7; z++) canvas.set(cx + d, ty - z, BRASS[3])
+    canvas.set(cx, ty - 2, CRIMSON[3])
+    for (const side of [-1, 1]) obelisk(canvas, cx + side * 46, base - h + 4)
+  }
+  if (level === 1) {
+    bed(cx - 30, base - h + 4, 9, 101)
+    bed(cx + 30, base - h + 4, 9, 103)
+  } else if (level === 2) {
+    for (const side of [-1, 1]) shadeBlobs(canvas, [{ x: cx + side * 30, y: base - h + 8, r: 6 }, { x: cx + side * 40, y: base - h + 3, r: 5 }], GREENS, 107 + side, 0.6)
+  }
+  founder(canvas, cx, base - 10, level)
+  if (level >= 3) {
+    // The eternal flame in a wide bowl before the statue.
+    for (let d = -4; d <= 4; d++) for (let z = 0; z < 3; z++) canvas.set(cx - 14 + d, base - 6 - z, z === 2 ? BRASS[2] : STEEL_GREY[1])
+    for (let z = 0; z < 7; z++) for (let d = -3; d <= 3; d++) if (Math.abs(d) < 3.5 - z / 2) canvas.set(cx - 14 + d, base - 9 - z, EMBER[z < 3 ? 1 : 2])
+    bed(cx + 24, base - 10, 6, 109)
+  } else {
+    for (const side of [-1, 1]) brazier(canvas, cx + side * 18, base - 6)
+  }
+  return canvas.sprite(cx, base, 0)
+}
+
+// The guild hall: a tall timber-framed hall with a chimney, a striped awning over a counter of cloth on its left wall
+// and a sign of gilded scales out front (level 1); a stone ground floor with a jettied timber storey over it, a belfry
+// behind, guild drapes and a cart of goods (level 2); a grand hall of stone and gilded trim with a golden-domed belfry,
+// an arcade of stalls under a gold canopy, chests of coin and the guild's scales (level 3). The second look roofs it in
+// slate.
+function guildHall(variant = 0, level = 1): Sprite {
+  const v = variant % 2
+  const { canvas, cx, base, h } = footprint(2, 110 + (level - 1) * 34)
+  yard(canvas, cx, base, h, PLASTER, 113)
+  const hb = base - 8
+  const roofs = v ? SLATE : ROOF
+  let top: ReturnType<typeof hall>
+  if (level === 1) {
+    top = hall(canvas, cx - 4, hb, { w: 40, wall: 34, roof: 30, walls: WALL, roofs, bay: 9, door: true, chimney: 0.42 })
+    awning(canvas, cx - 4, hb, 40, BLUE_STRIPE, 6, 22, 16, 11)
+    counter(canvas, cx - 4, hb, 40, 8, 20, 'cloth')
+    crate(canvas, cx + 18, base - 8, 9)
+    barrel(canvas, cx + 28, base - 12)
+  } else {
+    // The belfry behind on the right.
+    const belfry = tower(canvas, cx + 24, base - h - 8, 6, 62 + (level - 2) * 14, KEEP, level >= 3 ? null : roofs, true)
+    if (level >= 3) goldDome(canvas, belfry.x, belfry.y + 2, 6, true)
+    else finial(canvas, belfry.x, belfry.y, 4)
+    const ground = 22
+    hall(canvas, cx - 4, hb, { w: 42, wall: ground, roof: 4, walls: KEEP, roofs: KEEP, masonry: true, bay: 10, glow: level >= 3, door: true, trim: level >= 3 ? BRASS[2] : undefined })
+    top = hall(canvas, cx - 4, hb - ground - 3, { w: 45, wall: 22, roof: 30, walls: WALL, roofs, bay: 9, chimney: 0.42, trim: level >= 3 ? BRASS[2] : undefined })
+    for (const side of [-1, 1]) drape(canvas, cx - 4, hb - ground - 3, 45, side, 9, 20, 13)
+    if (level === 2) {
+      cart(canvas, cx + 16, base - 4)
+      crate(canvas, cx - 40, base - 20, 8)
+    } else {
+      hall(canvas, cx + 30, base - 12, { w: 12, wall: 14, roof: 9, walls: WALL, roofs: ROOF, open: true, cloth: CANOPY_GOLD })
+      chest(canvas, cx + 8, base - 6)
+      chest(canvas, cx + 18, base - 4)
+      shadeBlobs(canvas, [{ x: cx - 30, y: base - 14, r: 3 }, { x: cx - 26, y: base - 15, r: 3 }], BRASS, 9)
+    }
+  }
+  // The guild's sign: gilded scales on a post at the front left.
+  scale(canvas, cx - 44, base - 16)
+  return smoky(canvas.sprite(cx, base, 0), [top])
+}
+
 const variants = <T>(count: number, make: (i: number) => T) => Array.from({ length: count }, (_, i) => make(i))
 
 // 'jetty': a pier on its own (a free city's harbour), nothing but its `pier`.
@@ -3007,6 +3259,9 @@ export const LEVEL_SPRITES: Partial<Record<BuildingKind, Sprite[][]>> = {
   warehouse: [2, 3].map((level) => variants(2, (v) => warehouse(v, level))),
   treasury: [2, 3].map((level) => variants(2, (v) => treasury(v, level))),
   shipyard: [2, 3].map((level) => variants(2, (v) => shipyard(v, level))),
+  citadel: [2, 3].map((level) => variants(2, (v) => citadel(v, level))),
+  memorial: [2, 3].map((level) => variants(2, (v) => memorial(v, level))),
+  guildHall: [2, 3].map((level) => variants(2, (v) => guildHall(v, level))),
 }
 
 // The palace in each kingdom colour and at each level, made when first seen.
@@ -3053,6 +3308,9 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
   prisonFull: variants(2, (v) => prison(v, true)),
   tavern: variants(2, (v) => tavern(v)),
   shipyard: variants(2, (v) => shipyard(v)),
+  citadel: variants(2, (v) => citadel(v)),
+  memorial: variants(2, (v) => memorial(v)),
+  guildHall: variants(2, (v) => guildHall(v)),
   // A crown capital's own, never a lord's.
   cathedral: variants(2, (v) => cathedral(v)),
   monument: variants(2, (v) => monument(v)),

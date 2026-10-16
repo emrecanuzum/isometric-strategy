@@ -324,17 +324,19 @@ async function startBattle(
   }
   const attackers = a.map(fighter)
   const defenders = b.map(fighter)
-  let defense: { towers: number; walls: number; attackerTowers?: number } = { towers: 0, walls: 0 }
+  let defense: { towers: number; walls: number; attackerTowers?: number; keep?: number } = { towers: 0, walls: 0 }
   if (besieged !== null) {
     const state = states.get(besieged)
     if (state) {
       const settled = game.advance(state, t).kingdom
       const garrison = game.garrisonOf(settled)
-      defenders.unshift({ kingdom: besieged, army: null, soldiers: game.countOf(garrison), morale: settled.happiness ?? 60, familiarity: 100, units: garrison, faith: game.battleSpirit(settled, t) })
+      // The citadel steadies the garrison and adds to its roll (CLAUDE.md §9.8).
+      const citadel = game.citadelOf(settled, t)
+      defenders.unshift({ kingdom: besieged, army: null, soldiers: game.countOf(garrison), morale: Math.min(100, (settled.happiness ?? 60) + citadel.morale), familiarity: 100, units: garrison, faith: game.battleSpirit(settled, t) })
       const standingAt = (kind: string) => settled.buildings.filter((x: { kind: string; doneAt: number; broken?: boolean }) => x.kind === kind && x.doneAt <= t && !x.broken).length
       // Gates stand in the wall like any other stretch of it.
       // Fortification learnt at the university counts as more wall.
-      defense = { towers: standingAt('watchtower'), walls: standingAt('wall') + standingAt('gate') + game.researchEffects(settled, t).fortify }
+      defense = { towers: standingAt('watchtower'), walls: standingAt('wall') + standingAt('gate') + game.researchEffects(settled, t).fortify, ...(citadel.dice > 0 && { keep: citadel.dice }) }
     }
   }
   // The kingdom that declared the war attacks; in a siege, the besieger.
@@ -513,7 +515,7 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
       let breaking = Math.ceil(k.buildings.filter((b: { kind: string; broken?: boolean }) => b.kind === 'wall' && !b.broken).length * breakShare)
       const buildings = k.buildings.map((b: { kind: string; broken?: boolean }) => (b.kind === 'wall' && !b.broken && breaking-- > 0 ? { ...b, broken: true } : b))
       // The shield against the next siege.
-      return { ...k, stock, buildings, people: Math.max(0, people - fled), ...(fled > 0 && { fledAt: at }), happiness: Math.max(0, (k.happiness ?? 60) + game.balance.society.happiness.looted), shieldUntil: at + m.siege.shieldSeconds * 1000 }
+      return { ...k, stock, buildings, people: Math.max(0, people - fled), ...(fled > 0 && { fledAt: at }), happiness: Math.max(0, (k.happiness ?? 60) + game.balance.society.happiness.looted), shieldUntil: at + game.siegeShieldMs(k, at) }
     })
     if (fled > 0) await notify(lobby, [battle.besieged], 'siege_people', { lost: fled, by: nameOf(rows, battle.attackers[0].kingdom), taken: true }, Math.min(at, now))
     report.fled = fled

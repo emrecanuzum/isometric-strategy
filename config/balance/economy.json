@@ -636,6 +636,93 @@
           "workers": 5
         }
       ]
+    },
+    "citadel": {
+      "size": 3,
+      "requiresPalace": 5,
+      "unique": true,
+      "cost": {
+        "gold": 3500,
+        "materials": 2400,
+        "arms": 800
+      },
+      "buildSeconds": 300,
+      "levels": [
+        {
+          "cost": {
+            "gold": 5000,
+            "materials": 3200,
+            "arms": 1200
+          },
+          "buildSeconds": 420
+        },
+        {
+          "cost": {
+            "gold": 7000,
+            "materials": 4000,
+            "arms": 1600
+          },
+          "buildSeconds": 540
+        }
+      ]
+    },
+    "memorial": {
+      "size": 2,
+      "requiresPalace": 5,
+      "unique": true,
+      "cost": {
+        "gold": 3000,
+        "materials": 2200,
+        "arms": 300
+      },
+      "buildSeconds": 240,
+      "levels": [
+        {
+          "cost": {
+            "gold": 4500,
+            "materials": 3000,
+            "arms": 500
+          },
+          "buildSeconds": 360
+        },
+        {
+          "cost": {
+            "gold": 6500,
+            "materials": 3800,
+            "arms": 800
+          },
+          "buildSeconds": 480
+        }
+      ]
+    },
+    "guildHall": {
+      "size": 2,
+      "requiresPalace": 5,
+      "unique": true,
+      "cost": {
+        "gold": 3200,
+        "materials": 1800,
+        "arms": 200
+      },
+      "buildSeconds": 240,
+      "levels": [
+        {
+          "cost": {
+            "gold": 4800,
+            "materials": 2600,
+            "arms": 400
+          },
+          "buildSeconds": 360
+        },
+        {
+          "cost": {
+            "gold": 6800,
+            "materials": 3400,
+            "arms": 600
+          },
+          "buildSeconds": 480
+        }
+      ]
     }
   },
   "maxBatch": 64,

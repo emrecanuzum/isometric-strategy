@@ -19,7 +19,7 @@ export interface Score {
   learning: number
 }
 
-const INSTITUTIONS = new Set(['university', 'hospital', 'temple', 'barracks', 'spyHouse', 'market', 'warehouse'])
+const INSTITUTIONS = new Set(['university', 'hospital', 'temple', 'barracks', 'spyHouse', 'market', 'warehouse', 'citadel', 'guildHall'])
 
 export function scoreOf(k: Kingdom, at: number): Score {
   const s = balance.society.score
@@ -33,6 +33,9 @@ export function scoreOf(k: Kingdom, at: number): Score {
         ? level * s.palacePerLevel
         : b.kind === 'wall' || b.kind === 'gate'
           ? s.wallPer
+          : // The dynasty's memorial is built for the glory of it (CLAUDE.md §9.8).
+            b.kind === 'memorial'
+            ? level * s.memorialPerLevel
           : level * (INSTITUTIONS.has(b.kind) ? s.institutionPerLevel : s.buildingPerLevel)
   }
   const { villagers } = population(k, at)

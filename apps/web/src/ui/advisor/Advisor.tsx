@@ -19,8 +19,9 @@ export interface AdvisorMemory {
   tutorial?: 'on' | 'off' | 'done'
   // Topics put off until then (ms).
   snoozed?: Record<string, number>
-  // Tutorial steps already congratulated.
+  // Tutorial steps already congratulated, and those the lord chose to skip.
   cheered?: string[]
+  skipped?: string[]
 }
 
 const EVENT = 'advisor:memory'
@@ -67,11 +68,14 @@ export function AdvisorSettings({ storeKey }: { storeKey: string }) {
       </div>
       <div className="row spread">
         <span>Öğretici</span>
-        <button className="btn small" aria-pressed={memory.tutorial === 'on'} onClick={() => update(memory.tutorial === 'on' ? { tutorial: 'off' } : { tutorial: 'on', cheered: [] })}>
-          <Icon name="book" size={16} slash={memory.tutorial !== 'on'} /> {memory.tutorial === 'on' ? 'Açık' : 'Kapalı'}
+        <button className="btn small" aria-pressed={memory.tutorial === 'on'} onClick={() => update(memory.tutorial === 'on' ? { tutorial: 'off' } : { tutorial: 'on', cheered: [], skipped: [] })}>
+          <Icon name="book" size={16} slash={memory.tutorial !== 'on'} /> {memory.tutorial === 'on' ? 'Açık' : memory.tutorial === 'done' ? 'Tamamlandı' : 'Kapalı'}
         </button>
       </div>
-      <small className="hint">Açıkken elçi birkaç dakikada bir gelip eksiklerine göre öğüt verir; kapalıyken yalnızca elçi düğmesiyle çağırınca gelir.</small>
+      <small className="hint">
+        Öğütler açıkken elçi birkaç dakikada bir gelip eksiklerine göre öğüt verir; kapalıyken yalnızca elçi düğmesiyle çağırınca gelir. Öğretici yeni bir
+        lordu adım adım kuruluştan 3. seviye saraya götürür; bütün adımları zaten geçtiysen açılınca hemen "Tamamlandı" olur.
+      </small>
     </div>
   )
 }
@@ -117,7 +121,7 @@ const safe = <T,>(f: () => T, fallback: T): T => {
 }
 
 const tipFor = (c: AdvisorCtx, snoozed: Record<string, number>) => TIPS.find((t) => (snoozed[t.id] ?? 0) <= c.now && safe(() => t.when(c), false)) ?? null
-const stepFor = (c: AdvisorCtx) => STEPS.findIndex((s) => !safe(() => s.done(c), true))
+const stepFor = (c: AdvisorCtx, skipped: string[] = []) => STEPS.findIndex((s) => !skipped.includes(s.id) && !safe(() => s.done(c), true))
 
 function tipSpeech(t: Tip, c: AdvisorCtx, seed: number): Speech {
   const later = seed % LATER.length
@@ -138,7 +142,8 @@ function stepSpeech(s: Step, index: number, c: AdvisorCtx, cheer?: string): Spee
     replies: [
       ...(s.go ? [{ label: s.go.label, act: s.go.act }] : []),
       { label: 'Nasıl yapılır?', topic: 'build' },
-      { label: 'Öğreticiyi kapat', answer: 'Peki lordum, artık kendi yolunuzu çiziyorsunuz. Bir şey sormak isterseniz sağdaki elçi düğmesi beni çağırır.', tutorial: 'off' },
+      { label: 'Bu adımı geç', answer: 'Peki lordum, o işi şimdilik bir kenara koyuyorum. Sıradakine geçelim.', skip: s.id },
+      { label: 'Öğreticiyi kapat', answer: 'Peki lordum, artık kendi yolunuzu çiziyorsunuz. Bir şey sormak isterseniz sohbetin yanındaki Elçi düğmesi beni çağırır.', tutorial: 'off' },
     ],
   }
 }
@@ -187,7 +192,7 @@ export function Advisor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memory.tutorial])
   const tutorial = memory.tutorial === 'on'
-  const stepIndex = tutorial ? stepFor(ctx) : -1
+  const stepIndex = tutorial ? stepFor(ctx, memory.skipped) : -1
   const step = stepIndex >= 0 ? STEPS[stepIndex] : null
 
   // The tutorial is done when every step is.
@@ -222,11 +227,12 @@ export function Advisor({
     if (stepIndex !== prev && prev >= 0 && stepIndex >= 0) {
       const finished = STEPS[prev]
       const cheered = memory.cheered ?? []
-      const cheer = cheered.includes(finished.id) ? undefined : finished.cheer
+      // A skipped step is not cheered.
+      const cheer = cheered.includes(finished.id) || (memory.skipped ?? []).includes(finished.id) ? undefined : finished.cheer
       update({ cheered: [...cheered, finished.id] })
       setSpeech(stepSpeech(STEPS[stepIndex], stepIndex, ctxRef.current, cheer))
     }
-    // memory.cheered is read at the moment the step changes.
+    // memory.cheered and memory.skipped are read at the moment the step changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tutorial, stepIndex, blocked])
 
@@ -271,6 +277,7 @@ export function Advisor({
   const reply = (r: Reply) => {
     if (r.snooze && r.id) update({ snoozed: { ...(memory.snoozed ?? {}), [r.id]: ctxRef.current.now + r.snooze * 60_000 } })
     if (r.tutorial) update({ tutorial: r.tutorial })
+    if (r.skip) update({ skipped: [...(memory.skipped ?? []), r.skip] })
     if (r.act) {
       setSpeech(null)
       onAct(r.act)

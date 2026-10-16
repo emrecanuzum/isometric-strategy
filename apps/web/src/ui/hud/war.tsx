@@ -527,6 +527,8 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
     const counter = who === 'attackers' ? battle.plan.attackerCounter : battle.plan.defenderCounter
     const faith = (who === 'attackers' ? battle.plan.attackerFaith : battle.plan.defenderFaith) ?? 0
     const towers = (who === 'attackers' ? battle.plan.defense?.attackerTowers : battle.plan.defense?.towers) ?? 0
+    // A besieged palace's citadel (CLAUDE.md §9.8).
+    const keep = who === 'defenders' ? (battle.plan.defense?.keep ?? 0) : 0
     const units = fighters.reduce<Units>((all, f) => {
       for (const [u, n] of Object.entries(f.units ?? { spear: f.soldiers })) all[u as Unit] = (all[u as Unit] ?? 0) + (n ?? 0)
       return all
@@ -534,7 +536,7 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
     const names = [...new Set(fighters.map((f) => fighterName(online, f)))]
     const colors = [...new Set(fighters.map((f) => online.kingdoms.find((k) => k.id === f.kingdom)?.color))]
     const king = fighters.some((f) => f.king)
-    return { start, now, bonus, counter, faith, towers, units, names, colors, king }
+    return { start, now, bonus, counter, faith, towers, keep, units, names, colors, king }
   }
   const a = side('attackers')
   const d = side('defenders')
@@ -607,6 +609,7 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
                     s.faith ? `${s.king ? 'iman ve kral' : 'iman'} ${s.faith >= 0 ? '+' : '−'}${Math.abs(s.faith).toFixed(1).replace('.', ',')}` : '',
                     s.king ? 'kral komutada' : '',
                     s.towers ? `${s.towers} kule` : '',
+                    s.keep ? `hisar +${s.keep.toFixed(1).replace('.', ',')}` : '',
                   ]
                     .filter(Boolean)
                     .join(' · ') || undefined
@@ -627,7 +630,7 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
         <p className="hint">
           Her tur iki taraf da d{balance.military.battle.dice} atar. Zara saha bilgisi eklenir
           {defense && (defense.towers || defense.walls)
-            ? `; kuşatılan saray ${defense.towers} kule ve ${defense.walls} sur ile savunuyor${battle.plan.walls !== undefined && battle.plan.walls < defense.walls ? ` (mancınıklar ${defense.walls - battle.plan.walls} suru etkisiz kıldı)` : ''}`
+            ? `; kuşatılan saray ${defense.towers} kule ve ${defense.walls} sur ile savunuyor${battle.plan.walls !== undefined && battle.plan.walls < defense.walls ? ` (mancınıklar ${defense.walls - battle.plan.walls} suru etkisiz kıldı)` : ''}${defense.keep ? `, hisarı zara +${defense.keep.toFixed(1).replace('.', ',')} ekliyor` : ''}`
             : ''}
           ; tapınağın imanı ve yakındaki gözcü kuleleri de zara eklenir, kuleler her tur birkaç düşman vurur (askersiz bile birkaç tur direnir); birlik türlerinin üstünlüğü (mızrak &gt; süvari &gt; okçu &gt; mızrak) de eklenir. Morali
           biten ya da askeri kalmayan taraf yenilir.

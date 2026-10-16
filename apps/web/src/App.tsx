@@ -38,6 +38,7 @@ import {
   lobbyColors,
   setTradeGood,
   setTradeAmount,
+  siegeShieldMs,
   STROKE_KINDS,
   applyPlan,
   canDemolish,
@@ -80,7 +81,7 @@ import type { NavyOnMap } from './game/fleetShips'
 import type { ShipKind } from './game/shipSprites'
 import { createWorld, footprintOrigin } from './game/createWorld'
 import type { MapTool } from './game/createWorld'
-import type { AimMark, Hover, RivalTerritory, WorldView } from './game/createWorld'
+import type { AimMark, Hover, ProgressMark, RivalTerritory, WorldView } from './game/createWorld'
 import { KINGDOM_COLORS } from './game/buildingSprites'
 import type { KingdomColor } from './game/buildingSprites'
 import { serverNow } from './net/clock'
@@ -129,7 +130,8 @@ import { TownSheet } from './ui/hud/towns'
 import type { HudData } from './ui/hud/tabs'
 import { GoodPicker, SitePicker, missingText } from './ui/panels'
 import type { SiteAccess } from './ui/panels'
-import { Timers } from './ui/hud/Timers'
+import { Timers, buildSeconds } from './ui/hud/Timers'
+import type { TimerGo } from './ui/hud/Timers'
 import { QuestTracker, RoyalDialog, itemName, liveRequest, royalSaying } from './ui/hud/RoyalRequests'
 import { fmt } from './ui/hud/primitives'
 
@@ -955,6 +957,42 @@ function App({
     )
   }, [view, layer.towns, rivals, mine?.id, shown?.color, shown?.name])
 
+  // Bars over the map: the player's buildings going up, and every palace under siege or shielded after one fell.
+  const siegeKey = layer.battles.filter((b) => b.kind === 'siege' && !b.resolved).map((b) => `${b.id}:${b.ends_at}`).join(';')
+  const shieldKey = [kingdom?.shieldUntil ?? 0, ...rivals.map((r) => r.shield_until ?? 0)].join(';')
+  const worksKey = (kingdom?.buildings ?? []).filter((b) => b.doneAt > serverNow()).map((b) => `${b.id}:${b.doneAt}`).join(';')
+  useEffect(() => {
+    if (!view) return
+    const time = serverNow()
+    const palaceOf = (id: number) => (id === mine?.id ? kingdom?.buildings : rivals.find((r) => r.id === id)?.buildings)?.find((b) => b.kind === 'palace')
+    const colorFor = (id: number) => (id === mine?.id ? colorOf(shown?.color) : colorOf(rivals.find((r) => r.id === id)?.color))
+    const middle = (b: { x: number; y: number; size: number }) => ({ x: b.x + b.size / 2, y: b.y + b.size / 2 })
+    const marks: ProgressMark[] = []
+    for (const b of kingdom?.buildings ?? []) {
+      if (b.doneAt <= time || b.doneAt === 0) continue
+      marks.push({ key: `b:${b.id}`, at: middle(b), lift: 26 + b.size * 14, startedAt: b.doneAt - buildSeconds(b) * 1000, endsAt: b.doneAt, color: 0xe8c65a })
+    }
+    for (const battle of layer.battles) {
+      if (battle.kind !== 'siege' || battle.resolved || battle.besieged === null) continue
+      const palace = palaceOf(battle.besieged)
+      if (!palace) continue
+      const by = battle.attackers[0]?.kingdom
+      marks.push({ key: `s:${battle.id}`, at: middle(palace), lift: 110, startedAt: Date.parse(battle.started_at), endsAt: Date.parse(battle.ends_at), color: by ? colorFor(by) : 0xc0392b, label: 'Kuşatma' })
+    }
+    // The shield runs longer behind a citadel (CLAUDE.md §9.8).
+    const spanOf = (id: number) => {
+      const buildings = id === mine?.id ? kingdom?.buildings : rivals.find((r) => r.id === id)?.buildings
+      return buildings ? siegeShieldMs({ buildings }, time) : balance.military.siege.shieldSeconds * 1000
+    }
+    for (const [id, until] of [[mine?.id, kingdom?.shieldUntil], ...rivals.map((r) => [r.id, r.shield_until])] as [number | undefined, number | null | undefined][]) {
+      if (id === undefined || !until || until <= time) continue
+      const palace = palaceOf(id)
+      if (palace) marks.push({ key: `k:${id}`, at: middle(palace), lift: 110, startedAt: until - spanOf(id), endsAt: until, color: 0x8fc4e8, label: 'Kuşatma kalkanı' })
+    }
+    view.setProgress(marks)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, worksKey, siegeKey, shieldKey])
+
   // Villagers walk from their houses to the fields and workshops; every kingdom's merchant walks to its trade post.
   const buildings = kingdom?.buildings
   const departedAt = kingdom?.trade.good ? kingdom.trade.departedAt : null
@@ -1732,6 +1770,21 @@ function App({
   const noticeShown = !!notice && !!kingdom && !away && !houseQueue[0] && (introDone || kingdom.liege !== undefined || !fealtyOpen(kingdom, now))
   const introShown = !!view && !!kingdom && !away && !introDone && kingdom.liege === undefined && view.world.cities.length > 1 && fealtyOpen(kingdom, now)
   const advisorBlocked = noticeShown || introShown || !!away || !!houseQueue[0] || (!notice && !!fortunes[0]) || settingsOpen || !!watchedBattle || !!watchedTown || fullMap || !!preview
+  // A tap on a timer: the building's menu (the camera to it), or the tab it belongs to.
+  const timerGo = (go: TimerGo) => {
+    if ('building' in go) {
+      const b = kingdom?.buildings.find((x) => x.id === go.building)
+      if (!b) return
+      setPanel(null)
+      setSelected(b.id)
+      view?.centerOn({ x: b.x + b.size / 2, y: b.y + b.size / 2 })
+      return
+    }
+    if (go.part) showPart(go.part[0], go.part[1])
+    if (go.focus !== undefined) setFocus(go.focus)
+    setSelected(null)
+    setPanel(go.tab)
+  }
   const advisorAct = (a: AdvisorAction) => {
     if (a.kind === 'tab') {
       closeTab()
@@ -1911,7 +1964,12 @@ function App({
         />
       )}
       {view && kingdom && !holding && <Dock open={panel} unread={journal.unread} onToggle={toggleTab} />}
-      {view && kingdom && !holding && !panel && !selectedBuilding && innOpen === null && cityOpen === null && <Timers kingdom={kingdom} online={online} now={now} />}
+      {view && kingdom && (
+        <div className="side-stack">
+          {!needsPalace && <QuestTracker world={view.world} kingdom={kingdom} online={online} now={now} />}
+          {!holding && !panel && !selectedBuilding && innOpen === null && cityOpen === null && <Timers kingdom={kingdom} online={online} now={now} onGo={timerGo} />}
+        </div>
+      )}
       {view && kingdom && !holding && hover?.building && hover.building.owner === undefined && hover.building.id !== selected && (
         <MapTip building={kingdom.buildings.find((b) => b.id === hover.building!.id)} at={hover.building.screen} now={now} />
       )}
@@ -2133,14 +2191,8 @@ function App({
           }}
         />
       )}
-      {view && kingdom && !needsPalace && <QuestTracker world={view.world} kingdom={kingdom} online={online} now={now} />}
       {view && (
         <div className="zoom">
-          {kingdom && (
-            <button className="btn icon-only advisor-toggle" onClick={() => setAdvisorCall((n) => n + 1)} aria-label="Elçiyi çağır" title="Elçiyi çağır: öğüt, öğretici, oyunun anlatımı">
-              <EnvoyPortrait size={26} still />
-            </button>
-          )}
           <button className="btn icon-only" onClick={() => site && view.centerOn(site)} aria-label="Üsse dön" title="Üsse dön">
             <Icon name="pin" size={16} />
           </button>
@@ -2185,6 +2237,13 @@ function App({
           kingdoms={kingdoms}
           banner={(id) => view && <CrownBanner world={view.world} liege={kingdoms.find((k) => k.id === id)?.liege} />}
           onLocate={(site) => view?.centerOn(site)}
+          aside={
+            kingdom && (
+              <button className="btn advisor-toggle" onClick={() => setAdvisorCall((n) => n + 1)} aria-label="Elçiyi çağır" title="Elçiyi çağır: öğüt, öğretici, oyunun anlatımı">
+                <EnvoyPortrait size={26} still /> Elçi
+              </button>
+            )
+          }
           onKingdom={(id) => {
             if (id === mine.id) return
             setFocus(id)

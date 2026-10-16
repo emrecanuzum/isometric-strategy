@@ -27,6 +27,8 @@ import {
   buyCost,
   buyError,
   fortuneEffects,
+  guildOf,
+  memorialHappiness,
   happinessFor,
   isNightAt,
   maxConstructions,
@@ -128,7 +130,7 @@ export function flows(kingdom: Kingdom, now: number, market?: Market | null) {
   // A full treasury keeps the merchant home (economy.ts, advance).
   const full = goldCap(kingdom, now) - kingdom.stock.gold < 1
   const sold = good && !walledIn && !kingdom.trade.damaged && !full ? Math.max(0, Math.min(tradeLoad(kingdom) * trips, Math.floor(kingdom.stock[good] - tradeReserve(kingdom, good, now)) + Math.max(0, round[good] ?? 0))) : 0
-  const bonus = 1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade
+  const bonus = 1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade + guildOf(kingdom, now).trade
   // At the lobby's price as it stands (or the free city's), and less for a ruler long away, as the merchant is paid.
   const tradeGold = good ? sold * tradePrice(kingdom, good, market, now) * bonus * idleFactor(kingdom, now) : 0
   const tributesOut = -l.tributes.filter((t) => t.gold < 0).reduce((a, t) => a + t.gold, 0)
@@ -445,7 +447,9 @@ function MarketSection({ world, kingdom, now, online }: HudData) {
   const { maxBuy, buyPerClick } = balance.market
   const inBasket = basket?.good === good ? basket.units : 0
   const adding = Math.min(units, maxBuy - inBasket)
-  const cost = buyCost(market, good, inBasket + adding, now) - (inBasket > 0 ? buyCost(market, good, inBasket, now) : 0)
+  // The guild hall bargains a share off (CLAUDE.md §9.8).
+  const discount = guildOf(kingdom, now).discount
+  const cost = buyCost(market, good, inBasket + adding, now, discount) - (inBasket > 0 ? buyCost(market, good, inBasket, now, discount) : 0)
   const why = sending || adding <= 0 ? 'busy' : buyError(kingdom, market, good, inBasket + adding, now)
   const add = () => {
     if (why) return
@@ -504,10 +508,11 @@ function MarketSection({ world, kingdom, now, online }: HudData) {
               {cost} altına al
             </button>
           </div>
+          {discount > 0 && <p className="hint up">Lonca konağı pazarlık ediyor: pazar binasının fiyatı −%{Math.round(discount * 100)}.</p>}
           {(basket || sending) && (
             <p className="hint">
               {basket
-                ? `Sepette ${basket.units} ${RESOURCE_NAMES[basket.good].toLocaleLowerCase('tr')} (${buyCost(market, basket.good, basket.units, now)} altın, en fazla ${maxBuy}). `
+                ? `Sepette ${basket.units} ${RESOURCE_NAMES[basket.good].toLocaleLowerCase('tr')} (${buyCost(market, basket.good, basket.units, now, discount)} altın, en fazla ${maxBuy}). `
                 : ''}
               Fiyat güncelleniyor, lütfen bekle…
             </p>
@@ -926,6 +931,7 @@ function Mood({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?
           Mutluluk her tur hedefe doğru kayar. Vergi, kraliçe, tapınak, hastalık, günün olayları ve aç kalmak hedefi belirler; mutlu halk daha çok ve daha
           ucuza asker olur.
         </p>
+        {memorialHappiness(kingdom, now) > 0 && <Stat label="Hanedan anıtı" value={`+${memorialHappiness(kingdom, now)}`} note="hanedanın şanı mutluluk hedefine eklenir" />}
       </Section>
       <Section title="Vergi" icon="gold" aside={`köylü başına ${balance.society.tax.levels[tax].goldPerVillager} altın`}>
         <div className="segmented" role="radiogroup" aria-label="Vergi oranı">

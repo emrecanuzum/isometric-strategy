@@ -28,6 +28,7 @@ import type { World } from './worldgen'
 import { escortAway, expeditionHappiness, settleExpeditions, villagersAway } from './expeditions'
 import type { Expedition } from './expeditions'
 import { checkGoals } from './goals'
+import { guildOf, memorialHappiness } from './landmarks'
 import type { GoalsReached } from './goals'
 
 // A kingdom's economy: gold plus three goods, produced by buildings and sold by the merchant of its trade post.
@@ -40,7 +41,7 @@ export type Resource = 'gold' | Good
 export type Stock = Record<Resource, number>
 export type Cost = Partial<Stock>
 
-export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple', 'warehouse', 'treasury', 'fisherHut', 'prison', 'tavern', 'shipyard'] as const
+export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple', 'warehouse', 'treasury', 'fisherHut', 'prison', 'tavern', 'shipyard', 'citadel', 'memorial', 'guildHall'] as const
 export type BuildingKind = 'palace' | 'tradePost' | (typeof BUILDABLE)[number]
 
 // Weapons are worked from raw goods in the forge and kept in the armory, apart from the tradeable stores.
@@ -1496,7 +1497,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
         const blocked = !!k.blockade
         const strike = blocked ? null : voyagePirates(k, f, m.departedAt, next)
         const price = priceAt(market, good, next) * stewardFactor(k, good, next) * balance.navy.trade.priceFactor
-        const perUnit = price * (1 + researchEffects(k, next).trade + fortuneEffects(k, next).trade + dynastyEffects(k).trade) * idleFactor(k, next)
+        const perUnit = price * (1 + researchEffects(k, next).trade + fortuneEffects(k, next).trade + dynastyEffects(k).trade + guildOf(k, next).trade) * idleFactor(k, next)
         const room = Math.max(0, goldCap(k, next) - k.stock.gold)
         const full = room < 1
         const away = isAway(k, next)
@@ -1662,7 +1663,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       const city = k.trade.city
       const fortune = fortuneEffects(k, next).trade
       const price = tradePrice(k, good, market, next)
-      const perUnit = price * (1 + researchEffects(k, next).trade + fortune + dynastyEffects(k).trade) * idleFactor(k, next)
+      const perUnit = price * (1 + researchEffects(k, next).trade + fortune + dynastyEffects(k).trade + guildOf(k, next).trade) * idleFactor(k, next)
       // A full treasury has no room for the merchant's gold: he keeps the goods at home and sells only what fills it,
       // and sets out again once tribute or spending makes room (CLAUDE.md §6.4).
       const room = Math.max(0, goldCap(k, next) - k.stock.gold)
@@ -1694,7 +1695,10 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
   // The lord's house: births, deaths and successions up to now (only once the realm has its palace).
   if (k.buildings.some((b) => b.kind === 'palace')) {
     const step = dynastyStep(k, now)
-    if (step.events.length > 0 || !k.dynasty || step.kingdom.queen !== !!k.queen) {
+    // A house kept with years of another length is saved once brought to today's (dynasty.ts rescaleYears): left
+    // unsaved its old dates would be read with the new years (a lord of 34 shown as 234) and its births never come.
+    const rescaled = step.kingdom.dynasty?.yearMs !== k.dynasty?.yearMs
+    if (step.events.length > 0 || !k.dynasty || rescaled || step.kingdom.queen !== !!k.queen) {
       edit()
       k.dynasty = step.kingdom.dynasty
       k.queen = step.kingdom.queen
@@ -1727,6 +1731,8 @@ export function happinessFor(k: Kingdom, at: number) {
       ((k.fearUntil ?? 0) > at ? balance.military.fear.happiness : 0) +
       (imprisoned(k.buildings, k.site, at) ? balance.society.happiness.imprisoned : 0) +
       templeHappiness(k, at) +
+      // The dynasty's memorial (CLAUDE.md §9.8).
+      memorialHappiness(k, at) +
       researchEffects(k, at).happiness +
       dynastyEffects(k).happiness +
       (k.sickness ?? 0) * balance.institutions.sickness.happinessPerShare +

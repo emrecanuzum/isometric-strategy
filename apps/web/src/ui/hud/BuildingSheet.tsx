@@ -12,6 +12,7 @@ import { HospitalPanel, TemplePanel, UniversityPanel } from './institutions'
 import { Meter, Section, SpriteView } from './primitives'
 import { PrisonPanel, SpyHousePanel, TavernPanel } from './buildingPanels'
 import { TreasuryPanel } from './treasury'
+import { CitadelPanel, GuildHallPanel, MemorialPanel } from './landmarks'
 import { KingdomTab, TradeTab } from './tabs'
 import type { HudData } from './tabs'
 
@@ -97,6 +98,9 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
             {!building && b.kind === 'tavern' && <TavernPanel data={data} />}
             {!building && b.kind === 'spyHouse' && <SpyHousePanel data={data} />}
             {!building && b.kind === 'treasury' && <TreasuryPanel building={b} data={data} />}
+            {!building && b.kind === 'citadel' && <CitadelPanel building={b} data={data} />}
+            {!building && b.kind === 'memorial' && <MemorialPanel building={b} data={data} />}
+            {!building && b.kind === 'guildHall' && <GuildHallPanel building={b} data={data} />}
             {!building && b.kind === 'fisherHut' && <FisherPanel data={data} />}
             {!building && b.kind === 'barracks' && <GamePanel game="archery" data={data} />}
             {!building && b.kind === 'forge' && <GamePanel game="anvil" data={data} />}
@@ -172,7 +176,7 @@ function Output({ building: b, data }: { building: Building; data: HudData }) {
       </>
     )
   }
-  if (b.kind === 'university' || b.kind === 'hospital' || b.kind === 'temple' || b.kind === 'prison' || b.kind === 'tavern' || b.kind === 'spyHouse') return <b>{BUILDING_NOTES[b.kind]}</b>
+  if (b.kind === 'university' || b.kind === 'hospital' || b.kind === 'temple' || b.kind === 'prison' || b.kind === 'tavern' || b.kind === 'spyHouse' || b.kind === 'citadel' || b.kind === 'memorial' || b.kind === 'guildHall') return <b>{BUILDING_NOTES[b.kind]}</b>
   if (spec.gold) {
     return (
       <>
