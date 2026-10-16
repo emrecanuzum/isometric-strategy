@@ -264,7 +264,16 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   **düz** bir ahşap güverte, iki yanda korkuluk ve dikmeler, suya inen
   **ayak çiftleri** (dibinde köpük halkası). Güverte kıyılardan rampayla
   yükselir (suyun 30 piksel üstünde, altından gemi geçecek kadar yüksek;
-  taş köprünün kamburu 34 piksel); parçalar piksel bazında derinlik testiyle çizilir, öndeki kıyı
+  taş köprünün kamburu 34 piksel). Güverte zemine boyandığı için ekranda
+  kapladığı alan ayrıca hesaplanır (`chunkPainter.ts` → `worldDecks`):
+  nehir parıltıları, ördek ve kuğular güvertenin örttüğü yerde çizilmez;
+  köprünün arkasındaki ya da altındaki gemiler (ve gölgeleri) güvertenin
+  ters maskesiyle kesilir, köprünün altından geçiyormuş gibi görünür; taş
+  köprünün kemer boşlukları maskede açıktır, gemi kemerin altından görünür.
+  Köprüden geçen ordular (yol köprü karolarında zigzag çizse ya da sunucunun
+  yolu çizilen köprünün bir iki karo yanından geçse de) güvertenin ortasından
+  düz yürür.
+  Parçalar piksel bazında derinlik testiyle çizilir, öndeki kıyı
   köprünün ucunu örter. Güverte yaklaşık 1,5 karo, taş köprü 1,35 karo
   geniştir.
 - **Yol onarımı (yalnız çizim):** Dünya üretimi bazen yolu derenin içinden,
@@ -689,7 +698,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   parçaları (kaide ve kendisi) birbirini gölgelemez, kaideler başka
   binalara gölge düşürmez (yalnız zemine); kaidenin gölge kütlesi sabit
   noktasının altına inmez, gölgesi güneşe doğru ters düşmez. Böylece hiçbir
-  saatte kaide baştan başa gölgeye gömülmez.
+  saatte kaide baştan başa gölgeye gömülmez. Zeminin gölge katmanı kaidenin
+  altında kaldığı için kaidedeki binanın gölgesi kaidenin üstüne ayrıca
+  çizilir: kaide yüksekliğinde düşürülen gölgenin kaideye düşen pikselleri,
+  kaide ile bina arasında (`shadows.ts` → `onBase`).
   Binalar ön köşelerine göre sıralanır; resimleri üst üste binen iki
   komşudan x ya da y ekseninde ötekinin ilerisinde olan sonra çizilir
   (yamaçta kaidedeki ev yanındaki sarayın arkasına düşmez).

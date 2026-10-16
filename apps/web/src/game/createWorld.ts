@@ -1317,7 +1317,8 @@ export async function createWorld(
       for (const g of list) {
         for (const p of g.parts) {
           const order = p.depth - p.sprite.zIndex * 4096
-          p.sprite.zIndex = g.z
+          // A building a little above its base, so the shade it throws on the base goes between them (shadows.ts).
+          p.sprite.zIndex = g.z + (p === g.parts[g.parts.length - 1] && g.parts.length > 1 ? 0.002 : 0)
           redepth.set(p.depth, g.z * 4096 + order)
           p.depth = g.z * 4096 + order
         }

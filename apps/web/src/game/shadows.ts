@@ -35,6 +35,9 @@ export function createShadows(): Shadows {
   const raises = new WeakMap<Container, number>()
   const groups = new WeakMap<Container, object>()
   const lows = new WeakSet<Container>()
+  // The stone base each building stands on (the low part of its group), and the shade it throws onto that base.
+  const baseOf = new WeakMap<object, PixiSprite>()
+  const onBase = new Map<PixiSprite, { overlay: PixiSprite; key: string; cast: Sprite | null }>()
   const shades = new Map<PixiSprite, { shade: PixiSprite; frame: number }>()
   // Shadows that fall on buildings: per building, an overlay of its pixels in the shade of another building (its own
   // shading is drawn into it). Worked out anew for every step of the sun and whenever the buildings change.
@@ -43,6 +46,8 @@ export function createShadows(): Shadows {
   // The building being shaded now, a few rows a frame.
   let job: { target: PixiSprite; work: ShadeJob } | null = null
   let built = ''
+  // The decks' mask the ships' shadows are cut by (see ambient.ts).
+  let cutMask: Container | null = null
   let frame = 0
   let step = NaN
   let sun = sunShadow(0)
@@ -134,6 +139,7 @@ export function createShadows(): Shadows {
       if (group) groups.set(caster, group)
       if (low) lows.add(caster)
       else lows.delete(caster)
+      if (group && low && caster instanceof PixiSprite) baseOf.set(group, caster)
     },
     update(hour, casters) {
       filter.alpha = sunShadow(hour).alpha
@@ -178,6 +184,77 @@ export function createShadows(): Shadows {
         shade.position.set(child.x + raise * sun.x, child.y + raise + raise * sun.y)
         shade.scale.set(Math.abs(child.scale.x), Math.abs(child.scale.y))
         shade.visible = true
+        // A ship cut by a bridge's deck (it sails under it) has its shadow cut alike, so none falls on the deck.
+        const cut = child.label === 'ship' ? (child.mask as Container | null) : null
+        if (cut) cutMask = cut
+        if (cut && shade.mask !== cut) shade.setMask({ mask: cut, inverse: true })
+        else if (!cut && shade.mask) shade.mask = null
+        // Taking a mask off puts it back among what is drawn: keep it out.
+        if (cutMask) {
+          cutMask.includeInBuild = false
+          cutMask.measurable = false
+        }
+      }
+      // A building on a stone base throws its shadow onto the base's top too: its shadow cast at the base's height, kept
+      // where the base is, drawn over the base and under the building. (The ground's shadow layer lies beneath the base.)
+      const kept = new Set<PixiSprite>()
+      for (const child of casters.children) {
+        if (!(child instanceof PixiSprite) || child.label !== 'occluder' || lows.has(child) || !child.visible) continue
+        const group = groups.get(child)
+        const base = group && baseOf.get(group)
+        const look = lookOf(child.texture)
+        const baseLook = base && !base.destroyed ? lookOf(base.texture) : undefined
+        if (!base || !look || !baseLook || (raises.get(child) ?? 0) <= 0) continue
+        kept.add(child)
+        const dx = Math.round(child.x - look.anchorX - (base.x - baseLook.anchorX))
+        const dy = Math.round(child.y - look.anchorY - (base.y - baseLook.anchorY))
+        const key = `${step}:${dx}:${dy}`
+        let entry = onBase.get(child)
+        if (!entry || entry.key !== key) {
+          const shadow = shadowOf(look, footprints.get(child) ?? 0, child.scale.x < 0)
+          // Shadow pixels in the base's own pixels: shadow (sx, sy) sits at the building's anchor less the shadow's.
+          const ox = dx + look.anchorX - shadow.anchorX
+          const oy = dy + look.anchorY - shadow.anchorY
+          const pixels = new Uint32Array(shadow.pixels.length)
+          let any = false
+          for (let y = 0; y < shadow.height; y++) {
+            const by = y + oy
+            if (by < 0 || by >= baseLook.height) continue
+            for (let x = 0; x < shadow.width; x++) {
+              const i = y * shadow.width + x
+              if (shadow.pixels[i] >>> 24 === 0) continue
+              const bx = x + ox
+              if (bx < 0 || bx >= baseLook.width || baseLook.pixels[by * baseLook.width + bx] >>> 24 === 0) continue
+              pixels[i] = shadow.pixels[i]
+              any = true
+            }
+          }
+          const cast: Sprite | null = any ? { ...shadow, pixels, lift: undefined, flat: undefined } : null
+          if (entry?.cast) freeTexture(entry.cast)
+          const overlay = entry?.overlay ?? new PixiSprite()
+          if (cast) {
+            overlay.texture = textureOf(cast)
+            overlay.anchor.set(cast.anchorX / cast.width, cast.anchorY / cast.height)
+          }
+          overlay.visible = !!cast
+          overlay.tint = TINT
+          overlay.label = 'shade'
+          if (!overlay.parent) casters.addChild(overlay)
+          entry = { overlay, key, cast }
+          onBase.set(child, entry)
+        }
+        const { overlay } = entry
+        overlay.position.copyFrom(child.position)
+        overlay.scale.set(Math.abs(child.scale.x), Math.abs(child.scale.y))
+        overlay.alpha = filter.alpha
+        // Just above the base, just below the building (whose zIndex is a little above its base's).
+        overlay.zIndex = base.zIndex + 0.001
+      }
+      for (const [child, entry] of onBase) {
+        if (kept.has(child)) continue
+        entry.overlay.destroy()
+        if (entry.cast) freeTexture(entry.cast)
+        onBase.delete(child)
       }
       // Casters gone from the layer take their shadows with them.
       for (const [child, entry] of shades) {

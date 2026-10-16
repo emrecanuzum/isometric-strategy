@@ -537,6 +537,147 @@ export function worldBridges(world: World): Bridge[] {
   return list
 }
 
+// A stone bridge's arches: where the abutments end (t0, t1 along the deck), how many arches span between, and the share
+// of each arch's span its piers take at either end.
+function archLayout(bridge: Bridge) {
+  const length = Math.hypot(bridge.bx - bridge.ax, bridge.by - bridge.ay)
+  const t0 = Math.min(0.45, ABUTMENT / length)
+  return { t0, t1: 1 - t0, arches: Math.max(1, Math.round((length - ABUTMENT * 2) / ARCH_SPAN)), pier: 0.13 }
+}
+
+// Height of a stone bridge's arch opening above the water at `t` along it; 0 on the piers and abutments.
+export function archOpening(bridge: Bridge, t: number) {
+  const { t0, t1, arches, pier } = archLayout(bridge)
+  if (t <= t0 || t >= t1) return 0
+  const u = ((t - t0) / (t1 - t0)) * arches
+  const f = u - Math.floor(u)
+  if (f < pier || f > 1 - pier) return 0
+  const v = ((f - pier) / (1 - pier * 2)) * 2 - 1
+  const crown = deckHeight(bridge, t0 + ((Math.floor(u) + 0.5) / arches) * (t1 - t0)) - DECK_THICK - 3
+  return Math.max(0, crown) * Math.sqrt(1 - v * v)
+}
+
+// The bridges' decks as they stand on screen (CLAUDE.md §4.2.1): what they cover of the water behind and below them
+// (the river's glints and its ducks are not drawn there; ships sailing under are cut by them), and the line along
+// each deck a marcher keeps to.
+export interface Decks {
+  // Polygons on screen (x, y pairs; tile x→ (x − y)·32, y → (x + y)·16 − z) covering each deck in slices.
+  polygons: number[][]
+  // Whether the deck covers a point of the water (tile coordinates, on the water's surface).
+  covers(x: number, y: number): boolean
+  // A point on a deck carried onto the deck's middle line (a walk over the bridge tiles zigzags); others as they are.
+  snap(p: Point): Point
+  // Whether a point of the water lies under or behind a deck (seen from the viewer), close to it.
+  behind(x: number, y: number): boolean
+}
+const decksOf = new WeakMap<World, Decks>()
+export function worldDecks(world: World): Decks {
+  let decks = decksOf.get(world)
+  if (decks) return decks
+  const screen = (x: number, y: number, z: number) => [(x - y) * (TILE_WIDTH / 2), (x + y) * (TILE_HEIGHT / 2) - z] as const
+  const hull = (points: (readonly [number, number])[]) => {
+    const sorted = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1])
+    const cross = (o: readonly number[], a: readonly number[], b: readonly number[]) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    const lower: (readonly [number, number])[] = []
+    for (const p of sorted) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop()
+      lower.push(p)
+    }
+    const upper: (readonly [number, number])[] = []
+    for (const p of sorted.reverse()) {
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop()
+      upper.push(p)
+    }
+    return [...lower.slice(0, -1), ...upper.slice(0, -1)]
+  }
+  const items = worldBridges(world).map((bridge) => {
+    const dx = bridge.bx - bridge.ax
+    const dy = bridge.by - bridge.ay
+    const length = Math.hypot(dx, dy) || 1
+    const nx = -dy / length
+    const ny = dx / length
+    const half = bridge.stone ? STONE_HALF : BRIDGE_HALF
+    // Above the deck its railing or parapet; below it the deck's planks, or a stone bridge's walls down to the water.
+    const top = bridge.stone ? PARAPET : RAIL_HEIGHT
+    const slices: number[][] = []
+    const steps = Math.max(2, Math.ceil(length / 0.125))
+    for (let k = 0; k < steps; k++) {
+      const corners: (readonly [number, number])[] = []
+      for (const t of [k / steps, (k + 1) / steps]) {
+        const z = deckHeight(bridge, t)
+        const cx = bridge.ax + dx * t
+        const cy = bridge.ay + dy * t
+        for (const side of [-1, 1]) {
+          const x = cx + nx * half * side
+          const y = cy + ny * half * side
+          // A stone bridge's walls reach down to the water, but not across its arches' openings.
+          const arch = bridge.stone ? Math.min(archOpening(bridge, k / steps), archOpening(bridge, (k + 1) / steps)) : 0
+          const bottom = bridge.stone ? (arch > 0 ? arch : Math.min(z, heightAt(world, x, y))) : z - DECK_THICK
+          corners.push(screen(x, y, z + top), screen(x, y, bottom))
+        }
+      }
+      slices.push(hull(corners).flat())
+    }
+    const xs = slices.flatMap((poly) => poly.filter((_, i) => i % 2 === 0))
+    const ys = slices.flatMap((poly) => poly.filter((_, i) => i % 2 === 1))
+    return { bridge, dx, dy, length, nx, ny, half, slices, box: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] }
+  })
+  const inside = (poly: number[], x: number, y: number) => {
+    let sign = 0
+    for (let i = 0; i < poly.length; i += 2) {
+      const j = (i + 2) % poly.length
+      const c = (poly[j] - poly[i]) * (y - poly[i + 1]) - (poly[j + 1] - poly[i + 1]) * (x - poly[i])
+      if (c === 0) continue
+      if (sign === 0) sign = Math.sign(c)
+      else if (Math.sign(c) !== sign) return false
+    }
+    return true
+  }
+  const along = (it: (typeof items)[number], p: Point) => {
+    const t = ((p.x - it.bridge.ax) * it.dx + (p.y - it.bridge.ay) * it.dy) / (it.length * it.length)
+    const across = (p.x - it.bridge.ax) * it.nx + (p.y - it.bridge.ay) * it.ny
+    return { t, across }
+  }
+  decks = {
+    polygons: items.flatMap((it) => it.slices),
+    covers(x, y) {
+      const [sx, sy] = screen(x, y, 0)
+      for (const it of items) {
+        if (sx < it.box[0] || sx > it.box[2] || sy < it.box[1] || sy > it.box[3]) continue
+        if (it.slices.some((poly) => inside(poly, sx, sy))) return true
+      }
+      return false
+    },
+    snap(p) {
+      // Over water a marcher is carried onto a deck from further off: the server's way over a river may run a tile
+      // or two beside the bridge drawn (the drawn roads are mended, the server's tiles are not).
+      const tx = Math.floor(p.x)
+      const ty = Math.floor(p.y)
+      const terrain = tx >= 0 && ty >= 0 && tx < world.size && ty < world.size ? world.terrain[ty * world.size + tx] : -1
+      const wet = terrain === Terrain.River || terrain === Terrain.Lake
+      for (const it of items) {
+        const { t, across } = along(it, p)
+        if (t < -0.02 || t > 1.02 || Math.abs(across) > it.half + (wet ? 2.5 : 0.7)) continue
+        const u = Math.min(1, Math.max(0, t))
+        return { x: it.bridge.ax + it.dx * u, y: it.bridge.ay + it.dy * u }
+      }
+      return p
+    },
+    behind(x, y) {
+      for (const it of items) {
+        const { t, across } = along(it, { x, y })
+        if (t < -0.15 || t > 1.15 || Math.abs(across) > 6) continue
+        // How far toward the viewer (+x +y) the point lies from the deck's middle line, against the deck's reach that way.
+        const toward = across * (it.nx + it.ny)
+        if (toward <= it.half * Math.abs(it.nx + it.ny) + 0.3) return true
+      }
+      return false
+    },
+  }
+  decksOf.set(world, decks)
+  return decks
+}
+
 // The height of what one walks on at a point: a bridge's deck where it crosses, the ground elsewhere.
 export function surfaceHeight(world: World, p: Point) {
   const ground = heightAt(world, p.x, p.y)
@@ -1238,20 +1379,8 @@ function paintBridge(
   // A humped bridge of dressed stone: side walls pierced by round arches that spring from the water, a paved deck
   // and a low parapet on both sides.
   function paintStoneBridge() {
-    const t0 = Math.min(0.45, ABUTMENT / length)
-    const t1 = 1 - t0
-    const arches = Math.max(1, Math.round((length - ABUTMENT * 2) / ARCH_SPAN))
-    const pier = 0.13
-    // Height of the arch opening at `t`; 0 on the piers and abutments.
-    const opening = (t: number) => {
-      if (t <= t0 || t >= t1) return 0
-      const u = ((t - t0) / (t1 - t0)) * arches
-      const f = u - Math.floor(u)
-      if (f < pier || f > 1 - pier) return 0
-      const v = ((f - pier) / (1 - pier * 2)) * 2 - 1
-      const crown = deckAt(t0 + ((Math.floor(u) + 0.5) / arches) * (t1 - t0)) - DECK_THICK - 3
-      return Math.max(0, crown) * Math.sqrt(1 - v * v)
-    }
+    const { t0, t1, arches, pier } = archLayout(bridge)
+    const opening = (t: number) => archOpening(bridge, t)
     const groundAt = (wx: number, wy: number) => Math.max(0, heightAt(world, wx, wy))
     // Dressed blocks in staggered courses; the joints are darker.
     const block = (t: number, z: number) => {

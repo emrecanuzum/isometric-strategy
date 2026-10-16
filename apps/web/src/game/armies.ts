@@ -7,7 +7,7 @@ import { Canvas, NO_SHADOW, STONE, TIMBER, ramp, rgb, shadow } from './sprites'
 import type { Sprite } from './sprites'
 import { dashes } from './dashes'
 import { textureOf } from './textures'
-import { surfaceHeight } from './chunkPainter'
+import { surfaceHeight, worldDecks } from './chunkPainter'
 
 // Armies on the map (CLAUDE.md §9.7): a squad of spearmen under the kingdom's banner, walking along the route the
 // server keeps, which is drawn ahead of the player's own armies as a dashed line; crossed swords mark battles.
@@ -200,8 +200,11 @@ interface Shown {
 }
 
 export function createArmies(world: World, walkers: Container, routes: Graphics, labels: Container) {
-  // Where a marcher stands on screen: on a bridge's deck when crossing, not down at the water.
-  const standAt = (p: Point) => {
+  // Where a marcher stands on screen: on a bridge's deck when crossing, not down at the water, and along the deck's
+  // middle (the way over the bridge's tiles zigzags).
+  const decks = worldDecks(world)
+  const standAt = (q: Point) => {
+    const p = decks.snap(q)
     const s = tileToScreen(p)
     return { x: s.x, y: s.y - surfaceHeight(world, p) }
   }

@@ -1,8 +1,8 @@
 import { Feature, MAX_HEIGHT, TILE_HEIGHT, TILE_WIDTH, Terrain, alongPath, balance, hash, heightAt, pathLength } from '@game/shared'
 import type { Point, World } from '@game/shared'
-import { Container, Sprite as PixiSprite } from 'pixi.js'
+import { Container, Graphics, Sprite as PixiSprite } from 'pixi.js'
 import type { Texture } from 'pixi.js'
-import { ROUTE_STEP, resampleRoute } from './chunkPainter'
+import { ROUTE_STEP, resampleRoute, worldDecks } from './chunkPainter'
 import { SMOKE_PUFFS, innLook } from './innSprites'
 import { harbourOf } from './cities'
 import { SHIP_LENGTH, ship } from './shipSprites'
@@ -349,6 +349,24 @@ export function createAmbient(world: World, actors: Container): Ambient {
   const inView = (view: View, sx: number, sy: number, margin: number) =>
     sx > view.left - margin && sx < view.right + margin && sy > view.top - margin && sy < view.bottom + margin
 
+  // The bridges' decks: the water's glints, ducks and swans are not drawn where a deck covers them, and ships sailing
+  // under or behind one are cut by it (an inverse mask of the decks), so they pass under the bridge.
+  const decks = worldDecks(world)
+  const deckMask = new Graphics()
+  for (const poly of decks.polygons) deckMask.poly(poly).fill(0xffffff)
+  // Only ever a mask: kept out of the layer's drawing (as a mask in use is), never drawn itself.
+  deckMask.includeInBuild = false
+  deckMask.measurable = false
+  actors.addChild(deckMask)
+  const underDecks = (sprite: PixiSprite, x: number, y: number) => {
+    const cut = decks.behind(x, y)
+    if (cut && sprite.mask !== deckMask) sprite.setMask({ mask: deckMask, inverse: true })
+    else if (!cut && sprite.mask) sprite.mask = null
+    // Taking a mask off a sprite puts the mask back among what is drawn: keep it out (it would paint the decks white).
+    deckMask.includeInBuild = false
+    deckMask.measurable = false
+  }
+
   // --- River current ---
   const tracks: RiverTrack[] = world.rivers.map((river) => {
     const line = resampleRoute(river.points)
@@ -362,9 +380,6 @@ export function createAmbient(world: World, actors: Container): Ambient {
     for (let i = 0; i < n; i++) {
       const { x, y } = line[i]
       let hidden = false
-      for (let dy = -1; dy <= 1 && !hidden; dy++) {
-        for (let dx = -1; dx <= 1 && !hidden; dx++) hidden = world.feature[(Math.floor(y) + dy) * size + Math.floor(x) + dx] === Feature.Bridge
-      }
       // Ground d tiles nearer the viewer along the line of sight covers the water if it rises above it.
       for (let d = 0.5; !hidden && d * TILE_HEIGHT <= MAX_HEIGHT; d += 0.5) {
         if (x + d >= size || y + d >= size) break
@@ -408,7 +423,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
         const x = track.x[f] + dx * t - (dy / length) * s.lateral
         const y = track.y[f] + dy * t + (dx / length) * s.lateral
         const screen = toScreen(x, y, 0)
-        if (!inView(view, screen.x, screen.y, 8)) continue
+        if (!inView(view, screen.x, screen.y, 8) || decks.covers(x, y)) continue
         const sprite = flowPool.take(s.texture)
         sprite.anchor.set(0.5, 0)
         sprite.position.set(Math.round(screen.x), Math.round(screen.y))
@@ -554,7 +569,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
           y = leg.a.y + (leg.b.y - leg.a.y) * leg.t
         }
         const screen = toScreen(x, y, kind.water ? 0 : heightAt(world, x, y))
-        if (!inView(view, screen.x, screen.y, 24)) continue
+        if (!inView(view, screen.x, screen.y, 24) || (kind.water && decks.covers(x, y))) continue
         let frame: number
         if (kind.water) frame = Math.floor(seconds * 1.5 + a.offset) % 2
         else if (moving) frame = Math.floor(Math.hypot(to.x - from.x, to.y - from.y) * s * kind.strides) % 2
@@ -693,6 +708,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
       const bob = Math.round(Math.sin(seconds * 1.1 + s.seed) * 1)
       sprite.position.set(Math.round(screen.x), Math.round(screen.y) + bob)
       sprite.zIndex = screen.y
+      underDecks(sprite, x, y)
     }
     // The lords' ships: moored ones rock at their docks, ships under way sail out of sight and come back.
     const ms = seconds * 1000
@@ -744,6 +760,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
       const bob = Math.round(Math.sin(seconds * 1.3 + s.seed) * 1)
       sprite.position.set(Math.round(screen.x), Math.round(screen.y) + bob)
       sprite.zIndex = screen.y
+      underDecks(sprite, x, y)
       drawnShips.push({ x: sprite.position.x, y: sprite.position.y, z: screen.y, look: look.sprite, ship: s, ahead: ahead && ahead.map((p) => toScreen(p.x, p.y, 0)) })
     }
     shipPool.finish()
