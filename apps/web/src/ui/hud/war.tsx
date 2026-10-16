@@ -1,8 +1,8 @@
 import { BattleScene } from './BattleScene'
 import { startBattleMusic } from '../../audio/sfx'
 import { duckMusic } from '../../net/settings'
-import { UNITS, allShips, countShips, armoryOf, armyAt, nearCity, townSiegeRounds, townRoundsDone, townRoundMs, balance, countOf, familiarityAt, familiarityBonus, garrisonOf, moraleAt, nearInn, recruitment, territoryRect, territoryStage, trainError, unitSpec } from '@game/shared'
-import type { Army, Kingdom, Point, Town, Unit, Units, World } from '@game/shared'
+import { UNITS, atPalace, cargoRoom, cargoTotal, leadDice, leadError, leadsArmy, allShips, countShips, armoryOf, armyAt, nearCity, townSiegeRounds, townRoundsDone, townRoundMs, balance, countOf, familiarityAt, familiarityBonus, garrisonOf, moraleAt, nearInn, recruitment, territoryRect, territoryStage, trainError, unitSpec } from '@game/shared'
+import type { Army, Kingdom, LeadError, Point, Town, Unit, Units, World } from '@game/shared'
 import { useEffect, useState } from 'react'
 import { KINGDOM_COLORS } from '../../game/buildingSprites'
 import type { KingdomColor } from '../../game/buildingSprites'
@@ -73,11 +73,16 @@ export function warNotes(online: Online, now: number): WarNote[] {
       watch: { town: t.id },
     })
   }
+  // Rebels at the gates of the player's own towns (CLAUDE.md §8.4), until they are beaten.
+  for (const t of online.towns) {
+    if (t.owner !== me || !t.rebels || t.rebels.battle) continue
+    notes.push({ key: `rebels${t.id}`, text: `${t.rebels.count} asi ${t.name} kasabanı kuşatıyor · ordunla gidip bastır` })
+  }
   for (const b of online.battles) {
     const end = Date.parse(b.ends_at)
     if ((b.resolved && end <= now) || ![...b.attackers, ...b.defenders].some((f) => f.kingdom === me)) continue
     const start = Date.parse(b.started_at)
-    const what = b.kind === 'siege' && b.besieged !== null ? `${kingdomName(online, b.besieged)} kuşatması` : 'Meydan muharebesi'
+    const what = battleTitle(b, online)
     notes.push({ key: `battle${b.id}`, text: start > now ? `${what} ${clock(start - now)} sonra başlıyor` : `${what} sürüyor · ${clock(end - now)} kaldı`, from: start, until: end, watch: { battle: b.id } })
   }
   for (const a of online.armies) {
@@ -90,6 +95,15 @@ export function warNotes(online: Online, now: number): WarNote[] {
   }
   return notes
 }
+
+// A battle by name: a palace's siege, a town's rebels put down, or a battle in the field.
+export function battleTitle(b: Battle, online: Online) {
+  if (b.kind === 'revolt') return `${online.towns.find((t) => t.id === b.plan.town)?.name ?? 'Kasaba'} ayaklanması`
+  return b.kind === 'siege' && b.besieged !== null ? `${kingdomName(online, b.besieged)} kuşatması` : 'Meydan muharebesi'
+}
+
+// A side's fighter by name: a kingdom, its garrison, or a town's rebels.
+const fighterName = (online: Online, f: Battle['attackers'][number]) => (f.rebels ? 'Asiler' : f.army === null ? `${kingdomName(online, f.kingdom)} garnizonu` : kingdomName(online, f.kingdom))
 
 // What is going on: the war notes with how far each has run.
 function WarNow({ online, now }: { online: Online; now: number }) {
@@ -323,9 +337,24 @@ function Garrison({ data, armies }: { data: HudData; armies: number }) {
   )
 }
 
+// Why the lord cannot take command of an army (dynasty.ts leadError).
+const KING_REASONS: Record<LeadError, string> = {
+  council: 'Naipler konseyi yönetirken kral orduya geçemez',
+  queen: 'Önce sarayda bir kraliçe olmalı',
+  son: 'Önce bir oğlun olmalı (tahtın varisi)',
+  leading: 'Kral zaten başka bir orduya komuta ediyor',
+  battle: 'Ordu savaşta',
+  palace: 'Ordu sarayın önünde durmalı',
+}
+
 function ArmyCard({ index, army, others, data, rest }: { index: number; army: Army; others: Army[]; data: HudData; rest: ReturnType<typeof restOf> }) {
-  const { now, online, onShow } = data
+  const { now, online, onShow, kingdom } = data
   if (!online) return null
+  // The lord at its head (CLAUDE.md §8.2.1): taken over and left in front of the palace.
+  const kingLeads = leadsArmy(kingdom, army.led_by, now)
+  const home = atPalace(army, kingdom.buildings, now)
+  const kingWhy = kingLeads ? null : leadError(kingdom, now, { atPalace: home, battle: army.status === 'battle', leadingAnother: others.some((o) => leadsArmy(kingdom, o.led_by, now)) })
+  const king = kingdom.dynasty?.king
   const morale = moraleAt(army, now, rest)
   const familiarity = familiarityAt(army, now)
   const here = armyAt(army, now)
@@ -348,9 +377,14 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
           <b>
             {index}. Ordu · {soldiers} savaşçı
           </b>
-          <small>{siege ? `${siege.name} kuşatılıyor · ${clock(siege.siege!.endsAt - now)} kaldı` : toTown && Date.parse(army.arrive_at) > now ? `${toTown.name} kuşatmasına gidiyor · varış ${clock(Date.parse(army.arrive_at) - now)}` : armyStatus(army, now, rest, (id) => online.kingdoms.find((k) => k.id === id)?.shieldUntil ?? 0)}</small>
+          <small>{siege ? `${siege.name} kuşatılıyor · ${clock(siege.siege!.endsAt - now)} kaldı` : toTown && Date.parse(army.arrive_at) > now ? `${toTown.name} ${toTown.owner === online.me ? 'asilerine yürüyor' : 'kuşatmasına gidiyor'} · varış ${clock(Date.parse(army.arrive_at) - now)}` : armyStatus(army, now, rest, (id) => online.kingdoms.find((k) => k.id === id)?.shieldUntil ?? 0)}</small>
         </div>
         <UnitRow units={army.units ?? { spear: soldiers }} />
+        {cargoTotal(army.cargo) > 0 && (
+          <small className="order-note">
+            <Icon name="chest" size={16} /> Yük: {Object.entries(army.cargo ?? {}).filter(([, n]) => (n ?? 0) > 0).map(([g, n]) => `${fmt(n ?? 0)} ${RESOURCE_NAMES[g as keyof typeof RESOURCE_NAMES].toLowerCase()}`).join(', ')} · saraya varınca ambara girer (en fazla {fmt(cargoRoom(soldiers, army.cargo) + cargoTotal(army.cargo))} taşır)
+          </small>
+        )}
         <div className="army-stats">
           <div>
             <span>
@@ -365,6 +399,12 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
             <Meter value={familiarity / 100} tone="water" label="Saha bilgisi" segments={10} />
           </div>
         </div>
+        {kingLeads && (
+          <small className="order-note up">
+            <Icon name="crown" size={16} /> Kral komutada · emirler anında
+            {king ? ` · ${king.name}, savaş yeteneği ${king.skills.military}: zara ${leadDice(kingdom) >= 0 ? '+' : '−'}${Math.abs(leadDice(kingdom)).toFixed(1).replace('.', ',')}` : ''}
+          </small>
+        )}
         {army.contact_until && Date.parse(army.contact_until) > now && (
           <small className="order-note up">
             <Icon name="scroll" size={16} /> Komutanla iletişim açık: {clock(Date.parse(army.contact_until) - now)} boyunca emirler hemen uygulanır
@@ -404,6 +444,25 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
           >
             İkiye böl
           </button>
+          {kingLeads ? (
+            <button
+              className="btn small"
+              disabled={busy || !home}
+              onClick={() => online.act({ type: 'king', army: army.id, action: 'leave' })}
+              title={home ? 'Kral komutayı bırakıp sarayına döner' : 'Kral yalnızca sarayın önünde komutayı bırakır'}
+            >
+              <Icon name="home" size={16} /> Kral saraya dönsün
+            </button>
+          ) : (
+            <button
+              className="btn small"
+              disabled={!!kingWhy}
+              onClick={() => online.act({ type: 'king', army: army.id, action: 'lead' })}
+              title={kingWhy ? KING_REASONS[kingWhy] : 'Emirler elçi beklemeden uygulanır; kralın savaş yeteneği zarlara tam sayılır, ama ordu yenilirse kral düşebilir'}
+            >
+              <Icon name="crown" size={16} /> Kral ordunun başına geçsin
+            </button>
+          )}
           {near && (
             <button className="btn small" disabled={busy} onClick={() => online.act({ type: 'army', army: army.id, order: { kind: 'merge', with: near.id } })}>
               Birleştir
@@ -419,10 +478,7 @@ function Battles({ online, now }: { online: Online; now: number }) {
   const going = online.battles.filter((b) => !b.resolved || Date.parse(b.ends_at) > now)
   const done = online.battles.filter((b) => b.resolved && Date.parse(b.ends_at) <= now).slice(0, 5)
   const involved = (b: Battle) => [...b.attackers, ...b.defenders].some((f) => f.kingdom === online.me)
-  const title = (b: Battle) =>
-    b.kind === 'siege' && b.besieged !== null
-      ? `${kingdomName(online, b.besieged)} kuşatması`
-      : `${kingdomName(online, b.attackers[0]?.kingdom)} — ${kingdomName(online, b.defenders[0]?.kingdom)}`
+  const title = (b: Battle) => (b.kind === 'field' ? `${kingdomName(online, b.attackers[0]?.kingdom)} — ${kingdomName(online, b.defenders[0]?.kingdom)}` : battleTitle(b, online))
   return (
     <Section title="Savaşlar" icon="swords" aside={going.length ? `${going.length} sürüyor` : undefined}>
       {going.length + done.length === 0 && <p className="hint">Henüz muharebe olmadı.</p>}
@@ -475,9 +531,10 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
       for (const [u, n] of Object.entries(f.units ?? { spear: f.soldiers })) all[u as Unit] = (all[u as Unit] ?? 0) + (n ?? 0)
       return all
     }, {})
-    const names = [...new Set(fighters.map((f) => (f.army === null ? `${kingdomName(online, f.kingdom)} garnizonu` : kingdomName(online, f.kingdom))))]
+    const names = [...new Set(fighters.map((f) => fighterName(online, f)))]
     const colors = [...new Set(fighters.map((f) => online.kingdoms.find((k) => k.id === f.kingdom)?.color))]
-    return { start, now, bonus, counter, faith, towers, units, names, colors }
+    const king = fighters.some((f) => f.king)
+    return { start, now, bonus, counter, faith, towers, units, names, colors, king }
   }
   const a = side('attackers')
   const d = side('defenders')
@@ -489,6 +546,7 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
     color: KINGDOM_COLORS[s.colors[0] as KingdomColor]?.swatch ?? '#a8a4ac',
     archers: (s.units.archer ?? 0) > 0,
     catapults: (s.units.catapult ?? 0) > 0,
+    king: s.king,
   })
   // A tense march under the battle while it is fought (the tavern tune steps aside).
   useEffect(() => {
@@ -506,7 +564,7 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
         <header className="sheet-head">
           <Icon name="swords" size={32} />
           <div>
-            <h2 id="battle-title">{battle.kind === 'siege' ? `${kingdomName(online, battle.besieged ?? 0)} kuşatması` : 'Meydan muharebesi'}</h2>
+            <h2 id="battle-title">{battleTitle(battle, online)}</h2>
             <small>
               {now < started ? `${clock(started - now)} sonra başlıyor` : over ? `Bitti · ${winner.names.join(', ')} kazandı` : `Tur ${shown} / ${rounds.length} sürüyor`}
             </small>
@@ -546,7 +604,8 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
               <Stat label="Zar bonusu" value={`${s.bonus >= 0 ? '+' : '−'}${Math.abs(s.bonus).toFixed(1).replace('.', ',')}`} note={
                   [
                     s.counter ? `birlik üstünlüğü ${s.counter >= 0 ? '+' : '−'}${Math.abs(s.counter).toFixed(1).replace('.', ',')}` : '',
-                    s.faith ? `iman +${s.faith.toFixed(1).replace('.', ',')}` : '',
+                    s.faith ? `${s.king ? 'iman ve kral' : 'iman'} ${s.faith >= 0 ? '+' : '−'}${Math.abs(s.faith).toFixed(1).replace('.', ',')}` : '',
+                    s.king ? 'kral komutada' : '',
                     s.towers ? `${s.towers} kule` : '',
                   ]
                     .filter(Boolean)
@@ -648,7 +707,7 @@ export function TownSiegeView({ town, army, walled, online, now, onClose }: { to
           </button>
         </header>
         <BattleScene
-          attackers={{ soldiers: left ?? drawn - lostSoFar, start: drawn, color: swatch(besieger?.color, '#a8a4ac'), archers: (units?.archer ?? 0) > 0, catapults: (units?.catapult ?? 0) > 0 }}
+          attackers={{ soldiers: left ?? drawn - lostSoFar, start: drawn, color: swatch(besieger?.color, '#a8a4ac'), archers: (units?.archer ?? 0) > 0, catapults: (units?.catapult ?? 0) > 0, king: !!army?.royal }}
           defenders={{ soldiers: Math.max(defenders, town.owner !== null ? 3 : 0), start: Math.max(garrison, town.owner !== null ? 3 : 0), color: swatch(holder?.color, '#b08a3c'), archers: true, catapults: false }}
           siege
           round={done}

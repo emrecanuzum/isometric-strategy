@@ -1,4 +1,4 @@
-import { balance, booksOf, idleFactor, population, soldiersOf, storageCap, yearMs } from '@game/shared'
+import { balance, booksOf, crisisKey, fortunesBegun, goalRank, idleFactor, isCrisis, isDilemma, population, soldiersOf, storageCap, yearMs } from '@game/shared'
 import type { Kingdom, Pact, Resource, SeenSnapshot, SoldierLoss } from '@game/shared'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { squad } from '../game/armies'
@@ -11,7 +11,11 @@ import type { Battle, Notice } from '../net/online'
 import { describe } from './Envoy'
 import { Icon } from './icons'
 import type { IconName } from './icons'
-import { RESOURCE_ICONS, RESOURCE_NAMES } from './names'
+import { FORTUNE_TEXTS, RESOURCE_ICONS, RESOURCE_NAMES } from './names'
+import { EXPEDITION_TEXTS, FIND_TEXTS, GOAL_TEXTS } from './expeditionNames'
+import { expeditionLines, haulText } from './hud/expeditions'
+import { StoryScene, expeditionStory, villageStory } from './storyScenes'
+import type { Story } from './storyScenes'
 import type { Online } from './hud/online'
 import { kingdomName } from './hud/online'
 import { fmt } from './hud/primitives'
@@ -666,7 +670,7 @@ export function Scene({ items, mood = 'day' }: { items: Placed[]; mood?: Mood })
 }
 
 // A heap of gold coins (and a chest), drawn pixel by pixel.
-function coins(n: number): Sprite {
+export function coins(n: number): Sprite {
   const w = 34
   const h = 20
   const pixels = new Uint32Array(w * h)
@@ -756,9 +760,11 @@ interface Page {
   title: string
   picture: Picture
   lines: Line[]
+  // A picture of its own instead of the report's (the village's story, the expeditions; storyScenes.tsx).
+  story?: { story: Story; id: string }
 }
 
-const MILITARY = new Set(['siege_people', 'naval_battle', 'blockade_lifted', 'fleet_turned', 'battle_start', 'battle_end', 'town_siege', 'town_taken', 'town_held', 'town_siege_lifted', 'town_revolt', 'town_lost_revolt', 'tower_losses', 'army_threat', 'trade_raided', 'raid_repelled', 'war_declared', 'peace_enforced', 'order_failed'])
+const MILITARY = new Set(['king_fell', 'siege_people', 'naval_battle', 'blockade_lifted', 'fleet_turned', 'battle_start', 'battle_end', 'town_siege', 'town_taken', 'town_held', 'town_siege_lifted', 'town_revolt', 'town_lost_revolt', 'tower_losses', 'army_threat', 'trade_raided', 'raid_repelled', 'war_declared', 'peace_enforced', 'order_failed', 'cargo_lost', 'cargo_home'])
 const TRIBUTE = new Set(['patrol_tribute', 'patrol_taken', 'patrol_tip', 'patrol_ignored', 'tribute_ended', 'crown_gift'])
 
 const duration = (ms: number) => {
@@ -768,7 +774,7 @@ const duration = (ms: number) => {
   return h > 0 ? `${h} saat${m ? ` ${m} dakika` : ''}` : `${m} dakika`
 }
 // What took the soldiers, as the report names it.
-const LOSSES: Record<SoldierLoss, string> = { battle: 'meydan muharebesi', siege: 'saray kuşatması', town: 'kasaba kuşatması', towers: 'gözcü kuleleri', raid: 'ticaret yağması', crisis: 'afette seferberlik', disband: 'terhis' }
+const LOSSES: Record<SoldierLoss, string> = { battle: 'meydan muharebesi', siege: 'saray kuşatması', town: 'kasaba kuşatması', towers: 'gözcü kuleleri', raid: 'ticaret yağması', crisis: 'afette seferberlik', disband: 'terhis', expedition: 'sefer muhafızlığı' }
 
 const delta = (v: number) => `${v >= 0 ? '+' : '−'}${fmt(Math.abs(v))}`
 
@@ -806,6 +812,46 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
     const books = booksOf(kingdom)
     const was = before ? { ...booksOf({ books: before.books }) } : null
     const since0 = (pick: (b: typeof books) => number) => (was ? pick(books) - pick(was) : 0)
+    // What befell the village, told as a story: the day's events that came and went, how they were met, the goals
+    // reached and the parties back (CLAUDE.md §9.8–9.9).
+    const village: Line[] = []
+    const hours = away / 3_600_000
+    village.push({ icon: 'time', text: hours >= 1 ? `${duration(away)} boyunca köyde hayat kendi hâlinde sürdü. Kâhyanın defterinden:` : `Kısa bir süre yoktun; kâhyanın defterinden:` })
+    const fortunes = fortunesBegun(kingdom, since, now)
+    const told = fortunes.slice(-8)
+    if (fortunes.length > told.length) village.push({ icon: 'scroll', text: `Defterde ${fortunes.length - told.length} olay daha yazılı; en yenileri:` })
+    for (const f of told) {
+      const t = FORTUNE_TEXTS[f.kind]
+      const answer = kingdom.responses?.[crisisKey(f)]?.choice
+      const how = isCrisis(f.kind)
+        ? answer === 'villagers'
+          ? kingdom.steward ? ' Kâhya köylüleri seferber etti; zarar önlendi.' : ' Köylüler seferber edildi; zarar önlendi.'
+          : answer === 'army'
+            ? ' Ordu seferber edildi; zarar önlendi.'
+            : ' Kimse karar veremedi; olay zararını verdi.'
+        : isDilemma(f.kind)
+          ? answer
+            ? ' Bir yol seçildi.'
+            : ' Karar verecek kimse yoktu; olay kendi hâlinde geçti.'
+          : ''
+      const when = Math.max(1, Math.round((now - f.start) / 60_000))
+      village.push({
+        icon: t?.icon ?? 'star',
+        text: `${when >= 60 ? `${Math.round(when / 60)} saat` : `${when} dakika`} önce · ${t?.title ?? 'Bir olay'}: ${t?.text ?? ''}${how}`,
+        tone: isCrisis(f.kind) && !answer ? 'down' : t?.tone === 'good' ? 'up' : t?.tone === 'bad' ? 'down' : undefined,
+      })
+    }
+    if (fortunes.length === 0) village.push({ icon: 'happy', text: 'Ne afet geldi ne bayram; köy sakin bir dönem geçirdi.' })
+    const back = (kingdom.expeditions ?? []).filter((e) => e.result && !e.result.recalled && e.result.at > since)
+    for (const e of back) {
+      const got = haulText(e.result!.gains)
+      village.push({ icon: EXPEDITION_TEXTS[e.kind]?.icon ?? 'pin', text: `${EXPEDITION_TEXTS[e.kind]?.short ?? 'Sefer'} döndü${e.result!.find ? ` (${FIND_TEXTS[e.result!.find]?.name})` : ''}${got ? `: ${got}` : ', eli boş'}.`, tone: got ? 'up' : undefined })
+    }
+    const goals = Object.entries(kingdom.goals ?? {}).filter(([, g]) => (g?.at ?? 0) > since)
+    for (const [track, g] of goals) village.push({ icon: 'star', text: `Hedef tamamlandı: ${GOAL_TEXTS[track]?.name ?? track} · ${GOAL_TEXTS[track]?.badges[(g?.tier ?? 1) - 1] ?? ''}.`, tone: 'up' })
+    if (goals.length > 0) village.push({ icon: 'crown', text: `Unvanın: ${goalRank(kingdom).title}.` })
+    out.push({ title: 'Sen yokken köyde neler oldu', picture: 'house', lines: village, story: { story: villageStory(kingdom.color), id: `village:${kingdom.color}` } })
+
     const money: Line[] = [{ icon: 'time', text: `${duration(away)} yoktun.` }]
     if (before && was) {
       for (const r of ['gold', 'food', 'materials', 'arms'] as Resource[]) {
@@ -817,6 +863,7 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
       const wages = since0((b) => b.wages)
       const trade = since0((b) => b.trade)
       const other = since0((b) => b.other)
+      const expedition = since0((b) => b.expedition ?? 0)
       const tributeIn = since0((b) => b.tributeIn)
       const tributeOut = since0((b) => b.tributeOut)
       const crownPaid = since0((b) => b.crownPaid)
@@ -834,7 +881,8 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
       if (slack > 0) money.push({ icon: 'trade', text: `Sen yokken tüccar biraz kaytardı: ${fmt(slack)} seferde yükün ancak %${Math.round(balance.economy.away.merchantLoad * 100)}'sini götürdü.`, tone: 'down' })
       const held = since0((b) => b.tradeHeld)
       if (held > 0) money.push({ icon: 'trade', text: `Hazine dolu olduğu için tüccar ${fmt(held)} sefer mal götürmeden bekledi; yer açılınca yeniden satmaya başladı.` })
-      if (other >= 1) money.push({ icon: 'gold', text: `Kasabalardan, olaylardan ve balıkçıdan ${fmt(other)} altın geldi.`, tone: 'up' })
+      if (other >= 1) money.push({ icon: 'gold', text: `Kasabalardan, olaylardan, hedeflerden ve balıkçıdan ${fmt(other)} altın geldi.`, tone: 'up' })
+      if (expedition >= 1) money.push({ icon: 'pin', text: `Seferlerden ${fmt(expedition)} altın geldi.`, tone: 'up' })
       const upkeep = since0((b) => b.townUpkeep ?? 0)
       if (upkeep >= 1) money.push({ icon: 'crown', text: `Kasabaların bakımına ${fmt(upkeep)} altın gitti.`, tone: 'down' })
       if (wages >= 1) money.push({ icon: 'swords', text: `Askerlerin maaşına ${fmt(wages)} altın gitti.`, tone: 'down' })
@@ -848,7 +896,7 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
         money.push({ icon: 'warn', text: `Ambarlar dolu olduğu için ${fmt(wastedGoods)} birim mal boşa gitti${which}. Tüccarı dolu mala çevir, harca ya da ambar kur.`, tone: 'down' })
       }
       // What the accounts do not cover: buildings, training, envoys and purchases (or loot and gifts coming in).
-      const rest = kingdom.stock.gold - before.stock.gold - (tax + trade + other + tributeIn + crownGot - wages - upkeep - tributeOut - crownPaid - wasted)
+      const rest = kingdom.stock.gold - before.stock.gold - (tax + trade + other + expedition + tributeIn + crownGot - wages - upkeep - tributeOut - crownPaid - wasted)
       if (rest <= -1) money.push({ icon: 'build', text: `İnşaat, eğitim, elçiler ve alımlara ${fmt(-rest)} altın harcandı.`, tone: 'down' })
       else if (rest >= 1) money.push({ icon: 'gold', text: `Başka yollardan (yağma, hediye, fidye…) ${fmt(rest)} altın geldi.`, tone: 'up' })
       const p1 = population(kingdom, now)
@@ -862,6 +910,20 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
     const idle = idleFactor({ ...kingdom, lastSeenAt: since }, now)
     if (idle < 1) money.push({ icon: 'warn', text: `Uzun süre yoktun: binaların üretimi (yemek hariç), vergi ve tüccarın kazancı %${Math.round(idle * 100)} düzeyine kadar düştü (yokluk cezası). Döndüğün için yeniden tam çalışıyorlar.`, tone: 'down' })
     out.push({ title: 'Mali rapor', picture: 'treasury', lines: money })
+
+    // The parties back while away, each journey told in full (CLAUDE.md §9.9), and those still on the road.
+    const parties = (kingdom.expeditions ?? []).filter((e) => e.result && !e.result.recalled && e.result.at > since).sort((a, b) => a.result!.at - b.result!.at)
+    const roads = (kingdom.expeditions ?? []).filter((e) => !e.result && e.endAt > now)
+    if (parties.length > 0 || roads.length > 0) {
+      const lines: Line[] = []
+      for (const e of parties) {
+        lines.push({ icon: EXPEDITION_TEXTS[e.kind]?.icon ?? 'pin', text: `${EXPEDITION_TEXTS[e.kind]?.name ?? 'Sefer'}:` })
+        lines.push(...expeditionLines(e, online).slice(1))
+      }
+      for (const e of roads) lines.push({ icon: 'time', text: `${EXPEDITION_TEXTS[e.kind]?.name ?? 'Sefer'} hâlâ yolda; ${duration(e.endAt - now)} sonra dönecek.` })
+      const last = parties[parties.length - 1] ?? roads[0]
+      out.push({ title: 'Seferler', picture: 'world', lines, story: { story: expeditionStory(last.kind, last.result?.incidents, kingdom.color, last.result?.find), id: `away:${last.id}` } })
+    }
 
     // The fighting.
     const war: Line[] = data.notices.filter((n) => MILITARY.has(n.kind)).map((n) => {
@@ -880,7 +942,7 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
     for (const b of mine) {
       if (!b.report) continue
       const won = (b.plan.winner === 'attackers' ? b.attackers : b.defenders).some((f) => f.kingdom === me)
-      war.push({ icon: 'swords', text: `${b.kind === 'siege' ? 'Kuşatma' : 'Meydan muharebesi'} ${won ? 'kazanıldı' : 'kaybedildi'} (${Object.entries(b.report.losses).map(([who, n]) => `${who} −${fmt(n)}`).join(', ')})`, tone: won ? 'up' : 'down' })
+      war.push({ icon: 'swords', text: `${b.kind === 'siege' ? 'Kuşatma' : b.kind === 'revolt' ? 'Asilerle çarpışma' : 'Meydan muharebesi'} ${won ? 'kazanıldı' : 'kaybedildi'} (${Object.entries(b.report.losses).map(([who, n]) => `${who} −${fmt(n)}`).join(', ')})`, tone: won ? 'up' : 'down' })
     }
     if (war.length > 0) out.push({ title: 'Askeri rapor', picture: 'battle', lines: war })
 
@@ -908,7 +970,7 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
     const d = kingdom.dynasty
     if (d) {
       for (const c of d.children) if (c.bornAt > since) house.push({ icon: 'happy', text: `${c.sex === 'm' ? 'Bir oğlun' : 'Bir kızın'} oldu: ${c.name}.`, tone: 'up' })
-      for (const p of d.dead) if ((p.diedAt ?? 0) > since) house.push({ icon: 'unhappy', text: `Hükümdar ${p.name} ${p.cause === 'grief' ? 'kaybedilen savaşın kahrından' : 'yaşlılıktan'} öldü.`, tone: 'down' })
+      for (const p of d.dead) if ((p.diedAt ?? 0) > since) house.push({ icon: 'unhappy', text: `Hükümdar ${p.name} ${p.cause === 'battle' ? 'ordusunun başında savaşırken' : p.cause === 'grief' ? 'kaybedilen savaşın kahrından' : 'yaşlılıktan'} öldü.`, tone: 'down' })
       for (const c of d.children) if (c.grown && c.bornAt + balance.dynasty.comingOfAge * yearMs() > since) house.push({ icon: 'crown', text: `${c.name} reşit oldu.` })
       if (house.length > 0) house.push({ icon: 'crown', text: d.council || !d.king ? 'Lordluğu şimdi naipler konseyi yönetiyor.' : `Şimdi hükümdar ${d.king.name}.` })
     }
@@ -935,7 +997,7 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
       const winner = b.plan.winner === 'attackers' ? side(b.attackers) : side(b.defenders)
       world.push({
         icon: 'swords',
-        text: b.kind === 'siege' && b.besieged !== null ? `${side(b.attackers)}, ${name(b.besieged)} sarayını kuşattı; ${winner} kazandı.` : `${side(b.attackers)} ile ${side(b.defenders)} meydanda çarpıştı; ${winner} kazandı.`,
+        text: b.kind === 'revolt' ? `${side(b.attackers)} bir kasabasındaki asilerle çarpıştı; ${b.plan.winner === 'attackers' ? 'ayaklanmayı bastırdı' : 'asiler direndi'}.` : b.kind === 'siege' && b.besieged !== null ? `${side(b.attackers)}, ${name(b.besieged)} sarayını kuşattı; ${winner} kazandı.` : `${side(b.attackers)} ile ${side(b.defenders)} meydanda çarpıştı; ${winner} kazandı.`,
       })
     }
     for (const t of data.towns) world.push({ icon: 'crown', text: `${name(t.owner_id)}, ${t.name} kasabasını fethetti.`, tone: t.owner_id === me ? 'up' : undefined })
@@ -968,7 +1030,7 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
         </header>
         {current && (
           <>
-            <Scene items={items} mood={current.picture} />
+            {current.story ? <StoryScene story={current.story.story} id={current.story.id} /> : <Scene items={items} mood={current.picture} />}
             <h3 className="away-title">{current.title}</h3>
             <ul className="away-lines">
               {current.lines.map((line, i) => (

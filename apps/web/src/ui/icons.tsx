@@ -67,6 +67,9 @@ const MAPS = {
   gear: ['...ww...', '.w.ww.w.', '..wwww..', 'www..www', 'www..www', '..wwww..', '.w.ww.w.', '...ww...'],
   ship: ['...k....', '...kw...', '..kkww..', '...kwww.', '...k....', 'kbbbbbbk', '.kbtttk.', 'CCcCCcCC'],
   anchor: ['...kk...', '..k..k..', '...kk...', 'kkkkkkkk', '...kk...', 'k..kk..k', '.k.kk.k.', '..kkkk..'],
+  flower: ['..RR....', '.RyyR...', '..RR.RR.', '...gRyyR', '..g..RR.', '.Gg.g...', '..Ggg...', '...g....'],
+  leaf: ['.....oko', '....okyk', '...oyyok', '..oyyok.', '.oyook..', '.kook...', '.k......', 'k.......'],
+  snow: ['...C....', '.C.S.C..', '..SSS...', 'CSSwSSC.', '..SSS...', '.C.S.C..', '...C....', '........'],
   star: ['...yy...', '...yy...', 'yyywwyyy', '.yywwyy.', '..yyyy..', '.yy..yy.', '.y....y.', '........'],
 } as const
 

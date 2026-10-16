@@ -29,6 +29,12 @@ export interface Army {
   catapults?: boolean
   // The player's own armies: orders reach it at once until then (an envoy has just reached it).
   contact_until?: string | null
+  // The person id of the lord leading it (its own kingdom only), and whether a lord rides with it (seen by everyone:
+  // the royal banner). See dynasty.ts leadsArmy.
+  led_by?: number | null
+  royal?: boolean
+  // Goods bought at a town, carried home (the player's own armies only; CLAUDE.md §8.4).
+  cargo?: Partial<Record<'food' | 'materials' | 'arms', number>> | null
 }
 
 // Walkers keep to dry land below the mountains; bridges cross the water.
@@ -394,6 +400,20 @@ export function findRoute(world: Ground, from: Point, to: Point, blocked?: Block
   return route
 }
 
+// Where a kingdom's soldiers gather: just out in front of the palace gate (its front corner), clear of the walls.
+export function palaceDoor(buildings: { kind: string; x: number; y: number; size: number }[] | undefined): Point | null {
+  const palace = buildings?.find((b) => b.kind === 'palace')
+  return palace ? { x: palace.x + palace.size + 0.8, y: palace.y + palace.size + 0.8 } : null
+}
+
+// An army standing (not marching) right in front of its palace: where the lord can take it over or leave it.
+export function atPalace(army: Pick<Army, 'path' | 'depart_at' | 'arrive_at' | 'status'>, buildings: { kind: string; x: number; y: number; size: number }[] | undefined, at: number) {
+  const door = palaceDoor(buildings)
+  if (!door || army.status === 'battle' || (army.path.length > 1 && Date.parse(army.arrive_at) > at)) return false
+  const here = armyAt(army, at)
+  return Math.hypot(here.x - door.x, here.y - door.y) <= balance.dynasty.command.atPalaceTiles
+}
+
 export const routeLength = (path: Point[]) => path.reduce((sum, p, i) => (i ? sum + Math.hypot(p.x - path[i - 1].x, p.y - path[i - 1].y) : 0), 0)
 
 export const travelMs = (path: Point[]) => (routeLength(path) / balance.military.speedTilesPerSecond) * 1000
@@ -482,6 +502,10 @@ export interface Fighter {
   units?: Units
   // Added to the roll: faith from the temple and tactics from the university (institutions.ts battleSpirit).
   faith?: number
+  // The lord himself leads it (dynasty.ts leadsArmy).
+  king?: boolean
+  // A town's rebels (kingdom 0, no army; CLAUDE.md §8.4).
+  rebels?: boolean
 }
 
 // What stands with each side besides its soldiers: its watchtowers within reach of the battle (attackers' too in a

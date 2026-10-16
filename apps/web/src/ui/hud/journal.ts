@@ -3,6 +3,7 @@ import type { EconomyEvent, Good, Kingdom, Resource, Stock } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { IconName } from '../icons'
 import { BUILDING_NAMES, FORTUNE_TEXTS, RESEARCH_NAMES, RESOURCE_NAMES, SCOPE_NAMES } from '../names'
+import { EXPEDITION_TEXTS, FIND_TEXTS, GOAL_TEXTS, INCIDENT_TEXTS } from '../expeditionNames'
 
 // The envoy's journal: what happened in the kingdom, told as short dispatches. Single events (a building done, the
 // merchant coming back empty) are written at once; everything else is gathered into one report per day.
@@ -131,6 +132,29 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
         title: `${f?.title ?? 'Beklenmedik bir olay'} · ${SCOPE_NAMES[event.scope ?? 'kingdom']}`,
         text: [f?.text, ...extra, `Yaklaşık ${minutes} dk sürecek.`].filter(Boolean).join(' '),
       })
+    } else if (event.kind === 'crisis' && event.steward) {
+      const f = FORTUNE_TEXTS[event.fortune]
+      j = write(j, seasonStart, at, { tone: 'info', icon: 'scroll', title: `${f?.title ?? 'Olay'}: kâhya köylüleri seferber etti`, text: 'Sen karar veremeden kâhyan köylüleri topladı; zarar önlendi, bir süre iş yavaşlayacak.' })
+    } else if (event.kind === 'expedition') {
+      const e = event.expedition
+      const r = e.result
+      const t = EXPEDITION_TEXTS[e.kind]
+      if (r && !r.recalled) {
+        const bad = r.incidents.filter((i) => i.bad).length
+        const story = r.incidents.map((i) => INCIDENT_TEXTS[e.kind]?.[i.id]).filter(Boolean).join(' ')
+        const got = Object.entries(r.gains).filter(([, v]) => (v ?? 0) > 0).map(([g, v]) => `${fmt(v ?? 0)} ${g === 'gold' ? 'altın' : RESOURCE_NAMES[g as Good].toLowerCase()}`)
+        const losses = [...(r.villagersLost ? [`${r.villagersLost} köylü dönmedi`] : []), ...(r.soldiersLost ? [`${r.soldiersLost} muhafız düştü`] : [])]
+        j = write(j, seasonStart, at, {
+          tone: bad > r.incidents.length / 2 || losses.length > 0 ? 'bad' : 'good',
+          important: losses.length > 0,
+          icon: t?.icon ?? 'pin',
+          title: `${t?.short ?? 'Sefer'} döndü${r.find ? `: ${FIND_TEXTS[r.find]?.name}!` : ''}`,
+          text: [story, got.length ? `Getirdikleri: ${got.join(', ')}.` : 'Eli boş döndüler.', losses.length ? `${losses.join(', ')}.` : ''].filter(Boolean).join(' '),
+        })
+      }
+    } else if (event.kind === 'goal') {
+      const g = GOAL_TEXTS[event.track]
+      j = write(j, seasonStart, at, { tone: 'good', icon: 'star', title: `Hedef: ${g?.name ?? event.track} · ${g?.badges[event.tier - 1] ?? `${event.tier}. basamak`}`, text: `Bir yıldız kazandın${event.gold ? `; hazineye +${fmt(event.gold)} altın` : ''}.` })
     } else if (event.kind === 'crisis') {
       const f = FORTUNE_TEXTS[event.fortune]
       const extra = [

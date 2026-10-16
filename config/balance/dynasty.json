@@ -1,5 +1,8 @@
 {
-  "yearHours": 6,
+  "legacyYear": {
+    "ms": 21600000,
+    "graceHours": 2
+  },
   "king": {
     "age": [
       26,
@@ -178,5 +181,11 @@
         "bahar"
       ]
     }
+  },
+  "command": {
+    "atPalaceTiles": 3,
+    "presence": 0.3,
+    "dicePerPoint": 0.3,
+    "fall": 0.15
   }
 }

@@ -5,8 +5,10 @@ import { Icon } from '../icons'
 import type { IconName } from '../icons'
 import { BUILDING_NAMES, RESEARCH_NAMES, UNIT_NAMES } from '../names'
 import { ENVOY_NAMES } from './diplomacy'
+import { EXPEDITION_TEXTS } from '../expeditionNames'
 import type { Online } from './online'
 import { Meter } from './primitives'
+import { itemName, liveRequest } from './RoyalRequests'
 
 // Everything that takes a while, as timers above the menu in the bottom-left corner: buildings going up, research,
 // soldiers in training, the player's envoys and armies on the road, a sermon. A finished one flashes green for a few
@@ -43,6 +45,12 @@ function timersOf(kingdom: Kingdom, online: Online | undefined, now: number): Ti
     const unit = t.unit ?? 'spear'
     out.push({ key: `t:${t.doneAt}`, icon: 'people', label: `${t.count} ${UNIT_NAMES[unit].toLowerCase()}`, start: t.doneAt - t.count * unitSpec(unit).trainSeconds * 1000, end: t.doneAt })
   }
+  // Parties on their journeys (CLAUDE.md §9.9).
+  for (const e of kingdom.expeditions ?? []) {
+    if (e.result && e.endAt <= now - FLASH_MS) continue
+    if (e.result?.recalled) continue
+    out.push({ key: `x:${e.id}`, icon: EXPEDITION_TEXTS[e.kind]?.icon ?? 'pin', label: EXPEDITION_TEXTS[e.kind]?.short ?? 'Sefer', start: e.startAt, end: e.endAt })
+  }
   // Caravans taking a crown its order (CLAUDE.md §7.8).
   for (const t of kingdom.orderTrips ?? []) out.push({ key: `o:${t.crown}:${t.leftAt}`, icon: 'scroll', label: 'Taç siparişi kervanı', start: t.leftAt, end: t.arriveAt })
   // Ships on the slipways and fleets at sea (CLAUDE.md §8.5).
@@ -64,6 +72,9 @@ function timersOf(kingdom: Kingdom, online: Online | undefined, now: number): Ti
     out.push({ key: `k:${kingdom.shieldUntil}`, icon: 'shield', label: 'Kuşatma kalkanı', start: kingdom.shieldUntil! - span, end: kingdom.shieldUntil! })
   }
   if (online) {
+    // The liege's royal request taken on, until it runs out (CLAUDE.md §7.8).
+    const royal = liveRequest(kingdom, online.market, now)
+    if (royal?.accepted) out.push({ key: `q:${royal.req.n}`, icon: 'crown', label: `Kraliyet isteği: ${royal.req.units} ${itemName(royal.req.item)}`, start: royal.req.arriveAt, end: royal.req.endsAt })
     for (const e of online.envoys) {
       if (e.from_id !== online.me || e.status !== 'traveling') continue
       const to = online.kingdoms.find((k) => k.id === e.to_id)?.name ?? 'lord'

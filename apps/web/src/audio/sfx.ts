@@ -1,7 +1,7 @@
 // Sound effects, synthesised in the browser like the music: short cues for what the envoy brings and what happens in
 // the kingdom. One shared audio context, made on the first user gesture (browsers allow audio only after one).
 
-export type Cue = 'chat' | 'mention' | 'click' | 'enter' | 'leave' | 'start' | 'battle' | 'war' | 'envoy' | 'good' | 'bad' | 'build' | 'fortune' | 'omen' | 'coin'
+export type Cue = 'chat' | 'mention' | 'click' | 'enter' | 'leave' | 'start' | 'battle' | 'war' | 'envoy' | 'good' | 'bad' | 'build' | 'fortune' | 'omen' | 'coin' | 'tick' | 'go' | 'hit' | 'miss' | 'chop' | 'splash'
 
 const LEVEL = 0.35
 
@@ -138,6 +138,29 @@ export function play(cue: Cue) {
     case 'coin':
       tone(note(88), t, 0.06, 'square', 0.06)
       tone(note(93), t + 0.05, 0.12, 'square', 0.06)
+      break
+    // The mini-games (CLAUDE.md §6.5): the countdown, a good blow, a miss, an axe or scythe, the water.
+    case 'tick':
+      tone(note(76), t, 0.08, 'square', 0.06)
+      break
+    case 'go':
+      tone(note(83), t, 0.2, 'square', 0.08)
+      tone(note(88), t + 0.06, 0.25, 'triangle', 0.12)
+      break
+    case 'hit':
+      tone(note(91), t, 0.05, 'square', 0.07, 0.8)
+      drum(t, 0.35, 160)
+      break
+    case 'miss':
+      tone(note(52), t, 0.18, 'triangle', 0.18, 0.7)
+      break
+    case 'chop':
+      drum(t, 0.55, 120)
+      tone(note(70), t, 0.06, 'sawtooth', 0.05, 0.5)
+      break
+    case 'splash':
+      drum(t, 0.25, 300)
+      tone(note(84), t + 0.02, 0.12, 'sine', 0.06, 0.6)
       break
   }
 }

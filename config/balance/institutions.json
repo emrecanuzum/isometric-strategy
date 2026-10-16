@@ -550,6 +550,31 @@
         "tournament": {
           "weight": 1,
           "happiness": 5
+        },
+        "scholar": {
+          "weight": 2,
+          "happiness": 2
+        },
+        "festivalRequest": {
+          "weight": 2,
+          "happiness": -3
+        },
+        "lostChild": {
+          "weight": 1
+        },
+        "rareMerchant": {
+          "weight": 2
+        },
+        "strayHerd": {
+          "weight": 2
+        },
+        "harvestFair": {
+          "weight": 1,
+          "trade": 0.2,
+          "happiness": 4
+        },
+        "refugees": {
+          "weight": 1
         }
       }
     },
@@ -580,7 +605,12 @@
         "moreChance": 0.25,
         "minSoldiers": 2
       },
-      "keepHours": 24
+      "keepHours": 24,
+      "steward": {
+        "fee": {
+          "gold": 15
+        }
+      }
     },
     "choice": {
       "decideSeconds": 120,
@@ -698,6 +728,107 @@
           "b": {
             "cost": {
               "food": 30
+            },
+            "happiness": 5
+          }
+        },
+        "scholar": {
+          "a": {
+            "cost": {
+              "gold": 50
+            },
+            "researchRush": 60
+          },
+          "b": {
+            "cost": {
+              "food": 20
+            },
+            "happiness": 5
+          }
+        },
+        "festivalRequest": {
+          "a": {
+            "cost": {
+              "gold": 40,
+              "food": 50
+            },
+            "happiness": 12
+          },
+          "b": {
+            "work": 0.08,
+            "happiness": -3
+          }
+        },
+        "lostChild": {
+          "a": {
+            "work": -0.1,
+            "gain": {
+              "gold": 70
+            },
+            "happiness": 3
+          },
+          "b": {
+            "cost": {
+              "gold": 30
+            },
+            "happiness": 6
+          }
+        },
+        "rareMerchant": {
+          "a": {
+            "cost": {
+              "gold": 60
+            },
+            "gain": {
+              "arms": 160
+            }
+          },
+          "b": {
+            "cost": {
+              "materials": 100
+            },
+            "gain": {
+              "gold": 34
+            }
+          }
+        },
+        "strayHerd": {
+          "a": {
+            "gain": {
+              "food": 50
+            },
+            "happiness": -2
+          },
+          "b": {
+            "happiness": 4,
+            "trade": 0.05
+          }
+        },
+        "refugees": {
+          "a": {
+            "cost": {
+              "food": 40
+            },
+            "people": 3,
+            "happiness": -2
+          },
+          "b": {
+            "cost": {
+              "food": 20
+            },
+            "happiness": 3
+          }
+        },
+        "comet": {
+          "a": {
+            "cost": {
+              "gold": 40
+            },
+            "happiness": 8
+          },
+          "b": {
+            "cost": {
+              "food": 20
             },
             "happiness": 5
           }

@@ -27,6 +27,10 @@ export interface ArmyRow {
   familiarity: number
   camp: Point
   exposure: number
+  // The person id of the lord leading it himself (CLAUDE.md §8.2.1; game.leadsArmy).
+  led_by?: number | null
+  // Goods bought at a town, carried home (CLAUDE.md §8.4).
+  cargo?: Record<string, number> | null
 }
 
 export type Order =
@@ -36,11 +40,7 @@ export type Order =
   | { kind: 'merge'; with: number }
 
 // Where a kingdom's soldiers gather: just outside the palace's front corner.
-export function doorOf(state: Kingdom): Point | null {
-  const palace = state?.buildings?.find((b: { kind: string }) => b.kind === 'palace')
-  // Just out in front of the palace gate (its front corner), clear of the walls.
-  return palace ? { x: palace.x + palace.size + 0.8, y: palace.y + palace.size + 0.8 } : null
-}
+export const doorOf = (state: Kingdom): Point | null => game.palaceDoor(state?.buildings) as Point | null
 
 const inside = (rect: { x: number; y: number; size: number }, p: Point) => p.x >= rect.x && p.y >= rect.y && p.x < rect.x + rect.size && p.y < rect.y + rect.size
 
@@ -123,9 +123,10 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
     const enemy = kingdoms.find(
       (k) => k.id !== army.kingdom_id && k.state && inTerritory(k.state, target, at) && game.atWar(pacts, army.kingdom_id, k.id),
     )
-    // Sent onto a town: it marches to the town's gate, and lays siege there (see settleTowns) only when told to.
+    // Sent onto a town: it marches to the town's gate, and lays siege there (see settleTowns) only when told to; to a
+    // town of its own lord's, told so, it puts down the rebels there.
     const town = enemy ? undefined : townAt(await townsOf(army.lobby_id), target)
-    if (town && (order.siege ? town.owner_id !== army.kingdom_id : true)) {
+    if (town) {
       const holdings = kingdoms.map((k) => ({ id: k.id, buildings: k.state?.buildings ?? [] }))
       const goal: ArmyRow['goal'] = order.siege ? { kind: 'town', town: town.id } : { kind: 'move' }
       const update = march(world, army, owner, at, game.townGate(town), goal, game.buildingBlocker(holdings, army.kingdom_id), undefined, game.buildingBlocker(holdings))
@@ -195,7 +196,15 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
     if (!gone) return 'army'
     const { data: joined } = await admin
       .from('armies')
-      .update({ ...standing(there.here, at, morale, familiarity), soldiers, units: game.addUnits(unitsOf(army), unitsOf(other)), goal: { kind: 'move' } })
+      .update({
+        ...standing(there.here, at, morale, familiarity),
+        soldiers,
+        units: game.addUnits(unitsOf(army), unitsOf(other)),
+        goal: { kind: 'move' },
+        // The lord riding with either goes on with the joined army.
+        led_by: army.led_by ?? other.led_by ?? null,
+        ...((army.cargo || other.cargo) && { cargo: game.addCargo(other.cargo, army.cargo) }),
+      })
       .eq('id', other.id)
       .eq('soldiers', other.soldiers)
       .neq('status', 'battle')

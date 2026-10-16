@@ -14,7 +14,7 @@ const PAGES: { icon: IconName; title: string; text: string[] }[] = [
     icon: 'time',
     title: 'Dünya hiç durmaz',
     text: [
-      'Her lobi iki haftalık bir sezondur. Oyunda bir gün gerçekte bir saat sürer; saat ve gün herkes için aynıdır.',
+      'Her lobi iki haftalık bir sezondur. Oyunda bir gün (gece ve gündüz) gerçekte bir saat sürer ve takvimde bir yıldır: aylar ve mevsimler o saatin içinde geçer, hanedan da bu yıllarla yaşlanır. Saat ve tarih herkes için aynıdır.',
       'Oyunu kapattığında da lordluğun yaşamaya devam eder: inşaatlar biter, tüccarın satış yapar, köylüler üretir.',
     ],
   },

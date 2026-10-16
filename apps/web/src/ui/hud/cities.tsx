@@ -479,7 +479,7 @@ export function CrownOrders({ world, kingdom, now, online }: { world: World; kin
 // standing with the lord, its policies of the moment (what it buys at the lobby's market, the good it watches over,
 // its order of the hour, its patrols and tribute), the task it asks of the lord this hour, and the struggle for power
 // between the two.
-const QUEST_TITLES: Record<QuestKind, string> = { trade: 'Ticari üstünlük', town: 'Kasaba ele geçir', order: 'Siparişimizi gönder', army: 'Ordunu büyüt' }
+export const QUEST_TITLES: Record<QuestKind, string> = { trade: 'Ticari üstünlük', town: 'Kasaba ele geçir', order: 'Siparişimizi gönder', army: 'Ordunu büyüt' }
 
 function questText(kind: QuestKind, units: number | undefined, good: string | undefined, need: number) {
   switch (kind) {

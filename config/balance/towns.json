@@ -98,5 +98,36 @@
   },
   "score": {
     "perTown": 40
+  },
+  "rebels": {
+    "soldiers": [
+      4,
+      10
+    ],
+    "jitter": 1,
+    "morale": 55,
+    "familiarity": 60,
+    "quellLoyalty": 10,
+    "quietSeconds": 1800
+  },
+  "siegeRelation": -15,
+  "market": {
+    "goods": {
+      "gold": "arms",
+      "food": "food",
+      "materials": "materials",
+      "arms": "arms",
+      "people": "food"
+    },
+    "discount": 0.8,
+    "floorFactor": 1.05,
+    "stock": 400,
+    "refillPerRound": 0.8,
+    "relation": {
+      "worst": 1.5,
+      "best": 0.9
+    },
+    "carryPerSoldier": 12,
+    "gateTiles": 3
   }
 }

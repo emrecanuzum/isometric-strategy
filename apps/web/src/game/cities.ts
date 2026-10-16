@@ -13,7 +13,7 @@ import { SHIP_LENGTH } from './shipSprites'
 const NAMES = ['Altınkapı', 'Sedefhisar', 'Gümüşsu', 'Kervankale', 'Yıldızlıhan', 'Akkale', 'Mermerli', 'Lalezar', 'Bakırköprü', 'Safranbolu']
 const RULERS = ['Kral Alparslan', 'Kraliçe Nilüfer', 'Kral Orhan', 'Kraliçe Selcan', 'Kral Tuğrul', 'Kraliçe Gevherhan', 'Kral Kılıç Arslan', 'Kraliçe Mahperi']
 // The crowns' banners: the first capital's red, the second's blue.
-const CROWN_COLORS = ['#b23a26', '#2f5d9e']
+export const CROWN_COLORS = ['#b23a26', '#2f5d9e']
 // The same colours as roof colours (see KINGDOM_COLORS).
 export const CROWN_ROOFS = ['crimson', 'royal']
 

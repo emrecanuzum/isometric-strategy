@@ -53,15 +53,19 @@ import {
   tradeUpgradeCost,
   upgradeError,
   upgradeSpec,
+  calendarAt,
+  seasonOf,
+  seasonFactor,
+  expeditionsOut,
 } from '@game/shared'
 import { TradeShares } from './inns'
 import { CrownBanner, Fealty, TradeDestination, CrownOrders } from './cities'
 import { cityInfo } from '../../game/cities'
-import type { BuildingKind, Good, Kingdom, Market, Plot, Point, Resource, Stock, TaxLevel, Town, World } from '@game/shared'
+import type { BuildingKind, Expedition, Good, Kingdom, Market, Plot, Point, Resource, Stock, TaxLevel, Town, World } from '@game/shared'
 import { useEffect, useRef, useState } from 'react'
 import { STRUCTURE_SPRITES, palaceIn } from '../../game/buildingSprites'
 import { Icon } from '../icons'
-import { BUILDING_NAMES, BUILDING_NOTES, RESOURCE_ICONS, RESOURCE_NAMES, WEAPON_ICONS, WEAPON_NAMES } from '../names'
+import { BUILDING_NAMES, BUILDING_NOTES, RESOURCE_ICONS, RESOURCE_NAMES, SEASON_NAMES, WEAPON_ICONS, WEAPON_NAMES, dateText } from '../names'
 import { CostList, GoodChoice, Missing } from '../panels'
 import type { Journal } from './journal'
 import { DynastySection } from './dynasty'
@@ -69,6 +73,7 @@ import type { Online } from './online'
 import { REPORT_ROUNDS, isImportant, unreadImportant } from './journal'
 import { FortuneNote, HospitalPanel, Sickness, TemplePanel } from './institutions'
 import { PopulationPanel } from './population'
+import { ExpeditionReport, ExpeditionsPanel, GoalTitle, GoalsPanel, StewardSection } from './expeditions'
 import { IncomeSection, SeasonBooks } from './treasury'
 import { History, Meter, Placeholder, Section, SpriteView, Stat, fmt, signed, times } from './primitives'
 import { Subtabs, showPart, usePart } from './Subtabs'
@@ -334,7 +339,12 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
               <Icon name={RESOURCE_ICONS[r]} size={24} />
               <span>
                 <b>{RESOURCE_NAMES[r]}</b>
-                {r !== 'gold' && <small>Arazi çarpanı {times(kingdom.yields[r as Good])}</small>}
+                {r !== 'gold' && (
+                  <small>
+                    Arazi çarpanı {times(kingdom.yields[r as Good])}
+                    {r === 'food' && seasonOf(kingdom, now) && ` · Mevsim: ${SEASON_NAMES[seasonOf(kingdom, now)!]} ${times(seasonFactor(kingdom, now, 'food'))}`}
+                  </small>
+                )}
               </span>
               <strong className={stock >= room(r) ? 'down' : undefined}>
                 {fmt(stock)}
@@ -623,8 +633,8 @@ const describe = (plot: Plot | null | undefined) =>
   !plot ? 'yok' : plot.granted ? `hudut dışında, ${plot.distance} karo` : 'hudut içinde'
 
 // The palace tab in three parts, the one last looked at remembered (in this browser).
-type PalacePart = 'level' | 'house' | 'buildings'
-const PALACE_PARTS: PalacePart[] = ['level', 'house', 'buildings']
+type PalacePart = 'level' | 'house' | 'expeditions' | 'goals' | 'buildings'
+const PALACE_PARTS: PalacePart[] = ['level', 'house', 'expeditions', 'goals', 'buildings']
 
 // Opens the palace tab at a part next time (or now, if it is open): for whatever sends the player there.
 export const showPalacePart = (part: PalacePart) => showPart('palace', part)
@@ -649,6 +659,9 @@ export function KingdomTab(data: HudData) {
   const d = kingdom.dynasty
   // The house waits on the lord: a young child still to be named, or one with no upbringing chosen.
   const houseWaits = !!d && d.children.some((c) => !ofAge(c, now) && (!c.named || (!d.council && !c.education)))
+  // A party's report opened from the expeditions part (CLAUDE.md §9.9).
+  const [report, setReport] = useState<Expedition | null>(null)
+  const away = expeditionsOut(kingdom, now).length
   return (
     <>
       <Subtabs
@@ -658,6 +671,8 @@ export function KingdomTab(data: HudData) {
         parts={[
           { id: 'level', name: 'Seviye', icon: 'home' },
           { id: 'house', name: 'Hanedan', icon: 'crown', dot: houseWaits },
+          { id: 'expeditions', name: 'Seferler', icon: 'pin', count: away },
+          { id: 'goals', name: 'Hedefler', icon: 'star' },
           { id: 'buildings', name: 'Yapılar', icon: 'build' },
         ]}
       />
@@ -667,6 +682,7 @@ export function KingdomTab(data: HudData) {
             <SpriteView sprite={thumb('palace', kingdom.color)} scale={0.5} />
             <div>
               <b>Saray</b>
+              <GoalTitle kingdom={kingdom} />
               <p className="hint">{palace ? 'Lordluğun kalbi. Lord ve kraliçe burada yaşar.' : 'Sarayın henüz yerleştirilmedi.'}</p>
               {palace && (
                 <button className="btn small" onClick={() => onShow(center(palace))}>
@@ -724,6 +740,9 @@ export function KingdomTab(data: HudData) {
         </>
       )}
       {part === 'house' && <DynastySection kingdom={kingdom} now={data.now} online={data.online} />}
+      {part === 'expeditions' && <ExpeditionsPanel kingdom={kingdom} now={now} online={data.online} onReport={setReport} />}
+      {part === 'goals' && <GoalsPanel kingdom={kingdom} now={now} />}
+      {report && <ExpeditionReport expedition={report} kingdom={kingdom} online={data.online} onClose={() => setReport(null)} />}
       {part === 'buildings' && (
         <Section title="Yapılar" icon="build" aside={`${kingdom.buildings.length} toplam`}>
           <ul className="tally">
@@ -767,7 +786,7 @@ export const showPeoplePart = (part: PeoplePart) => showPart('people', part)
 export function PeopleTab(data: HudData) {
   const { kingdom, now, online } = data
   const [part, setPart] = usePart('people', PEOPLE_PARTS, 'people')
-  const { villagers, soldiers, cap, housing, jobs, efficiency } = population(kingdom, now)
+  const { villagers, soldiers, cap, housing, jobs, efficiency, away } = population(kingdom, now)
   const food = flows(kingdom, now).food
   const houses = kingdom.buildings.filter((b) => b.kind === 'house' && b.doneAt <= now).length
   // How the people are doing, read off the state of the kingdom: fed and put to work. A shrinking granary only
@@ -820,6 +839,7 @@ export function PeopleTab(data: HudData) {
           <Section title="İş gücü" icon="villager">
             <Stat label="Köylü" value={villagers} note={`${houses} ev`} />
             <Stat label="İş gücü ihtiyacı" value={jobs} tone={villagers < jobs ? 'down' : undefined} />
+            {away > 0 && <Stat label="Seferde" value={away} note="çalışmaz, vergi vermez" />}
             <Stat label="Üretim verimi" value={`%${Math.round(efficiency * 100)}`} tone={efficiency < 1 ? 'down' : 'up'} />
             <Stat label="Yemek tüketimi" value={`${signed(-food.used)} / tur`} />
           </Section>
@@ -833,7 +853,12 @@ export function PeopleTab(data: HudData) {
           </Section>
         </>
       )}
-      {part === 'mood' && <Mood kingdom={kingdom} now={now} online={online} />}
+      {part === 'mood' && (
+        <>
+          <Mood kingdom={kingdom} now={now} online={online} />
+          <StewardSection kingdom={kingdom} online={online} />
+        </>
+      )}
       {part === 'health' && <Health data={data} />}
       {part === 'queen' && <Queen kingdom={kingdom} now={now} online={online} />}
     </>
@@ -1086,15 +1111,18 @@ export function JournalTab({ journal, now, onImportantRead }: HudData) {
       ) : (
         <div className="letters">
           {[...days].map(([day, entries]) => (
-            <section key={day} aria-label={`${day}. gün`}>
-              <h3 className="day-head">{day}. gün</h3>
+            // A journal day is a day/night cycle of the season, which is also a calendar year (CLAUDE.md §2).
+            <section key={day} aria-label={`${balance.time.calendar.startYear + day - 1} yılı`}>
+              <h3 className="day-head">{balance.time.calendar.startYear + day - 1} yılı</h3>
               {entries.map((e) => (
                 <article key={e.id} className={`letter tone-${e.tone}${isImportant(e) ? ' important' : ''}`}>
                   <Icon name={e.icon} size={16} />
                   <div>
                     <b>{e.title}</b>
                     {e.text && <p>{e.text}</p>}
-                    <small>{ago(now - e.at)}</small>
+                    <small>
+                      {dateText(calendarAt(e.at, e.at), 'day')} · {ago(now - e.at)}
+                    </small>
                   </div>
                 </article>
               ))}

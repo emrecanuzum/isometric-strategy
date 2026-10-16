@@ -1,6 +1,7 @@
 import { balance, crisisDecideMs, crisisKey, dilemmaDecideMs, dilemmaOptions } from '@game/shared'
 import type { ChoiceOption, CrisisChoice, DilemmaChoice, EconomyEvent, Good, Kingdom } from '@game/shared'
 import { EventArt } from './EventArt'
+import { StoryScene, fortuneStory } from './storyScenes'
 import { Icon } from './icons'
 import { CRISIS_TEXTS, DILEMMA_TEXTS, FORTUNE_TEXTS, RESOURCE_NAMES, SCOPE_NAMES } from './names'
 
@@ -20,6 +21,8 @@ export function optionNote(o: ChoiceOption) {
     ...(o.trade ? [`ticaret geliri ${pct(o.trade)}`] : []),
     ...(o.work ? [`iş gücü ${pct(o.work)}`] : []),
     ...Object.entries(o.output ?? {}).map(([g, v]) => `${resourceName(g)} üretimi ${pct(v ?? 0)}`),
+    ...(o.researchRush ? [`süren araştırma ${Math.round(o.researchRush)} sn erken biter`] : []),
+    ...(o.people ? [`${o.people} köylü yerleşir (boş ev varsa)`] : []),
   ].join(' · ')
 }
 
@@ -75,7 +78,11 @@ export function FortuneDialog({
           </div>
         </header>
         <div className="fortune-art">
-          <EventArt kind={event.fortune} />
+          {(() => {
+            // The fortunes added with the expeditions are drawn like the reports' pictures (storyScenes.tsx).
+            const story = fortuneStory(event.fortune, kingdom?.color)
+            return story ? <StoryScene story={story} id={`${event.fortune}:${kingdom?.color}`} /> : <EventArt kind={event.fortune} />
+          })()}
         </div>
         <div className="fortune-body">
           <p>{f?.text}</p>
@@ -92,7 +99,10 @@ export function FortuneDialog({
                 <p className="down">Karar vermek için geç kaldın; olay etkisini gösterdi.</p>
               ) : (
                 <>
-                  <p className="hint">Ne yapalım? {left} içinde karar verilmezse hiçbir şey yapılmaz.</p>
+                  <p className="hint">
+                    Ne yapalım? {left} içinde karar verilmezse{' '}
+                    {kingdom?.steward ? `kâhyan köylüleri seferber eder (${balance.institutions.events.crisis.steward.fee.gold} altın).` : 'hiçbir şey yapılmaz.'}
+                  </p>
                   <button className="btn crisis-choice" onClick={() => onAnswer('villagers')}>
                     <b>{crisis.villagers}</b>
                     <small>

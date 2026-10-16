@@ -2,6 +2,8 @@ import cities from '../../../config/balance/cities.json'
 import diplomacy from '../../../config/balance/diplomacy.json'
 import dynasty from '../../../config/balance/dynasty.json'
 import economy from '../../../config/balance/economy.json'
+import expeditions from '../../../config/balance/expeditions.json'
+import goals from '../../../config/balance/goals.json'
 import institutions from '../../../config/balance/institutions.json'
 import espionage from '../../../config/balance/espionage.json'
 import map from '../../../config/balance/map.json'
@@ -15,4 +17,4 @@ import time from '../../../config/balance/time.json'
 import towns from '../../../config/balance/towns.json'
 import world from '../../../config/balance/world.json'
 
-export const balance = { cities, diplomacy, dynasty, economy, espionage, institutions, map, market, military, minigames, navy, society, territory, time, towns, world } as const
+export const balance = { cities, diplomacy, dynasty, economy, espionage, expeditions, goals, institutions, map, market, military, minigames, navy, society, territory, time, towns, world } as const

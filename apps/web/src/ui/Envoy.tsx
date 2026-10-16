@@ -4,6 +4,8 @@ import type { Notice } from '../net/online'
 import { Icon } from './icons'
 import type { IconName } from './icons'
 import { RESOURCE_NAMES } from './names'
+import { NoticeArt, noticeLook } from './NoticeArt'
+import { EnvoyPortrait } from './advisor/EnvoyPortrait'
 import { ENVOY_NAMES, OPERATION_NAMES, TOPIC_NAMES, describeTerms } from './hud/diplomacy'
 import type { Online } from './hud/online'
 
@@ -11,6 +13,13 @@ import type { Online } from './hud/online'
 // beginning and ending, spies caught). Closing one marks it read.
 
 const fmt = (v: number) => Math.round(v).toLocaleString('tr-TR')
+
+// Goods by name and amount ("40 yemek, 12 savaş malzemesi").
+const goodsText = (goods: unknown) =>
+  Object.entries((goods ?? {}) as Record<string, number>)
+    .filter(([, v]) => v > 0)
+    .map(([g, v]) => `${fmt(v)} ${RESOURCE_NAMES[g as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? g}`)
+    .join(', ')
 
 // What the insulting envoy says at the gate (one of these, by the envoy's number).
 const INSULTS = [
@@ -172,6 +181,7 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         text: `Filon ${p.target} iskelesine vardı ama ${p.why === 'dock' ? 'orada iskele yok' : p.why === 'taken' ? 'başka bir donanma zaten abluka ediyor' : 'artık savaşta değilsiniz'}; eve dönüyor.`,
       }
     case 'battle_start':
+      if (p.kind === 'revolt') return { icon: 'swords', title: `${p.name} asileriyle çarpışma başladı`, text: `Ordun ${p.name} kapısındaki asilerin üstüne yürüdü. Savaş tur tur sürecek; kazanırsan ayaklanma biter.` }
       return {
         icon: 'swords',
         title: p.kind === 'siege' ? 'Kuşatma başladı!' : 'Savaş başladı!',
@@ -181,23 +191,38 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       const report = p.report as { winner: string; losses: Record<string, number>; loot?: Record<string, number> }
       const losses = Object.entries(report.losses).map(([name, n]) => `${name} ${fmt(n)}`).join(', ')
       const loot = report.loot ? ` Yağma: ${Object.entries(report.loot).map(([r, v]) => `${fmt(v)} ${RESOURCE_NAMES[r as keyof typeof RESOURCE_NAMES].toLowerCase()}`).join(', ')}.` : ''
+      if (p.kind === 'revolt') {
+        const r = balance.towns.rebels
+        return p.winner === 'attackers'
+          ? { icon: 'crown', title: `${p.name} ayaklanması bastırıldı`, text: `Ordun asileri dağıttı (kayıplar: ${losses}). Ayaklanma bitti, kasabanın sadakati +${r.quellLoyalty} arttı ve ${Math.round(r.quietSeconds / 60)} dakika yeniden ayaklanmaz; sadakati düşük kalırsa sonra yine ayaklanabilir.` }
+          : { icon: 'warn', title: `${p.name} asileri direndi`, text: `Ordun asilere yenildi ve eve çekiliyor (kayıplar: ${losses}). Asiler kasabanın kapısında kalıyor; daha büyük bir orduyla yeniden gelebilirsin.` }
+      }
       return { icon: 'swords', title: `${p.kind === 'siege' ? 'Kuşatma' : 'Savaş'} bitti: ${p.winner === 'attackers' ? 'saldıranlar' : 'savunanlar'} kazandı`, text: `Kayıplar: ${losses}.${loot}` }
     }
     case 'siege_people':
       return p.taken
         ? { icon: 'unhappy', title: 'Halk sarayı terk ediyor', text: `${p.by} sarayını düşürdü; korkuya kapılan ${fmt(Number(p.lost))} köylü lordluğunu terk etti. Evler boş kaldı, halk ancak zamanla geri gelir.` }
         : { icon: 'unhappy', title: 'Kuşatma halkı kaçırıyor', text: `${p.by} ordusu sarayını kuşattı; ${fmt(Number(p.lost))} köylü canını kurtarmak için kaçtı. Kuşatma sürdükçe kaçanlar artacak, halk büyümeyecek.` }
+    case 'king_command':
+      return p.lead
+        ? { icon: 'crown', title: 'Kral ordunun başında', text: `${p.king} ordusunun başına geçti. Emirlerini kendisi verecek: elçi beklemeden, hemen uygulanır. Savaş yeteneği zarlara tam sayılır; ama ordu yenilirse kral savaşta düşebilir.` }
+        : { icon: 'home', title: 'Kral saraya döndü', text: `${p.king || 'Kral'} ordunun komutasını bıraktı ve sarayına döndü. Ordunun emirleri yine elçiyle gider.` }
+    case 'king_fell':
+      return Number(p.lord) === online.me
+        ? { icon: 'unhappy', title: 'Kral savaşta düştü!', text: `Hükümdar ${p.king} ordusunun başında savaşırken öldü. Ordu onsuz yoluna devam ediyor; tahta kimin geçeceğini hanedan belirleyecek.` }
+        : { icon: 'swords', title: `${p.name} hükümdarı düştü`, text: `${p.name} hükümdarı ${p.king} ordusunun başında savaşırken öldü.` }
     case 'tower_losses':
       return { icon: 'warn', title: 'Gözcü kuleleri ateş açtı', text: `Düşman kuleleri ordundan ${p.killed} askeri vurdu.` }
     case 'order_failed':
       if (p.why === 'peace') return { icon: 'warn', title: 'Kasaba kuşatılamadı', text: 'Ordun kasabaya vardı ama kasabanın sahibiyle savaşta değilsin; kuşatma yapamaz. Ordu orada bekliyor.' }
+      if (p.why === 'calm') return { icon: 'shield', title: 'Bastırılacak ayaklanma yok', text: 'Ordun kasabana vardı ama orada asi yok; ordu kapıda bekliyor.' }
       return { icon: 'warn', title: 'Emir yerine getirilemedi', text: 'Elçi orduya ulaştı ama emir uygulanamadı (yol yok ya da ordu savaşta).' }
     case 'town_siege': {
       const mine = p.by === me
       const minutes = Math.round(balance.towns.siegeSeconds / 60)
       return mine
         ? { icon: 'swords', title: `${p.name} kuşatılıyor`, text: `Ordun ${p.name} kasabasını kuşattı. Ordu orada kaldıkça kuşatma ${minutes} dakikada biter; ilerlemesi kasabanın üstünde görünür.${overreachNote(online, 1)}` }
-        : { icon: 'warn', title: `${p.name} kuşatma altında!`, text: `${p.by} ordusu ${p.name} kasabanı kuşattı. ${minutes} dakika içinde ordunla gelip kuşatmayı kıramazsan kasaba onların olur.` }
+        : { icon: 'warn', title: `${p.name} kuşatma altında!`, text: `${p.by} ordusu ${p.name} kasabanı kuşattı. ${minutes} dakika içinde ordunla gelip kuşatmayı kıramazsan kasaba onların olur.${Number(p.relation) < 0 ? ` ${p.by} ile ilişkin ${-Number(p.relation)} düştü.` : ''}` }
     }
     case 'town_siege_lifted':
       return { icon: 'shield', title: `${p.name} kuşatması kalktı`, text: `${p.name} önündeki kuşatma sona erdi: kuşatan ordu gitti, yenildi ya da artık savaşta değilsiniz.` }
@@ -240,10 +265,28 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       return {
         icon: 'unhappy',
         title: `${p.name} ayaklandı!`,
-        text: `${p.name} halkı sana karşı ayaklandı: ${p.minutes ?? Math.round(balance.towns.revolt.seconds / 60)} dakika boyunca hiçbir şey göndermeyecek. Ayaklanma bittiğinde sadakat hâlâ ${balance.towns.revolt.breakAwayBelow}'nin altındaysa kasaba senden kopar. Kasabanın panelinden bakımını artırabilirsin.`,
+        text: `${p.name} halkı sana karşı ayaklandı: ${p.minutes ?? Math.round(balance.towns.revolt.seconds / 60)} dakika boyunca hiçbir şey göndermeyecek${Number(p.rebels) > 0 ? ` ve ${p.rebels} asi kasabanın kapısını tuttu` : ''}. Ordunu gönderip asileri yenersen ayaklanma biter (kasabanın panelinde "Ayaklanmayı bastır"). Yoksa ayaklanma bittiğinde sadakat hâlâ ${balance.towns.revolt.breakAwayBelow}'nin altındaysa kasaba senden kopar ve asiler onun garnizonu olur.`,
       }
     case 'town_lost_revolt':
       return { icon: 'warn', title: `${p.name} senden koptu`, text: `${p.name} halkı ayaklanmayı sonuna götürdü ve sana bağlılığını bıraktı. Kasaba artık kimseye bağlı değil; küçük bir garnizonla kendini savunuyor, yeniden kuşatıp alabilirsin.` }
+    case 'town_sale': {
+      const good = RESOURCE_NAMES[p.good as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? String(p.good)
+      return {
+        icon: 'gold',
+        title: 'Kasabadan iyi haber',
+        text: `${p.by}, ${p.name} kasabanın pazarından ${fmt(Number(p.units))} ${good} aldı; hazinene ${fmt(Number(p.gold))} altın girdi.${Number(p.wasted) > 0 ? ` Hazine dolu olduğu için ${fmt(Number(p.wasted))} altın boşa gitti.` : ''}`,
+      }
+    }
+    case 'cargo_home': {
+      const goods = goodsText(p.goods)
+      return {
+        icon: 'chest',
+        title: 'Ordun yükünü getirdi',
+        text: `Kasabadan alınan mallar saraya ulaştı${goods ? `: ${goods} ambara girdi` : ''}.${Number(p.wasted) > 0 ? ` Ambar dolu olduğu için ${fmt(Number(p.wasted))} birim boşa gitti.` : ''}`,
+      }
+    }
+    case 'cargo_lost':
+      return { icon: 'warn', title: 'Yük kaybedildi', text: `Ordun yenildi; kasabadan taşıdığı mallar (${goodsText(p.goods)}) savaş alanında kaldı.` }
     case 'town_held':
       return { icon: 'warn', title: `${p.name} dayandı`, text: `${p.name} garnizonu kuşatmayı püskürttü; ordundan ${fmt(Number(p.lost))} asker düştü, kimse kalmadı.` }
     default:
@@ -259,50 +302,60 @@ export function EnvoyDialog({ notice, online, onClose }: { notice: Notice; onlin
   // A rival crown's demand, answerable until it runs out.
   const demand = notice.kind === 'patrol_tribute' && Number(p.expiresAt) > Date.now()
   const battle = notice.kind.startsWith('battle') ? (p.battle as number) : null
+  const look = noticeLook(notice, online)
   return (
     <div className="modal" role="dialog" aria-labelledby="envoy-title">
-      <section className="dialog frame envoy">
-        <header className="sheet-head">
-          <Icon name={icon} size={32} />
+      <section className={`dialog frame fortune-dialog envoy-dialog ${look.tone}`}>
+        <header className="fortune-banner">
+          <span className="envoy-face">
+            <EnvoyPortrait size={44} />
+          </span>
           <div>
-            <small>Elçi</small>
+            <small>
+              <Icon name={icon} size={16} /> Elçi haber getirdi
+            </small>
             <h2 id="envoy-title">{title}</h2>
           </div>
         </header>
-        {text && <p>{text}</p>}
-        <div className="row spread">
-          {demand ? (
-            <>
-              <button className="btn small danger" onClick={() => (online.act({ type: 'patrolAnswer', visit: p.visit as number, pay: false }), onClose())}>
-                Reddet
-              </button>
-              <button className="btn small" onClick={() => (online.act({ type: 'patrolAnswer', visit: p.visit as number, pay: true }), onClose())}>
-                <Icon name="gold" size={16} /> {fmt(Number(p.amount))} altın öde
-              </button>
-            </>
-          ) : pending ? (
-            <>
-              <button className="btn small danger" onClick={() => (online.act({ type: 'respond', envoy: p.envoy as number, accept: false }), onClose())}>
-                Reddet
-              </button>
-              <button className="btn small" onClick={() => (online.act({ type: 'respond', envoy: p.envoy as number, accept: true }), onClose())}>
-                Kabul et
-              </button>
-            </>
-          ) : (
-            <>
-              {battle !== null ? (
-                <button className="btn small" onClick={() => (online.watch(battle), onClose())}>
-                  <Icon name="swords" size={16} /> İzle
+        <div className="fortune-art">
+          <NoticeArt look={look} />
+        </div>
+        <div className="fortune-body">
+          {text && <p>{text}</p>}
+          <div className="row spread">
+            {demand ? (
+              <>
+                <button className="btn small danger" onClick={() => (online.act({ type: 'patrolAnswer', visit: p.visit as number, pay: false }), onClose())}>
+                  Reddet
                 </button>
-              ) : (
-                <span />
-              )}
-              <button className="btn small" onClick={onClose}>
-                Tamam
-              </button>
-            </>
-          )}
+                <button className="btn small" onClick={() => (online.act({ type: 'patrolAnswer', visit: p.visit as number, pay: true }), onClose())}>
+                  <Icon name="gold" size={16} /> {fmt(Number(p.amount))} altın öde
+                </button>
+              </>
+            ) : pending ? (
+              <>
+                <button className="btn small danger" onClick={() => (online.act({ type: 'respond', envoy: p.envoy as number, accept: false }), onClose())}>
+                  Reddet
+                </button>
+                <button className="btn small" onClick={() => (online.act({ type: 'respond', envoy: p.envoy as number, accept: true }), onClose())}>
+                  Kabul et
+                </button>
+              </>
+            ) : (
+              <>
+                {battle !== null ? (
+                  <button className="btn small" onClick={() => (online.watch(battle), onClose())}>
+                    <Icon name="swords" size={16} /> İzle
+                  </button>
+                ) : (
+                  <span />
+                )}
+                <button className="btn small" onClick={onClose}>
+                  Tamam
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </section>
     </div>

@@ -1,0 +1,313 @@
+{
+  "maxActiveByPalaceLevel": [
+    1,
+    1,
+    2,
+    2,
+    3
+  ],
+  "maxVillagerShare": 0.34,
+  "keepFinished": 8,
+  "escortCut": 0.15,
+  "escortFloor": 0.35,
+  "boonMinutes": 45,
+  "valuation": {
+    "note": "Opportunity cost model used to tune the hauls (CLAUDE.md §9.9): a villager away pays no tax (normal tax 0.02 gold per round) and, if employed, makes nothing (~0.1 gold-equivalent per round). Goods valued at their usual lobby prices.",
+    "taxPerRound": 0.02,
+    "workPerRound": 0.1,
+    "prices": {
+      "gold": 1,
+      "food": 0.2,
+      "materials": 0.3,
+      "arms": 0.4
+    }
+  },
+  "kinds": {
+    "hunt": {
+      "palace": 1,
+      "minutes": 45,
+      "villagers": [
+        2,
+        6
+      ],
+      "escort": 2,
+      "cost": {
+        "gold": 4
+      },
+      "haul": {
+        "food": 33,
+        "materials": 11
+      },
+      "incidents": 2,
+      "danger": 0.3,
+      "good": {
+        "herd": {
+          "weight": 3,
+          "haul": 0.35
+        },
+        "berries": {
+          "weight": 2,
+          "haul": 0.15,
+          "gain": {
+            "food": 20
+          }
+        },
+        "hermit": {
+          "weight": 1,
+          "boon": 3
+        },
+        "quiet": {
+          "weight": 3
+        }
+      },
+      "bad": {
+        "bear": {
+          "weight": 3,
+          "haul": -0.45,
+          "soldierLost": 0.25
+        },
+        "lostTrail": {
+          "weight": 2,
+          "haul": -0.3
+        },
+        "poachers": {
+          "weight": 1,
+          "haul": -0.25,
+          "soldierLost": 0.15
+        }
+      }
+    },
+    "explore": {
+      "palace": 2,
+      "minutes": 120,
+      "villagers": [
+        2,
+        5
+      ],
+      "escort": 3,
+      "cost": {
+        "gold": 6,
+        "food": 10
+      },
+      "haul": {
+        "arms": 44,
+        "gold": 5
+      },
+      "incidents": 3,
+      "danger": 0.3,
+      "good": {
+        "cave": {
+          "weight": 3,
+          "haul": 0.3
+        },
+        "ruins": {
+          "weight": 2,
+          "gain": {
+            "gold": 15
+          }
+        },
+        "rumour": {
+          "weight": 3,
+          "rumour": true
+        },
+        "eagle": {
+          "weight": 2,
+          "boon": 2
+        }
+      },
+      "bad": {
+        "rockslide": {
+          "weight": 3,
+          "haul": -0.4,
+          "villagerLost": 0.25
+        },
+        "blizzard": {
+          "weight": 2,
+          "haul": -0.3
+        },
+        "wolves": {
+          "weight": 2,
+          "haul": -0.2,
+          "soldierLost": 0.25
+        }
+      }
+    },
+    "pilgrimage": {
+      "palace": 2,
+      "minutes": 90,
+      "villagers": [
+        2,
+        6
+      ],
+      "escort": 0,
+      "cost": {
+        "gold": 8,
+        "food": 6
+      },
+      "haul": {},
+      "boon": {
+        "perVillager": 1.5,
+        "max": 8,
+        "minutes": 45
+      },
+      "incidents": 2,
+      "danger": 0.2,
+      "good": {
+        "blessing": {
+          "weight": 3,
+          "haul": 0.3
+        },
+        "relic": {
+          "weight": 1,
+          "haul": 0.2,
+          "gain": {
+            "gold": 15
+          }
+        },
+        "miracle": {
+          "weight": 1,
+          "haul": 0.5
+        },
+        "fellowship": {
+          "weight": 3,
+          "haul": 0.1
+        }
+      },
+      "bad": {
+        "fever": {
+          "weight": 2,
+          "haul": -0.3
+        },
+        "robbers": {
+          "weight": 2,
+          "haul": -0.25
+        }
+      }
+    },
+    "caravan": {
+      "palace": 2,
+      "tradePost": true,
+      "minutes": 240,
+      "villagers": [
+        3,
+        6
+      ],
+      "escort": 4,
+      "cost": {
+        "gold": 20,
+        "materials": 25
+      },
+      "haul": {
+        "gold": 56
+      },
+      "incidents": 3,
+      "danger": 0.3,
+      "good": {
+        "fair": {
+          "weight": 3,
+          "haul": 0.25
+        },
+        "spices": {
+          "weight": 2,
+          "haul": 0.15,
+          "gain": {
+            "food": 30
+          }
+        },
+        "oasis": {
+          "weight": 2
+        },
+        "rumour": {
+          "weight": 2,
+          "rumour": true
+        }
+      },
+      "bad": {
+        "bandits": {
+          "weight": 3,
+          "haul": -0.6,
+          "soldierLost": 0.4
+        },
+        "toll": {
+          "weight": 3,
+          "haul": -0.15
+        },
+        "sandstorm": {
+          "weight": 2,
+          "haul": -0.25,
+          "villagerLost": 0.15
+        }
+      }
+    },
+    "treasure": {
+      "palace": 3,
+      "minutes": 180,
+      "villagers": [
+        2,
+        4
+      ],
+      "escort": 3,
+      "cost": {
+        "gold": 10,
+        "food": 10
+      },
+      "costFlat": {
+        "gold": 60
+      },
+      "haul": {},
+      "incidents": 3,
+      "danger": 0.35,
+      "find": {
+        "hoard": {
+          "chance": 0.04,
+          "perVillager": 0.03,
+          "gain": {
+            "gold": 800
+          }
+        },
+        "cache": {
+          "chance": 0.22,
+          "perVillager": 0.04,
+          "gain": {
+            "gold": 140,
+            "arms": 40
+          }
+        }
+      },
+      "good": {
+        "map": {
+          "weight": 3,
+          "find": 0.06
+        },
+        "wonders": {
+          "weight": 2,
+          "boon": 4
+        },
+        "rumour": {
+          "weight": 2,
+          "rumour": true
+        },
+        "quiet": {
+          "weight": 2
+        }
+      },
+      "bad": {
+        "trap": {
+          "weight": 3,
+          "find": -0.05,
+          "villagerLost": 0.3,
+          "soldierLost": 0.2
+        },
+        "curse": {
+          "weight": 2,
+          "boon": -4
+        },
+        "rivals": {
+          "weight": 2,
+          "find": -0.04,
+          "soldierLost": 0.3
+        }
+      }
+    }
+  }
+}

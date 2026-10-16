@@ -1,0 +1,25 @@
+{
+  "rewardByTier": [{ "gold": 25 }, { "gold": 50 }, { "gold": 100 }],
+  "tracks": {
+    "builder": { "measure": "buildings", "tiers": [10, 25, 50] },
+    "homes": { "measure": "houses", "tiers": [5, 10, 20] },
+    "palace": { "measure": "palace", "tiers": [2, 3, 5] },
+    "people": { "measure": "villagers", "tiers": [30, 60, 100] },
+    "heirs": { "measure": "children", "tiers": [1, 2, 4] },
+    "victor": { "measure": "battlesWon", "tiers": [1, 5, 15] },
+    "lands": { "measure": "towns", "tiers": [1, 2, 3] },
+    "scholar": { "measure": "researches", "tiers": [2, 5, 10] },
+    "explorer": { "measure": "expeditions", "tiers": [1, 5, 15] },
+    "merchant": { "measure": "tradeGold", "tiers": [2000, 10000, 40000] },
+    "treasurer": { "measure": "gold", "tiers": [1000, 3500, 7000] },
+    "devout": { "measure": "temple", "tiers": [1, 2, 3] },
+    "admiral": { "measure": "ships", "tiers": [1, 5, 12] }
+  },
+  "ranks": [
+    { "stars": 0, "title": "Genç Lord" },
+    { "stars": 4, "title": "Saygın Lord" },
+    { "stars": 10, "title": "Ünlü Lord" },
+    { "stars": 18, "title": "Efsanevi Lord" },
+    { "stars": 28, "title": "Destansı Hükümdar" }
+  ]
+}

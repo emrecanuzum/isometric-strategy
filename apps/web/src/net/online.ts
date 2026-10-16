@@ -1,4 +1,4 @@
-import type { PlanStep, Good, TradeLedger, Town, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, RiverKeep, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units, Ship, Ships, MissionOrder, NavyLook, Blockade } from '@game/shared'
+import type { PlanStep, Good, TradeLedger, Town, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, RiverKeep, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units, Ship, Ships, MissionOrder, NavyLook, Blockade, ArcadeGame } from '@game/shared'
 import { supabase } from '../lib/supabase'
 
 // The lobby as the client sees it: the player's own kingdom in full, the others only as they show on the map, and the
@@ -171,17 +171,22 @@ export type Command =
   | { type: 'sermon' }
   | { type: 'crisis'; key: string; choice: 'villagers' | 'army' | 'none' }
   | { type: 'choose'; key: string; choice: 'a' | 'b' }
+  // Expeditions (CLAUDE.md §9.9): a party sent off, or called home; the steward who answers crises (§9.8).
+  | { type: 'expedition'; action: 'start'; kind: string; villagers: number; escort: Units }
+  | { type: 'expedition'; action: 'recall'; id: number }
+  | { type: 'steward'; on: boolean }
   | { type: 'nameChild'; id: number; name: string }
   | { type: 'educate'; id: number; focus: 'finance' | 'people' | 'military' }
   | { type: 'seen' }
   | { type: 'operation'; target: number; op: Operation; town?: number }
   | { type: 'townUpkeep'; town: number; level: number }
   | { type: 'releaseTown'; town: number }
+  | { type: 'townBuy'; town: number; army: number; units: number }
   | { type: 'raid'; target: number }
   | { type: 'cast' }
   | { type: 'fish'; toggles: number[] }
-  | { type: 'play'; game: 'archery' | 'anvil' | 'caravan' }
-  | { type: 'played'; game: 'archery' | 'anvil' | 'caravan'; toggles: number[] }
+  | { type: 'play'; game: ArcadeGame }
+  | { type: 'played'; game: ArcadeGame; toggles: number[] }
   | { type: 'repairTrade' }
   | { type: 'ransom' }
   | { type: 'patrolAnswer'; visit: number; pay: boolean }
@@ -202,6 +207,8 @@ export type Command =
   | { type: 'intel'; target: number }
   | { type: 'raise'; units: Units }
   | { type: 'army'; army: number; order: ArmyOrderPayload }
+  // The lord takes command of an army in front of his palace, or leaves it there (CLAUDE.md §8.2.1).
+  | { type: 'king'; army: number; action: 'lead' | 'leave' }
   // A crown's commission delivered (CLAUDE.md §7.8).
   | { type: 'order'; crown: number }
   // The navy (CLAUDE.md §8.5).
@@ -212,6 +219,8 @@ export type Command =
   | { type: 'fleet'; action: 'dock' | 'recall'; fleet: number }
   | { type: 'fleet'; action: 'sail'; fleet: number; x: number; y: number }
   | { type: 'quest'; crown: number; action: 'take' | 'claim' }
+  // The liege's royal envoy answered (CLAUDE.md §7.8).
+  | { type: 'royal'; action: 'accept' | 'decline' | 'deliver' }
   | { type: 'fleet'; action: 'mission'; fleet: number; order: MissionOrder }
 
 export class CommandError extends Error {}
@@ -291,7 +300,7 @@ export interface ArmyOrder {
 
 export interface Battle {
   id: number
-  kind: 'field' | 'siege'
+  kind: 'field' | 'siege' | 'revolt'
   x: number
   y: number
   started_at: string
@@ -299,7 +308,8 @@ export interface Battle {
   attackers: Fighter[]
   defenders: Fighter[]
   besieged: number | null
-  plan: BattlePlan & { defense?: { towers: number; walls: number; attackerTowers?: number } }
+  // A revolt's battle names the town whose rebels it is fought against.
+  plan: BattlePlan & { defense?: { towers: number; walls: number; attackerTowers?: number }; town?: number }
   resolved: boolean
   report: { winner: 'attackers' | 'defenders'; losses: Record<string, number>; loot?: Record<string, number> } | null
 }
@@ -362,8 +372,8 @@ export async function loadBattles(lobby: string): Promise<Battle[]> {
 
 // The lobby's towns, who holds them and the sieges under way (CLAUDE.md §8.4).
 export async function loadTowns(lobby: string): Promise<Town[]> {
-  const { data } = await supabase.from('lobby_towns').select('id, idx, x, y, kind, name, owner_id, garrison, siege').eq('lobby_id', lobby).order('idx')
-  return (data ?? []).map((t) => ({ id: t.id, idx: t.idx, x: t.x, y: t.y, kind: t.kind, name: t.name, owner: t.owner_id, garrison: t.garrison, siege: t.siege }))
+  const { data } = await supabase.from('lobby_towns').select('id, idx, x, y, kind, name, owner_id, garrison, siege, rebels, market_stock, market_at').eq('lobby_id', lobby).order('idx')
+  return (data ?? []).map((t) => ({ id: t.id, idx: t.idx, x: t.x, y: t.y, kind: t.kind, name: t.name, owner: t.owner_id, garrison: t.garrison, siege: t.siege, rebels: t.rebels ?? null, marketStock: t.market_stock ?? null, marketAt: t.market_at === null || t.market_at === undefined ? null : Number(t.market_at) }))
 }
 
 export async function loadNotices(lobby: string): Promise<Notice[]> {

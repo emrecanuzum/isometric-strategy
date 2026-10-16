@@ -11,6 +11,8 @@ export interface SceneSide {
   color: string
   archers: boolean
   catapults: boolean
+  // The lord leads it himself: he stands behind the line under his banner, crowned.
+  king?: boolean
 }
 
 const W = 160
@@ -96,6 +98,25 @@ export function BattleScene({ attackers, defenders, siege, round, over, winner }
           soldier(x, y, dir, side.color, still ? 0.5 : swing)
           // Winners raise their spears.
           if (won && Math.floor(t * 2 + i) % 2 === 0) px(x, y - 14, 1, 2, '#e6ebf0')
+        }
+        // The lord behind his line: a crowned figure in a purple cloak beside a tall banner (gone if he lost and fled).
+        if (side.king) {
+          const kx = front - dir * 26 - dir * (lost ? Math.min(20, (now / 60) % 40) : 0)
+          const ky = GROUND + 4
+          px(kx - 1, ky - 1, 1, 1, '#1c1612')
+          px(kx + 1, ky - 1, 1, 1, '#1c1612')
+          px(kx - 2, ky - 7, 5, 6, '#6a3a8c')
+          px(kx - 1, ky - 7, 3, 2, '#e8c44a')
+          px(kx, ky - 9, 1, 2, '#c8a07a')
+          px(kx - 1, ky - 11, 3, 2, '#e8c44a')
+          px(kx - 1, ky - 12, 1, 1, '#ffe27a')
+          px(kx + 1, ky - 12, 1, 1, '#ffe27a')
+          const pole = kx - dir * 4
+          px(pole, ky - 20, 1, 20, '#7a5834')
+          const wave = still ? 0 : Math.round(Math.sin(t * 4))
+          px(dir > 0 ? pole - 6 : pole + 1, ky - 20 + wave, 6, 4, side.color)
+          px(dir > 0 ? pole - 4 : pole + 2, ky - 19 + wave, 2, 2, '#e8c44a')
+          if (won && Math.floor(t * 2) % 2 === 0) px(kx + dir * 2, ky - 14, 1, 3, '#e6ebf0')
         }
         // Arrows arcing over the line.
         if (side.archers && !s.over && !still) {

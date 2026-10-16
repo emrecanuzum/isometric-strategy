@@ -1,16 +1,17 @@
-import { BUILDINGS, balance, buildingOutput, constructing, maxConstructions, fishCatch, gameTime, goldCap, growthTerms, idleFactor, ledger, population, timeToFill, roundOutcome, sailorsOf, storageCap, townYield } from '@game/shared'
+import { BUILDINGS, balance, buildingOutput, calendarAt, constructing, maxConstructions, fishCatch, gameTime, goldCap, growthTerms, idleFactor, ledger, population, timeToFill, roundOutcome, sailorsOf, seasonEffect, seasonOf, seasonFactor, storageCap, townYield } from '@game/shared'
 import type { BuildingKind, Kingdom, Market, Resource, Stock } from '@game/shared'
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { PHASE_NAMES, dayPhase, isNight } from '../../game/daylight'
 import { Icon } from '../icons'
-import { BUILDING_NAMES, RESOURCE_ICONS, RESOURCE_NAMES } from '../names'
+import { BUILDING_NAMES, RESOURCE_ICONS, RESOURCE_NAMES, SEASON_ICONS, SEASON_NAMES, dateText } from '../names'
 import type { TabId } from './Hud'
-import { History, Meter, fmt, short, signed } from './primitives'
+import { History, Meter, fmt, short, signed, times } from './primitives'
 import { RESOURCES, flows } from './tabs'
 
 // Stores along the top. Each one shows a small card on hover (or keyboard focus): where it comes from, where it goes,
-// its recent course. The clock at the end tells the game time; one game day passes in one real hour. On touch screens,
+// its recent course. The clock at the end tells the game time and the date; one game day, which is also one calendar
+// year, passes in one real hour. On touch screens,
 // with no hover, a tap opens the card (and its button leads on to the tab), and a tap anywhere else closes it.
 
 // Asked at each tap, so it follows the device (or a browser switched to a phone view after loading).
@@ -189,6 +190,16 @@ function ResourceCard({ resource: r, kingdom, now, history, market }: { resource
           ))}
         </ul>
       )}
+      {r === 'food' && seasonOf(kingdom, now) && (
+        <ul className="pop-lines">
+          <li>
+            <span>
+              <Icon name={SEASON_ICONS[seasonOf(kingdom, now)!]} size={8} /> Mevsim: {SEASON_NAMES[seasonOf(kingdom, now)!]} (tarla, iskele)
+            </span>
+            <b className={seasonFactor(kingdom, now, 'food') < 1 ? 'down' : 'up'}>{times(seasonFactor(kingdom, now, 'food'))}</b>
+          </li>
+        </ul>
+      )}
       {series.length > 1 && <History values={series} label={`Son ${series.length} tur`} />}
       <p className="pop-foot">
         {runsOut !== null ? (
@@ -299,6 +310,9 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
 // Game date and time, with a card showing the day as a 24-hour strip.
 function Clock({ now, seasonStart, nextRound, open, onTap }: { now: number; seasonStart: number; nextRound?: number; open: boolean; onTap: () => void }) {
   const t = gameTime(now, seasonStart)
+  const c = calendarAt(now, seasonStart)
+  const harvest = seasonEffect('food', c.season)
+  const sickness = seasonEffect('sickness', c.season)
   const night = isNight(t.hour)
   const time = `${String(t.hh).padStart(2, '0')}:${String(t.mm).padStart(2, '0')}`
   const phase = PHASE_NAMES[dayPhase(t.hour)]
@@ -307,14 +321,14 @@ function Clock({ now, seasonStart, nextRound, open, onTap }: { now: number; seas
       {/* A button, so a tap reaches it on every phone (iOS ignores taps on plain elements). */}
       <button
         className="res clock"
-        aria-label={`${t.day}. gün, saat ${time}, ${phase}`}
+        aria-label={`${dateText(c)}, ${SEASON_NAMES[c.season]}, saat ${time}, ${phase}`}
         aria-expanded={touchOnly() ? open : undefined}
         onClick={() => touchOnly() && onTap()}
       >
         <Icon name={night ? 'moon' : 'sun'} size={24} />
         <span className="res-value">
           <b>{time}</b>
-          <small>{t.day}. gün</small>
+          <small>{dateText(c, 'short')}</small>
         </span>
       </button>
       <div className="pop frame right" role="tooltip">
@@ -339,18 +353,32 @@ function Clock({ now, seasonStart, nextRound, open, onTap }: { now: number; seas
         <ul className="pop-lines">
           <li>
             <span>Tarih</span>
+            <b>{dateText(c)}</b>
+          </li>
+          <li>
+            <span>
+              <Icon name={SEASON_ICONS[c.season]} size={8} /> Mevsim
+            </span>
             <b>
-              {t.month}. ay, {t.dayOfMonth}. gün
+              {SEASON_NAMES[c.season]} · {Math.max(1, Math.ceil((c.seasonEndsAt - now) / 60000))} dk sonra {SEASON_NAMES[c.nextSeason].toLowerCase()}
             </b>
+          </li>
+          <li>
+            <span>Hasat (tarla, iskele)</span>
+            <b className={harvest < 0.995 ? 'down' : 'up'}>{times(harvest)}</b>
+          </li>
+          <li>
+            <span>Hastalığın yayılması</span>
+            <b className={sickness > 1.005 ? 'down' : 'up'}>{times(sickness)}</b>
           </li>
           <li>
             <span>Sezon</span>
             <b>
-              {t.day} / {balance.time.seasonGameDays} gün
+              {t.day} / {balance.time.seasonGameDays} yıl
             </b>
           </li>
           <li>
-            <span>Yeni gün</span>
+            <span>Yeni yıl</span>
             <b>{Math.ceil(t.untilNextDay / 60000)} dk sonra</b>
           </li>
           {nextRound !== undefined && (
@@ -362,7 +390,8 @@ function Clock({ now, seasonStart, nextRound, open, onTap }: { now: number; seas
         </ul>
         <Meter value={t.day / balance.time.seasonGameDays} label="Sezon ilerlemesi" segments={16} />
         <p className="pop-foot">
-          Oyunda 1 gün = gerçekte 1 saat. Çubuktaki her kare 1 oyun saatidir (gerçekte ortalama {(balance.time.gameDayMs / 24 / 60000).toString().replace('.', ',')} dk): gece daha hızlı, şafak ve gün batımı daha yavaş geçer.
+          Oyunda 1 gün = 1 yıl = gerçekte 1 saat: yıl gece yarısı 1 Ocak'ta başlar, her ay ~{Math.round(balance.time.gameDayMs / 12 / 60000)} dk, her mevsim ~
+          {Math.round(balance.time.gameDayMs / 4 / 60000)} dk sürer (kış gece yarısı, ilkbahar şafak, yaz öğle, sonbahar akşamüstü). Hanedan da bu yıllarla yaşlanır. Çubuktaki her kare 1 oyun saatidir (gerçekte ortalama {(balance.time.gameDayMs / 24 / 60000).toString().replace('.', ',')} dk): gece daha hızlı, şafak ve gün batımı daha yavaş geçer.
           <br />
           <b>Tur</b>, her {balance.economy.productionSeconds} saniyede (oyunda {Math.round((balance.economy.productionSeconds * 1000 * 24 * 60) / balance.time.gameDayMs)} dk) bir işleyen üretim turudur: binalar üretir, halk yer, vergi ve maaşlar ödenir. Bir oyun saatinde ortalama {Math.round(balance.time.gameDayMs / 24 / (balance.economy.productionSeconds * 1000))} tur geçer.
         </p>

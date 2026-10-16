@@ -8,7 +8,7 @@ import * as game from './game.js'
 import { applyOrder, armiesOf, armyNow, doorOf, march, standing, unitsOf } from './armies.ts'
 import type { ArmyRow, Order } from './armies.ts'
 import { answer, arrive, settleTributes } from './diplomacy.ts'
-import { ensureTowns, settleTowns } from './towns.ts'
+import { ensureTowns, settleQuell, settleTowns } from './towns.ts'
 import { settlePatrols } from './patrols.ts'
 import { settleNavy } from './navy.ts'
 import type { EnvoyRow } from './diplomacy.ts'
@@ -25,6 +25,8 @@ interface Fighter {
   familiarity: number
   units?: Record<string, number>
   faith?: number
+  king?: boolean
+  rebels?: boolean
 }
 interface Plan {
   winner: 'attackers' | 'defenders'
@@ -111,7 +113,7 @@ export async function tick(lobby: string, simAt: number, now: number) {
 
   // Towns: placed if the lobby has none yet, and their sieges begun, broken off and ended.
   await ensureTowns(lobby, world, rows)
-  await settleTowns(lobby, await loadKingdoms(lobby), await pactsOf(lobby), now)
+  await settleTowns(lobby, world, await loadKingdoms(lobby), await pactsOf(lobby), now)
   // The crown kingdoms' patrols reaching lords.
   await settlePatrols(lobby, world, await loadKingdoms(lobby), now)
   // Fleets meeting at the lords' docks: blockades, raids and sorties (CLAUDE.md §8.5).
@@ -167,11 +169,29 @@ async function moveArmies(lobby: string, world: LobbyWorld, rows: Row[], pacts: 
     const a = l.army
     if (l.engaged || a.status !== 'moving' || ms(a.arrive_at) > now) continue
     if (a.goal.kind === 'home') {
-      await admin.from('armies').delete().eq('id', a.id)
-      await mutateKingdom(a.kingdom_id, ms(a.arrive_at), (k) => {
+      const { data: gone } = await admin.from('armies').delete().eq('id', a.id).select('id').maybeSingle()
+      if (!gone) continue
+      // What it bought at a town goes into the stores as it marches in (what does not fit is lost; CLAUDE.md §8.4).
+      const cargo = (a.cargo ?? {}) as Record<string, number>
+      const stored: Record<string, number> = {}
+      let wasted = 0
+      const at = ms(a.arrive_at)
+      await mutateKingdom(a.kingdom_id, at, (k) => {
         const units = game.addUnits(game.garrisonOf(k), unitsOf(a))
-        return { ...k, units, soldiers: game.countOf(units), fielded: Math.max(0, (k.fielded ?? 0) - a.soldiers) }
+        const stock = { ...k.stock }
+        const cap = game.storageCap(k, at)
+        wasted = 0
+        for (const [g, n] of Object.entries(cargo)) {
+          if (!(g in stock) || !(n > 0)) continue
+          const fit = Math.max(0, Math.min(n, cap - stock[g]))
+          stock[g] += fit
+          stored[g] = fit
+          wasted += n - fit
+        }
+        const next = { ...k, units, soldiers: game.countOf(units), fielded: Math.max(0, (k.fielded ?? 0) - a.soldiers), stock }
+        return wasted > 0 ? game.book(next, { wastedGoods: wasted }) : next
       })
+      if (Object.keys(stored).length > 0 || wasted > 0) await notify(lobby, [a.kingdom_id], 'cargo_home', { goods: stored, wasted }, at)
       l.engaged = true
     } else if (a.goal.kind === 'move' || a.goal.kind === 'town') {
       await admin.from('armies').update({ status: 'idle' }).eq('id', a.id)
@@ -297,8 +317,10 @@ async function startBattle(
   const fighter = (l: Live) => {
     const owner = states.get(l.army.kingdom_id)
     const now = owner ? armyNow(l.army, world, owner, t) : { morale: l.army.morale, familiarity: 0, here: point }
-    const faith = owner ? game.battleSpirit(owner, t) : 0
-    return { kingdom: l.army.kingdom_id, army: l.army.id, soldiers: l.army.soldiers, morale: now.morale, familiarity: now.familiarity, units: unitsOf(l.army), faith }
+    // The lord at its head adds his own gift for war in full (CLAUDE.md §8.2.1).
+    const king = !!owner && game.leadsArmy(owner, l.army.led_by, t)
+    const faith = owner ? game.battleSpirit(owner, t, king) : 0
+    return { kingdom: l.army.kingdom_id, army: l.army.id, soldiers: l.army.soldiers, morale: now.morale, familiarity: now.familiarity, units: unitsOf(l.army), faith, ...(king && { king: true }) }
   }
   const attackers = a.map(fighter)
   const defenders = b.map(fighter)
@@ -386,7 +408,10 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
   const settle = async (side: Fighter[], lost: number[], morale: number, won: boolean) => {
     for (const [i, f] of side.entries()) {
       const loss = lost[i] ?? 0
-      losses[nameOf(rows, f.kingdom)] = (losses[nameOf(rows, f.kingdom)] ?? 0) + loss
+      const who = f.rebels ? 'Asiler' : nameOf(rows, f.kingdom)
+      losses[who] = (losses[who] ?? 0) + loss
+      // A town's rebels belong to no one: their losses are the town's to count (see settleQuell).
+      if (f.rebels) continue
       if (f.army === null) {
         await mutateKingdom(f.kingdom, at, (k) => {
           const units = game.takeShare(game.garrisonOf(k), loss).left
@@ -400,6 +425,8 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
       if (!army) continue
       const soldiers = army.soldiers - loss
       const units = game.takeShare(unitsOf(army), loss).left
+      // Goods carried from a town are lost with a beaten (or fallen) army.
+      if (!won && army.cargo && game.cargoTotal(army.cargo) > 0) await notify(lobby, [f.kingdom], 'cargo_lost', { goods: army.cargo }, Math.min(at, now))
       if (soldiers <= 0) {
         await admin.from('armies').delete().eq('id', army.id)
         continue
@@ -416,7 +443,7 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
         const retreat = owner && door ? march(world, still, owner, at, door, { kind: 'home', retreat: true }, game.buildingBlocker([...states].map(([id, st]) => ({ id, buildings: st.buildings })), f.kingdom)) : null
         // With no way home it stays where it is, still out of the fight until it is given a new order.
         const fallback = { ...standing(here, at, morale, familiarity), goal: { kind: 'home', retreat: true } }
-        await admin.from('armies').update({ ...(retreat ?? fallback), soldiers, units, morale }).eq('id', army.id)
+        await admin.from('armies').update({ ...(retreat ?? fallback), soldiers, units, morale, cargo: null }).eq('id', army.id)
       }
     }
   }
@@ -428,11 +455,28 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
   const winners = new Set((plan.winner === 'attackers' ? battle.attackers : battle.defenders).map((f) => f.kingdom))
   // A lord whose side lost may die of grief, now and then (CLAUDE.md §9.1): decided once, from the battle and the realm.
   for (const id of new Set((plan.winner === 'attackers' ? battle.defenders : battle.attackers).map((f) => f.kingdom))) {
-    if (winners.has(id)) continue
-    await mutateKingdom(id, at, (k) => (game.griefStrikes(k, battle.id) ? game.dieOfGrief(k, at) : null))
+    if (winners.has(id) || id === 0) continue
+    // A lord who led his army into the lost battle may fall in it (more often); the army goes on without him.
+    const led = [...battle.attackers, ...battle.defenders].find((f) => f.kingdom === id && f.king && f.army !== null)
+    let fell = ''
+    await mutateKingdom(id, at, (k) => {
+      fell = ''
+      if (led && game.fallStrikes(k, battle.id)) {
+        fell = k.dynasty?.king?.name ?? ''
+        return game.dieOfGrief(k, at, 'battle')
+      }
+      return game.griefStrikes(k, battle.id) ? game.dieOfGrief(k, at) : null
+    })
+    if (led && fell) {
+      await admin.from('armies').update({ led_by: null }).eq('id', led.army!)
+      const sides = [...new Set([...battle.attackers, ...battle.defenders].map((f) => f.kingdom))]
+      await notify(lobby, sides, 'king_fell', { lord: id, name: nameOf(rows, id), king: fell }, at)
+    }
   }
   const siegeTaken = battle.kind === 'siege' && plan.winner === 'attackers'
-  for (const id of winners) {
+  // Putting down a town's own rebels is no victory for the ranking.
+  for (const id of battle.kind === 'revolt' ? [] : winners) {
+    if (id === 0) continue
     await mutateKingdom(id, at, (k) => {
       const record = { ...(k.record ?? {}) }
       if (siegeTaken) record.siegesWon = (record.siegesWon ?? 0) + 1
@@ -481,7 +525,10 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
     })
     report.loot = loot
   }
+  // The rebels of a town beaten (the revolt ends) or holding out (CLAUDE.md §8.4).
+  const quelled = battle.kind === 'revolt' ? await settleQuell(battle as never, at) : null
+  if (quelled) report.town = quelled
   await admin.from('battles').update({ report }).eq('id', battle.id)
-  const kingdoms = [...new Set([...battle.attackers, ...battle.defenders].map((f) => f.kingdom))]
-  await notify(lobby, kingdoms, 'battle_end', { battle: battle.id, kind: battle.kind, winner: plan.winner, report }, Math.min(at, now))
+  const kingdoms = [...new Set([...battle.attackers, ...battle.defenders].map((f) => f.kingdom))].filter((k) => k !== 0)
+  await notify(lobby, kingdoms, 'battle_end', { battle: battle.id, kind: battle.kind, winner: plan.winner, report, ...(quelled && { town: quelled.town, name: quelled.name }) }, Math.min(at, now))
 }

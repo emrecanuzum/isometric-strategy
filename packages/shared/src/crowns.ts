@@ -1,8 +1,8 @@
 import { balance } from './balance'
-import { book } from './economy'
+import { BUILDINGS, WEAPONS, armoryCap, armoryOf, book, palaceLevel, storageCap } from './economy'
 import { priceAt } from './market'
 import type { Market } from './market'
-import type { Good, Kingdom } from './economy'
+import type { Good, Kingdom, Weapon } from './economy'
 
 // The politics of the two crown kingdoms (CLAUDE.md §7.8): every lord stands somewhere with each crown (a relation from
 // −100 to 100), each crown watches over the trade in one good at a time, and a crown is as strong as the lords sworn to
@@ -294,4 +294,133 @@ export function claimQuest(kingdom: Kingdom, crown: number, at: number, crowns: 
   const q = quests()
   const next = changeCrownRelation({ ...kingdom, crownQuests: list, stock: { ...kingdom.stock, gold: kingdom.stock.gold + gold } }, crown, kingdom.liege === crown ? q.relation.own : q.relation.other)
   return gold > 0 ? book(next, { crownGot: gold }) : next
+}
+
+// ---- The liege's royal requests (CLAUDE.md §7.8) --------------------------------------------------------------------
+
+// Every hour the royal envoy of the crown a lord is sworn to asks for a lot of one thing (a weapon from the armory or
+// a good from the stores), to be handed over within the hour. Each lord's envoy comes at its own moment of the hour
+// (seeded by the lobby and the lord's seat), the lot is sized to the lord's palace and forges, and the crown pays a
+// little over what the lot would fetch at the market, never more than a palace-level sum: goodwill more than gold.
+// Nothing is stored but the answers (Kingdom.royal).
+export type RoyalItem = Good | Weapon
+
+export interface RoyalRequest {
+  // The request's number (the n-th since the epoch for this lord), its crown, what and how many it asks.
+  n: number
+  crown: number
+  item: RoyalItem
+  units: number
+  // The gold it pays (at the prices of the moment; fixed once the request is answered).
+  gold: number
+  arriveAt: number
+  endsAt: number
+}
+
+export interface RoyalAnswer {
+  n: number
+  status: 'accepted' | 'declined' | 'delivered'
+  at: number
+  // What was asked and offered when the request was answered (kept, so the lot does not change afterwards).
+  item?: RoyalItem
+  units?: number
+  gold?: number
+}
+
+const royal = () => spec().royal
+export const isWeaponItem = (item: RoyalItem): item is Weapon => (WEAPONS as readonly string[]).includes(item)
+
+const royalPhase = (kingdom: Pick<Kingdom, 'lobbyKey' | 'site'>) => mix(kingdom.lobbyKey ?? 0, kingdom.site.x, kingdom.site.y, 5303) % (royal().everySeconds * 1000)
+
+// What a unit of the item is worth at the lobby's market: the good itself, or the raw goods a forge works into it.
+export function royalUnitValue(item: RoyalItem, market: Market | null | undefined, at: number) {
+  if (!isWeaponItem(item)) return priceAt(market, item, at)
+  const uses = BUILDINGS.forge.products?.[item]?.uses ?? {}
+  return Object.entries(uses).reduce((sum, [g, v]) => sum + (v ?? 0) * priceAt(market, g as Good, at), 0)
+}
+
+// The gold for `units` of the item: the market value with the premium, under the palace-level cap.
+export function royalGold(item: RoyalItem, units: number, palace: number, market: Market | null | undefined, at: number) {
+  const r = royal()
+  const cap = r.goldCapByPalaceLevel[Math.max(0, Math.min(r.goldCapByPalaceLevel.length - 1, palace - 1))]
+  return Math.max(0, Math.min(cap, Math.round(units * royalUnitValue(item, market, at) * r.premium)))
+}
+
+const roundTo = (v: number, step: number) => Math.max(step, Math.floor(v / step) * step)
+
+export const royalAnswer = (kingdom: Pick<Kingdom, 'royal'>, n: number) => (kingdom.royal ?? []).find((a) => a.n === n) ?? null
+
+// The request in hand at `at` (the latest to have arrived, perhaps run out), for a sworn lord; null otherwise.
+export function royalRequest(kingdom: Kingdom, at: number, market: Market | null | undefined): RoyalRequest | null {
+  if (kingdom.liege === undefined || kingdom.liege === null) return null
+  const r = royal()
+  const every = r.everySeconds * 1000
+  const phase = royalPhase(kingdom)
+  const n = Math.floor((at - phase) / every)
+  const arriveAt = n * every + phase
+  const endsAt = arriveAt + r.durationSeconds * 1000
+  const crown = kingdom.liege
+  const answer = royalAnswer(kingdom, n)
+  if (answer?.item && answer.units) return { n, crown, item: answer.item, units: answer.units, gold: answer.gold ?? 0, arriveAt, endsAt }
+  // Sized to the lord as it stood when the envoy came.
+  const palace = Math.max(1, palaceLevel(kingdom, arriveAt))
+  const forges = kingdom.buildings.filter((b) => b.kind === 'forge' && b.doneAt <= arriveAt).length
+  const h = mix(kingdom.lobbyKey ?? 0, kingdom.site.x, kingdom.site.y, n, 8819)
+  const factor = r.factor[0] + (((h >>> 12) % 1000) / 999) * (r.factor[1] - r.factor[0])
+  const level = (list: readonly number[]) => list[Math.min(list.length - 1, palace - 1)]
+  let item: RoyalItem
+  let units: number
+  if (forges > 0 && (h % 1000) / 1000 < r.weaponShare) {
+    item = WEAPONS[(h >>> 4) % WEAPONS.length]
+    const w = r.weapons
+    const most = Math.min(w.max, Math.floor(armoryCap(kingdom, arriveAt) * w.armoryShare))
+    units = Math.min(roundTo(most, w.step), roundTo((level(w.byPalaceLevel) + w.perForge * forges) * factor, w.step))
+  } else {
+    item = GOODS_ORDER[(h >>> 4) % GOODS_ORDER.length]
+    const g = r.goods
+    units = Math.min(roundTo(storageCap(kingdom, arriveAt) * g.storeShare, g.step), roundTo(level(g.byPalaceLevel) * factor, g.step))
+  }
+  return { n, crown, item, units, gold: royalGold(item, units, palaceLevel(kingdom, at), market, at), arriveAt, endsAt }
+}
+
+// How much of the item the lord holds.
+export const royalHave = (kingdom: Kingdom, item: RoyalItem) => (isWeaponItem(item) ? armoryOf(kingdom)[item] : kingdom.stock[item])
+
+export type RoyalAction = 'accept' | 'decline' | 'deliver'
+export type RoyalError = 'unsworn' | 'noRequest' | 'expired' | 'answered' | 'declined' | 'delivered' | 'short'
+
+export function royalError(kingdom: Kingdom, action: RoyalAction, at: number, market: Market | null | undefined): RoyalError | null {
+  if (kingdom.liege === undefined || kingdom.liege === null) return 'unsworn'
+  const req = royalRequest(kingdom, at, market)
+  if (!req) return 'noRequest'
+  if (at >= req.endsAt) return 'expired'
+  const answer = royalAnswer(kingdom, req.n)
+  if (answer?.status === 'delivered') return 'delivered'
+  if (answer?.status === 'declined') return 'declined'
+  if (action !== 'deliver') return answer ? 'answered' : null
+  return royalHave(kingdom, req.item) >= req.units ? null : 'short'
+}
+
+// The answers of the last day, with this one in place of any earlier answer to the same request.
+function answered(kingdom: Kingdom, answer: RoyalAnswer, at: number): RoyalAnswer[] {
+  const keep = at - royal().keepSeconds * 1000
+  return [...(kingdom.royal ?? []).filter((a) => a.n !== answer.n && a.at >= keep), answer]
+}
+
+// Answers the royal envoy: takes the request on (the lot and its pay fixed), turns it down (the crown is a little
+// put out) or hands the lot over (the items leave, the gold comes as far as the treasury holds it, `goldRoom`, and
+// the crown's goodwill).
+export function answerRoyal(kingdom: Kingdom, action: RoyalAction, at: number, market: Market | null | undefined, goldRoom: number): Kingdom {
+  if (royalError(kingdom, action, at, market)) return kingdom
+  const req = royalRequest(kingdom, at, market)!
+  const r = royal()
+  const lot = { item: req.item, units: req.units, gold: req.gold }
+  if (action === 'accept') return { ...kingdom, royal: answered(kingdom, { n: req.n, status: 'accepted', at, ...lot }, at) }
+  if (action === 'decline') return changeCrownRelation({ ...kingdom, royal: answered(kingdom, { n: req.n, status: 'declined', at, ...lot }, at) }, req.crown, r.relation.decline)
+  const gold = Math.max(0, Math.min(req.gold, Math.floor(goldRoom)))
+  let k: Kingdom = { ...kingdom, royal: answered(kingdom, { n: req.n, status: 'delivered', at, ...lot }, at) }
+  if (isWeaponItem(req.item)) k = { ...k, armory: { ...armoryOf(k), [req.item]: armoryOf(k)[req.item] - req.units } }
+  else k = { ...k, stock: { ...k.stock, [req.item]: k.stock[req.item] - req.units } }
+  k = changeCrownRelation({ ...k, stock: { ...k.stock, gold: k.stock.gold + gold } }, req.crown, r.relation.deliver)
+  return req.gold > 0 ? book(k, { crownGot: gold, ...(req.gold > gold && { wastedGold: req.gold - gold }) }) : k
 }

@@ -27,7 +27,7 @@
 
 .minigame-play canvas {
   width: 100%;
-  max-width: 500px;
+  max-width: 512px;
   max-height: 55vh;
   object-fit: contain;
   image-rendering: pixelated;
@@ -100,4 +100,89 @@
   overflow: hidden auto;
   padding: calc(var(--px) * 2);
   background: var(--slot);
+}
+
+/* The result of a run: a pixel medal, the stars won (popping in one by one), the score. */
+.minigame-result {
+  display: grid;
+  justify-items: center;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 4) 0;
+  text-align: center;
+}
+
+.minigame-award {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 6);
+}
+
+.minigame-award small {
+  color: var(--muted);
+}
+
+.minigame-medal {
+  width: 64px;
+  height: 80px;
+  image-rendering: pixelated;
+  animation: minigame-swing 2.4s ease-in-out infinite;
+  transform-origin: 50% 0;
+}
+
+.minigame-stars {
+  display: flex;
+  gap: calc(var(--px) * 2);
+}
+
+.minigame-stars span {
+  display: inline-grid;
+  filter: grayscale(1) brightness(0.45);
+  opacity: 0.6;
+}
+
+.minigame-stars span.lit {
+  filter: none;
+  opacity: 1;
+  animation: minigame-star 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+
+.minigame-record {
+  margin: 0;
+  color: var(--gold);
+  animation: minigame-blink 1s steps(2) infinite;
+}
+
+@keyframes minigame-star {
+  from {
+    transform: scale(0) rotate(-40deg);
+    filter: grayscale(1) brightness(0.45);
+    opacity: 0.6;
+  }
+  to {
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes minigame-swing {
+  0%,
+  100% {
+    transform: rotate(-4deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+
+@keyframes minigame-blink {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .minigame-medal,
+  .minigame-stars span.lit,
+  .minigame-record {
+    animation: none;
+  }
 }

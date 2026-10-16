@@ -2,7 +2,23 @@
   "gameDayMs": 3600000,
   "seasonGameDays": 336,
   "messengerDelayGameDays": 0.008333,
-  "monthGameDays": 30,
+  "calendar": {
+    "startYear": 1182
+  },
+  "seasons": {
+    "food": {
+      "spring": 1,
+      "summer": 1.15,
+      "autumn": 1.1,
+      "winter": 0.75
+    },
+    "sickness": {
+      "spring": 1,
+      "summer": 0.8,
+      "autumn": 1,
+      "winter": 1.25
+    }
+  },
   "contactSeconds": 30,
   "pace": {
     "night": 0.6,

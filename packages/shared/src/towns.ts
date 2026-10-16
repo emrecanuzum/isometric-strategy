@@ -1,5 +1,7 @@
 import { balance } from './balance'
 import type { Point } from './iso'
+import { priceAt } from './market'
+import type { Market, MarketGood } from './market'
 import { territoryRect } from './territory'
 import { Feature, Terrain, citiesOf, hash, mulberry32 } from './worldgen'
 
@@ -24,6 +26,11 @@ export interface Town {
   // Soldiers of its own defending it while it is free.
   garrison: number
   siege: TownSiege | null
+  // Risen against its lord: the rebels camped at its gate (CLAUDE.md §8.4); null or absent when none.
+  rebels?: TownRebels | null
+  // Its market: the stock left after the last sale and when that was (ms); absent while nothing was ever sold.
+  marketStock?: number | null
+  marketAt?: number | null
 }
 
 export interface TownSiege {
@@ -60,6 +67,8 @@ export interface HeldTown {
   // When spies last stirred it up, and by how much its loyalty fell then (see inciteTown).
   incitedAt?: number
   incitedBy?: number
+  // A revolt just put down: no new one starts before then (ms), however low its loyalty.
+  quietUntil?: number
 }
 
 export type TownGood = 'gold' | 'food' | 'materials' | 'arms' | 'villagers'
@@ -296,7 +305,7 @@ export function townsRound(held: HeldTown[], at: number, roundMs: number, paid: 
       if (h.loyalty < r.below) h.revoltUntil += r.seconds * 1000
       else h.revoltUntil = undefined
     }
-    if (h.revoltUntil === undefined && h.loyalty < r.below) {
+    if (h.revoltUntil === undefined && h.loyalty < r.below && !townQuiet(h, at)) {
       h.revoltUntil = at + r.seconds * 1000
       events.push({ kind: 'townRevolt', town: h.id, name: h.name })
     }
@@ -421,4 +430,116 @@ export function inciteTown<K extends { towns?: HeldTown[] }>(kingdom: K, town: n
       return { ...t, loyalty, ...(at !== undefined && { incitedAt: at, incitedBy: Math.round((loyalty - townLoyalty(t)) * 10) / 10 }) }
     }),
   }
+}
+
+// ---- Rebels (CLAUDE.md §8.4) ------------------------------------------------------------------------------------------
+
+// A held town in revolt sends its rebels out: a band camped at its gate as if laying siege to it, kept on the town's
+// row so everyone sees it. Its lord's army beats it at the gate to end the revolt (a battle of kind 'revolt').
+export interface TownRebels {
+  count: number
+  // When they rose (ms).
+  since: number
+  // The battle being fought against them, if any.
+  battle?: number | null
+}
+
+const R = () => balance.towns.rebels
+
+// How many rise: more the lower the town's loyalty has sunk under the revolt line, a little more or less by the draw.
+export function rebelCount(loyalty: number, idx: number, since: number) {
+  const [lo, hi] = R().soldiers
+  const below = balance.towns.revolt.below
+  const depth = Math.max(0, Math.min(1, (below - loyalty) / below))
+  const jitter = Math.floor(hash(idx, 13, Math.floor(since / 1000)) * (R().jitter * 2 + 1)) - R().jitter
+  return Math.max(lo, Math.min(hi, lo + Math.round((hi - lo) * depth) + jitter))
+}
+
+// The rebels as a side of a battle: spearmen who know their ground (kingdom 0: no one's).
+export const rebelFighter = (rebels: Pick<TownRebels, 'count'>) => ({
+  kingdom: 0,
+  army: null,
+  soldiers: rebels.count,
+  morale: R().morale,
+  familiarity: R().familiarity,
+  units: { spear: rebels.count },
+  rebels: true,
+})
+
+// Whether a revolt may not start yet: just put down, the town stays quiet a while, however low its loyalty.
+export const townQuiet = (h: Pick<HeldTown, 'quietUntil'>, at: number) => (h.quietUntil ?? 0) > at
+
+// The rebels beaten: the revolt ends, loyalty rises a little and the town stays quiet for a while.
+export function quellTown<K extends { towns?: HeldTown[] }>(kingdom: K, town: number, at: number): K {
+  return {
+    ...kingdom,
+    towns: (kingdom.towns ?? []).map((t) =>
+      t.id !== town ? t : { ...t, revoltUntil: undefined, loyalty: Math.min(100, townLoyalty(t) + R().quellLoyalty), quietUntil: at + R().quietSeconds * 1000 },
+    ),
+  }
+}
+
+// ---- The town's market (CLAUDE.md §8.4) -------------------------------------------------------------------------------
+
+// Every town sells one good of its own, from a stock that refills slowly, to any lord whose army comes to its gate. Its
+// price is the market building's (lobby price × buyMarkup) less a discount, moved by how the buyer stands with the
+// town's lord, and never under floorFactor × the lobby price: bought here, a good cannot be sold back at a profit.
+const M = () => balance.towns.market
+
+export const townMarketGood = (kind: TownKind) => M().goods[kind] as MarketGood
+
+// The stock for sale at `at`: what was left after the last sale, refilled round by round up to the cap (full when
+// nothing was ever sold).
+export function townStock(town: Pick<Town, 'marketStock' | 'marketAt'>, at: number) {
+  if (town.marketStock === null || town.marketStock === undefined || !town.marketAt) return M().stock
+  const rounds = Math.max(0, at - town.marketAt) / (balance.economy.productionSeconds * 1000)
+  return Math.min(M().stock, town.marketStock + rounds * M().refillPerRound)
+}
+
+// What the buyer's standing with the town's lord does to the price: dearer for an enemy, a little cheaper for a friend.
+// `relation` null: the lord himself, or a free town (no one's standing counts).
+export function townRelationFactor(relation: number | null) {
+  if (relation === null) return 1
+  const r = Math.max(-100, Math.min(100, relation)) / 100
+  return r < 0 ? 1 + (M().relation.worst - 1) * -r : 1 - (1 - M().relation.best) * r
+}
+
+// One unit's price at the town.
+export function townUnitPrice(market: Market | null | undefined, kind: TownKind, at: number, relation: number | null) {
+  const lobby = priceAt(market, townMarketGood(kind), at)
+  return Math.max(lobby * balance.market.buyMarkup * M().discount * townRelationFactor(relation), lobby * M().floorFactor)
+}
+
+export const townBuyCost = (market: Market | null | undefined, kind: TownKind, units: number, at: number, relation: number | null) =>
+  Math.ceil(units * townUnitPrice(market, kind, at, relation))
+
+// What an army carries home (goods bought at a town), and how much more it can take.
+export type Cargo = Partial<Record<MarketGood, number>>
+export const cargoTotal = (cargo: Cargo | null | undefined) => Object.values(cargo ?? {}).reduce<number>((s, n) => s + (n ?? 0), 0)
+export const cargoRoom = (soldiers: number, cargo: Cargo | null | undefined) => Math.max(0, soldiers * M().carryPerSoldier - cargoTotal(cargo))
+export function addCargo(a: Cargo | null | undefined, b: Cargo | null | undefined): Cargo {
+  const out: Cargo = { ...a }
+  for (const [g, n] of Object.entries(b ?? {})) out[g as MarketGood] = (out[g as MarketGood] ?? 0) + (n ?? 0)
+  return out
+}
+
+export type TownBuyError = 'rebels' | 'besieged' | 'stock' | 'carry' | 'cost' | 'none'
+
+// Whether `units` can be bought at the town by an army of `soldiers` carrying `cargo`, with `gold` in the treasury.
+export function townBuyError(
+  town: Pick<Town, 'rebels' | 'siege' | 'marketStock' | 'marketAt'>,
+  units: number,
+  soldiers: number,
+  cargo: Cargo | null | undefined,
+  gold: number,
+  cost: number,
+  at: number,
+): TownBuyError | null {
+  if (!Number.isInteger(units) || units < 1) return 'none'
+  if (town.rebels) return 'rebels'
+  if (town.siege) return 'besieged'
+  if (units > Math.floor(townStock(town, at))) return 'stock'
+  if (units > cargoRoom(soldiers, cargo)) return 'carry'
+  if (gold < cost) return 'cost'
+  return null
 }

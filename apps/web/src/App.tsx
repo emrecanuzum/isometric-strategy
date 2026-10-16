@@ -1,5 +1,6 @@
 import {
   BUILDINGS,
+  leadsArmy,
   Feature,
   Terrain,
   TileRule,
@@ -10,6 +11,8 @@ import {
   crisisKey,
   fealtyOpen,
   townWalled,
+  townGate,
+  relationBetween,
   inTown,
   patrolTimes,
   patrolSlotAt,
@@ -56,6 +59,8 @@ import {
   alongPath,
   pathLength,
   sailError,
+  royalAnswer,
+  royalRequest,
 } from '@game/shared'
 import type { Along, Lord, BuildError, BuildingKind, Good, Kingdom, PlanStep, Point, Ships, World } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -83,11 +88,15 @@ import { CHAT_KEEP, CommandError, loadChat, loadMine, loadRivals, markSeen, post
 import type { ChatMessage, Command, IntelReport, Lobby, Mine, Notice, Rival } from './net/online'
 import { useLayer } from './net/layer'
 import type { MapArmy } from './game/armies'
+import { REBEL_COLOR } from './game/armies'
 import { play } from './audio/sfx'
 import type { Cue } from './audio/sfx'
 import { DetailSettings, SoundSettings } from './ui/home/SettingsPanel'
 import { WarTargets } from './ui/hud/WarTargets'
 import { EnvoyDialog, describe as describeNotice } from './ui/Envoy'
+import { Advisor, AdvisorSettings } from './ui/advisor/Advisor'
+import type { AdvisorAction } from './ui/advisor/lines'
+import { EnvoyPortrait } from './ui/advisor/EnvoyPortrait'
 import { AwayReport, awaySince } from './ui/AwayReport'
 import { CrownIntro, introSeen } from './ui/CrownIntro'
 import { FortuneDialog } from './ui/FortuneDialog'
@@ -95,6 +104,7 @@ import type { FortuneEvent } from './ui/FortuneDialog'
 import { HouseDialog, allKnown, houseNews, readKnown, writeKnown } from './ui/hud/dynasty'
 import type { HouseNews } from './ui/hud/dynasty'
 import type { KingdomInfo, Online } from './ui/hud/online'
+import { relationTermsIn } from './ui/hud/online'
 import { BattleView, TownSiegeView, showArmyPart, warNotes } from './ui/hud/war'
 import { RivalFleetSheet } from './ui/hud/navy'
 import { showPart } from './ui/hud/Subtabs'
@@ -108,6 +118,8 @@ import { BUILDING_NAMES, FORTUNE_TEXTS, RESOURCE_NAMES } from './ui/names'
 import { Dock, Sheet, TopBar, useTabKeys } from './ui/hud/Hud'
 import type { TabId } from './ui/hud/Hud'
 import { useJournal } from './ui/hud/journal'
+import { ExpeditionReport } from './ui/hud/expeditions'
+import { EXPEDITION_TEXTS, GOAL_TEXTS } from './ui/expeditionNames'
 import { BuildingSheet } from './ui/hud/BuildingSheet'
 import { MapAlerts } from './ui/hud/MapAlerts'
 import { InnTip, MapTip } from './ui/hud/MapTip'
@@ -118,6 +130,8 @@ import type { HudData } from './ui/hud/tabs'
 import { GoodPicker, SitePicker, missingText } from './ui/panels'
 import type { SiteAccess } from './ui/panels'
 import { Timers } from './ui/hud/Timers'
+import { QuestTracker, RoyalDialog, itemName, liveRequest, royalSaying } from './ui/hud/RoyalRequests'
+import { fmt } from './ui/hud/primitives'
 
 const TERRAIN_NAMES: Record<number, string> = {
   [Terrain.Grass]: 'Çayır',
@@ -145,6 +159,15 @@ const RULE_NAMES: Record<number, string> = {
 
 // What the server answers when it refuses a command (see supabase/functions/command).
 const REFUSALS: Record<string, string> = {
+  // The lord at the head of an army (CLAUDE.md §8.2.1).
+  king_council: 'Naipler konseyi yönetirken kral orduya geçemez',
+  king_queen: 'Kral ordunun başına geçmeden önce sarayda bir kraliçe olmalı',
+  king_son: 'Kral ordunun başına geçmeden önce bir oğlu olmalı',
+  king_leading: 'Kral zaten başka bir orduya komuta ediyor',
+  king_battle: 'Ordu savaşta',
+  king_palace: 'Ordu sarayın önünde durmalı',
+  king_led: 'Kral zaten bu ordunun başında',
+  king_none: 'Bu ordunun başında kral yok',
   step: 'Bu miktar seçilemez',
   tradeWait: 'Satış miktarı az önce değişti; biraz bekle',
   full: 'Lobide yer kalmadı',
@@ -195,6 +218,20 @@ const REFUSALS: Record<string, string> = {
   good: 'Taşınacak malı seç',
   engaged: 'Filo vardı, çarpışma başlamak üzere; şimdi geri çağrılamaz',
   besieged: 'Kuşatma altındaki kasaba serbest bırakılamaz',
+  // The liege's royal requests (CLAUDE.md §7.8).
+  unsworn: 'Önce bir taç krallığına biat et',
+  noRequest: 'Kraliyet elçisinin bir isteği yok',
+  expired: 'Bu isteğin süresi doldu',
+  answered: 'Bu isteğe zaten cevap verdin',
+  declined: 'Bu isteği geri çevirdin',
+  delivered: 'Bu isteği zaten teslim ettin',
+  short: 'İstenen miktar elinde yok',
+  // Town markets (CLAUDE.md §8.4).
+  gate: 'Ordun kasabanın kapısında değil',
+  stock: 'Kasabanın elinde o kadar mal yok',
+  carry: 'Ordun bu kadar yük taşıyamaz',
+  rebels: 'Kasabada ayaklanma var; önce asileri bastır',
+  townBesieged: 'Kasaba kuşatma altında; pazarı kapalı',
 }
 const refusal = (e: unknown) => {
   const code = e instanceof CommandError ? e.message : 'server'
@@ -207,6 +244,8 @@ const NOTICE_CUES: Record<string, Cue> = {
   battle_end: 'battle',
   war_declared: 'war',
   tower_losses: 'bad',
+  king_command: 'good',
+  king_fell: 'bad',
   siege_people: 'bad',
   operation_struck: 'bad',
   spy_caught: 'bad',
@@ -226,6 +265,9 @@ const NOTICE_CUES: Record<string, Cue> = {
   town_held: 'bad',
   town_revolt: 'bad',
   town_lost_revolt: 'bad',
+  town_sale: 'coin',
+  cargo_home: 'coin',
+  cargo_lost: 'bad',
   patrol_tribute: 'war',
   patrol_tip: 'coin',
   crown_gift: 'coin',
@@ -237,7 +279,7 @@ const NOTICE_CUES: Record<string, Cue> = {
 }
 
 // News that goes against the player: kept under the journal's "Önemli" tab.
-const HURTFUL = new Set(['siege_people', 'fleet_turned', 'town_revolt', 'town_lost_revolt', 'patrol_tribute', 'patrol_ignored', 'patrol_taken', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed'])
+const HURTFUL = new Set(['king_fell', 'siege_people', 'fleet_turned', 'town_revolt', 'town_lost_revolt', 'patrol_tribute', 'patrol_ignored', 'patrol_taken', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed', 'cargo_lost'])
 function noticeHurts(n: Notice, me: string | undefined) {
   if (HURTFUL.has(n.kind)) return true
   const p = n.payload as { kind?: string; accepted?: boolean; report?: { losses?: Record<string, number> } }
@@ -771,6 +813,32 @@ function App({
     )
   }, [view, site, stage, plots, kingdom])
 
+  // Parties back from their journeys whose report the player has not seen yet (remembered in this browser per lobby;
+  // CLAUDE.md §9.9), the oldest first.
+  const expeditionKey = `expedition-seen:${lobby.id}`
+  const [expeditionSeen, setExpeditionSeen] = useState(() => {
+    try {
+      return Number(localStorage.getItem(expeditionKey) ?? 0) || 0
+    } catch {
+      return 0
+    }
+  })
+  const markExpeditionSeen = useCallback(
+    (id: number) => {
+      setExpeditionSeen((was) => {
+        const next = Math.max(was, id)
+        try {
+          localStorage.setItem(expeditionKey, String(next))
+        } catch {
+          // Not remembered: shown again next time.
+        }
+        return next
+      })
+    },
+    [expeditionKey],
+  )
+  const returned = (kingdom?.expeditions ?? []).filter((e) => e.result && !e.result.recalled && e.id > expeditionSeen).sort((a, b) => a.id - b.id)[0] ?? null
+
   // The envoy's journal of what happened, kept in this browser per lobby.
   // The day's events waiting to be shown in their window, oldest first.
   const [fortunes, setFortunes] = useState<FortuneEvent[]>([])
@@ -794,7 +862,7 @@ function App({
         ? FORTUNE_TEXTS[(events.find((e) => e.kind === 'fortune') as { fortune: string }).fortune]?.tone === 'bad'
           ? 'omen'
           : 'fortune'
-        : events.some((e) => e.kind === 'researched' || e.kind === 'trained')
+        : events.some((e) => e.kind === 'researched' || e.kind === 'trained' || e.kind === 'expedition' || e.kind === 'goal')
           ? 'good'
           : events.some((e) => e.kind === 'built')
             ? 'build'
@@ -812,6 +880,10 @@ function App({
           )
         } else if (event.kind === 'built') {
           view.float(center(event.building), `${BUILDING_NAMES[event.building.kind]} tamamlandı`, 0x9ee6a0)
+        } else if (event.kind === 'goal' && palace) {
+          view.float(center(palace), `★ ${GOAL_TEXTS[event.track]?.badges[event.tier - 1] ?? 'Hedef'}`, 0xf2d16b)
+        } else if (event.kind === 'expedition' && palace && !event.expedition.result?.recalled) {
+          view.float(center(palace), `${EXPEDITION_TEXTS[event.expedition.kind]?.short ?? 'Sefer'} döndü`, 0x9ee6a0)
         }
       }
     }
@@ -1519,6 +1591,19 @@ function App({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, lordsKey, patrolStep, mapBuildings, rivals])
 
+  // A town's rebels camped at its gate (CLAUDE.md §8.4), drawn as a squad in black and grey, everyone sees them.
+  const rebelSquads = useMemo(
+    (): MapArmy[] =>
+      layer.towns
+        .filter((t) => t.rebels)
+        .map((t) => {
+          const gate = townGate(t)
+          const since = t.rebels!.since
+          return { id: -(100_000 + t.id), color: REBEL_COLOR, own: false, soldiers: null, path: [{ x: gate.x + 1.4, y: gate.y + 0.4 }], departAt: since, arriveAt: since, battle: !!t.rebels!.battle, selected: false, figures: Math.min(20, Math.max(2, Math.ceil(t.rebels!.count / 2))), catapult: false }
+        }),
+    [layer.towns],
+  )
+
   // Armies and battles on the map.
   useEffect(() => {
     if (!view) return
@@ -1537,12 +1622,14 @@ function App({
         // Own armies by their exact size; others by what everyone can see of them.
         figures: a.soldiers !== null ? Math.min(20, Math.max(2, Math.ceil(a.soldiers / 2))) : (a.figures ?? 3),
         catapult: a.units ? (a.units.catapult ?? 0) > 0 : !!a.catapults,
-      }))],
+        // The lord at its head (own armies: only while he lives and rules).
+        royal: a.kingdom_id === mine.id ? !!kingdomRef.current && leadsArmy(kingdomRef.current, a.led_by, serverNow()) : !!a.royal,
+      })), ...rebelSquads],
       layer.battles
         .filter((b) => !b.resolved || Date.parse(b.ends_at) > serverNow())
         .map((b) => ({ id: b.id, at: { x: b.x, y: b.y }, startedAt: Date.parse(b.started_at), endsAt: Date.parse(b.ends_at) })),
     )
-  }, [view, layer.armies, layer.battles, kingdoms, mine.id, armyFocus, patrols])
+  }, [view, layer.armies, layer.battles, kingdoms, mine.id, armyFocus, patrols, rebelSquads])
 
   // The lords' ships at their docks and at sea (CLAUDE.md §8.5): each drawn as its type, warships first.
   const kindsOf = (ships: Ships | null | undefined): ShipKind[] => (['galley', 'corsair', 'cog'] as const).flatMap((x) => Array.from({ length: Math.min(4, ships?.[x] ?? 0) }, () => x)).slice(0, 4)
@@ -1598,6 +1685,40 @@ function App({
       noteJournal(n.id, at, { icon, title, text: text || undefined, important: noticeHurts(n, kingdom?.name) })
     }
   })
+  // The liege's royal envoy (CLAUDE.md §7.8): the request of the hour opens its dialog once (remembered in this
+  // browser), and its arrival, delivery or running out goes in the journal (each once, under ids of its own).
+  const royalLive = kingdom ? liveRequest(kingdom, layer.market, now) : null
+  const royalKey = `royal-seen:${lobby.id}`
+  const [royalSeen, setRoyalSeen] = useState(() => {
+    try {
+      return Number(localStorage.getItem(royalKey) ?? 0)
+    } catch {
+      return 0
+    }
+  })
+  const seeRoyal = (n: number) => {
+    setRoyalSeen(n)
+    try {
+      localStorage.setItem(royalKey, String(n))
+    } catch {
+      // Without storage it is only remembered for now.
+    }
+  }
+  useEffect(() => {
+    if (!view || !kingdom) return
+    const req = royalRequest(kingdom, now, layer.market)
+    if (!req) return
+    const id = (n: number, k: number) => -(n * 4 + k)
+    const answer = royalAnswer(kingdom, req.n)
+    if (now < req.endsAt) noteJournal(id(req.n, 1), req.arriveAt, { icon: 'crown', title: 'Kraliyet elçisi geldi', text: `${royalSaying(view.world, req)} (Görevler kutusunda.)` })
+    if (answer?.status === 'delivered') noteJournal(id(req.n, 2), answer.at, { icon: 'chest', title: 'Kraliyet isteği teslim edildi', text: `${fmt(req.units)} ${itemName(req.item)} başkente gitti; taç ${fmt(req.gold)} altın ödedi ve sana minnettar.` })
+    // The one before (or this one, once over): run out without being handed over.
+    const prev = now >= req.endsAt ? req : royalRequest(kingdom, req.arriveAt - 1, layer.market)
+    if (!prev || now < prev.endsAt) return
+    const was = royalAnswer(kingdom, prev.n)
+    if (journal.notices?.includes(id(prev.n, 1)) && (!was || was.status === 'accepted'))
+      noteJournal(id(prev.n, 3), prev.endsAt, { icon: 'warn', title: 'Kraliyet isteği yetişmedi', text: `${fmt(prev.units)} ${itemName(prev.item)} zamanında gönderilemedi; elçi eli boş döndü.` })
+  })
   const closeNotice = () => {
     if (!notice) return
     markSeen([notice.id])
@@ -1605,6 +1726,33 @@ function App({
   }
   const watchedBattle = layer.battles.find((b) => b.id === watching) ?? null
   const watchedTown = layer.towns.find((t) => t.id === watchingTown) ?? null
+
+  // The envoy as advisor and teacher (CLAUDE.md §9.8): called with the envoy button, coming on his own otherwise.
+  const [advisorCall, setAdvisorCall] = useState(0)
+  const noticeShown = !!notice && !!kingdom && !away && !houseQueue[0] && (introDone || kingdom.liege !== undefined || !fealtyOpen(kingdom, now))
+  const introShown = !!view && !!kingdom && !away && !introDone && kingdom.liege === undefined && view.world.cities.length > 1 && fealtyOpen(kingdom, now)
+  const advisorBlocked = noticeShown || introShown || !!away || !!houseQueue[0] || (!notice && !!fortunes[0]) || settingsOpen || !!watchedBattle || !!watchedTown || fullMap || !!preview
+  const advisorAct = (a: AdvisorAction) => {
+    if (a.kind === 'tab') {
+      closeTab()
+      if (a.part) showPart(a.part.key, a.part.part)
+      setPanel(a.tab)
+    } else if (a.kind === 'build') {
+      closeTab()
+      startPlacing(a.building)
+    } else if (a.kind === 'open') {
+      const b = kingdom?.buildings.find((x) => x.kind === a.building)
+      if (!b) return
+      closeTab()
+      setSelected(b.id)
+      view?.centerOn({ x: b.x, y: b.y })
+    } else if (site) view?.centerOn(site)
+  }
+  // The tab the tutorial points at glows in the dock.
+  const onAdvisorHint = useCallback((tab: string | null) => {
+    if (tab) document.documentElement.dataset.hint = tab
+    else delete document.documentElement.dataset.hint
+  }, [])
 
   // What the tabs and building menus read, and the commands they give.
   const hudData: HudData | null =
@@ -1734,6 +1882,7 @@ function App({
             <div className="form">
               <SoundSettings settings={settings} onChange={onSettings} />
               <DetailSettings settings={settings} onChange={onSettings} />
+              {kingdom && <AdvisorSettings storeKey={`advisor:${lobby.id}:${mine.id}`} />}
             </div>
           </section>
         </div>
@@ -1800,7 +1949,15 @@ function App({
               armies={layer.armies}
               pacts={layer.pacts}
               now={now}
+              market={layer.market}
+              relation={town.owner === null || town.owner === mine.id ? null : relationBetween(layer.relations, mine.id, town.owner, now, relationTermsIn(online, mine.id, town.owner))}
               onSend={(army, tile) => sendArmy(army, tile, true)}
+              onMove={(army, tile) => sendArmy(army, tile)}
+              onBuy={(army, units) => online.act({ type: 'townBuy', town: town.id, army, units }).then((r) => {
+                const got = r as { cost?: number } | undefined
+                if (got?.cost !== undefined) setToast(`Mallar orduya yüklendi: ${units} birim, ${got.cost} altın`)
+              })}
+              onWatchBattle={(battle) => online.watch(battle)}
               onShow={(tile) => view.centerOn(tile)}
               onWatch={() => setWatchingTown(town.id)}
               onUpkeep={(level) => online?.act({ type: 'townUpkeep', town: town.id, level })}
@@ -1976,8 +2133,14 @@ function App({
           }}
         />
       )}
+      {view && kingdom && !needsPalace && <QuestTracker world={view.world} kingdom={kingdom} online={online} now={now} />}
       {view && (
         <div className="zoom">
+          {kingdom && (
+            <button className="btn icon-only advisor-toggle" onClick={() => setAdvisorCall((n) => n + 1)} aria-label="Elçiyi çağır" title="Elçiyi çağır: öğüt, öğretici, oyunun anlatımı">
+              <EnvoyPortrait size={26} still />
+            </button>
+          )}
           <button className="btn icon-only" onClick={() => site && view.centerOn(site)} aria-label="Üsse dön" title="Üsse dön">
             <Icon name="pin" size={16} />
           </button>
@@ -2091,6 +2254,8 @@ function App({
           now={now}
           onClose={(ids) => {
             setAway(null)
+            // The parties back while away were told in the report.
+            markExpeditionSeen(Math.max(0, ...(kingdom.expeditions ?? []).filter((e) => e.result).map((e) => e.id)))
             if (ids.length > 0) {
               markSeen(ids)
               dropNotices(ids)
@@ -2105,6 +2270,7 @@ function App({
         <HouseDialog news={houseQueue[0]} kingdom={kingdom} now={now} online={online} onClose={() => setHouseQueue((q) => q.slice(1))} />
       )}
       {notice && kingdom && !away && !houseQueue[0] && (introDone || kingdom.liege !== undefined || !fealtyOpen(kingdom, now)) && <EnvoyDialog notice={notice} online={online} onClose={closeNotice} />}
+      {!notice && !away && kingdom && !fortunes[0] && returned && <ExpeditionReport expedition={returned} kingdom={kingdom} online={online} onClose={() => markExpeditionSeen(returned.id)} />}
       {!notice && kingdom && fortunes[0] && (
         <FortuneDialog
           event={fortunes[0]}
@@ -2113,6 +2279,20 @@ function App({
           onAnswer={(choice) => online.act({ type: 'crisis', key: crisisKey({ scope: fortunes[0].scope ?? 'kingdom', start: fortunes[0].start }), choice })}
           onChoose={(choice) => online.act({ type: 'choose', key: crisisKey({ scope: fortunes[0].scope ?? 'kingdom', start: fortunes[0].start }), choice })}
           onClose={() => setFortunes((list) => list.slice(1))}
+        />
+      )}
+      {view && kingdom && royalLive && !royalLive.accepted && royalSeen !== royalLive.req.n && !notice && !away && !houseQueue[0] && !fortunes[0] && (
+        <RoyalDialog world={view.world} kingdom={kingdom} req={royalLive.req} online={online} onClose={() => seeRoyal(royalLive.req.n)} />
+      )}
+      {view && kingdom && (
+        <Advisor
+          storeKey={`advisor:${lobby.id}:${mine.id}`}
+          ctx={{ kingdom, now, online, crowns: view.world.cities.length }}
+          blocked={advisorBlocked}
+          busy={(holding && !needsPalace) || aiming !== null || sailing !== null || selected !== null || panel !== null || plan.length > 0}
+          summon={advisorCall}
+          onAct={advisorAct}
+          onHint={onAdvisorHint}
         />
       )}
       {watchedBattle && <BattleView battle={watchedBattle} online={online} now={now} onClose={() => setWatching(null)} />}

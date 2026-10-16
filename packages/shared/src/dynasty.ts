@@ -1,4 +1,5 @@
 import { balance } from './balance'
+import { yearMs } from './clock'
 import type { Kingdom } from './economy'
 
 // The lord's house (CLAUDE.md §9.1): the ruling lord, the lady, their children. They age (a dynasty year is a few
@@ -28,7 +29,7 @@ export interface Person {
   named?: boolean
   grown?: boolean
   // How a dead member of the house died.
-  cause?: 'age' | 'grief'
+  cause?: 'age' | 'grief' | 'battle'
   diedAt?: number
 }
 
@@ -47,6 +48,9 @@ export interface Dynasty {
   born?: number
   // Rulers so far, the first lord counting as one.
   generation: number
+  // The length of a year (ms) the house's dates were made with; missing: the old six-hour years
+  // (balance.dynasty.legacyYear), which dynastyStep turns into today's years.
+  yearMs?: number
 }
 
 export type DynastyEvent =
@@ -56,7 +60,6 @@ export type DynastyEvent =
   | { kind: 'dynasty'; what: 'coronation'; person: Person }
   | { kind: 'dynasty'; what: 'wedding'; person: Person }
 
-export const yearMs = () => D().yearHours * 3_600_000
 export const ageOf = (p: Pick<Person, 'bornAt'>, at: number) => Math.max(0, (at - p.bornAt) / yearMs())
 export const ofAge = (p: Pick<Person, 'bornAt'>, at: number) => ageOf(p, at) >= D().comingOfAge
 
@@ -98,7 +101,7 @@ const drawnSkills = (k: Pick<Kingdom, 'site' | 'foundedAt'>, id: number): Skills
 // The house as it begins: a lord in his prime (and his lady, if the realm already has one).
 export function foundDynasty(k: Pick<Kingdom, 'site' | 'foundedAt' | 'queen'>, at: number): Dynasty {
   const born = (k.foundedAt ?? at) - between(roll(k, 1, 1), D().king.age) * yearMs()
-  const dynasty: Dynasty = { seq: 2, king: person(k, 1, 'm', born, drawnSkills(k, 1)), queen: null, children: [], dead: [], generation: 1 }
+  const dynasty: Dynasty = { seq: 2, king: person(k, 1, 'm', born, drawnSkills(k, 1)), queen: null, children: [], dead: [], generation: 1, yearMs: yearMs() }
   return k.queen ? wed(k, dynasty, k.foundedAt ?? at) : dynasty
 }
 
@@ -151,7 +154,7 @@ export function dynastyEffects(k: Pick<Kingdom, 'dynasty'>) {
 // realm's `queen` flag is the lady at court (away when carried off).
 export function dynastyStep(k: Kingdom, to: number): { kingdom: Kingdom; events: DynastyEvent[] } {
   const events: DynastyEvent[] = []
-  let d = k.dynasty ?? foundDynasty(k, to)
+  let d = rescaleYears(k.dynasty ?? foundDynasty(k, to), to)
   let queen = !!k.queen
   // A lady newly come to court (the realm took a queen): she joins the house.
   if (queen && !d.queen && !k.queenHeldBy) {
@@ -211,6 +214,34 @@ export function dynastyStep(k: Kingdom, to: number): { kingdom: Kingdom; events:
     break
   }
   return { kingdom: { ...k, dynasty: d, queen }, events }
+}
+
+// A house whose dates were made with years of another length, brought to today's years at `at`: everyone keeps the
+// age they have at `at` and ages by the new years from then on; a death or a birth still to come is that many new
+// years away. Whoever would already be past the age death was drawn for is given balance.dynasty.legacyYear
+// .graceHours more (no house loses its lord the moment the years change). A death of grief keeps its time.
+function rescaleYears(d: Dynasty, at: number): Dynasty {
+  const now = yearMs()
+  const was = d.yearMs ?? D().legacyYear.ms
+  if (was === now) return d
+  const q = now / was
+  const grace = at + D().legacyYear.graceHours * 3_600_000
+  const time = (t: number) => at - (at - t) * q
+  const living = (p: Person): Person => {
+    const bornAt = time(p.bornAt)
+    const deathAt = p.cause === 'grief' ? p.deathAt : p.deathAt > at ? time(p.deathAt) : grace
+    return { ...p, bornAt, deathAt }
+  }
+  const dead = (p: Person): Person => ({ ...p, bornAt: time(p.bornAt), deathAt: time(p.deathAt), diedAt: p.diedAt === undefined ? undefined : time(p.diedAt) })
+  return {
+    ...d,
+    king: d.king && living(d.king),
+    queen: d.queen && living(d.queen),
+    children: d.children.map(living),
+    dead: d.dead.map(dead),
+    nextBirthAt: d.nextBirthAt == null ? d.nextBirthAt : d.nextBirthAt > at ? at + (d.nextBirthAt - at) * q : d.nextBirthAt,
+    yearMs: now,
+  }
 }
 
 // A child grown up: its tutors' work added to its gifts.
@@ -275,8 +306,49 @@ export function griefStrikes(k: Pick<Kingdom, 'site' | 'foundedAt' | 'dynasty'>,
   return !!k.dynasty?.king && !k.dynasty.council && roll(k, battle, 77) < D().grief
 }
 
-export function dieOfGrief(k: Kingdom, at: number): Kingdom {
+export function dieOfGrief(k: Kingdom, at: number, cause: 'grief' | 'battle' = 'grief'): Kingdom {
   const d = k.dynasty
   if (!d?.king || at >= d.king.deathAt) return k
-  return { ...k, dynasty: { ...d, king: { ...d.king, deathAt: at, cause: 'grief' } } }
+  return { ...k, dynasty: { ...d, king: { ...d.king, deathAt: at, cause } } }
+}
+
+// ---- The lord at the head of his army (CLAUDE.md §8.2.1) -----------------------------------------------------------
+
+// Whether the army marked as led by `ledBy` (a person's id) has the living ruler at its head: the mark lapses when he
+// dies or the regents rule.
+export function leadsArmy(k: Pick<Kingdom, 'dynasty'>, ledBy: number | null | undefined, at: number) {
+  const d = k.dynasty
+  return ledBy != null && !!d?.king && !d.council && d.king.id === ledBy && d.king.deathAt > at
+}
+
+export type LeadError = 'council' | 'queen' | 'son' | 'leading' | 'palace' | 'battle'
+
+// The lord rides out at the head of an army only with his house secured: a lady at court and a son to follow him. He
+// leads one army at a time, and takes it over in front of his palace.
+export function leadError(
+  k: Pick<Kingdom, 'dynasty' | 'queen' | 'queenHeldBy'>,
+  at: number,
+  army: { atPalace: boolean; battle: boolean; leadingAnother: boolean },
+): LeadError | null {
+  const d = k.dynasty
+  if (!d?.king || d.council || d.king.deathAt <= at) return 'council'
+  if (!d.queen || !k.queen || k.queenHeldBy != null) return 'queen'
+  if (!d.children.some((c) => c.sex === 'm')) return 'son'
+  if (army.leadingAnother) return 'leading'
+  if (army.battle) return 'battle'
+  if (!army.atPalace) return 'palace'
+  return null
+}
+
+// The dice of an army the lord leads: his presence, and his own gift for war counted in full (in place of the general
+// one, dynastyEffects().dice).
+export function leadDice(k: Pick<Kingdom, 'dynasty'>) {
+  const c = D().command
+  const skill = k.dynasty?.king?.skills.military ?? D().skills.center
+  return c.presence + (skill - D().skills.center) * c.dicePerPoint
+}
+
+// A lord leading an army that loses falls in battle more often than one who grieves at home.
+export function fallStrikes(k: Pick<Kingdom, 'site' | 'foundedAt' | 'dynasty'>, battle: number) {
+  return !!k.dynasty?.king && !k.dynasty.council && roll(k, battle, 79) < D().command.fall
 }

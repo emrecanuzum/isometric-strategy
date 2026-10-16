@@ -21,8 +21,15 @@ import {
   townSiegeMs,
   townUpkeepGold,
   townUpkeepLevel,
+  cargoRoom,
+  priceAt,
+  townMarketGood,
+  townQuiet,
+  townRelationFactor,
+  townStock,
+  townUnitPrice,
 } from '@game/shared'
-import type { Army, HeldTown, Kingdom, LoyaltyParts, Pact, Point, Town, TownGood, World } from '@game/shared'
+import type { Army, HeldTown, Kingdom, LoyaltyParts, Market, Pact, Point, Town, TownGood, World } from '@game/shared'
 import { cityInfo } from '../../game/cities'
 import { TOWN_KIND_NAMES, townGift } from '../../game/towns'
 import { Icon } from '../icons'
@@ -48,7 +55,7 @@ const clock = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-export function TownSheet({ world, town, walled, kingdom, me, names, armies, pacts, now, onSend, onShow, onWatch, onUpkeep, onRelease, onClose }: {
+export function TownSheet({ world, town, walled, kingdom, me, names, armies, pacts, now, market, relation, onSend, onMove, onBuy, onWatchBattle, onShow, onWatch, onUpkeep, onRelease, onClose }: {
   world: World
   town: Town
   // Behind a wooden palisade (see townWalled).
@@ -60,7 +67,16 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
   armies: Army[]
   pacts: Pact[]
   now: number
+  // The lobby's prices, and how the player stands with the town's lord (null: his own town, or a free one).
+  market: Market | null | undefined
+  relation: number | null
+  // Sends an army to lay siege (or, at a town of the player's, to put down its rebels).
   onSend(army: number, tile: Point): void
+  // Sends an army just to stand at the gate (to buy at the market).
+  onMove(army: number, tile: Point): void
+  // Buys at the town's market with an army at its gate.
+  onBuy(army: number, units: number): void
+  onWatchBattle(battle: number): void
   onShow(tile: Point): void
   onWatch(): void
   // Sets the upkeep paid to a town of the player's (an index into balance.towns.upkeep.goldPerRound).
@@ -80,26 +96,31 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
   const gate = townGate(town)
   const atGate = (a: Army) => {
     const here = armyAt(a, now)
-    return Date.parse(a.arrive_at) <= now && Math.hypot(here.x - gate.x, here.y - gate.y) <= 3
+    return Date.parse(a.arrive_at) <= now && Math.hypot(here.x - gate.x, here.y - gate.y) <= balance.towns.market.gateTiles
   }
   const minutes = Math.round(townSiegeMs(walled) / 60_000)
   const p = balance.towns.palisade
   const held = mine ? (kingdom.towns?.find((h) => h.id === town.id) ?? heldTown(town, now)) : null
   // In parts, like the other menus (the last one looked at remembered): one's own town and another's have their own.
   const [part, setPart] = usePart<TownPart>(mine ? 'town:own' : 'town:other', mine ? OWN_PARTS : OTHER_PARTS, mine ? 'state' : 'info')
-  const restless = !!held && (townRevolting(held, now) || townLoyalty(held) < balance.towns.revolt.below + 5)
+  const restless = !!held && (townRevolting(held, now) || townLoyalty(held) < balance.towns.revolt.below + 5 || !!town.rebels)
   const parts: Part<TownPart>[] = mine
     ? [
         { id: 'state', name: 'Durum', icon: 'happy', dot: restless },
         { id: 'upkeep', name: 'Bakım', icon: 'gold', dot: (kingdom.towns?.length ?? 0) > 1 },
         { id: 'yield', name: 'Getiri', icon: 'chest' },
+        { id: 'market', name: 'Pazar', icon: 'trade' },
         { id: 'siege', name: 'Kuşatma', icon: 'swords', dot: !!siege },
         { id: 'release', name: 'Bırak', icon: 'banner' },
       ]
     : [
         { id: 'info', name: 'Bilgi', icon: 'scroll' },
+        { id: 'market', name: 'Pazar', icon: 'trade' },
         { id: 'siege', name: 'Kuşat', icon: 'swords', dot: !!siege },
       ]
+  const marketPart = part === 'market' && (
+    <TownMarket town={town} kingdom={kingdom} mine={mine} holder={holder} armies={own} atGate={atGate} market={market} relation={relation} now={now} onMove={(a) => onMove(a, middle)} onBuy={onBuy} />
+  )
   const siegeSection = siege && (
     <Section title="Kuşatma" icon="swords" aside={`${clock(siege.endsAt - now)} kaldı`}>
       <p className="hint">{siege.kingdom === me ? 'Ordun kasabayı kuşatıyor.' : `${names.get(siege.kingdom) ?? '?'} ordusu kasabayı kuşatıyor.`}</p>
@@ -143,7 +164,11 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
           </div>
         </div>
         <Subtabs label="Kasaba" parts={parts} part={part} onPart={setPart} />
-        {held && part !== 'siege' && <Holding world={world} kingdom={kingdom} held={held} now={now} onUpkeep={onUpkeep} besieged={!!siege} onRelease={onRelease} part={part} />}
+        {mine && part === 'state' && town.rebels && (
+          <Rebels town={town} armies={own} atGate={atGate} now={now} onSend={(a) => onSend(a, middle)} onWatchBattle={onWatchBattle} />
+        )}
+        {held && part !== 'siege' && part !== 'market' && <Holding world={world} kingdom={kingdom} held={held} now={now} onUpkeep={onUpkeep} besieged={!!siege} onRelease={onRelease} part={part} />}
+        {marketPart}
         {mine && part === 'siege' && (
           <>
             {siegeSection || (
@@ -193,9 +218,9 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
 }
 
 // A town of the player's: its loyalty and what moves it, the upkeep, what it has sent, and the strength it lends.
-type TownPart = 'state' | 'upkeep' | 'yield' | 'siege' | 'release' | 'info'
-const OWN_PARTS: TownPart[] = ['state', 'upkeep', 'yield', 'siege', 'release']
-const OTHER_PARTS: TownPart[] = ['info', 'siege']
+type TownPart = 'state' | 'upkeep' | 'yield' | 'market' | 'siege' | 'release' | 'info'
+const OWN_PARTS: TownPart[] = ['state', 'upkeep', 'yield', 'market', 'siege', 'release']
+const OTHER_PARTS: TownPart[] = ['info', 'market', 'siege']
 
 function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, part }: { world: World; kingdom: Kingdom; held: HeldTown; now: number; onUpkeep(level: number): void; besieged: boolean; onRelease(): void; part: TownPart }) {
   const [sure, setSure] = useState(false)
@@ -227,8 +252,10 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, par
             <Meter value={loyalty / 100} tone={loyalty >= 50 ? 'up' : loyalty >= r.below ? 'gold' : 'down'} label="Sadakat" segments={20} />
             {revolting ? (
               <p className="alert">
-                Kasaba ayaklandı: {span(held.revoltUntil! - now)} daha hiçbir şey göndermeyecek. Ayaklanma bittiğinde sadakat %{r.breakAwayBelow}'nin altındaysa kasaba senden kopar.
+                Kasaba ayaklandı: {span(held.revoltUntil! - now)} daha hiçbir şey göndermeyecek. Asileri yenersen ayaklanma hemen biter; yoksa ayaklanma bittiğinde sadakat %{r.breakAwayBelow}'nin altındaysa kasaba senden kopar.
               </p>
+            ) : townQuiet(held, now) ? (
+              <p className="hint">Ayaklanma bastırıldı: kasaba {span(held.quietUntil! - now)} daha ayaklanmaz, sadakati düşük olsa bile. Bu sürede bakımı artırıp sadakati toparla.</p>
             ) : loyalty < r.below + 10 ? (
               <p className="alert">Sadakat %{r.below}'in altına inerse kasaba ayaklanır. Bakımı artırmak sadakati yükseltir.</p>
             ) : null}
@@ -314,6 +341,147 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, par
         </>
       )}
     </>
+  )
+}
+
+// ---- Rebels and the town's market (CLAUDE.md §8.4) -------------------------------------------------------------------
+
+// The rebels at the gate of the player's town: how many, since when, and sending an army to put them down.
+function Rebels({ town, armies, atGate, now, onSend, onWatchBattle }: { town: Town; armies: Army[]; atGate(a: Army): boolean; now: number; onSend(army: number): void; onWatchBattle(battle: number): void }) {
+  const rebels = town.rebels!
+  const q = balance.towns.rebels
+  return (
+    <Section title="Asiler kasabayı kuşatıyor" icon="swords" aside={`${rebels.count} asi · ${span(now - rebels.since)}dır`}>
+      <p className="alert">
+        {rebels.count} asi kasabanın kapısını tuttu; ayaklanma sürdükçe kasaba hiçbir şey göndermez. Ordunu gönderip asileri yenersen ayaklanma biter, sadakat +{q.quellLoyalty} artar ve kasaba{' '}
+        {Math.round(q.quietSeconds / 60)} dakika yeniden ayaklanmaz. Yenilirsen ordun eve çekilir, asiler kalır.
+      </p>
+      {rebels.battle ? (
+        <div className="row spread">
+          <span className="hint">Ordun asilerle çarpışıyor.</span>
+          <button className="btn small" onClick={() => onWatchBattle(rebels.battle!)}>
+            İzle
+          </button>
+        </div>
+      ) : armies.length === 0 ? (
+        <p className="hint">Sahada ordun yok. Ordu sekmesinden garnizondan bir ordu çıkar.</p>
+      ) : (
+        <>
+          <p className="hint">Asiler kendi topraklarını iyi bilir; en az {Math.ceil(rebels.count * 1.5)} askerle gitmek akıllıcadır.</p>
+          <ul className="town-armies">
+            {armies.map((a) => (
+              <li key={a.id}>
+                <span>
+                  Ordu #{a.id} · {a.soldiers ?? '?'} asker
+                </span>
+                <button className="btn small" onClick={() => onSend(a.id)}>
+                  {atGate(a) ? 'Ayaklanmayı bastır' : 'Gönder ve bastır'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Section>
+  )
+}
+
+const MARKET_GOOD_NAMES = { food: 'yemek', materials: 'yapı malzemesi', arms: 'savaş malzemesi' } as const
+
+// The town's market: the good it sells, its stock, its price for the player, and buying with an army at the gate.
+function TownMarket({ town, kingdom, mine, holder, armies, atGate, market, relation, now, onMove, onBuy }: {
+  town: Town
+  kingdom: Kingdom
+  mine: boolean
+  holder: string | null
+  armies: Army[]
+  atGate(a: Army): boolean
+  market: Market | null | undefined
+  relation: number | null
+  now: number
+  onMove(army: number): void
+  onBuy(army: number, units: number): void
+}) {
+  const m = balance.towns.market
+  const [amount, setAmount] = useState<Record<number, number>>({})
+  const good = townMarketGood(town.kind)
+  const name = MARKET_GOOD_NAMES[good]
+  const stock = Math.floor(townStock(town, now))
+  const unit = townUnitPrice(market, town.kind, now, relation)
+  const lobby = priceAt(market, good, now)
+  const factor = townRelationFactor(relation)
+  const perHour = Math.round(m.refillPerRound * (3600 / balance.economy.productionSeconds))
+  const closed = town.rebels ? 'Kasabada ayaklanma var; asiler bastırılana kadar pazar kapalı.' : town.siege ? 'Kasaba kuşatma altında; pazar kapalı.' : null
+  const price = (v: number) => v.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const gold = kingdom.stock.gold
+  const ready = armies.filter(atGate)
+  return (
+    <Section title="Kasaba pazarı" icon="trade" aside={`${fmt(stock)} / ${fmt(m.stock)} ${name}`}>
+      <p className="hint">
+        Kasaba kendi ürettiği {name} satar: stoğu sınırlıdır, saatte yaklaşık {fmt(perHour)} birim yenilenir. Almak için bir ordun kasabanın kapısında olmalı; altın hemen ödenir,
+        mallar orduyla gider ve ordu saraya dönünce ambara girer (asker başına {m.carryPerSoldier} birim taşır; yenilen ordu yükünü kaybeder).
+      </p>
+      <Meter value={stock / m.stock} tone="gold" label="Kasabanın stoğu" segments={12} />
+      <Stat label={`Birim fiyatı (${name})`} value={`${price(unit)} altın`} note={`lobi fiyatı ${price(lobby)}, pazar binası ${price(lobby * balance.market.buyMarkup)}`} />
+      <p className="hint">
+        {mine
+          ? 'Kendi kasaban: ödediğin altın kimseye gitmez.'
+          : holder
+            ? `Ödediğin altın kasabanın sahibi ${holder}'e gider. Onunla ilişkine göre fiyat ×${factor.toFixed(2).replace('.', ',')}${relation !== null ? ` (ilişki ${Math.round(relation)})` : ''}: kötü ilişkide pahalı, iyi ilişkide biraz ucuz.`
+            : 'Kasaba kimseye bağlı değil: ödediğin altın kimseye gitmez.'}{' '}
+        Fiyat lobi fiyatının ×{String(m.floorFactor).replace('.', ',')} altına inmez; buradan alınan mal lobi pazarında kârla satılamaz.
+      </p>
+      {closed ? (
+        <p className="alert">{closed}</p>
+      ) : armies.length === 0 ? (
+        <p className="hint">Sahada ordun yok. Ordu sekmesinden garnizondan bir ordu çıkar.</p>
+      ) : (
+        <ul className="town-armies">
+          {armies.map((a) => {
+            const soldiers = a.soldiers ?? 0
+            const room = cargoRoom(soldiers, a.cargo)
+            const most = Math.max(0, Math.min(stock, room, Math.floor(gold / Math.max(0.0001, unit))))
+            const picked = Math.min(most, amount[a.id] ?? most)
+            const steps = [...new Set([25, 50, 100, 200, most].filter((n) => n > 0 && n <= most))].sort((x, y) => x - y)
+            if (!ready.includes(a)) {
+              return (
+                <li key={a.id}>
+                  <span>
+                    Ordu #{a.id} · {soldiers} asker · {fmt(room)} birim taşıyabilir
+                  </span>
+                  <button className="btn small" onClick={() => onMove(a.id)}>
+                    Kapıya gönder
+                  </button>
+                </li>
+              )
+            }
+            return (
+              <li key={a.id} className="town-buy">
+                <span>
+                  Ordu #{a.id} kapıda · {fmt(room)} birim daha taşıyabilir
+                </span>
+                {most > 0 ? (
+                  <>
+                    <div className="segmented" role="radiogroup" aria-label="Miktar">
+                      {steps.map((n) => (
+                        <button key={n} className="btn small" role="radio" aria-checked={picked === n} onClick={() => setAmount({ ...amount, [a.id]: n })}>
+                          {n === most ? `Hepsi (${fmt(n)})` : fmt(n)}
+                        </button>
+                      ))}
+                    </div>
+                    <button className="btn small" disabled={picked < 1} onClick={() => onBuy(a.id, picked)}>
+                      <Icon name="gold" size={16} /> {fmt(picked)} {name} satın al · {fmt(Math.ceil(picked * unit))} altın
+                    </button>
+                  </>
+                ) : (
+                  <small className="hint">{room < 1 ? 'Ordu daha fazla taşıyamaz.' : stock < 1 ? 'Kasabanın stoğu bitti; biraz bekle.' : 'Hazinende yeterli altın yok.'}</small>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </Section>
   )
 }
 

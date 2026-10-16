@@ -83,6 +83,22 @@ export async function loadKingdoms(lobby: string): Promise<Row[]> {
   return (data ?? []) as Row[]
 }
 
+// When the lobby's season began (ms), which the calendar and its seasons count from (CLAUDE.md §2).
+const seasonStarts = new Map<string, Promise<number>>()
+export function seasonStartOf(lobby: string): Promise<number> {
+  let found = seasonStarts.get(lobby)
+  if (!found) {
+    found = (async () => {
+      const { data, error } = await admin.from('lobbies').select('season_start').eq('id', lobby).single()
+      if (error || !data) refuse('lobby')
+      return ms(data!.season_start as string)
+    })()
+    found.catch(() => seasonStarts.delete(lobby))
+    seasonStarts.set(lobby, found)
+  }
+  return found
+}
+
 export async function lobbyMarket(lobby: string) {
   const { data } = await admin.from('lobbies').select('market').eq('id', lobby).single()
   return (data?.market ?? null) as any

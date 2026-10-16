@@ -27,6 +27,8 @@ export interface MapArmy {
   // Figures drawn (3–9, by its size) and whether a catapult rolls behind it.
   figures: number
   catapult: boolean
+  // The lord leads it himself: a royal banner (gold, crowned) and a crowned rider at its head.
+  royal?: boolean
   // A column of this many squads one behind another (the crowns' patrols), each drawn this much larger.
   train?: number
   size?: number
@@ -60,14 +62,19 @@ export interface MapBattle {
 
 const SKIN = rgb(0xb88458)
 const HELM = ramp(0x4a505a, 0x7a828e, 0xa8b0bc, 0xd6dce4)
+const GOLD = ramp(0x8a5e1c, 0xd9a83a, 0xffe27a)
+const CLOAK = ramp(0x3e2050, 0x6a3a8c, 0x8e5ab0)
 const DASH = 10
 const GAP = 7
 
-const roofsOf = (color: string | null) => (KINGDOM_COLORS[color as KingdomColor] ?? KINGDOM_COLORS.royal).roofs
+// A town's rebels (CLAUDE.md §8.4) march in black and ash grey, no kingdom's colours.
+export const REBEL_COLOR = 'rebel'
+const REBEL = ramp(0x0e0e10, 0x18181c, 0x24242a, 0x34343a, 0x4a4a50, 0x8a8a90)
+const roofsOf = (color: string | null) => (color === REBEL_COLOR ? REBEL : (KINGDOM_COLORS[color as KingdomColor] ?? KINGDOM_COLORS.royal).roofs)
 
 // Spearmen in tunics of the kingdom's colour behind a banner, more of them for a bigger army (in ranks of three), and
 // a catapult on wheels at the back when the army has one; two frames of the march.
-export function squad(color: string | null, frame: number, figures = 3): Sprite {
+export function squad(color: string | null, frame: number, figures = 3, royal = false): Sprite {
   const tunic = roofsOf(color)
   const canvas = new Canvas(52, 58)
   const base = 56
@@ -117,8 +124,18 @@ export function squad(color: string | null, frame: number, figures = 3): Sprite 
       for (let x = 1; x <= 9; x++) {
         const wave = Math.round(Math.sin(x * 0.7 + frame * 1.5) * 0.8)
         if (x > 7 && (y === 0 || y === 6)) continue
-        canvas.set(bx + x, base - 50 + y + wave, y === 0 ? tunic[5] : tunic[y < 3 ? 3 : 2])
+        // The royal banner: gold, edged in the kingdom's colour, a small crown on it.
+        const crown = royal && y >= 2 && y <= 4 && x >= 3 && x <= 6 && (y > 2 || x === 3 || x === 6 || x === 4)
+        const color = royal ? (crown ? tunic[5] : y === 0 || y === 6 ? tunic[3] : GOLD[y < 3 ? 2 : 1]) : y === 0 ? tunic[5] : tunic[y < 3 ? 3 : 2]
+        canvas.set(bx + x, base - 50 + y + wave, color)
       }
+    }
+    // A gilded finial over the royal banner.
+    if (royal) {
+      canvas.set(bx, base - 51, GOLD[2])
+      canvas.set(bx - 1, base - 52, GOLD[1])
+      canvas.set(bx + 1, base - 52, GOLD[1])
+      canvas.set(bx, base - 53, GOLD[2])
     }
   }, true)
   // Ranks of three, back to front, each a little lower and to the side on the iso grid.
@@ -132,6 +149,18 @@ export function squad(color: string | null, frame: number, figures = 3): Sprite 
   spots.sort((a, b) => a[1] - b[1])
   // Neighbours out of step with each other, so the column ripples as it marches.
   spots.forEach(([x, y], i) => raise(y, () => soldier(x, y, frame + (i % 2) * 2)))
+  // The lord at the front: a crowned man in a purple cloak.
+  if (royal) {
+    const [x, y] = [ox + 8, base - 6]
+    raise(y, () => {
+      soldier(x, y, frame + 1)
+      for (let yy = y - 8; yy < y - 1; yy++) canvas.set(x - 2, yy, CLOAK[yy < y - 5 ? 2 : 1])
+      for (let xx = x - 1; xx <= x + 1; xx++) canvas.set(xx, y - 9, GOLD[2])
+      canvas.set(x - 1, y - 10, GOLD[2])
+      canvas.set(x + 1, y - 10, GOLD[2])
+      canvas.set(x, y - 10, GOLD[1])
+    })
+  }
   return { ...canvas.sprite(ox + 2, base - 10, 0), lift }
 }
 
@@ -179,9 +208,9 @@ function swords(): Sprite {
 }
 
 const squads = new Map<string, Sprite[]>()
-const squadOf = (color: string | null, frame: number, figures = 3) => {
-  const key = `${color ?? 'royal'}:${figures}`
-  if (!squads.has(key)) squads.set(key, [0, 1, 2, 3].map((f) => squad(color, f, figures)))
+const squadOf = (color: string | null, frame: number, figures = 3, royal = false) => {
+  const key = `${color ?? 'royal'}:${figures}${royal ? ':king' : ''}`
+  if (!squads.has(key)) squads.set(key, [0, 1, 2, 3].map((f) => squad(color, f, figures, royal)))
   return squads.get(key)![frame]
 }
 const CATAPULTS = [0, 1, 2, 3].map(catapultLook)
@@ -315,7 +344,7 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
       // gateway).
       body.visible = true
       if (s.cart) s.cart.visible = true
-      const look = squadOf(army.color, moving && scale >= 1 ? Math.floor(time / 180) % 4 : 0, army.figures)
+      const look = squadOf(army.color, moving && scale >= 1 ? Math.floor(time / 180) % 4 : 0, army.figures, army.royal)
       body.texture = textureOf(look)
       body.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
       body.position.set(screen.x, screen.y)

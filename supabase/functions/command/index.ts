@@ -30,12 +30,14 @@ import {
   refuse,
   relationOf,
   rememberWorld,
+  seasonStartOf,
   syncWarFlags,
   worldOf,
 } from '../_shared/server.ts'
 import type { Kingdom, Point, Row, World } from '../_shared/server.ts'
 import { tickLobby } from '../_shared/tick.ts'
-import { ensureTowns, townsOf } from '../_shared/towns.ts'
+import { ensureTowns, townOf, townsOf } from '../_shared/towns.ts'
+import type { TownRow } from '../_shared/towns.ts'
 import { refuseDemand } from '../_shared/patrols.ts'
 import type { VisitRow } from '../_shared/patrols.ts'
 
@@ -146,7 +148,9 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
   if (!row) return refuse('member')
 
   const market = await lobbyMarket(lobby)
-  const settled = row.state ? game.advance(row.state, now, market) : null
+  // The realm keeps when its lobby's season began: the calendar's seasons count from it (CLAUDE.md §2).
+  const seasonStart = await seasonStartOf(lobby)
+  const settled = row.state ? game.advance({ ...row.state, seasonStart }, now, market) : null
   const state = settled?.kingdom ?? null
   const stage = state ? game.territoryStage(state, now) : 0
   const need = (): Kingdom => state ?? refuse('founded')
@@ -318,8 +322,9 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       if (error) refuse(error)
       if (town && town.owner_id === row.id) {
         const [low, high] = game.balance.towns.revolt.garrison
-        const garrison = low + Math.floor(game.hash(town.idx, 11, Math.floor(now / 1000)) * (high - low + 1))
-        const { data: freed } = await admin.from('lobby_towns').update({ owner_id: null, garrison }).eq('id', id).eq('owner_id', row.id).is('siege', null).select('id').maybeSingle()
+        // Its rebels, if it has risen, stay on as its garrison.
+        const garrison = town.rebels?.count ?? low + Math.floor(game.hash(town.idx, 11, Math.floor(now / 1000)) * (high - low + 1))
+        const { data: freed } = await admin.from('lobby_towns').update({ owner_id: null, garrison, rebels: null }).eq('id', id).eq('owner_id', row.id).is('siege', null).select('id').maybeSingle()
         if (!freed) refuse('besieged')
       } else if (town && town.owner_id !== null) refuse('town')
       next = changed(game.releaseTown(k, id))
@@ -392,6 +397,33 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       next = changed(found > 0 ? game.book(after, { other: found }) : after)
       break
     }
+    case 'expedition': {
+      // A party of villagers sent on a journey, or called home (CLAUDE.md §9.9).
+      const k = need()
+      if (cmd.action === 'recall') {
+        const id = isId(cmd.id) ? cmd.id : refuse('rejected')
+        if (game.expeditionRecallError(k, id, now)) refuse('rejected')
+        next = changed(game.recallExpedition(k, id, now))
+        break
+      }
+      if (typeof cmd.kind !== 'string' || !game.EXPEDITION_KINDS.includes(cmd.kind)) refuse('rejected')
+      const villagers = whole(cmd.villagers, 1, 50)
+      // Only known kinds of soldier, in whole numbers.
+      const escort: Record<string, number> = {}
+      for (const [unit, n] of Object.entries(cmd.escort ?? {})) {
+        if (!(game.UNITS as readonly string[]).includes(unit)) refuse('rejected')
+        const count = whole(n, 0, 50)
+        if (count > 0) escort[unit] = count
+      }
+      const error = game.expeditionError(k, cmd.kind, villagers, escort, now)
+      if (error) refuse(error === 'cost' || error === 'soldiers' || error === 'locked' ? error : 'rejected')
+      next = changed(game.startExpedition(k, cmd.kind, villagers, escort, now))
+      break
+    }
+    case 'steward':
+      // The steward who turns the villagers out against an unanswered crisis (CLAUDE.md §9.8).
+      next = changed(game.setSteward(need(), cmd.on === true))
+      break
     case 'repairTrade':
       next = changed(game.repairTrade(need()))
       break
@@ -417,6 +449,16 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       const error = game.questError(k, cmd.crown, action, now, crowns, palace)
       if (error) refuse(error)
       next = changed(action === 'take' ? game.takeQuest(k, cmd.crown, now, crowns, palace) : game.claimQuest(k, cmd.crown, now, crowns, palace, game.goldCap(k, now) - k.stock.gold))
+      break
+    }
+    case 'royal': {
+      // The liege's royal envoy answered (CLAUDE.md §7.8): its request taken on, turned down, or the lot handed over.
+      const k = need()
+      const action = String(cmd.action) as 'accept' | 'decline' | 'deliver'
+      if (!['accept', 'decline', 'deliver'].includes(action)) refuse('rejected')
+      const error = game.royalError(k, action, now, market)
+      if (error) refuse(error)
+      next = changed(game.answerRoyal(k, action, now, market, game.goldCap(k, now) - k.stock.gold))
       break
     }
     case 'ships': {
@@ -528,7 +570,7 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
   // Any command of a founded kingdom marks its ruler as present.
   // How things stand is kept with it, for the report shown when the ruler comes back after a while.
   // A real command marks the ruler present; the open game's 'seen' only for a while after the last one (presenceAt).
-  if (next?.state) next = { ...next, state: { ...next.state, ...game.presenceAt(next.state as Kingdom, now, cmd.type !== 'seen'), seen: game.seenSnapshot(next.state as Kingdom, now), lobbyKey: game.lobbyKeyOf(lobby) } }
+  if (next?.state) next = { ...next, state: { ...next.state, ...game.presenceAt(next.state as Kingdom, now, cmd.type !== 'seen'), seen: game.seenSnapshot(next.state as Kingdom, now), lobbyKey: game.lobbyKeyOf(lobby), seasonStart } }
   // The lobby's ranking reads the score kept beside the state.
   if (next?.state) next = { ...next, score: game.scoreOf(next.state as Kingdom, now) }
 
@@ -963,9 +1005,11 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       const played = game.replayGame(which, run!.seed, cmd.toggles)
       // Over sooner than it can be played: not counted.
       const score = game.playedInTime(run!.at, played.steps, now) ? played.score : 0
-      const reward = game.gameReward(which, score)
+      const earned = game.gameReward(which, score)
+      let reward: Record<string, number> = {}
       let fresh = true
       let best = 0
+      let left = 0
       await mutateKingdom(me.id, now, (k) => {
         const mine = k.minigames?.[which]
         // Settled once only, even if two answers for the same run arrive together.
@@ -973,18 +1017,27 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
           fresh = false
           return null
         }
+        // All the games together bring no more than the hour's budget (CLAUDE.md §6.5).
+        const budgeted = game.budgetedReward(k, earned, now) as Record<string, number>
         const stock = { ...k.stock }
         const caps: Record<string, number> = { gold: game.goldCap(k, now) }
-        for (const [r, v] of Object.entries(reward as Record<string, number>)) {
+        const given: Record<string, number> = {}
+        for (const [r, v] of Object.entries(budgeted)) {
           const cap = caps[r] ?? game.storageCap(k, now)
-          stock[r] = Math.max(stock[r], Math.min(cap, stock[r] + v))
+          const next = Math.max(stock[r], Math.min(cap, stock[r] + v))
+          if (next > stock[r]) given[r] = next - stock[r]
+          stock[r] = next
         }
+        reward = given
         best = Math.max(mine?.best ?? 0, score)
-        return { ...k, stock, minigames: { ...k.minigames, [which]: { ...mine, run: null, best } } }
+        const out = { ...k, stock, minigames: { ...k.minigames, [which]: { ...mine, run: null, best } }, minigameEarned: game.noteEarning(k, given, now) }
+        left = game.budgetLeft(out, now)
+        return out
       })
       if (!fresh) refuse('none')
       if (score > 0) await recordScore(lobby, me, which, score)
-      return { score, reward, best }
+      // `earned`: what the score was worth before the budget; `reward`: what was given.
+      return { score, reward, earned, best, budgetLeft: left }
     }
     case 'recall': {
       const { data: mission } = await admin.from('spy_missions').select('*').eq('id', cmd.mission).maybeSingle()
@@ -1040,7 +1093,9 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       // is still at its side; elsewhere the envoy has to ride to it (§8.2.1).
       const { here } = armyNow(army!, world, me.state, now)
       const inTouch = !!army!.contact_until && ms(army!.contact_until) > now
-      if (inTerritory(me.state, here, now) || inTouch) {
+      // The lord at its head gives his orders himself, wherever it is.
+      const led = game.leadsArmy(me.state, army!.led_by, now)
+      if (inTerritory(me.state, here, now) || inTouch || led) {
         const why = await applyOrder(world, army!, order, rows, pacts, now)
         if (why) refuse(why)
         return { at: iso(now) }
@@ -1049,12 +1104,102 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       await admin.from('army_orders').insert({ lobby_id: lobby, army_id: army!.id, kingdom_id: me.id, effective_at: iso(now + delay), payload: order })
       return { at: iso(now + delay) }
     }
+    case 'king': {
+      // The lord takes command of an army in front of his palace, or leaves it there (CLAUDE.md §8.2.1).
+      const { data } = await admin.from('armies').select('*').eq('id', cmd.army).maybeSingle()
+      const army = data as ArmyRow | null
+      if (!army || army.kingdom_id !== me.id) refuse('army')
+      const state = game.advance(me.state, now).kingdom
+      const atPalace = game.atPalace(army!, state.buildings, now)
+      if (cmd.action === 'lead') {
+        const { data: mine } = await admin.from('armies').select('id, led_by').eq('kingdom_id', me.id)
+        const leadingAnother = (mine ?? []).some((a: { id: number; led_by: number | null }) => a.id !== army!.id && game.leadsArmy(state, a.led_by, now))
+        if (game.leadsArmy(state, army!.led_by, now)) refuse('king_led')
+        const why = game.leadError(state, now, { atPalace, battle: army!.status === 'battle', leadingAnother })
+        if (why) refuse(`king_${why}`)
+        // Only from the army as it was read (not meanwhile in battle).
+        const { data: done } = await admin.from('armies').update({ led_by: state.dynasty.king.id }).eq('id', army!.id).neq('status', 'battle').select('id').maybeSingle()
+        if (!done) refuse('king_battle')
+        // A mark left by a lord now dead is cleared from the other armies.
+        await admin.from('armies').update({ led_by: null }).eq('kingdom_id', me.id).neq('id', army!.id).not('led_by', 'is', null)
+        await notify(lobby, [me.id], 'king_command', { lead: true, king: state.dynasty.king.name }, now)
+        return null
+      }
+      if (cmd.action === 'leave') {
+        if (army!.led_by == null) refuse('king_none')
+        // A lord who is no longer (dead, or the regents rule) leaves it anywhere; a living one in front of his palace.
+        if (game.leadsArmy(state, army!.led_by, now) && !atPalace) refuse('king_palace')
+        await admin.from('armies').update({ led_by: null }).eq('id', army!.id)
+        await notify(lobby, [me.id], 'king_command', { lead: false, king: state.dynasty?.king?.name ?? '' }, now)
+        return null
+      }
+      return refuse('rejected')
+    }
+    case 'townBuy': {
+      // Goods bought at a town's market by an army standing at its gate (CLAUDE.md §8.4): the gold goes to the town's
+      // lord at once (nowhere for a free town or the lord's own purchase), the goods ride home with the army.
+      const units = whole(cmd.units, 1, game.balance.towns.market.stock)
+      const { data: townData } = await admin.from('lobby_towns').select('*').eq('lobby_id', lobby).eq('id', Number(cmd.town)).maybeSingle()
+      const row = townData as TownRow | null
+      if (!row) return refuse('town')
+      const { data: armyData } = await admin.from('armies').select('*').eq('id', cmd.army).maybeSingle()
+      const army = armyData as ArmyRow | null
+      if (!army || army.kingdom_id !== me.id || army.lobby_id !== lobby) return refuse('army')
+      if (army.status === 'battle') refuse('battle')
+      const world = await worldOf(lobby)
+      const { here } = armyNow(army, world, me.state, now)
+      const gate = game.townGate(row)
+      if (ms(army.arrive_at) > now || Math.hypot(here.x - gate.x, here.y - gate.y) > game.balance.towns.market.gateTiles) refuse('gate')
+      const town = townOf(row)
+      const owner = row.owner_id
+      const relation = owner === null || owner === me.id ? null : (await relationOf(lobby, me.id, owner, now)).value
+      const market = await lobbyMarket(lobby)
+      const cost = game.townBuyCost(market, row.kind, units, now, relation)
+      const error = game.townBuyError(town, units, army.soldiers, army.cargo, Infinity, cost, now)
+      if (error) refuse(error === 'besieged' ? 'townBesieged' : error)
+      const good = game.townMarketGood(row.kind) as string
+      // Paid first; the stock is then claimed only as it was read (or the gold goes back).
+      await mutateKingdom(me.id, now, (k) => (k.stock.gold >= cost ? { ...k, stock: { ...k.stock, gold: k.stock.gold - cost } } : refuse('cost')))
+      const refund = () => mutateKingdom(me.id, now, (k) => ({ ...k, stock: { ...k.stock, gold: k.stock.gold + cost } }))
+      const left = game.townStock(town, now) - units
+      let claim = admin.from('lobby_towns').update({ market_stock: left, market_at: now }).eq('id', row.id).is('rebels', null).is('siege', null)
+      claim = row.market_at === null || row.market_at === undefined ? claim.is('market_at', null) : claim.eq('market_at', row.market_at)
+      const { data: claimed } = await claim.select('id').maybeSingle()
+      if (!claimed) {
+        await refund()
+        refuse('stock')
+      }
+      // Loaded onto the army as it was read (a split or a loss meanwhile: the purchase is undone).
+      const { data: loaded } = await admin
+        .from('armies')
+        .update({ cargo: game.addCargo(army.cargo, { [good]: units }) })
+        .eq('id', army.id)
+        .eq('soldiers', army.soldiers)
+        .neq('status', 'battle')
+        .select('id')
+        .maybeSingle()
+      if (!loaded) {
+        await admin.from('lobby_towns').update({ market_stock: left + units }).eq('id', row.id).eq('market_at', now)
+        await refund()
+        refuse('army')
+      }
+      // The town's lord takes the gold, as far as his treasury holds it.
+      if (owner !== null && owner !== me.id) {
+        let got = 0
+        await mutateKingdom(owner, now, (k) => {
+          got = Math.max(0, Math.min(cost, game.goldCap(k, now) - k.stock.gold))
+          return game.book({ ...k, stock: { ...k.stock, gold: k.stock.gold + got } }, { townSales: got, wastedGold: cost - got })
+        }).catch(() => null)
+        await notify(lobby, [owner], 'town_sale', { town: row.id, name: row.name, by: me.name ?? '?', good, units, gold: got, wasted: cost - got }, now)
+      }
+      return { cost, good, units }
+    }
     default:
       return refuse('unknown')
   }
 }
 
-const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'townUpkeep', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'nameChild', 'educate', 'crisis', 'choose', 'seen', 'reset', 'ships', 'fleet', 'order', 'quest', 'releaseTown'])
+const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'townUpkeep', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'nameChild', 'educate', 'crisis', 'choose', 'seen', 'reset', 'ships', 'fleet', 'order', 'quest', 'royal', 'releaseTown', 'expedition', 'steward'])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

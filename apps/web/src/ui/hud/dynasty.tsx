@@ -193,7 +193,7 @@ export function DynastySection({ kingdom, now, online }: { kingdom: Kingdom; now
               <li key={p.id}>
                 <Portrait seed={p.id * 977 + kingdom.site.x} sex={p.sex} age={ageOf(p, p.diedAt ?? now)} role={p.sex === 'm' ? 'king' : 'queen'} dead size={40} />
                 <span>
-                  {p.name} · {Math.floor(ageOf(p, p.diedAt ?? now))} yaşında {p.cause === 'grief' ? 'kahrından' : 'yaşlılıktan'} öldü
+                  {p.name} · {Math.floor(ageOf(p, p.diedAt ?? now))} yaşında {p.cause === 'battle' ? 'savaşta düşerek' : p.cause === 'grief' ? 'kahrından' : 'yaşlılıktan'} öldü
                 </span>
               </li>
             ))}
@@ -280,7 +280,7 @@ export function HouseDialog({ news, kingdom, now, online, onClose }: { news: Hou
     news.kind === 'birth'
       ? `Kraliçe ${kingdom.dynasty?.queen?.name ?? ''} bir ${p.sex === 'm' ? 'oğlan' : 'kız'} doğurdu! Halk sevinçle kutluyor. Ona bir ad koy; hükümdar yaşadıkça eğitimini Saray sekmesinin Hanedan bölümünden seçebilirsin.`
       : news.kind === 'death'
-        ? `Hükümdar ${p.name}, ${Math.floor(ageOf(p, p.diedAt ?? now))} yaşında ${p.cause === 'grief' ? 'kaybedilen savaşın kahrından' : 'yaşlılıktan'} öldü. ${
+        ? `Hükümdar ${p.name}, ${Math.floor(ageOf(p, p.diedAt ?? now))} yaşında ${p.cause === 'battle' ? 'ordusunun başında savaşırken' : p.cause === 'grief' ? 'kaybedilen savaşın kahrından' : 'yaşlılıktan'} öldü. ${
             news.heir && !kingdom.dynasty?.council ? `Yerine oğlu ${news.heir.name} geçti.` : news.heir ? `Oğlu ${news.heir.name} reşit olana kadar naipler konseyi yönetecek.` : 'Oğlu olmadığı için lordluğu naipler konseyi yönetecek.'
           } Kraliçe artık kraliçe ana; yeni hükümdarın kendi kraliçesini alması gerekecek.`
         : news.kind === 'coronation'

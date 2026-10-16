@@ -1,4 +1,4 @@
-import type { BuildingKind, Resource, Unit, Weapon } from '@game/shared'
+import type { BuildingKind, CalendarDate, Resource, Season, Unit, Weapon } from '@game/shared'
 import type { IconName } from './icons'
 
 export const RESOURCE_NAMES: Record<Resource, string> = {
@@ -186,6 +186,13 @@ export const FORTUNE_TEXTS: Record<string, { title: string; text: string; tone: 
   lostCaravan: { title: 'Kayıp kervan', text: 'Ormanda yolunu yitirmiş, sahipsiz bir kervan bulundu; yükü sapasağlam.', tone: 'good', icon: 'trade' },
   relic: { title: 'Aziz kalıntısı', text: 'Köylüler eski bir mezarda kutsal bir kalıntı buldu; halk ziyarete akın ediyor.', tone: 'good', icon: 'temple' },
   tournament: { title: 'Şövalye turnuvası', text: 'Meydanda mızrak dövüşü var; lordlar ve halk sancaklar altında toplandı.', tone: 'good', icon: 'banner' },
+  scholar: { title: 'Gezgin bilgin', text: 'Heybesi kitap dolu bir bilgin kapına geldi; bilgisini satmaya hazır.', tone: 'good', icon: 'book' },
+  festivalRequest: { title: 'Halk şenlik istiyor', text: 'Köylüler meydanda toplandı: hasat bitti, bir şenlik istiyorlar. Halk biraz söyleniyor.', tone: 'bad', icon: 'music' },
+  lostChild: { title: 'Kayıp soylu çocuğu', text: 'Yoldan geçen bir soylunun çocuğu ormanda kayboldu; ailesi yardım dileniyor.', tone: 'bad', icon: 'eye' },
+  rareMerchant: { title: 'Nadir mallar tüccarı', text: 'Uzak diyarlardan bir tüccar kapında: elinde iyi demir var, keresteye de alıcı.', tone: 'good', icon: 'trade' },
+  strayHerd: { title: 'Sahipsiz sürü', text: 'Çobansız bir koyun sürüsü tarlalarına girdi.', tone: 'good', icon: 'food' },
+  harvestFair: { title: 'Hasat panayırı', text: 'Komşu köylerden gelenlerle hasat panayırı kuruldu; pazar canlı, halk neşeli.', tone: 'good', icon: 'trade' },
+  refugees: { title: 'Göçmen aileler', text: 'Savaştan kaçan birkaç aile hududuna sığındı; yurt arıyorlar.', tone: 'bad', icon: 'people' },
 }
 
 // The answers to a crisis (CLAUDE.md §9.8): what the villagers and the army do against each, and what happens if
@@ -217,4 +224,22 @@ export const DILEMMA_TEXTS: Record<string, { a: string; b: string; done: { a: st
   lostCaravan: { a: 'Yükü depolara al', b: 'Sahiplerine haber sal', done: { a: 'Yük depolarında; halk sahiplerinin ne diyeceğini merak ediyor.', b: 'Sahipleri geldi; hem ödül verdiler hem de pazarına uğruyorlar.' } },
   relic: { a: 'Kalıntıya bir türbe yaptır', b: 'Kalıntıyı pazarda sergile', done: { a: 'Türbe yükseliyor; tapınağa giden yol kalabalık.', b: 'Ziyaretçiler pazarı doldurdu; sadaka kutusu doldu.' } },
   tournament: { a: 'Büyük bir ödül koy', b: 'Halka ziyafet ver', done: { a: 'Ödül için en iyi şövalyeler geldi; meydan coştu.', b: 'Ziyafet sofraları kuruldu; halk karnını doyurup turnuvayı izliyor.' } },
+  scholar: { a: 'Üniversitende ağırla', b: 'Halka okuma yazma öğretsin', done: { a: 'Bilgin hocalarına yol gösterdi; süren araştırma hızlandı.', b: 'Meydanda dersler başladı; halk memnun.' } },
+  festivalRequest: { a: 'Şenliği sen düzenle', b: 'Hasat sonrasına ertele', done: { a: 'Meydanda davullar çalıyor; halk bayram ediyor.', b: 'Halk söylene söylene işine döndü; tarlalar boş kalmadı.' } },
+  lostChild: { a: 'Arama ekipleri çıkar', b: 'Ödül ilan et', done: { a: 'Köylüler ormanı taradı ve çocuğu buldu; ailesi seni ödüllendirdi.', b: 'Avcılar ödül için ormana daldı; çocuk annesine kavuştu, adın dilden dile dolaşıyor.' } },
+  rareMerchant: { a: 'Demirini satın al', b: 'Kerestemizi sat', done: { a: 'Demir çubuklar cephaneye taşındı.', b: 'Tüccar keresteni yükleyip altınını saydı.' } },
+  strayHerd: { a: 'Sürüyü ağıla kat', b: 'Sahibini bul', done: { a: 'Koyunlar ağılda; komşular biraz kırgın.', b: 'Sahibi bulundu; dürüstlüğün pazarda konuşuluyor.' } },
+  refugees: { a: 'Kapıları aç', b: 'Azık verip yollarını gönder', done: { a: 'Aileler boş evlere yerleşti.', b: 'Aileler azıklarını alıp teşekkür ederek yollarına devam etti.' } },
+  comet: { a: 'Müneccimleri çağır', b: 'Halka ziyafet ver', done: { a: 'Müneccimler yıldızın bolluk getireceğini söyledi; halk yatıştı.', b: 'Sofralar kuruldu; halk korkusunu unuttu.' } },
 }
+
+// The calendar (CLAUDE.md §2): month names, long and short, the seasons and how a date is written.
+export const MONTH_NAMES = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık']
+export const MONTH_SHORT = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
+
+export const SEASON_NAMES: Record<Season, string> = { spring: 'İlkbahar', summer: 'Yaz', autumn: 'Sonbahar', winter: 'Kış' }
+export const SEASON_ICONS: Record<Season, IconName> = { spring: 'flower', summer: 'sun', autumn: 'leaf', winter: 'snow' }
+
+// "14 Mayıs 1182"; short: "14 May 1182"; without the year: "14 Mayıs".
+export const dateText = (c: Pick<CalendarDate, 'year' | 'month' | 'day'>, form: 'long' | 'short' | 'day' = 'long') =>
+  form === 'day' ? `${c.day} ${MONTH_NAMES[c.month]}` : `${c.day} ${(form === 'short' ? MONTH_SHORT : MONTH_NAMES)[c.month]} ${c.year}`

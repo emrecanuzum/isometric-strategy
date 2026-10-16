@@ -5,9 +5,19 @@
   "slackMs": 3000,
   "maxToggles": 3000,
   "boardSize": 10,
+  "budget": {
+    "note": "all the arcade games together: the most their rewards may be worth (gold, goods at their usual price) in any window of this many seconds",
+    "windowSeconds": 3600,
+    "goldPerWindow": 70
+  },
   "fishing": {
     "caughtBase": 50,
-    "speedBonus": 50
+    "speedBonus": 50,
+    "stars": [
+      50,
+      70,
+      85
+    ]
   },
   "archery": {
     "building": "barracks",
@@ -41,7 +51,12 @@
     },
     "cap": {
       "gold": 20
-    }
+    },
+    "stars": [
+      20,
+      32,
+      45
+    ]
   },
   "anvil": {
     "building": "forge",
@@ -74,7 +89,12 @@
     "cap": {
       "gold": 15,
       "arms": 25
-    }
+    },
+    "stars": [
+      60,
+      100,
+      130
+    ]
   },
   "caravan": {
     "building": "tradePost",
@@ -101,6 +121,164 @@
     },
     "cap": {
       "gold": 25
-    }
+    },
+    "stars": [
+      35,
+      60,
+      85
+    ]
+  },
+  "woodsplit": {
+    "building": "lumberCamp",
+    "limitSeconds": 28,
+    "logs": 12,
+    "leadSeconds": 1,
+    "core": [
+      0.45,
+      0.8
+    ],
+    "halfWidth": [
+      0.07,
+      0.15
+    ],
+    "innerShare": 0.4,
+    "speed": [
+      0.7,
+      1.25
+    ],
+    "knotChance": 0.2,
+    "knotFactor": 2,
+    "points": [
+      5,
+      3,
+      1
+    ],
+    "comboEvery": 3,
+    "pauseSeconds": 0.55,
+    "stuckSeconds": 1.1,
+    "reward": {
+      "materials": 0.4,
+      "gold": 0.12
+    },
+    "cap": {
+      "materials": 30,
+      "gold": 10
+    },
+    "stars": [
+      35,
+      60,
+      85
+    ]
+  },
+  "harvest": {
+    "building": "farm",
+    "limitSeconds": 25,
+    "speed": 55,
+    "spacing": 10,
+    "gap": [
+      14,
+      30
+    ],
+    "reaperX": 56,
+    "lead": 70,
+    "reach": 5,
+    "runs": {
+      "ripe": [
+        3,
+        6
+      ],
+      "green": [
+        2,
+        4
+      ],
+      "golden": [
+        1,
+        1
+      ],
+      "crow": [
+        1,
+        1
+      ]
+    },
+    "chances": {
+      "golden": 0.1,
+      "crow": 0.16,
+      "green": 0.22
+    },
+    "points": {
+      "ripe": 1,
+      "golden": 5,
+      "green": -2,
+      "crow": -5
+    },
+    "comboEvery": 8,
+    "stamina": {
+      "drain": 0.5,
+      "regen": 0.55,
+      "recover": 0.35
+    },
+    "reward": {
+      "food": 0.35,
+      "gold": 0.05
+    },
+    "cap": {
+      "food": 50,
+      "gold": 8
+    },
+    "stars": [
+      60,
+      100,
+      140
+    ],
+    "comboMax": 3
+  },
+  "net": {
+    "building": "dock",
+    "limitSeconds": 30,
+    "nets": 5,
+    "pull": 0.9,
+    "slack": 0.6,
+    "band": [
+      0.45,
+      0.8
+    ],
+    "haulPerSecond": 0.3,
+    "slipPerSecond": 0.06,
+    "surgeGapSeconds": [
+      0.8,
+      1.8
+    ],
+    "surgeSeconds": [
+      0.3,
+      0.7
+    ],
+    "surgeForce": [
+      0.5,
+      1.1
+    ],
+    "jitter": 0.25,
+    "fish": [
+      5,
+      9
+    ],
+    "tearLoss": 2,
+    "afterTear": 0.3,
+    "tearPauseSeconds": 0.6,
+    "betweenNetsSeconds": 0.9,
+    "perFish": 2,
+    "perfectBonus": 4,
+    "reward": {
+      "food": 0.8,
+      "gold": 0.2
+    },
+    "cap": {
+      "food": 45,
+      "gold": 10
+    },
+    "stars": [
+      25,
+      38,
+      50
+    ]
   }
 }

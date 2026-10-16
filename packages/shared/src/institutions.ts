@@ -1,4 +1,4 @@
-import { dynastyEffects } from './dynasty'
+import { dynastyEffects, leadDice } from './dynasty'
 import { balance } from './balance'
 import type { Cost, Good, Kingdom } from './economy'
 import { isNightAt, phaseEndsAt } from './society'
@@ -113,10 +113,10 @@ const byLevel = (values: number[], level: number) => (level <= 0 ? 0 : values[Ma
 export const templeHappiness = (k: Kingdom, at: number) => byLevel(I.temple.happinessByLevel, levelOf(k, 'temple', at))
 
 // What soldiers add to their rolls: faith from the temple (more with theology), what was learnt at the university, and
-// the ruler's head for war (dynasty.ts).
-export const battleSpirit = (k: Kingdom, at: number) => {
+// the ruler's head for war (dynasty.ts): counted in full, with his presence, for the army he leads himself (`led`).
+export const battleSpirit = (k: Kingdom, at: number, led = false) => {
   const learnt = researchEffects(k, at)
-  return byLevel(I.temple.faithByLevel, levelOf(k, 'temple', at)) * (1 + learnt.faith) + learnt.battle + dynastyEffects(k).dice
+  return byLevel(I.temple.faithByLevel, levelOf(k, 'temple', at)) * (1 + learnt.faith) + learnt.battle + (led ? leadDice(k) : dynastyEffects(k).dice)
 }
 
 // The other study of the same tier of a branch (taking one closes the other).
@@ -290,6 +290,10 @@ export function answerCrisis<K extends Seeded & Pick<Kingdom, 'units' | 'soldier
 export interface ChoiceOption extends Pick<FortuneSpec, 'output' | 'trade' | 'work' | 'happiness' | 'templeHappiness'> {
   cost?: Cost
   gain?: Cost
+  // Seconds taken off the study under way at the university (a wandering scholar's help), and families taken in (they
+  // stay as far as there are homes for them).
+  researchRush?: number
+  people?: number
 }
 const CHOICE = I.events.choice as unknown as { decideSeconds: number; kinds: Record<string, Record<DilemmaChoice, ChoiceOption>> }
 export type DilemmaChoice = 'a' | 'b'
@@ -315,7 +319,7 @@ export function dilemmaError(k: Seeded & Pick<Kingdom, 'stock'>, key: string, ch
 }
 
 // Takes that way: its cost paid and its gain given at once (the next round keeps the stores within their room).
-export function answerDilemma<K extends Seeded & Pick<Kingdom, 'stock'>>(k: K, key: string, choice: DilemmaChoice, at: number): K {
+export function answerDilemma<K extends Seeded & Pick<Kingdom, 'stock'> & Partial<Pick<Kingdom, 'researches' | 'people'>>>(k: K, key: string, choice: DilemmaChoice, at: number): K {
   if (dilemmaError(k, key, choice, at)) return k
   const f = fortunesAt(k, at).find((x) => crisisKey(x) === key)!
   const option = CHOICE.kinds[f.kind][choice]
@@ -325,8 +329,16 @@ export function answerDilemma<K extends Seeded & Pick<Kingdom, 'stock'>>(k: K, k
   const stock = { ...k.stock }
   for (const [r, v] of Object.entries(option.cost ?? {})) stock[r as keyof typeof stock] -= v ?? 0
   for (const [r, v] of Object.entries(option.gain ?? {})) stock[r as keyof typeof stock] += v ?? 0
-  return { ...k, responses, stock }
+  const rush = (option.researchRush ?? 0) * 1000
+  const researches = rush > 0 && k.researches ? k.researches.map((r) => (r.doneAt > at ? { ...r, doneAt: Math.max(at, r.doneAt - rush) } : r)) : k.researches
+  // Newcomers are counted at once; the people never exceed their homes (economy.ts population).
+  const people = option.people && k.people !== undefined ? k.people + option.people : k.people
+  return { ...k, responses, stock, ...(researches && { researches }), ...(people !== undefined && { people }) }
 }
+
+// The steward who answers a crisis for an absent lord (CLAUDE.md §9.8): turned on or off.
+export const stewardFee = () => CRISIS.steward.fee as Cost
+export const setSteward = <K extends Pick<Kingdom, 'steward'>>(k: K, on: boolean): K => (!!k.steward === on ? k : { ...k, steward: on })
 
 // What the fortunes under way add up to (a crisis warded off does nothing; villagers turned out work less a while; the
 // answer to a choice adds its own effects while the fortune lasts).
