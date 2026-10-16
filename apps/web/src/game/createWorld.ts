@@ -1243,7 +1243,7 @@ export async function createWorld(
         const sprite = new Sprite(textureOf(look))
         sprite.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
         sprite.label = 'occluder'
-        shadows.setFootprint(sprite, s.size, part.z - heightAt(world, part.fx, part.fy))
+        shadows.setFootprint(sprite, s.size, part.z - heightAt(world, part.fx, part.fy), s, part !== main && !part.stands)
         const sx = (part.fx - part.fy) * (TILE_WIDTH / 2)
         const sy = (part.fx + part.fy) * (TILE_HEIGHT / 2) - part.z
         sprite.position.set(sx, sy)
@@ -1275,6 +1275,55 @@ export async function createWorld(
         }
       })
     })
+    // Sorting by the front corner goes wrong for neighbours on a slope (a house on a tall base sorts by its base's top
+    // and falls behind the palace beside it) or of different sizes. Footprints never overlap, so of two buildings whose
+    // pictures overlap the one past the other along x or y stands in front: it is drawn after.
+    {
+      const groups = new Map<string, Occluder[]>()
+      for (const o of occluders) {
+        const key = `${o.x},${o.y}`
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key)!.push(o)
+      }
+      const list = [...groups.values()].map((parts) => ({
+        parts,
+        o: parts[0],
+        left: Math.min(...parts.map((p) => p.left)),
+        right: Math.max(...parts.map((p) => p.right)),
+        top: Math.min(...parts.map((p) => p.top)),
+        bottom: Math.max(...parts.map((p) => p.top + p.look.height)),
+        z: parts[0].sprite.zIndex,
+      }))
+      list.sort((a, b) => a.left - b.left)
+      for (let pass = 0; pass < 4; pass++) {
+        let moved = false
+        for (let i = 0; i < list.length; i++) {
+          const a = list[i]
+          for (let j = i + 1; j < list.length && list[j].left < a.right; j++) {
+            const b = list[j]
+            if (b.top >= a.bottom || a.top >= b.bottom) continue
+            const aFront = a.o.x >= b.o.x + b.o.size || a.o.y >= b.o.y + b.o.size
+            const bFront = b.o.x >= a.o.x + a.o.size || b.o.y >= a.o.y + a.o.size
+            if (aFront === bFront) continue
+            const [front, back] = aFront ? [a, b] : [b, a]
+            if (front.z > back.z) continue
+            front.z = back.z + 0.02
+            moved = true
+          }
+        }
+        if (!moved) break
+      }
+      const redepth = new Map<number, number>()
+      for (const g of list) {
+        for (const p of g.parts) {
+          const order = p.depth - p.sprite.zIndex * 4096
+          p.sprite.zIndex = g.z
+          redepth.set(p.depth, g.z * 4096 + order)
+          p.depth = g.z * 4096 + order
+        }
+      }
+      for (const l of lights) l.depth = redepth.get(l.depth) ?? l.depth
+    }
     // Lit windows shine in the glow layer above everything, so the buildings in front of a house would not hide them:
     // each one is cut down to the pixels no building drawn after it covers.
     for (const { lit, sx, sy, depth } of lights) {

@@ -1026,7 +1026,10 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       const army = data as ArmyRow | null
       if (!army || army.kingdom_id !== me.id) refuse('army')
       if (army!.status === 'battle') refuse('battle')
-      const order = cmd.order as Order
+      const given = cmd.order as Order
+      // A move lays siege to the town it reaches only when the siege is asked for (the town's panel); else the army
+      // just stands at its gate.
+      const order: Order = given?.kind === 'move' ? { kind: 'move', x: Number(given.x), y: Number(given.y), ...(given.siege === true && { siege: true }) } : given
       const valid =
         (order?.kind === 'move' && Number.isFinite(order.x) && Number.isFinite(order.y)) ||
         order?.kind === 'home' ||

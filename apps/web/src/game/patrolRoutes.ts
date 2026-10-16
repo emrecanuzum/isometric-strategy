@@ -108,7 +108,8 @@ function nearest(graph: Graph, p: Point, reach = 6): number {
 }
 
 // What a patrol rides round: the crown capitals' walls and buildings (the outer town is drawn only, so the ground knows
-// nothing of it) and the lords' buildings and standing walls; it goes through any gate, the crowns' and the lords'.
+// nothing of it) and the lords' buildings (their fields too) and standing walls; it goes through any gate, the crowns'
+// and the lords'.
 type Holding = { buildings: { kind: string; x: number; y: number; size: number; broken?: boolean }[] }
 const cityBlocks = new WeakMap<World, Set<number>>()
 export function patrolBlocker(world: World, lords: Holding[]): Blocked {
@@ -124,7 +125,7 @@ export function patrolBlocker(world: World, lords: Holding[]): Blocked {
   const taken = new Set(city)
   for (const lord of lords) {
     for (const b of lord.buildings) {
-      if (b.kind === 'farm' || b.kind === 'gate' || (b.kind === 'wall' && b.broken)) continue
+      if (b.kind === 'gate' || (b.kind === 'wall' && b.broken)) continue
       for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) taken.add(y * 65536 + x)
     }
   }

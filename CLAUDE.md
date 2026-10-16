@@ -354,7 +354,15 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   seviyede büyür (1: açık kuleli sur, 5: altın yıldızlı, sarmaşıklı büyük
   saray). Ticaret noktası görseli ticaret seviyesini izler (yükseltilince
   binanın seviyesi de yazılır, rakipler de görür); harap hâli o seviyenin ve
-  çeşidin yanmış hâlidir. Oyunda henüz olmayan seviyeler (pazar 2–3, kışla 3,
+  çeşidin yanmış hâlidir. **Ambar** kırmızı tahta bir ahırdır (barn):
+  dikey kırmızı tahtalar, beyaz pervazlar, koyu kırık (gambrel) çatı,
+  alınlıkta çapraz kuşaklı büyük kapı ve saman kapağı, yan duvarda
+  pencereler; ikinci çeşidi daha eski, koyu kırmızıdır. 1. seviye küçük ve
+  saman balyalı, 2. seviyede yanında sundurma, 3. seviyede arkasında taş
+  silo ve saman arabası vardır. 2. seviye iskelenin her çeşidi dolu bir
+  balıkçı avlusudur (kulübe, sandal, balık sergeni, ağ, sandık ve fıçı;
+  vinçli çeşitte liman barakası, fenerli çeşitte fener kulesinin önünde
+  balıkçı kulübesi). Oyunda henüz olmayan seviyeler (pazar 2–3, kışla 3,
   gözcü kulesi 2–3) için görseller hazırdır.
 
 ### 4.3 Harita üretimi
@@ -677,7 +685,14 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   kıyıda suya bakan alçak köşeye oturur, arkasındaki yamaca gömülür;
   böylece iskelenin ahşap kısmıyla aynı hizada kalır.
   Kaidedeki yapının gölgesi kaide yüksekliğinden aşağıdaki zemine düşer
-  (güneşten öteye kayar; `shadows.ts` → `setFootprint`).
+  (güneşten öteye kayar; `shadows.ts` → `setFootprint`). Bir binanın
+  parçaları (kaide ve kendisi) birbirini gölgelemez, kaideler başka
+  binalara gölge düşürmez (yalnız zemine); kaidenin gölge kütlesi sabit
+  noktasının altına inmez, gölgesi güneşe doğru ters düşmez. Böylece hiçbir
+  saatte kaide baştan başa gölgeye gömülmez.
+  Binalar ön köşelerine göre sıralanır; resimleri üst üste binen iki
+  komşudan x ya da y ekseninde ötekinin ilerisinde olan sonra çizilir
+  (yamaçta kaidedeki ev yanındaki sarayın arkasına düşmez).
 - **Esrarengiz balıkçı kulübesi** (3. seviye saray, bir tane, yalnızca
   hudut içindeki ya da iskele ekindeki bir **kıyı** karesine kurulur): kendi başına çok az yemek
   ve nehre atılmış altınlardan çok az (tur başına 0,1) getirir. Tıklanınca
@@ -703,7 +718,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 - **Patikalar:** Her yapının kapısından saraya ve köylülerin evden işe
   yürüdüğü yollar boyunca, yapıların etrafından dolaşan ince toprak
   patikalar zemine işlenir; cetvelle çizilmiş gibi düz değil, hafifçe
-  dalgalanarak uzanırlar (yürüyenler yine aynı yolu izler). Başka bir
+  dalgalanarak uzanırlar (yürüyenler yine aynı yolu izler). Patikalar
+  binaların da **tarlaların da** içinden geçmez, yanlarından dolanır; tarlaya
+  giden patika tarlanın kenarında biter (köylüler tarlada çalışmak için
+  içine yürür). Başka bir
   patikaya bağlanmayan ucunda patika birden kesilmez: son ~2,5 karoda
   daralır ve yer yer çimenle kesilerek söner. Ticaret yolu da aşınmış yol
   sayılır: yürüyenler onu kullanır, yolun üstüne ya da yanına ona paralel
@@ -1239,7 +1257,10 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   Devriyeler haritada tacın renginde (kızıl / lacivert), sıradan ordulardan
   iri, **arka arkaya 5 bölüklük bir kol** olarak herkese görünür: bölükler
   aynı yolu biraz arayla izler, her biri kendi yönünü alır; yolun başında
-  ve sonunda öndekinin çevresinde toplanırlar. Konumları saatten
+  öndekinin çevresinde toplanırlar. Lordun sarayına (ya da eğlence
+  merkezine) varınca kol yolda, binanın önünde arka arkaya durur (hiçbir
+  bölük binanın üstüne çıkmaz); dönüşte arkadaki bölükler önden gider.
+  Konumları saatten
   hesaplanır. Ordu sancakları gölge düşürmez (yüksekten düşen uzun gölge
   bölüğü havadaymış gibi gösteriyordu; `sprites.ts` → `NO_SHADOW`).
   - **Kendi tacının devriyesi** lordun **eğlence merkezine** uğrar, içer,
@@ -1365,7 +1386,7 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   karodan yakın gelince en yakını kendiliğinden seçilir: çevresi kesikli
   çizgiyle (lord kendi renginde, şehir tacın renginde, kasaba altın renginde)
   ve adıyla gösterilir; tıklayınca ordu oraya gider (lordda sarayına,
-  kasabada kuşatmaya). Kendi ordusunun 2,5 karo yakınındaki boş yere
+  kasabada kapısına; kasaba kuşatması yalnızca kasaba panelinden başlar). Kendi ordusunun 2,5 karo yakınındaki boş yere
   tıklamak o orduyu seçer (ordu sekmesi açılır).
 - **Takip et:** Ordu kartındaki düğme kamerayı orduya kilitler; kamera
   orduyla birlikte kayar. Düğmeye yeniden basınca, alttaki şeritteki
@@ -1452,9 +1473,12 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
   karşılamıyordu); kalabalık kasaba **14 köylülük yer** verir (nüfus sınırı ve
   barınak birlikte artar; halk o yeri zamanla doldurur, ayaklanmada yer
   gidince o köylüler de gider). Türler kasabalar arasında dağıtılır; her tür en az bir kez vardır.
-- **Kuşatma:** Kasabaya tıklayınca panel açılır; "Gönder" ile bir ordu
-  seçilir (ordu "Hareket" ile kasabanın üstüne gönderilerek de aynısı olur).
-  Ordu kasabanın kapısına varınca kuşatma başlar ve **15 dakika** sürer;
+- **Kuşatma:** Kuşatma yalnızca kasaba panelinin **Kuşat** bölümünden
+  başlar: kapıda bekleyen ordu için "Kuşatmayı başlat", uzaktaki için
+  "Gönder ve kuşat" (emir `move` + `siege: true`). Haritadan "Hareket" ile
+  kasabanın üstüne gönderilen ordu yalnızca kasabanın kapısına yürür ve
+  orada bekler, kuşatmaz. Kuşatma emri verilen ordu kapıya varınca kuşatma
+  başlar ve **15 dakika** sürer;
   ilerleme çubuğu kasabanın üstünde, kuşatanın renginde görünür.
   Kuşatma **5 dakikalık turlarla** işler (`siegeRoundSeconds`): her turda
   kuşatan **en az 1 asker** kaybeder (sahipli kasabada da; halk direnir),

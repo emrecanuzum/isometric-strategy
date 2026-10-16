@@ -30,6 +30,22 @@ export interface MapArmy {
   // A column of this many squads one behind another (the crowns' patrols), each drawn this much larger.
   train?: number
   size?: number
+  // A column riding back the way it came: the squads that halted behind its first lead the way home.
+  trainAhead?: boolean
+}
+
+// The point `d` tiles along a path (clamped to its ends).
+function along(path: Point[], d: number): Point {
+  if (d <= 0 || path.length < 2) return path[0]
+  for (let i = 1; i < path.length; i++) {
+    const l = Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y)
+    if (d <= l) {
+      const f = l ? d / l : 0
+      return { x: path[i - 1].x + (path[i].x - path[i - 1].x) * f, y: path[i - 1].y + (path[i].y - path[i - 1].y) * f }
+    }
+    d -= l
+  }
+  return path[path.length - 1]
 }
 
 // Tiles between the squads of a column.
@@ -304,17 +320,21 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
       const size = Math.max(1, 0.6 / scale) * (army.size ?? 1)
       body.scale.set(size)
       body.zIndex = screen.y
-      // The rest of a column ride the same road a little later, each on its own; bunched up where the road ends (or
-      // has not yet begun) they gather round the first.
+      // The rest of a column ride the same road one behind another. Where the road ends the column halts along it,
+      // each squad still a gap behind the one before (none ride up onto what the road leads to); riding back, the
+      // squads that halted behind lead the way. Only where the road has not yet begun (or the column has come home)
+      // do they gather round the first.
       if (s.followers.length > 0) {
-        const speed = routeLength(army.path) / Math.max(1, army.arriveAt - army.departAt)
+        const total = routeLength(army.path)
+        const progress = total * Math.min(1, Math.max(0, (time - army.departAt) / Math.max(1, army.arriveAt - army.departAt)))
         s.followers.forEach((f, i) => {
           const k = i + 1
-          const lag = speed > 0 ? (k * TRAIN_GAP) / speed : 0
-          const trail = armyAt(route, time - lag)
+          const d = army.trainAhead ? progress + k * TRAIN_GAP : progress - k * TRAIN_GAP
           const angle = (k / s.followers.length) * Math.PI * 2 + army.id
           const rest = { x: here.x + Math.cos(angle) * 1.4, y: here.y + Math.sin(angle) * 1.4 }
-          const w = Math.min(1, Math.hypot(trail.x - here.x, trail.y - here.y) / (k * TRAIN_GAP))
+          const trail = along(army.path, d)
+          // How far it is out of the bunch: all the way once a gap from the end it waits at.
+          const w = Math.min(1, (army.trainAhead ? total - progress : progress) / (k * TRAIN_GAP))
           const at = { x: rest.x + (trail.x - rest.x) * w, y: rest.y + (trail.y - rest.y) * w }
           const p = standAt(at)
           f.visible = true

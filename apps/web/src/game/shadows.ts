@@ -20,8 +20,10 @@ const BUDGET_MS = 4
 export interface Shadows {
   layer: Container
   // A building standing on a footprint of this many tiles (it rises from the footprint's back edges), `raise` pixels
-  // above the ground at its front corner (on the stone base that levels it on a slope).
-  setFootprint(caster: Container, size: number, raise?: number): void
+  // above the ground at its front corner (on the stone base that levels it on a slope). The parts of one building (its
+  // base and itself) share a `group` and throw no shade on one another; a `low` part (a stone base) throws none on any
+  // building, only on the ground.
+  setFootprint(caster: Container, size: number, raise?: number, group?: object, low?: boolean): void
   update(hour: number, casters: Container): void
 }
 
@@ -31,6 +33,8 @@ export function createShadows(): Shadows {
   layer.filters = [filter]
   const footprints = new WeakMap<Container, number>()
   const raises = new WeakMap<Container, number>()
+  const groups = new WeakMap<Container, object>()
+  const lows = new WeakSet<Container>()
   const shades = new Map<PixiSprite, { shade: PixiSprite; frame: number }>()
   // Shadows that fall on buildings: per building, an overlay of its pixels in the shade of another building (its own
   // shading is drawn into it). Worked out anew for every step of the sun and whenever the buildings change.
@@ -94,7 +98,8 @@ export function createShadows(): Shadows {
   function startShading(target: PixiSprite, buildings: PixiSprite[]) {
     const others = buildings.flatMap((other) => {
       const o = lookOf(other.texture)
-      return other === target || !o ? [] : [{ look: o, x: other.x, y: other.y, shadow: shadowOf(o, 1, false) }]
+      const kin = groups.get(target) !== undefined && groups.get(other) === groups.get(target)
+      return other === target || kin || lows.has(other) || !o ? [] : [{ look: o, x: other.x, y: other.y, shadow: shadowOf(o, 1, false) }]
     })
     return shadeOn({ look: lookOf(target.texture)!, x: target.x, y: target.y }, others, sun)
   }
@@ -123,9 +128,12 @@ export function createShadows(): Shadows {
 
   return {
     layer,
-    setFootprint(caster, size, raise = 0) {
+    setFootprint(caster, size, raise = 0, group, low) {
       footprints.set(caster, size)
       raises.set(caster, Math.max(0, raise))
+      if (group) groups.set(caster, group)
+      if (low) lows.add(caster)
+      else lows.delete(caster)
     },
     update(hour, casters) {
       filter.alpha = sunShadow(hour).alpha

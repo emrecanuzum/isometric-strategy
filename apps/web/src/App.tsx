@@ -309,8 +309,9 @@ const TRAIL_MAX_TILES = 40
 // What the town's walkers need to know of a building (rivals' buildings carry no more).
 type TownBuilding = Rival['buildings'][number]
 
-// Villagers walk from their homes to the fields and workshops; the merchant tends the trade post.
-function townErrands(buildings: TownBuilding[], time: number): Errand[] {
+// Villagers walk from their homes to the fields and workshops; the merchant tends the trade post. With `edge` a walk
+// to a field ends at its edge (the footpaths go round the fields; the villagers walk in to work them).
+function townErrands(buildings: TownBuilding[], time: number, edge = false): Errand[] {
   const done = buildings.filter((b) => b.doneAt <= time)
   const palace = done.find((b) => b.kind === 'palace')
   const work = done.filter((b) => BUILDINGS[b.kind].workers && b.kind !== 'tradePost')
@@ -320,7 +321,7 @@ function townErrands(buildings: TownBuilding[], time: number): Errand[] {
     .forEach((home, i) => {
       for (let n = 0; n < 2; n++) {
         const place = work[(i * 2 + n) % Math.max(1, work.length)] ?? (home === palace ? undefined : palace)
-        if (place) errands.push({ from: doorstep(home), to: place.kind === 'farm' ? center(place) : doorstep(place) })
+        if (place) errands.push({ from: doorstep(home), to: place.kind === 'farm' && !edge ? center(place) : doorstep(place) })
       }
     })
   return errands
@@ -338,8 +339,8 @@ function footpaths(world: World, buildings: TownBuilding[], time: number): Point
   const palace = buildings.find((b) => b.kind === 'palace')
   const solid = new Set<number>()
   for (const b of buildings) {
-    // Fields and gates are walked over; everything else is walked around.
-    if (b.kind === 'farm' || b.kind === 'gate') continue
+    // Gates are walked through; everything else, the fields too, is walked around.
+    if (b.kind === 'gate') continue
     for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) solid.add(y * world.size + x)
   }
   const visited = buildings.filter((b) => b !== palace && b.doneAt <= time && b.kind !== 'wall' && b.kind !== 'gate')
@@ -347,7 +348,7 @@ function footpaths(world: World, buildings: TownBuilding[], time: number): Point
   const far = (p: Point) => (gate ? Math.hypot(p.x - gate.x, p.y - gate.y) : 0)
   const routes = [
     ...(gate ? visited.map((b) => ({ from: doorstep(b), to: gate })).sort((a, b) => far(a.from) - far(b.from)) : []),
-    ...townErrands(buildings, time),
+    ...townErrands(buildings, time, true),
   ]
   // Tiles a footpath already wears, with a tile of margin either side: a later walk there keeps to that path and is
   // not drawn again beside it (two lines a tile apart read as a braid).
@@ -1095,9 +1096,10 @@ function App({
     view?.setAimMark(aimTarget ? { rect: aimTarget.rect, color: aimTarget.color, label: aimTarget.label } : null)
   }, [view, aimTarget])
 
-  // Sends the aimed army toward a tile (an enemy's lands mean a siege) and leaves aiming.
-  const sendArmy = (army: number, tile: Point) => {
-    act({ type: 'army', army, order: { kind: 'move', x: Math.floor(tile.x), y: Math.floor(tile.y) } }).then((r) => {
+  // Sends the aimed army toward a tile (an enemy's lands mean a siege; a town is besieged only with `siege`, from its
+  // panel) and leaves aiming.
+  const sendArmy = (army: number, tile: Point, siege = false) => {
+    act({ type: 'army', army, order: { kind: 'move', x: Math.floor(tile.x), y: Math.floor(tile.y), ...(siege && { siege: true }) } }).then((r) => {
       const at = (r as { at?: string } | undefined)?.at
       if (at && Date.parse(at) > serverNow() + 5000) setToast('Elçi yola çıktı; emir orduya ulaşınca uygulanacak')
     })
@@ -1483,15 +1485,33 @@ function App({
         if (!stop) continue
         const key = `${crown}:${p}:${slot}`
         if (!patrolRoutes.current.has(key)) {
-          const door = { x: stop.x + stop.size + 0.8, y: stop.y + stop.size + 0.8 }
           const blocked = patrolBlocker(view.world, [...towns.values()].map((buildings) => ({ buildings })))
+          // Out in front of the building, clear of its walls (the patrol's squads are drawn large): the free tile
+          // nearest that spot, off every building and field.
+          const front = { x: stop.x + stop.size + 1.6, y: stop.y + stop.size + 1.6 }
+          let door = front
+          let best = Infinity
+          for (let dy = -6; dy <= 6; dy++) {
+            for (let dx = -6; dx <= 6; dx++) {
+              const x = Math.floor(front.x) + dx
+              const y = Math.floor(front.y) + dy
+              const d = Math.hypot(x + 0.5 - front.x, y + 0.5 - front.y)
+              if (d >= best || !walkable(view.world, x, y)) continue
+              let clear = true
+              for (let oy = -1; oy <= 1 && clear; oy++) for (let ox = -1; ox <= 1 && clear; ox++) clear = !blocked(x + ox, y + oy)
+              if (!clear) continue
+              best = d
+              door = { x: x + 0.5, y: y + 0.5 }
+            }
+          }
           patrolRoutes.current.set(key, patrolRoute(view.world, city, capitalGate(city), door, blocked) ?? patrolRoute(view.world, city, capitalGate(city), door))
         }
         const route = patrolRoutes.current.get(key)
         if (!route || route.length === 0) continue
-        const [path, departAt, arriveAt] =
-          t < times.arrive ? [route, times.start, times.arrive] : t < times.leave ? [[route[route.length - 1]], times.leave, times.leave] : [[...route].reverse(), times.leave, times.home]
-        out.push({ id: -(crown * 16 + p + 1), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 4, catapult: false, train: 5, size: 1.6 })
+        // Through the stay the column stands halted along the road it came by, then rides back with its tail leading.
+        const back = t >= times.leave
+        const [path, departAt, arriveAt] = back ? [[...route].reverse(), times.leave, times.home] : [route, times.start, times.arrive]
+        out.push({ id: -(crown * 16 + p + 1), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 4, catapult: false, train: 5, size: 1.6, trainAhead: back })
       }
     })
     if (patrolRoutes.current.size > 64) patrolRoutes.current.clear()
@@ -1780,7 +1800,7 @@ function App({
               armies={layer.armies}
               pacts={layer.pacts}
               now={now}
-              onSend={(army, tile) => sendArmy(army, tile)}
+              onSend={(army, tile) => sendArmy(army, tile, true)}
               onShow={(tile) => view.centerOn(tile)}
               onWatch={() => setWatchingTown(town.id)}
               onUpkeep={(level) => online?.act({ type: 'townUpkeep', town: town.id, level })}

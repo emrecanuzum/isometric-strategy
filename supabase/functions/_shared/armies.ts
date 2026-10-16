@@ -30,7 +30,7 @@ export interface ArmyRow {
 }
 
 export type Order =
-  | { kind: 'move'; x: number; y: number }
+  | { kind: 'move'; x: number; y: number; siege?: boolean }
   | { kind: 'home' }
   | { kind: 'split'; soldiers: number }
   | { kind: 'merge'; with: number }
@@ -123,11 +123,12 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
     const enemy = kingdoms.find(
       (k) => k.id !== army.kingdom_id && k.state && inTerritory(k.state, target, at) && game.atWar(pacts, army.kingdom_id, k.id),
     )
-    // Sent onto a town it does not hold: it marches to the town's gate to lay siege (see settleTowns).
+    // Sent onto a town: it marches to the town's gate, and lays siege there (see settleTowns) only when told to.
     const town = enemy ? undefined : townAt(await townsOf(army.lobby_id), target)
-    if (town && town.owner_id !== army.kingdom_id) {
+    if (town && (order.siege ? town.owner_id !== army.kingdom_id : true)) {
       const holdings = kingdoms.map((k) => ({ id: k.id, buildings: k.state?.buildings ?? [] }))
-      const update = march(world, army, owner, at, game.townGate(town), { kind: 'town', town: town.id }, game.buildingBlocker(holdings, army.kingdom_id), undefined, game.buildingBlocker(holdings))
+      const goal: ArmyRow['goal'] = order.siege ? { kind: 'town', town: town.id } : { kind: 'move' }
+      const update = march(world, army, owner, at, game.townGate(town), goal, game.buildingBlocker(holdings, army.kingdom_id), undefined, game.buildingBlocker(holdings))
       if (!update) return 'route'
       await admin.from('armies').update(update).eq('id', army.id)
       return null

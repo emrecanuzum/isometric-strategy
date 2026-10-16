@@ -270,7 +270,7 @@ export function subscribe(lobby: string, feed: LobbyFeed) {
 
 // ---- The layer between kingdoms --------------------------------------------------------------------------------
 
-export type ArmyOrderPayload = { kind: 'move'; x: number; y: number } | { kind: 'home' } | { kind: 'split'; soldiers: number } | { kind: 'merge'; with: number }
+export type ArmyOrderPayload = { kind: 'move'; x: number; y: number; siege?: boolean } | { kind: 'home' } | { kind: 'split'; soldiers: number } | { kind: 'merge'; with: number }
 
 export interface ArmyOrder {
   id: number

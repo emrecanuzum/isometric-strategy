@@ -1055,8 +1055,13 @@ function dock(variant = 0, level = 1): Sprite {
       tops.push(hall(canvas, hx, hy, { w: 34, wall: 22, roof: 20, walls: LOG_WALLS, roofs: ROOF, bay: 12, door: true, chimney: 0.4 }))
       for (const dx of [16, 24]) barrel(canvas, cx + dx, base - 9 + dx / 4)
       rowboat(canvas, cx - 36, base - h + 4)
+      fishRack(canvas, cx - 42, base - h + 18)
+      net(canvas, cx - 14, base - 8)
+      crate(canvas, cx - 24, base - 6, 8)
+      crate(canvas, cx - 30, base - 10, 7)
     } else if (v === 1) {
-      // A crane: a post and a jib with a rope and hook, crates stacked by it.
+      // The harbour-master's shed behind; before it a crane, a post and a jib with a rope and hook, crates stacked by it.
+      tops.push(hall(canvas, cx + 24, base - h + 10, { w: 22, wall: 16, roof: 14, walls: LOG_WALLS, roofs: SHINGLE, bay: 10, door: true, chimney: 0.35 }))
       const px = cx - 6
       const py = base - h + 10
       for (let z = 0; z < 40; z++) for (const dx of [-1, 0, 1, 2]) canvas.set(px + dx, py - z, TIMBER[dx < 1 ? 2 : 1])
@@ -1068,14 +1073,24 @@ function dock(variant = 0, level = 1): Sprite {
       crate(canvas, cx + 14, base - 16, 10)
       crate(canvas, cx + 10, base - 24, 8)
       barrel(canvas, cx - 30, base - 10)
+      // A boat and nets.
+      rowboat(canvas, cx - 40, base - h + 8)
+      net(canvas, cx - 20, base - 6)
+      barrel(canvas, cx - 22, base - 14)
     } else {
-      // A little lighthouse with a lit lantern, nets and barrels at its foot.
-      const tw = tower(canvas, hx + 6, hy - 6, 10, 46, KEEP, ROOF, true)
+      // A little lighthouse with a lit lantern at the back, the fishers' shed before it, a boat drawn up, a fish
+      // rack, nets, crates and barrels.
+      const tw = tower(canvas, cx - 20, base - h + 2, 9, 46, KEEP, ROOF, true)
       for (let y = 0; y < 4; y++) for (let x = -3; x <= 3; x++) canvas.set(tw.x + x, tw.y + 20 + y, EMBER[y < 2 ? 2 : 1])
       finial(canvas, tw.x, tw.y, 3)
-      net(canvas, cx - 18, base - 10)
-      barrel(canvas, cx - 4, base - 8)
-      barrel(canvas, cx + 4, base - 12)
+      tops.push(hall(canvas, hx + 6, hy + 2, { w: 28, wall: 18, roof: 16, walls: LOG_WALLS, roofs: ROOF, bay: 12, door: true, chimney: 0.4 }))
+      fishRack(canvas, cx - 40, base - h + 14)
+      rowboat(canvas, cx - 30, base - 12)
+      net(canvas, cx - 2, base - 6)
+      crate(canvas, cx + 22, base - 12, 8)
+      crate(canvas, cx + 28, base - 16, 8)
+      barrel(canvas, cx + 14, base - 8)
+      barrel(canvas, cx - 12, base - 14)
     }
   } else {
     if (v === 0) {
@@ -1332,7 +1347,8 @@ function plinth(tiles: number, left: number, front: number, right: number, top: 
   const base = canvas.height - 3 - Math.ceil(Math.max(0, front - Math.min(left, front, right)))
   // Height above the anchor (the ground at the front corner) maps to screen rows.
   const lift = (z: number) => z - front
-  canvas.solid(diamondAt(cx, base - h, w), Math.min(left, front, right) - front, top - front)
+  // From the anchor up only: a solid below the anchor would throw its shadow toward the sun.
+  canvas.solid(diamondAt(cx, base - h, w), 0, top - front)
   for (const side of [-1, 1]) {
     const far = side < 0 ? left : right
     for (let t = 0; t <= w; t++) {
@@ -2203,74 +2219,147 @@ function temple(variant = 0, level = 1): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
-// Big double doors on the right wall of a hall standing on (cx, hb) with half-width w.
-function barnDoors(canvas: Canvas, cx: number, hb: number, w: number, from = 14, to = 30, tall = 16) {
-  for (let t = from; t <= to; t++) {
-    const x = cx + (w - t)
-    const ground = hb - w / 2 + t / 2
-    for (let z = 0; z < tall; z++) canvas.set(x, ground - z, t === Math.round((from + to) / 2) ? TIMBER[0] : (t + z) % 7 === 0 ? TIMBER[1] : t % 3 === 0 ? PLANK[1] : PLANK[2])
+// Barn reds (the second look an older, ox-blood barn) and the white of its trim.
+const BARN_RED = ramp(0x4a1610, 0x6e2014, 0x962c1a, 0xbc3e22, 0xd8582e, 0xec7a46)
+const BARN_OLD = ramp(0x3a1812, 0x56241a, 0x763224, 0x94402c, 0xae5238, 0xc46a4c)
+const BARN_TRIM = ramp(0x8a867e, 0xbab6ac, 0xe2ded4, 0xf6f3ea)
+const BARN_DARK = 0x1a1c26
+
+// A barn standing with its front corner on (fx, fy): its gable end (`a` pixels across) faces the front left, its long
+// side (`b` pixels) the front right, walls `wall` high under a gambrel roof `peak` high. Red boards upright, white
+// trim at the corners and along the roof's edge, a big cross-braced door and a hay-loft hatch in the gable, windows
+// in the side. Drawn as the model it is (u across the gable, v along the side, z up), back surfaces first.
+function barn(canvas: Canvas, fx: number, fy: number, o: { a: number; b: number; wall: number; peak: number; reds: Uint32Array; windows: number }) {
+  const { a: A, b: B, wall: W, peak: P, reds } = o
+  const at = (u: number, v: number, z: number) => [fx - u + v, fy - u / 2 - v / 2 - z] as const
+  const put = (u: number, v: number, z: number, c: number) => {
+    const [x, y] = at(u, v, z)
+    canvas.set(x, y, c)
   }
+  // The gambrel: steep from the eaves to a knee, then gently up to the ridge.
+  const roofAt = (u: number) => {
+    const s = Math.max(0, Math.min(u, A - u)) / (A / 2)
+    return s < 0.32 ? P * 0.62 * (s / 0.32) : P * (0.62 + 0.38 * ((s - 0.32) / 0.68))
+  }
+  const board = (k: number, salt: number) => (k % 3 < 0.6 ? 0 : hash(Math.floor(k / 3), salt, 61) > 0.78 ? 1 : hash(Math.floor(k / 3), salt + 1, 61) < 0.15 ? -1 : 0)
+  const step = 0.5
+  // The far slope of the roof (lit), behind everything.
+  for (let u = A / 2; u <= A + 2; u += step) for (let v = -1; v <= B + 2; v += step) put(u, v, W + roofAt(Math.min(u, A)) - Math.max(0, u - A) * 0.8, SLATE[Math.floor(v) % 5 === 0 ? 3 : 4])
+  // The long side, in shade: boards, white corner posts and sill, windows with white frames.
+  for (let v = 0; v <= B; v += step) {
+    for (let z = 0; z <= W; z += step) {
+      let c = reds[2 + board(v, 7)]
+      if (v % 3 < 0.6) c = reds[1]
+      if (v < 1.5 || v > B - 1.5 || z < 1.5 || z > W - 1) c = BARN_TRIM[1]
+      for (let k = 0; k < o.windows; k++) {
+        const mid = B * (0.42 + (0.46 * (k + 0.5)) / o.windows)
+        const lo = W * 0.42
+        const hi = W * 0.76
+        if (Math.abs(v - mid) <= 4 && z >= lo && z <= hi) c = Math.abs(v - mid) > 2.8 || z < lo + 1.2 || z > hi - 1.2 ? BARN_TRIM[1] : Math.abs(v - mid) < 0.6 ? BARN_TRIM[0] : BARN_DARK
+      }
+      put(0, v, z, c)
+    }
+  }
+  // The near slope of the roof, over the long side and out past it.
+  for (let u = -2.5; u <= A / 2; u += step) {
+    for (let v = 0; v <= B + 2; v += step) {
+      const z = u < 0 ? W + u * 0.7 : W + roofAt(u)
+      const row = Math.floor((u < 0 ? 0 : roofAt(u)) / 2.5)
+      let c = SLATE[(row & 1 ? 2 : 3) + (hash(Math.floor(v / 2), row, 63) > 0.85 ? -1 : 0)]
+      if (u < -1.6) c = BARN_TRIM[1]
+      else if (u > A / 2 - 0.8) c = SLATE[4]
+      put(u, v, z, c)
+    }
+  }
+  // The gable end, lit: boards up to the roof line, white trim round it, the hay-loft hatch and the big door.
+  const doorW = Math.round(A * 0.26)
+  const doorH = Math.round(W * 0.78)
+  for (let u = 0; u <= A; u += step) {
+    const top = W + roofAt(u)
+    for (let z = 0; z <= top; z += step) {
+      let c = reds[3 + board(u, 3)]
+      if (u % 3 < 0.6) c = reds[2]
+      if (u < 1.5 || u > A - 1.5 || z < 1.5 || z > top - 1.6 || Math.abs(z - W) < 0.6) c = BARN_TRIM[3]
+      const du = u - A / 2
+      // The hay-loft hatch.
+      if (Math.abs(du) <= 4.5 && z >= W + 2 && z <= W + 2 + P * 0.42) c = Math.abs(du) > 3.2 || z < W + 3.2 || z > W + 0.8 + P * 0.42 ? BARN_TRIM[3] : BARN_DARK
+      // The door: planks in a white frame, braced by a cross.
+      if (Math.abs(du) <= doorW && z <= doorH) {
+        const fu = (du + doorW) / (doorW * 2)
+        const fz = z / doorH
+        const edge = Math.abs(du) > doorW - 1.4 || z > doorH - 1.4
+        const cross = Math.abs(fu - fz) < 0.07 || Math.abs(fu - (1 - fz)) < 0.07
+        c = edge || cross ? BARN_TRIM[3] : Math.floor(du + doorW) % 3 === 0 ? PLANK[2] : PLANK[4]
+      }
+      put(u, 0, z, c)
+    }
+  }
+  // The roof's edge over the gable.
+  for (let u = -2.5; u <= A + 2.5; u += 0.25) {
+    const z = u < 0 ? W + u * 0.7 : u > A ? W - (u - A) * 0.7 : W + roofAt(u)
+    put(u, -1, z + 0.5, SLATE[2])
+    put(u, -1, z + 1, BARN_TRIM[3])
+  }
+  // Its shape for the shadow: the walls, and the roof roughly as a box under its ridge.
+  const foot = [at(0, 0, 0), at(A, 0, 0), at(A, B, 0), at(0, B, 0)].flat()
+  canvas.solid(foot, 0, W)
+  canvas.solid(foot, W, W + P * 0.8)
 }
 
-// A wheelbarrow standing on (x, base).
-function wheelbarrow(canvas: Canvas, x: number, base: number) {
-  for (let t = 0; t < 10; t++) for (let z = 2; z < 6; z++) canvas.set(x + t, base - z + t / 2, z === 5 ? PLANK[1] : PLANK[3])
-  for (let t = 0; t < 8; t++) canvas.set(x - 7 + t, base - 5 + t / 2, TIMBER[1])
-  for (const [dx, dy] of [[11, 4], [11, 6], [12, 5], [10, 5]]) canvas.set(x + dx, base + dy - 2, TIMBER[0])
+// Square bales of hay standing on (x, base).
+function bale(canvas: Canvas, x: number, base: number) {
+  for (let t = 0; t < 8; t++) for (let z = 0; z < 6; z++) canvas.set(x + t, base - z + t / 2, z === 5 ? THATCH[5] : z === 2 ? THATCH[2] : THATCH[t < 4 ? 4 : 3])
+  for (let t = 0; t < 6; t++) for (let d = 0; d < 3; d++) canvas.set(x - t, base - 5 + t / 2 - d + 0.5, THATCH[5 - (d & 1)])
 }
 
-// The warehouse (CLAUDE.md §6.4), two looks per level picked by the building:
-//   level 1: a thatched store with sacks and logs; a plank barn with a wheelbarrow;
-//   level 2: a timber-framed store under slate on a loading deck; the same with a canvas awning over its door;
-//   level 3: a great stone warehouse with a horse cart; a two-storey store with a covered wagon and a shed.
+// The warehouse (CLAUDE.md §6.4), a red barn, two looks per level picked by the building (bright red, or older
+// ox-blood boards): level 1 a small barn with hay bales; level 2 a bigger one with a lean-to beside it and crates;
+// level 3 a great barn with a stone silo behind it, a lean-to and a hay cart.
 function warehouse(variant = 0, level = 1): Sprite {
   const v = variant % 2
   const { canvas, cx, base, h } = footprint(2, 80 + (level - 1) * 16)
   yard(canvas, cx, base, h, level === 1 ? SOIL : KEEP, 53)
-  const hb = base - 8
+  const reds = v ? BARN_OLD : BARN_RED
+  const size = [
+    { a: 30, b: 40, wall: 20, peak: 18, windows: 1 },
+    { a: 34, b: 46, wall: 24, peak: 21, windows: 2 },
+    { a: 38, b: 52, wall: 28, peak: 24, windows: 2 },
+  ][level - 1]
+  // Centred on the footprint (2 tiles: 64 pixels a side in u and v).
+  const u0 = (64 - size.a) / 2 + 4
+  const v0 = (64 - size.b) / 2 - (level > 1 ? 6 : 0)
+  const fx = cx - u0 + v0
+  const fy = base - u0 / 2 - v0 / 2
+  if (level === 3) {
+    // The silo behind, to the left.
+    tower(canvas, cx - 30, base - 46, 9, 50, KEEP, SLATE)
+  }
+  if (level > 1) {
+    // A lean-to beside the long side's far end: a low shed under a single slope.
+    const lu = size.a * 0.62
+    const lv0 = size.b
+    const lv1 = size.b + 14
+    const lw = size.wall * 0.62
+    const put = (u: number, vv: number, z: number, c: number) => canvas.set(fx - u + vv, fy - u / 2 - vv / 2 - z, c)
+    for (let vv = lv0; vv <= lv1; vv += 0.5) for (let z = 0; z <= lw; z += 0.5) put(0, vv, z, vv > lv1 - 1.2 || z < 1.2 ? BARN_TRIM[1] : vv % 3 < 0.6 ? reds[1] : reds[2])
+    for (let u = 0; u <= lu; u += 0.5) for (let z = 0; z <= lw + (u / lu) * 6; z += 0.5) put(u, lv1, z, u > lu - 1.2 || z < 1.2 ? BARN_TRIM[2] : u % 3 < 0.6 ? reds[2] : reds[3])
+    for (let u = -2; u <= lu; u += 0.5) for (let vv = lv0; vv <= lv1 + 1.5; vv += 0.5) put(u, vv, lw + (Math.max(0, u) / lu) * 6, u < -1.2 ? BARN_TRIM[1] : SLATE[Math.floor(u / 2.5) & 1 ? 2 : 3])
+    const foot = [[0, lv0], [lu, lv0], [lu, lv1], [0, lv1]].flatMap(([u, vv]) => [fx - u + vv, fy - u / 2 - vv / 2])
+    canvas.solid(foot, 0, lw + 6)
+  }
+  barn(canvas, fx, fy, { ...size, reds })
   if (level === 1) {
-    const w = 38
-    hall(canvas, cx - 2, hb, { w, wall: 18, roof: 22, walls: v ? LOG_WALLS : WALL, roofs: v ? SHINGLE : THATCH, bay: 0, door: true })
-    barnDoors(canvas, cx - 2, hb, w, 12, 24, 13)
-    if (v) {
-      wheelbarrow(canvas, cx + 18, base - 10)
-      shadeBlobs(canvas, [{ x: cx - 18, y: base - 6, r: 4 }, { x: cx - 12, y: base - 5, r: 3.5 }], SACK, 3)
-    } else {
-      logPile(canvas, cx - 40, base - 14, [[0, 3], [1, 2]])
-      shadeBlobs(canvas, [{ x: cx + 14, y: base - 6, r: 4 }, { x: cx + 20, y: base - 9, r: 3.5 }, { x: cx + 17, y: base - 12, r: 3 }], SACK, 3)
-      barrel(canvas, cx + 28, base - 12)
-    }
+    bale(canvas, cx - 40, base - 14)
+    bale(canvas, cx - 32, base - 10)
+    bale(canvas, cx - 36, base - 18)
   } else if (level === 2) {
-    const w = 42
-    // A loading deck of planks along the front left.
-    for (let t = 0; t < 30; t++) for (let d = 0; d < 6; d++) canvas.set(cx - 44 + t + d, base - 14 + t / 2 - d / 2 + 2, PLANK[d === 0 ? 1 : 3])
-    hall(canvas, cx + 2, hb - 2, { w, wall: 26, roof: 24, walls: WALL, roofs: SLATE, bay: 14, door: true })
-    barnDoors(canvas, cx + 2, hb - 2, w, 14, 28, 17)
-    if (v) awning(canvas, cx + 2, hb - 2, w, ramp(0x8a7a5a, 0xc8b88e), 14, 34, 20, 12)
-    crate(canvas, cx + 18, base - 8, 9)
-    crate(canvas, cx + 26, base - 12, 9)
-    barrel(canvas, cx - 24, base - 10)
-    barrel(canvas, cx - 16, base - 6)
-  } else if (!v) {
-    const w = 48
-    hall(canvas, cx + 2, hb - 4, { w, wall: 30, roof: 26, walls: KEEP, roofs: SLATE, masonry: true, bay: 0, door: true })
-    barnDoors(canvas, cx + 2, hb - 4, w, 14, 32, 20)
-    logPile(canvas, cx - 46, base - 16, [[0, 3], [1, 2]])
-    cart(canvas, cx + 14, base - 4)
-    // The horse in the shafts.
-    shadeBlobs(canvas, [{ x: cx + 4, y: base - 10, r: 4 }, { x: cx, y: base - 13, r: 2.5 }], ramp(0x3a2416, 0x5c3a22, 0x7f5432), 23)
-    crate(canvas, cx + 30, base - 14, 9)
+    crate(canvas, cx - 36, base - 12, 9)
+    bale(canvas, cx - 26, base - 8)
+    barrel(canvas, cx - 42, base - 18)
   } else {
-    const w = 42
-    // A lean-to shed on the right, then the two-storey store.
-    hall(canvas, cx + 30, base - h + 6, { w: 16, wall: 16, roof: 10, walls: WALL, roofs: SLATE, open: true, roofed: true })
-    hall(canvas, cx - 4, hb - 2, { w, wall: 36, roof: 26, walls: WALL, roofs: SLATE, bay: 12, door: true })
-    barnDoors(canvas, cx - 4, hb - 2, w, 14, 28, 18)
-    for (const t of [-26, -14]) dormer(canvas, cx - 4 + t, hb - 2 - 36 - 8 + Math.abs(t) / 4, SLATE)
-    // A covered wagon.
-    cart(canvas, cx + 10, base - 2)
-    for (let t = 0; t < 18; t++) for (let z = 0; z < 8 - Math.abs(t - 9) * 0.3; z++) canvas.set(cx + 10 + t, base - 12 - z - t * 0.3, z > 6 ? PLASTER[2] : PLASTER[4 - (t % 6 === 0 ? 1 : 0)])
-    barrel(canvas, cx + 34, base - 14)
+    cart(canvas, cx - 40, base - 12)
+    for (let t = 0; t < 14; t++) for (let z = 0; z < 6 - Math.abs(t - 7) * 0.5; z++) canvas.set(cx - 40 + t, base - 20 - z + t / 2, THATCH[4 - (t % 4 === 0 ? 1 : 0)])
+    bale(canvas, cx - 22, base - 6)
   }
   return canvas.sprite(cx, base, 0)
 }

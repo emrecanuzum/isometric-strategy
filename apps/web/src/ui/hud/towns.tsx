@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Subtabs, usePart } from './Subtabs'
 import type { Part } from './Subtabs'
 import {
+  armyAt,
+  townGate,
   atWar,
   balance,
   dynastyEffects,
@@ -74,6 +76,12 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
   const lawful = town.owner === null || atWar(pacts, me, town.owner)
   const siege = town.siege
   const own = armies.filter((a) => a.kingdom_id === me && a.status !== 'battle')
+  // Standing at the town's gate already (it besieges at once).
+  const gate = townGate(town)
+  const atGate = (a: Army) => {
+    const here = armyAt(a, now)
+    return Date.parse(a.arrive_at) <= now && Math.hypot(here.x - gate.x, here.y - gate.y) <= 3
+  }
   const minutes = Math.round(townSiegeMs(walled) / 60_000)
   const p = balance.towns.palisade
   const held = mine ? (kingdom.towns?.find((h) => h.id === town.id) ?? heldTown(town, now)) : null
@@ -159,15 +167,18 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
               <p className="hint">Sahada ordun yok. Ordu sekmesinden garnizondan bir ordu çıkar.</p>
             ) : (
               <>
-                <p className="hint">Gönderdiğin ordu kasabanın kapısına varınca kuşatma başlar ve {minutes} dakika sürer. Ordu orada kalmalı; giderse ya da yenilirse kuşatma kalkar.</p>
+                <p className="hint">
+                  Kuşatma yalnız buradan başlar: kapıdaki ordu hemen kuşatır, uzaktaki ordu kapıya varınca. Haritadan "Hareket" ile gelen ordu kapıda bekler. Kuşatma {minutes} dakika sürer; ordu orada
+                  kalmalı, giderse ya da yenilirse kuşatma kalkar.
+                </p>
                 <ul className="town-armies">
                   {own.map((a) => (
                     <li key={a.id}>
                       <span>
                         Ordu #{a.id} · {a.soldiers ?? '?'} asker
                       </span>
-                      <button className="btn small" disabled={!!siege && siege.army === a.id} onClick={() => onSend(a.id, middle)}>
-                        {siege && siege.army === a.id ? 'Kuşatıyor' : 'Gönder'}
+                      <button className="btn small" disabled={!!siege} onClick={() => onSend(a.id, middle)}>
+                        {siege && siege.army === a.id ? 'Kuşatıyor' : atGate(a) ? 'Kuşatmayı başlat' : 'Gönder ve kuşat'}
                       </button>
                     </li>
                   ))}
