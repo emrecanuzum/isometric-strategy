@@ -16,7 +16,8 @@ export interface Lobby {
   market: Market | null
   // How its world was made from the seed (worldgen WORLD_REV; absent before the column existed: 1).
   world_rev?: number
-  // The rectangles its widened rivers leave dry, for a lobby that was running when they came (worldgen RiverKeep).
+  // The rectangles its widened rivers leave dry, for a lobby that was running when they came (worldgen RiverKeep);
+  // read once the player is in the lobby (lobbyRiverKeep).
   river_keep?: RiverKeep[] | null
 }
 
@@ -106,11 +107,18 @@ export async function listLobbies(): Promise<LobbyListing[]> {
   return data as LobbyListing[]
 }
 
-const LOBBY_COLUMNS = 'id, name, seed, is_public, max_players, season_start, season_end, has_password, market, world_rev, river_keep'
+const LOBBY_COLUMNS = 'id, name, seed, is_public, max_players, season_start, season_end, has_password, market, world_rev'
 
 export async function getLobby(id: string): Promise<Lobby | null> {
   const { data } = await supabase.from('lobbies').select(LOBBY_COLUMNS).eq('id', id).maybeSingle()
   return data as Lobby | null
+}
+
+// What a lobby's widened rivers leave dry (only its own players may read it).
+export async function lobbyRiverKeep(lobby: string): Promise<RiverKeep[] | null> {
+  const { data, error } = await supabase.rpc('lobby_river_keep', { lobby })
+  if (error) throw error
+  return (data as RiverKeep[] | null) ?? null
 }
 
 export async function loadMine(lobby: string): Promise<Mine | null> {

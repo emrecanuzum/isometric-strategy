@@ -2223,7 +2223,7 @@ function temple(variant = 0, level = 1): Sprite {
 const BARN_RED = ramp(0x4a1610, 0x6e2014, 0x962c1a, 0xbc3e22, 0xd8582e, 0xec7a46)
 const BARN_OLD = ramp(0x3a1812, 0x56241a, 0x763224, 0x94402c, 0xae5238, 0xc46a4c)
 const BARN_TRIM = ramp(0x8a867e, 0xbab6ac, 0xe2ded4, 0xf6f3ea)
-const BARN_DARK = 0x1a1c26
+const BARN_DARK = rgb(0x1a1c26)
 
 // A barn standing with its front corner on (fx, fy): its gable end (`a` pixels across) faces the front left, its long
 // side (`b` pixels) the front right, walls `wall` high under a gambrel roof `peak` high. Red boards upright, white
@@ -2243,8 +2243,21 @@ function barn(canvas: Canvas, fx: number, fy: number, o: { a: number; b: number;
   }
   const board = (k: number, salt: number) => (k % 3 < 0.6 ? 0 : hash(Math.floor(k / 3), salt, 61) > 0.78 ? 1 : hash(Math.floor(k / 3), salt + 1, 61) < 0.15 ? -1 : 0)
   const step = 0.5
+  // A roof surface sampled across u: each sample is drawn down to the next one's height too, so the steep part of the
+  // gambrel leaves no holes between samples.
+  const slope = (u0: number, u1: number, zOf: (u: number) => number, color: (u: number, v: number) => number) => {
+    for (let u = u0; u <= u1; u += 0.25) {
+      const z = zOf(u)
+      const next = zOf(Math.min(u1, u + 0.25))
+      for (let v = -1; v <= B + 2; v += step) {
+        const c = color(u, v)
+        for (let zz = Math.min(z, next); zz <= Math.max(z, next); zz += 0.5) put(u, v, zz, c)
+        put(u, v, z, c)
+      }
+    }
+  }
   // The far slope of the roof (lit), behind everything.
-  for (let u = A / 2; u <= A + 2; u += step) for (let v = -1; v <= B + 2; v += step) put(u, v, W + roofAt(Math.min(u, A)) - Math.max(0, u - A) * 0.8, SLATE[Math.floor(v) % 5 === 0 ? 3 : 4])
+  slope(A / 2, A + 2, (u) => W + roofAt(Math.min(u, A)) - Math.max(0, u - A) * 0.8, (_, v) => SLATE[Math.floor(v) % 5 === 0 ? 3 : 4])
   // The long side, in shade: boards, white corner posts and sill, windows with white frames.
   for (let v = 0; v <= B; v += step) {
     for (let z = 0; z <= W; z += step) {
@@ -2261,16 +2274,12 @@ function barn(canvas: Canvas, fx: number, fy: number, o: { a: number; b: number;
     }
   }
   // The near slope of the roof, over the long side and out past it.
-  for (let u = -2.5; u <= A / 2; u += step) {
-    for (let v = 0; v <= B + 2; v += step) {
-      const z = u < 0 ? W + u * 0.7 : W + roofAt(u)
-      const row = Math.floor((u < 0 ? 0 : roofAt(u)) / 2.5)
-      let c = SLATE[(row & 1 ? 2 : 3) + (hash(Math.floor(v / 2), row, 63) > 0.85 ? -1 : 0)]
-      if (u < -1.6) c = BARN_TRIM[1]
-      else if (u > A / 2 - 0.8) c = SLATE[4]
-      put(u, v, z, c)
-    }
-  }
+  slope(-2.5, A / 2, (u) => (u < 0 ? W + u * 0.7 : W + roofAt(u)), (u, v) => {
+    const row = Math.floor((u < 0 ? 0 : roofAt(u)) / 2.5)
+    if (u < -1.6) return BARN_TRIM[1]
+    if (u > A / 2 - 0.8) return SLATE[4]
+    return SLATE[(row & 1 ? 2 : 3) + (hash(Math.floor(v / 2), row, 63) > 0.85 ? -1 : 0)]
+  })
   // The gable end, lit: boards up to the roof line, white trim round it, the hay-loft hatch and the big door.
   const doorW = Math.round(A * 0.26)
   const doorH = Math.round(W * 0.78)
