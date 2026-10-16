@@ -524,7 +524,9 @@ export function outlineOf(sprite: Sprite): Sprite {
 
 // The lit windows of a building as a sprite of their own, drawn over the night so they glow: the window panes (and
 // forge fires) brightened, with a faint warm halo around them. Anchored like the building.
-const LIT = new Set([GLASS[1], GLASS[2], rgb(0xe0641c), rgb(0xffb040)])
+// Window glass of the model-drawn buildings (buildingKit → PANE) is dark by day and lit too.
+const PANES = new Set([rgb(0x151b2a), rgb(0x222e48), rgb(0x34466a), rgb(0x8aa6c4)])
+const LIT = new Set([GLASS[1], GLASS[2], rgb(0xe0641c), rgb(0xffb040), ...PANES])
 const lights = new WeakMap<Sprite, Sprite | null>()
 export function lightsOf(sprite: Sprite): Sprite | null {
   if (lights.has(sprite)) return lights.get(sprite)!
@@ -541,7 +543,7 @@ export function lightsOf(sprite: Sprite): Sprite | null {
   for (let y = 0; y < sprite.height; y++) {
     for (let x = 0; x < sprite.width; x++) {
       const p = sprite.pixels[y * sprite.width + x]
-      if (LIT.has(p)) canvas.set(x, y, p === GLASS[1] ? rgb(0xffd870) : rgb(0xfff2b8))
+      if (LIT.has(p)) canvas.set(x, y, p === GLASS[1] || (PANES.has(p) && (x + y) % 5 !== 0) ? rgb(0xffd870) : rgb(0xfff2b8))
     }
   }
   const lit = any ? canvas.sprite(sprite.anchorX, sprite.anchorY, 0) : null

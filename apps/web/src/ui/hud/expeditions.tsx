@@ -26,7 +26,8 @@ import {
   villagersFree,
 } from '@game/shared'
 import type { Expedition, ExpeditionKind, Kingdom, Resource } from '@game/shared'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { playOnce } from '../../audio/sfx'
 import { EXPEDITION_TEXTS, FIND_TEXTS, GOAL_TEXTS, INCIDENT_TEXTS, TIER_NAMES } from '../expeditionNames'
 import { Icon } from '../icons'
 import type { IconName } from '../icons'
@@ -254,6 +255,8 @@ export function expeditionLines(e: Expedition, online?: Online): ReportLine[] {
 export function ExpeditionReport({ expedition: e, kingdom, online, onClose }: { expedition: Expedition; kingdom: Kingdom; online?: Online; onClose: () => void }) {
   const t = EXPEDITION_TEXTS[e.kind]
   const lines = expeditionLines(e, online)
+  // Hoofbeats and a horn: the expedition is home.
+  useEffect(() => playOnce(`expedition:${e.id}`, 'expedition'), [e.id])
   return (
     <div className="modal" role="dialog" aria-labelledby="expedition-title" onClick={(ev) => ev.target === ev.currentTarget && onClose()}>
       <section className="dialog frame away">

@@ -1,9 +1,21 @@
 import { TILE_HEIGHT, TILE_WIDTH, hash, heightAt } from '@game/shared'
-import type { BuildingKind, KingdomColorId, Point, World } from '@game/shared'
+import type { BuildingKind, KingdomColorId, World } from '@game/shared'
 import { BARK, Canvas, CLOTH, GLASS, ROOF, SACK, STONE, TIMBER, WALL, diamondAt, ellipseAt, pick, ramp, rgb, shadeBlobs, shadow } from './sprites'
 import type { Sprite } from './sprites'
 import { WALL_KINDS, wallLinks, wallLook } from './wallSprites'
 import type { WallKind } from './wallSprites'
+import { CHIMNEYS, smoky, stillOf } from './buildingKit'
+import { farm, farmProps } from './farms'
+import { house } from './houses'
+import { palaceModel } from './castle'
+import { forge, lumberCamp } from './industry'
+import { market, tavern, tradePost as tradePostLevel, treasury } from './civic'
+import { barracks, prison, spyHouse, watchtower } from './military'
+import { hospital, temple, university } from './learning'
+import { dock, fisherHut } from './waterside'
+import { citadel, guildHall, memorial } from './works'
+
+export { CHIMNEYS }
 
 // Buildings of the player's town, made the same way as the inn: every sprite stands on the front corner of its
 // footprint (the anchor), its walls run back along the two front edges and a hip roof covers the top.
@@ -47,26 +59,17 @@ export const KINGDOM_COLORS = {
 } satisfies Record<KingdomColorId, { name: string; roofs: Uint32Array; swatch: string }>
 export type KingdomColor = KingdomColorId
 const KEEP = ramp(0x6a6672, 0x868290, 0xa8a4ac, 0xc8c4c4, 0xdedad2)
-const DARK_STONE = ramp(0x34323c, 0x46444e, 0x5a5862, 0x6e6c74, 0x84828a)
 const LOGS = ramp(0x3a2616, 0x5a3c22, 0x7a5432, 0x9a7044)
 const CUT = ramp(0x8a6a40, 0xc8a46a, 0xe2c48a)
 const SOIL = ramp(0x3a2818, 0x4e3620, 0x64472a, 0x7a5834)
-const WHEAT = ramp(0x6a5a1c, 0x9a8228, 0xc4a63a, 0xe2c858)
-const GREENS = ramp(0x23502a, 0x356e34, 0x4f8c40, 0x76ac52)
-const STRIPE = ramp(0xa8423a, 0xe9dcc0)
 // Canopy cloths: shade, colour, light stripe.
 const CANOPY = ramp(0x7a2a26, 0xa8423a, 0xe9dcc0)
-const CANOPY_BLUE = ramp(0x1e3466, 0x2a4a8a, 0xe9dcc0)
-const CANOPY_GOLD = ramp(0x8a6418, 0xd8a832, 0xf0dc9a)
-const CANOPY_BROWN = ramp(0x4a3220, 0x6e4c30, 0x9a7a58)
 const EMBER = ramp(0x8a2a10, 0xe0641c, 0xffb040)
 const PLANK = ramp(0x3a2818, 0x5a3e24, 0x7a5834, 0x9a7444, 0xb08a54)
 const WATER_FOAM = rgb(0xd8eef4)
 const BRASS = ramp(0x7a5a18, 0xb08a2a, 0xe2c058, 0xfff0a0)
 const CRIMSON = ramp(0x4a0e14, 0x7a1822, 0xa82430, 0xcc3a40)
-const FRUIT = [rgb(0xd84a3a), rgb(0xe8a030), rgb(0x8fbf55), rgb(0x9a5ab0)]
 const FLAG = ramp(0x7a1c1c, 0xb02a24, 0xd84a3a)
-const BLADE = ramp(0x4a505a, 0xa8b0bc, 0xe6ebf0)
 
 interface HallStyle {
   // Half the footprint's width on screen; its height is half of that.
@@ -238,14 +241,6 @@ function footprint(tiles: number, above: number) {
   const h = (tiles * TILE_HEIGHT) / 2
   const canvas = new Canvas(w * 2 + 8, h * 2 + above + 4)
   return { canvas, cx: canvas.width >> 1, base: canvas.height - 2, w, h }
-}
-
-// Smoke rises from these points of a sprite (relative to its anchor); the map animates it.
-export const CHIMNEYS = new Map<Sprite, Point[]>()
-function smoky(sprite: Sprite, tops: { x: number; y: number; chimney: boolean }[]) {
-  const points = tops.filter((t) => t.chimney).map((t) => ({ x: t.x - sprite.anchorX, y: t.y - sprite.anchorY - 1 }))
-  if (points.length > 0) CHIMNEYS.set(sprite, points)
-  return sprite
 }
 
 // A gilded spike on a roof point.
@@ -423,192 +418,6 @@ function star(canvas: Canvas, x: number, y: number) {
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) canvas.set(x + dx, y + dy, BRASS[3])
 }
 
-const MOSSY = ramp(0x2a3a1c, 0x3e5226, 0x56682e, 0x6e7e38, 0x889444, 0xa0aa52)
-const LOG_WALLS = ramp(0x3a2616, 0x4e3420, 0x6a4a2c, 0x8a6440, 0xa07a50)
-const IVY_LEAF = ramp(0x1f3a1c, 0x2e5a26, 0x447a32)
-
-// A low fence of posts and a rail along the front right edge of a 1×1 tile.
-function picket(canvas: Canvas, cx: number, base: number, from = 4, to = 30) {
-  for (let t = from; t <= to; t++) {
-    const x = cx + t
-    const ground = base - t / 2
-    if (t % 4 === 0) for (let z = 0; z < 7; z++) canvas.set(x, ground - z, z === 6 ? PLANK[4] : PLANK[2])
-    canvas.set(x, ground - 4, PLANK[3])
-    canvas.set(x, ground - 2, PLANK[1])
-  }
-}
-
-// Moss and ivy grown over what is drawn in a box: a few greens on roofs and walls.
-// `on`: only over these colours (the stone of the walls, not the roofs).
-function overgrow(canvas: Canvas, x0: number, y0: number, x1: number, y1: number, share: number, seed: number, on?: Uint32Array) {
-  const only = on ? new Set<number>(on) : null
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const c = canvas.get(x, y)
-      if (c >>> 24 === 0 || (only && !only.has(c)) || hash(x >> 1, y >> 1, seed) > share) continue
-      canvas.set(x, y, IVY_LEAF[(x + y) % 3])
-    }
-  }
-}
-
-// Houses come in four looks at each level (CLAUDE.md §6.4), picked by the building:
-//   0 plaster under red tiles, 1 timber and thatch with a fence, 2 stone under slate, 3 logs under a mossy roof.
-// Level 1 is a cottage, level 2 a bigger house (a bread oven, a dormer), level 3 a two-storey house or a manor
-// (a wing, a cupola, ivy).
-function house(variant: number, level = 1): Sprite {
-  const v = variant % 4
-  const { canvas, cx, base } = footprint(1, 54 + (level - 1) * 18)
-  const roofs = [ROOF, THATCH, SLATE, MOSSY][v]
-  const walls = v === 2 || (level === 3 && v === 0) ? KEEP : v === 3 && level === 1 ? LOG_WALLS : WALL
-  const masonry = walls === KEEP
-  const size = [[22, 14, 16], [26, 22, 20], [27, 30, 22]][level - 1]
-  const [w, wall, roof] = size
-  const hb = base - 4
-  const tops: { x: number; y: number; chimney: boolean }[] = []
-  // A stone turret behind the stone manor (level 3, look 2), drawn before the house.
-  if (level === 3 && v === 2) finial(canvas, cx - 14, tower(canvas, cx - 14, hb - 22, 6, 44, KEEP, SLATE, true).y, 3)
-  if (v === 1 && level >= 1) picket(canvas, cx, base)
-  const chimney = v === 3 && level === 1 ? undefined : v === 1 && level === 3 ? 0.5 : 0.42
-  const top = hall(canvas, cx, hb, { w, wall, roof, walls, roofs, masonry, bay: level === 1 ? 14 : 10, door: true, chimney, trim: level === 3 && v !== 3 ? BRASS[1] : undefined })
-  tops.push(top)
-  // A porch on posts by the door of the log cottage.
-  if (v === 3 && level === 1) {
-    const px = cx - 18
-    const py = hb - 4
-    for (const dx of [0, 10]) for (let z = 0; z < 10; z++) canvas.set(px + dx, py + dx / 2 - z, TIMBER[1])
-    for (let t = -2; t <= 12; t++) for (let d = 0; d < 4; d++) canvas.set(px + t, py + t / 2 - 10 - d, MOSSY[2 - (d === 0 ? 1 : 0)])
-  }
-  // A domed bread oven by the thatched house.
-  if (v === 1 && level === 2) {
-    shadeBlobs(canvas, [{ x: cx - 24, y: base - 9, r: 5 }], STONE, 4)
-    for (let x = -1; x <= 1; x++) for (let z = 0; z < 3; z++) canvas.set(cx - 24 + x, base - 7 - z, EMBER[1])
-  }
-  // A dormer on the roof and a garden fence.
-  if (v === 3 && level === 2) {
-    hall(canvas, cx - 11, hb - wall - 1, { w: 9, wall: 9, roof: 7, walls: WALL, roofs: SLATE, bay: 6 })
-    picket(canvas, cx, base, 2, 26)
-  }
-  // A cupola on the manor's roof, ivy over its walls and a fence round the garden.
-  if (v === 3 && level === 3) {
-    const cupola = hall(canvas, top.x, top.y + 10, { w: 6, wall: 7, roof: 9, walls: WALL, roofs: SLATE, bay: 0 })
-    finial(canvas, cupola.x, cupola.y, 3)
-    picket(canvas, cx, base)
-  }
-  if (v === 3) overgrow(canvas, cx - 30, base - 70 - level * 10, cx + 30, base, level === 1 ? 0.12 : 0.06, 71 + level)
-  if (v === 2 && level === 2) picket(canvas, cx, base, 14, 30)
-  return smoky(canvas.sprite(cx, base, 0), tops)
-}
-
-// Ploughed ground in rows, with a low fence along the two front edges.
-// Fields come in three crops (CLAUDE.md §6.4), picked by the building: 0 wheat, 1 flax in blue flower, 2 pumpkins.
-// From level 2 the flax field is watered by a ditch across it.
-const FLAX = ramp(0x23502a, 0x356e34, 0x4f8c40, 0x6a8ad8)
-const PUMPKIN = ramp(0x8a3a10, 0xc8601a, 0xe8862a, 0xf4ac4a)
-function farm(variant: number, level = 1): Sprite {
-  const { canvas, cx, base, w, h } = footprint(2, 12)
-  const v = variant % 3
-  const crop = v === 0 ? WHEAT : v === 1 ? FLAX : GREENS
-  const top = base - h * 2
-  const rows = 8
-  const inset = 3
-  for (let y = top; y <= base; y++) {
-    for (let x = cx - w; x <= cx + w; x++) {
-      const a = (x - cx) / (w - inset)
-      const b = (y - (base - h)) / (h - inset / 2)
-      if (Math.abs(a) + Math.abs(b) > 1) continue
-      // Rows run along one tile axis.
-      const phase = (((b - a) / 2 + 1) * rows) % 1
-      const furrow = phase > 0.55
-      canvas.set(x, y, pick(SOIL, (furrow ? 0.6 : 2) + (hash(x, y, 31) - 0.5) * 1.2))
-    }
-  }
-  // Plants on the ridges, drawn back to front so nearer ones overlap.
-  for (let y = top; y <= base; y++) {
-    for (let x = cx - w; x <= cx + w; x++) {
-      const a = (x - cx) / (w - inset - 2)
-      const b = (y - (base - h)) / (h - inset / 2 - 1)
-      if (Math.abs(a) + Math.abs(b) > 1) continue
-      const phase = (((b - a) / 2 + 1) * rows) % 1
-      if (phase < 0.15 || phase > 0.4 || (x & 1) === 1 || hash(x, y, 37 + variant) < 0.35) continue
-      const tall = crop === WHEAT ? 3 + Math.floor(hash(x, y, 41) * 2) : crop === FLAX ? 3 : 2
-      for (let z = 0; z < tall; z++) canvas.set(x, y - z, crop[Math.min(crop === FLAX && z < tall - 1 ? 2 : 3, z + (x < cx ? 1 : 0))])
-    }
-  }
-  // Pumpkins lying among the leaves.
-  if (v === 2) {
-    for (let i = 0; i < 14; i++) {
-      const a = (hash(i, 1, 43) - 0.5) * 1.5
-      const b = (hash(i, 2, 43) - 0.5) * 1.5
-      if (Math.abs(a) + Math.abs(b) > 0.8) continue
-      const px = Math.round(cx + a * (w - 8))
-      const py = Math.round(base - h + b * (h - 4))
-      shadeBlobs(canvas, [{ x: px, y: py - 2, r: 2.5 }], PUMPKIN, i)
-      canvas.set(px, py - 5, GREENS[1])
-    }
-  }
-  // A ditch of water across the flax field.
-  if (v === 1 && level >= 2) {
-    for (let t = -w / 2 + 6; t <= w / 2 - 6; t++) for (let d = 0; d < 3; d++) canvas.set(cx + t, base - h - t / 2 + d - 1, d === 0 ? rgb(0x9ad0e8) : rgb(0x3a7ab8))
-  }
-  // Fence posts and a rail.
-  for (const side of [-1, 1]) {
-    for (let t = 0; t <= w; t++) {
-      const x = cx + side * (w - t)
-      const ground = base - h + t / 2
-      if (t % 8 === 0) for (let z = 0; z < 5; z++) canvas.set(x, ground - z, TIMBER[side < 0 ? 2 : 1])
-      canvas.set(x, ground - 3, TIMBER[side < 0 ? 2 : 1])
-    }
-  }
-  return canvas.sprite(cx, base, 0)
-}
-
-// What stands on a field from level 2: haystacks and a scarecrow; at level 3 a barn with a haystack by the wheat, a
-// shed and a well by the flax, a vine pergola by the pumpkins. Drawn apart from the flat field so it sorts with the
-// buildings around it (see structureParts).
-function farmProps(level: number, variant = 0): Sprite {
-  const v = variant % 3
-  const { canvas, cx, base, h } = footprint(2, level === 3 ? 50 : 22)
-  if (level === 3 && v === 0) {
-    hall(canvas, cx + 26, base - h - 4, { w: 18, wall: 12, roof: 14, walls: LOG_WALLS, roofs: THATCH, door: true })
-    haystack(canvas, cx - 26, base - h - 6)
-    haystack(canvas, cx - 18, base - h - 2)
-  } else if (level === 3 && v === 1) {
-    hall(canvas, cx + 24, base - h - 4, { w: 16, wall: 12, roof: 12, walls: LOG_WALLS, roofs: SHINGLE, door: true })
-    // A stone well with a little roof.
-    const wx = cx - 22
-    const wy = base - h - 2
-    shadeBlobs(canvas, [{ x: wx, y: wy - 3, r: 4 }], STONE, 9)
-    for (const dx of [-3, 3]) for (let z = 4; z < 13; z++) canvas.set(wx + dx, wy - z, TIMBER[1])
-    for (let dx = -5; dx <= 5; dx++) for (let d = 0; d < 2; d++) canvas.set(wx + dx, wy - 13 - d + Math.abs(dx) * 0.4, SHINGLE[3 - d])
-  } else if (level === 3) {
-    // A pergola of vines on posts.
-    const px = cx + 12
-    const py = base - h - 6
-    for (const [dx, dy] of [[0, 0], [16, -8], [-8, -4], [8, -12]]) for (let z = 0; z < 14; z++) canvas.set(px + dx, py + dy - z, TIMBER[1])
-    shadeBlobs(canvas, [{ x: px + 4, y: py - 18, r: 6 }, { x: px + 12, y: py - 22, r: 5 }, { x: px - 2, y: py - 20, r: 4 }], GREENS, 13)
-    for (let i = 0; i < 6; i++) canvas.set(px - 2 + i * 3, py - 14 + (i % 2), FRUIT[3])
-    haystack(canvas, cx - 24, base - h - 4)
-  } else {
-    for (const [dx, dy] of [[-30, -6], [-20, -11]]) haystack(canvas, cx + dx, base - h + dy)
-    scarecrow(canvas, cx + 14, base - h + 6)
-    if (v === 2) barrel(canvas, cx + 26, base - h - 4)
-  }
-  return canvas.sprite(cx, base, 0)
-}
-
-function haystack(canvas: Canvas, x: number, base: number) {
-  shadeBlobs(canvas, [{ x, y: base - 4, r: 6 }, { x: x + 2, y: base - 7, r: 4 }], WHEAT, 71, 0.8)
-}
-
-function scarecrow(canvas: Canvas, x: number, base: number) {
-  for (let z = 0; z < 14; z++) canvas.set(x, base - z, TIMBER[1])
-  for (let dx = -4; dx <= 4; dx++) canvas.set(x + dx, base - 10, TIMBER[2])
-  for (let z = 4; z < 10; z++) for (let dx = -2; dx <= 2; dx++) canvas.set(x + dx, base - z, CLOTH[0][dx < 0 ? 2 : 1])
-  for (let dx = -2; dx <= 2; dx++) canvas.set(x + dx, base - 14, WHEAT[3])
-  canvas.set(x, base - 12, SACK[3])
-  canvas.set(x, base - 13, SACK[2])
-}
-
 // A log lying along the screen's down-right diagonal, its cut end facing the viewer.
 function log(canvas: Canvas, x: number, y: number, length: number) {
   for (let t = 0; t <= length; t++) {
@@ -626,162 +435,6 @@ function log(canvas: Canvas, x: number, y: number, length: number) {
 // (thatch, then a red-roofed sawmill, then a stone hall), 1 open sheds on posts with saws and stacked logs.
 function logPile(canvas: Canvas, px: number, py: number, rows: readonly (readonly [number, number])[]) {
   for (const [row, count] of rows) for (let i = 0; i < count; i++) log(canvas, px + i * 5 + row * 2.5, py + i * 2.5 - row * 4 + row * 1.25, 18)
-}
-function sawhorse(canvas: Canvas, x: number, base: number) {
-  for (const dx of [0, 10]) for (let z = 0; z < 7; z++) { canvas.set(x + dx - z * 0.3, base + dx / 2 - z, TIMBER[1]); canvas.set(x + dx + z * 0.3, base + dx / 2 - z, TIMBER[1]) }
-  log(canvas, x - 4, base - 9, 16)
-}
-function stump(canvas: Canvas, sx: number, sy: number) {
-  for (let x = -3; x <= 3; x++) for (let z = 0; z < 4; z++) canvas.set(sx + x, sy - z, z === 3 ? CUT[1] : BARK[x < 0 ? 2 : 1])
-  for (let z = 0; z < 7; z++) canvas.set(sx + 1 + z * 0.4, sy - 4 - z, TIMBER[2])
-  for (let d = 0; d < 3; d++) canvas.set(sx + 3 + d * 0.3, sy - 11 + d, STONE[4])
-}
-function bigSaw(canvas: Canvas, x: number, y: number) {
-  for (let t = 0; t < 22; t++) {
-    canvas.set(x + t, y + t / 2, STEEL_GREY[2])
-    canvas.set(x + t, y + t / 2 + 1, t % 2 ? STEEL_GREY[1] : STEEL_GREY[3])
-  }
-  for (const t of [0, 21]) for (let z = 0; z < 4; z++) canvas.set(x + t, y + t / 2 - z, TIMBER[2])
-}
-
-function lumberCamp(variant = 0, level = 1): Sprite {
-  const v = variant % 2
-  const { canvas, cx, base, h } = footprint(2, 56 + (level - 1) * 14)
-  const tops: { x: number; y: number; chimney: boolean }[] = []
-  if (v === 0) {
-    const style =
-      level === 1
-        ? { w: 30, wall: 14, roof: 16, walls: LOG_WALLS, roofs: THATCH, bay: 0 }
-        : level === 2
-          ? { w: 36, wall: 20, roof: 20, walls: LOG_WALLS, roofs: ROOF, bay: 12 }
-          : { w: 40, wall: 24, roof: 22, walls: KEEP, roofs: SLATE, masonry: true, bay: 12 }
-    tops.push(hall(canvas, cx + 6, base - h - 2, { ...style, door: true, chimney: 0.35 }))
-    logPile(canvas, cx - 44, base - h - 6, [[0, 3], [1, 2], [2, 1]])
-    if (level >= 2) logPile(canvas, cx - 30, base - h + 6, [[0, 3], [1, 2]])
-    stump(canvas, cx + 16, base - 10)
-    if (level >= 2) bigSaw(canvas, cx - 8, base - 12)
-    if (level === 3) cart(canvas, cx + 18, base - 4)
-  } else {
-    // Open sheds on posts: a small one at level 1, a shelter with saws hung up at 2, a long shed full of logs at 3.
-    const shed =
-      level === 1
-        ? { w: 24, wall: 16, roof: 12, roofs: THATCH }
-        : level === 2
-          ? { w: 32, wall: 20, roof: 14, roofs: SHINGLE }
-          : { w: 44, wall: 22, roof: 16, roofs: SLATE }
-    hall(canvas, cx + 4, base - h + 2, { ...shed, walls: WALL, open: true, roofed: true })
-    // Logs stacked under the roof.
-    logPile(canvas, cx - 16 - (level - 1) * 4, base - h - 4 - (level - 1) * 2, level === 3 ? [[0, 5], [1, 4], [2, 3]] : level === 2 ? [[0, 4], [1, 3], [2, 1]] : [[0, 3], [1, 2]])
-    sawhorse(canvas, cx - 34, base - 14)
-    if (level >= 2) bigSaw(canvas, cx - 18, base - 8)
-    if (level === 3) {
-      barrel(canvas, cx + 24, base - 10)
-      // A fire pit.
-      shadeBlobs(canvas, [{ x: cx + 10, y: base - 5, r: 4 }], STONE, 3)
-      for (let x = -2; x <= 2; x++) for (let z = 0; z < 4 - Math.abs(x); z++) canvas.set(cx + 10 + x, base - 6 - z, EMBER[z > 1 ? 2 : 1])
-    }
-    stump(canvas, cx + 20, base - 6)
-  }
-  return smoky(canvas.sprite(cx, base, 0), tops)
-}
-
-// A chimney of stone standing on (x, foot), `tall` pixels; returns its top for the smoke.
-function stack(canvas: Canvas, x: number, foot: number, tall: number, width = 5) {
-  for (let z = 0; z < tall; z++) for (let dx = 0; dx < width; dx++) canvas.set(x + dx, foot - z, z > tall - 3 ? STONE[1] : dx < width / 2 ? STONE[4] : STONE[2])
-  return { x: x + width / 2, y: foot - tall, chimney: true }
-}
-
-// An anvil standing on (x, base).
-function anvil(canvas: Canvas, ax: number, ay: number) {
-  for (let x = -4; x <= 4; x++) canvas.set(ax + x, ay - 5, STEEL_GREY[3])
-  for (let x = -3; x <= 3; x++) canvas.set(ax + x, ay - 4, STEEL_GREY[2])
-  for (let z = 0; z < 4; z++) for (let x = -1; x <= 1; x++) canvas.set(ax + x, ay - z, STEEL_GREY[z === 0 ? 0 : 1])
-}
-
-// A suit of armour on a stand, on (x, base).
-function armour(canvas: Canvas, x: number, base: number) {
-  for (let z = 0; z < 3; z++) canvas.set(x, base - z, TIMBER[1])
-  for (let z = 3; z < 11; z++) for (let dx = -2; dx <= 2; dx++) canvas.set(x + dx, base - z, STEEL_GREY[dx < 0 ? 3 : z % 3 === 0 ? 1 : 2])
-  for (let dx = -1; dx <= 1; dx++) for (let z = 11; z < 14; z++) canvas.set(x + dx, base - z, STEEL_GREY[dx < 0 ? 3 : 1])
-}
-
-// A water wheel turning by the wall, its centre at (x, y).
-function waterWheel(canvas: Canvas, x: number, y: number, r = 11) {
-  for (let a = 0; a < 64; a++) {
-    const t = (a / 64) * Math.PI * 2
-    for (const rr of [r, r - 1]) canvas.set(x + Math.round(Math.cos(t) * rr * 0.5), y + Math.round(Math.sin(t) * rr), PLANK[rr === r ? 1 : 3])
-  }
-  for (let k = 0; k < 8; k++) {
-    const t = (k / 8) * Math.PI * 2
-    for (let d = 0; d < r; d++) canvas.set(x + Math.round(Math.cos(t) * d * 0.5), y + Math.round(Math.sin(t) * d), TIMBER[1])
-  }
-  for (let dx = -8; dx <= 8; dx++) for (let d = 0; d < 3; d++) canvas.set(x + dx, y + r + d, d === 0 ? rgb(0x9ad0e8) : rgb(0x3a7ab8))
-}
-
-// The weapon forge (CLAUDE.md §6.4) in three looks at each level, picked by the building:
-//   0 a dark stone smithy under slate (two chimneys and a glowing door at 2, gilded trim, racks and a cart at 3),
-//   1 a stone-and-timber forge with an anvil out front (a lean-to at 2, a water wheel and armour at 3),
-//   2 a timber workshop (an open forge under its roof at 2, a gilded hall with banners at 3).
-function forge(variant = 0, level = 1): Sprite {
-  const v = variant % 3
-  const { canvas, cx, base } = footprint(2, 82 + (level - 1) * 16)
-  const tops: { x: number; y: number; chimney: boolean }[] = []
-  const tall = (level - 1) * 5
-  if (v === 0) {
-    const top = hall(canvas, cx, base - 4, { w: 52 + (level - 1) * 2, wall: 24 + tall, roof: 26 + tall, walls: DARK_STONE, roofs: SLATE, masonry: true, bay: 16, glow: true, door: true, chimney: 0.35, trim: level === 3 ? BRASS[1] : undefined })
-    tops.push(top)
-    if (level >= 2) tops.push(stack(canvas, cx + 14, base - 4 - 24 - tall - 18, 20))
-    anvil(canvas, cx - 22, base - 6)
-    if (level >= 2) rack(canvas, cx + 24, base - 6)
-    if (level === 3) {
-      cart(canvas, cx - 40, base - 8)
-      drape(canvas, cx, base - 4, 54, 1, 10, 24 + tall - 2, 14)
-    }
-  } else if (v === 1) {
-    const walls = level === 1 ? DARK_STONE : KEEP
-    const top = hall(canvas, cx + 6, base - 10, { w: 44, wall: 22 + tall, roof: 22 + tall, walls, roofs: SHINGLE, masonry: true, bay: 14, glow: true, door: true, chimney: 0.4 })
-    tops.push(top)
-    if (level >= 2) {
-      // A lean-to over the anvil and a grindstone.
-      hall(canvas, cx - 24, base - 6, { w: 16, wall: 14, roof: 8, walls: WALL, roofs: SHINGLE, open: true, roofed: true })
-      shadeBlobs(canvas, [{ x: cx - 6, y: base - 8, r: 3.5 }], STONE, 11)
-    }
-    anvil(canvas, cx - 16, base - 3)
-    barrel(canvas, cx + 22, base - 8)
-    if (level === 3) {
-      waterWheel(canvas, cx + 46, base - 30)
-      tops.push(stack(canvas, cx + 20, base - 10 - 22 - tall - 20, 22))
-      for (const dx of [-30, -38]) armour(canvas, cx + dx, base - 10 - (dx + 38) / 4)
-    }
-  } else {
-    const roofs = level === 3 ? SLATE : SHINGLE
-    const walls = level === 3 ? KEEP : WALL
-    const top = hall(canvas, cx + 4, base - 8, { w: 46, wall: 24 + tall * 2, roof: 22, walls, roofs, masonry: level === 3, bay: 12, glow: level >= 2, door: true, chimney: 0.45, trim: level === 3 ? BRASS[2] : undefined })
-    tops.push(top)
-    if (level >= 2) {
-      // An open forge under a lean-to at the front, its hearth glowing.
-      hall(canvas, cx - 22, base - 4, { w: 18, wall: 14, roof: 10, walls: WALL, roofs, open: true, roofed: true })
-      for (let x = 0; x < 9; x++) for (let z = 0; z < 7; z++) canvas.set(cx - 28 + x, base - 12 - z, z > 4 ? STONE[2] : x > 1 && x < 7 && z > 1 ? EMBER[z > 3 ? 2 : 1] : STONE[1])
-    }
-    if (level === 3) {
-      for (const side of [-1, 1]) drape(canvas, cx + 4, base - 8, 46, side, 8, 24 + tall * 2 - 2, 16)
-      cart(canvas, cx + 18, base - 4)
-    }
-    crate(canvas, cx + 24, base - 12, 9)
-    anvil(canvas, cx - 10, base - 2)
-  }
-  return smoky(canvas.sprite(cx, base, 0), tops)
-}
-
-// Swords and a shield leaning on a wooden rack, standing on (x, base).
-function rack(canvas: Canvas, x: number, base: number) {
-  for (let dx = 0; dx <= 12; dx++) canvas.set(x + dx, base - 9 - dx / 2, TIMBER[1])
-  for (const dx of [2, 5, 8]) {
-    for (let z = 0; z < 11; z++) canvas.set(x + dx, base - dx / 2 - z, z < 3 ? TIMBER[0] : BLADE[z > 8 ? 2 : 1])
-    canvas.set(x + dx - 1, base - dx / 2 - 3, BRASS[2])
-    canvas.set(x + dx + 1, base - dx / 2 - 3, BRASS[2])
-  }
-  for (let y = -3; y <= 3; y++) for (let dx = -3; dx <= 3; dx++) if (dx * dx + y * y <= 9) canvas.set(x + 13 + dx, base - 8 + y, Math.abs(dx) + Math.abs(y) <= 1 ? BRASS[3] : CRIMSON[dx < 0 ? 3 : 2])
 }
 
 // A barrel standing on (x, base).
@@ -808,43 +461,7 @@ function crate(canvas: Canvas, x: number, base: number, size: number) {
 
 const CHAR = ramp(0x120c0a, 0x1e1410, 0x2c1e16, 0x3a2a1e)
 
-// The trade post grows with the post's level (CLAUDE.md §6.4), in two looks per level picked by the building:
-//   1A a grain stall under thatch with a red awning; 1B a cloth stall under shingles with a blue awning;
-//   2A a two-storey caravanserai with a market awning and a cart; 2B a smithy and ore trader with an open forge;
-//   3A a great inn and guild hall with a bell tower and banners; 3B a depot: a long open shed full of barrels.
-const SHINGLE = ramp(0x3a3026, 0x52463a, 0x6a5c4c, 0x82735f, 0x9a8a74, 0xb2a28a)
-const BLUE_STRIPE = ramp(0x2a4a8a, 0xe9dcc0)
-const CLAY = ramp(0x6a3418, 0x9a5228, 0xc0743c, 0xd8966a)
 const STEEL_GREY = ramp(0x3c4048, 0x6a707a, 0xa8b0bc, 0xd6dae0)
-
-// An awning sloping out from the left wall of a hall on (cx, hb), striped in `stripes` (two colours).
-function awning(canvas: Canvas, cx: number, hb: number, hw: number, stripes: Uint32Array, from: number, to: number, z = 20, out = 13) {
-  for (let t = from; t <= to; t += 0.5) {
-    for (let d = 0; d <= out; d += 0.5) {
-      const x = cx - (hw - t) - d * 0.9
-      const y = hb - hw / 2 + t / 2 - z + d * 0.85
-      const scallop = d > out - 2 && Math.floor(t / 3) % 2 === 0
-      if (d > out - 1 && !scallop) continue
-      canvas.set(x, y, Math.floor(t / 5) % 2 === 0 ? stripes[1] : stripes[0])
-    }
-  }
-}
-
-// A counter along the left wall under an awning, heaped with fruit and grain or with bolts of cloth.
-function counter(canvas: Canvas, cx: number, hb: number, hw: number, from: number, to: number, goods: 'food' | 'cloth') {
-  for (let t = from; t <= to; t++) {
-    const x = cx - (hw - t) - 6
-    const y = hb - hw / 2 + t / 2 + 3
-    for (let z = 0; z < 7; z++) canvas.set(x, y - z, z === 6 ? PLANK[4] : PLANK[z < 2 ? 1 : 2])
-    if (goods === 'food') {
-      if (hash(t, 1, 71) > 0.3) canvas.set(x, y - 7, FRUIT[Math.floor(hash(t, 2, 71) * FRUIT.length)])
-      if (hash(t, 3, 71) > 0.55) canvas.set(x, y - 8, FRUIT[Math.floor(hash(t, 4, 71) * FRUIT.length)])
-    } else {
-      const bolt = CLOTH[Math.floor(t / 4) % CLOTH.length]
-      for (let z = 7; z < 10; z++) canvas.set(x, y - z, bolt[z === 9 ? 3 : 2])
-    }
-  }
-}
 
 // A two-wheeled cart standing on (x, base), loaded with sacks.
 function cart(canvas: Canvas, x: number, base: number) {
@@ -856,96 +473,6 @@ function cart(canvas: Canvas, x: number, base: number) {
   }
   canvas.set(x + 8, base - 3, TIMBER[2])
   shadeBlobs(canvas, [{ x: x + 5, y: base - 11, r: 3 }, { x: x + 11, y: base - 13, r: 3.5 }], SACK, 5)
-}
-
-function tradePostLevel(variant: number, level: number): Sprite {
-  const b = variant % 2 === 1
-  const { canvas, cx, base, h } = footprint(2, 60 + level * 26)
-  if (level === 1) {
-    // A stall: corner posts under a pyramid roof, an awning off its side, goods on the counter and on the ground.
-    yard(canvas, cx, base, h, b ? KEEP : SACK, b ? 33 : 34)
-    const hb = base - 12
-    const hw = 34
-    hall(canvas, cx, hb, { w: hw, wall: 20, roof: 24, walls: WALL, roofs: b ? SHINGLE : THATCH, open: true, roofed: true })
-    awning(canvas, cx, hb, hw, b ? BLUE_STRIPE : STRIPE, 4, hw - 4, 16, 12)
-    counter(canvas, cx, hb, hw, 6, hw - 6, b ? 'cloth' : 'food')
-    if (b) {
-      // Pots and jars by the corner.
-      for (const [dx, dy] of [[10, -6], [16, -9], [4, -4]]) shadeBlobs(canvas, [{ x: cx + dx, y: base + dy - 3, r: 3 }], CLAY, dx)
-      for (let i = 0; i < 3; i++) for (let z = 0; z < 4; z++) for (let x = 0; x < 6; x++) canvas.set(cx + 20 + x, base - 12 - i * 4 - z, CLOTH[i % CLOTH.length][x < 3 ? 3 : 1])
-    } else {
-      shadeBlobs(canvas, [{ x: cx + 8, y: base - 6, r: 4 }, { x: cx + 14, y: base - 9, r: 4 }, { x: cx + 11, y: base - 12, r: 3.5 }], SACK, 3)
-      // A basket of grain.
-      for (let dx = -4; dx <= 4; dx++) for (let z = 0; z < 5; z++) canvas.set(cx + 22 + dx, base - 10 - z, z === 4 ? WHEAT[3] : PLANK[Math.abs(dx) === 4 ? 1 : 2])
-    }
-    return canvas.sprite(cx, base, 0)
-  }
-  if (level === 2 && !b) {
-    // The caravanserai: a two-storey timber hall with a market awning, a cart before it.
-    yard(canvas, cx, base, h, KEEP, 35)
-    const hb = base - 12
-    const hw = 42
-    const top = hall(canvas, cx, hb, { w: hw, wall: 34, roof: 24, walls: WALL, roofs: ROOF, bay: 11, door: true, chimney: 0.42 })
-    awning(canvas, cx, hb, hw, STRIPE, 6, hw - 6, 18, 13)
-    counter(canvas, cx, hb, hw, 8, hw - 8, 'food')
-    cart(canvas, cx + 12, base - 4)
-    barrel(canvas, cx + 30, base - 14)
-    banner(canvas, top.x, top.y, 10)
-    return smoky(canvas.sprite(cx, base, 0), [top])
-  }
-  if (level === 2) {
-    // The smithy and ore trader: a stone forge house with an open lean-to over the anvil, ore heaped by the door.
-    yard(canvas, cx, base, h, KEEP, 36)
-    const hb = base - 18
-    const hw = 34
-    const top = hall(canvas, cx + 10, hb, { w: hw, wall: 26, roof: 22, walls: KEEP, roofs: SHINGLE, masonry: true, bay: 12, door: true, chimney: 0.35 })
-    // An open smithy shed off the front left, the hearth glowing inside and the anvil before it.
-    hall(canvas, cx - 22, base - 8, { w: 18, wall: 16, roof: 12, walls: WALL, roofs: SHINGLE, open: true, roofed: true })
-    const fx = cx - 26
-    const fy = base - 16
-    for (let x = 0; x < 9; x++) for (let z = 0; z < 8; z++) canvas.set(fx + x, fy - z, z > 5 ? STONE[2] : x > 1 && x < 7 && z > 1 ? EMBER[z > 3 ? 2 : 1] : STONE[1])
-    const ax = cx - 12
-    const ay = base - 4
-    for (let x = -4; x <= 4; x++) canvas.set(ax + x, ay - 5, STEEL_GREY[3])
-    for (let x = -3; x <= 3; x++) canvas.set(ax + x, ay - 4, STEEL_GREY[2])
-    for (let z = 0; z < 4; z++) for (let x = -1; x <= 1; x++) canvas.set(ax + x, ay - z, STEEL_GREY[z === 0 ? 0 : 1])
-    // Ore heaps and a crate of ingots.
-    shadeBlobs(canvas, [{ x: cx + 6, y: base - 6, r: 5 }, { x: cx + 13, y: base - 9, r: 4 }], DARK_STONE, 7)
-    crate(canvas, cx + 22, base - 14, 9)
-    for (let x = 0; x < 6; x++) canvas.set(cx + 23 + x, base - 22, BRASS[2])
-    return smoky(canvas.sprite(cx, base, 0), [top])
-  }
-  if (!b) {
-    // The great inn and guild hall: a tall timber hall, a wing, a bell turret, guild banners and a stall.
-    yard(canvas, cx, base, h, KEEP, 37)
-    const wing = hall(canvas, cx + 26, base - 30, { w: 24, wall: 26, roof: 18, walls: WALL, roofs: ROOF, bay: 10, chimney: 0.4 })
-    const hb = base - 10
-    const hw = 40
-    const top = hall(canvas, cx - 4, hb, { w: hw, wall: 38, roof: 26, walls: WALL, roofs: ROOF, bay: 10, door: true })
-    const bell = tower(canvas, top.x, top.y + 2, 5, 14, WALL, ROOF)
-    finial(canvas, bell.x, bell.y, 3)
-    for (const side of [-1, 1]) drape(canvas, cx - 4, hb, hw, side, 10, 34, 16)
-    awning(canvas, cx - 4, hb, hw, BLUE_STRIPE, 18, hw - 4, 16, 11)
-    counter(canvas, cx - 4, hb, hw, 20, hw - 6, 'cloth')
-    barrel(canvas, cx + 18, base - 6)
-    barrel(canvas, cx + 25, base - 9)
-    banner(canvas, wing.x, wing.y, 9)
-    return smoky(canvas.sprite(cx, base, 0), [wing])
-  }
-  // The depot: a long open shed on posts under a red roof, barrels and crates stacked under it and around it.
-  yard(canvas, cx, base, h, SACK, 38)
-  const hb = base - 8
-  const hw = 46
-  hall(canvas, cx, hb, { w: hw, wall: 26, roof: 22, walls: WALL, roofs: ROOF, open: true, roofed: true })
-  for (let i = 0; i < 5; i++) barrel(canvas, cx - 30 + i * 7, base - 22 + i * 3)
-  for (let i = 0; i < 3; i++) barrel(canvas, cx - 27 + i * 7, base - 30 + i * 3)
-  crate(canvas, cx + 6, base - 12, 10)
-  crate(canvas, cx + 14, base - 16, 10)
-  crate(canvas, cx + 9, base - 22, 8)
-  cart(canvas, cx + 22, base - 4)
-  shadeBlobs(canvas, [{ x: cx - 6, y: base - 6, r: 4 }, { x: cx - 1, y: base - 8, r: 3.5 }], SACK, 9)
-  banner(canvas, cx, hb - hw / 2 - 26 - 18, 10)
-  return canvas.sprite(cx, base, 0)
 }
 
 // Any building wrecked by raiders, made from its sound look so the two always match: soot over walls and roof, a hole
@@ -998,127 +525,6 @@ const ruinedTrade = new Map<number, Sprite[]>()
 const ruinedTradeAt = (level: number) => {
   if (!ruinedTrade.has(level)) ruinedTrade.set(level, [0, 1].map((v) => ruinOf(level > 1 ? LEVEL_SPRITES.tradePost![level - 2][v] : STRUCTURE_SPRITES.tradePost[v], 40 + level * 2 + v)))
   return ruinedTrade.get(level)!
-}
-
-
-const REEDS = ramp(0x34452a, 0x516634, 0x748a42, 0x5a3d26)
-
-// A rowboat pulled up on the shore, its bow towards (x, y).
-function rowboat(canvas: Canvas, x: number, y: number, length = 18) {
-  for (let t = 0; t < length; t++) {
-    const half = Math.round(Math.sin((t / (length - 1)) * Math.PI) * 4)
-    for (let d = -half; d <= half; d++) {
-      const rim = Math.abs(d) === half
-      canvas.set(x + t, y + t / 2 + d * 0.5 + Math.abs(d) * 0.4, rim ? PLANK[1] : d < 0 ? PLANK[3] : TIMBER[0])
-    }
-  }
-  for (let d = -3; d <= 3; d++) canvas.set(x + 9, y + 4 + d * 0.5, PLANK[2])
-}
-
-// A drying rack of fish standing on (rx, ry).
-function fishRack(canvas: Canvas, rx: number, ry: number) {
-  for (const x of [0, 18]) for (let z = 0; z < 14; z++) canvas.set(rx + x, ry + x / 2 - z, TIMBER[2])
-  for (let x = 0; x <= 18; x++) {
-    canvas.set(rx + x, ry + x / 2 - 13, TIMBER[1])
-    if (x % 3 === 1) for (let z = 0; z < 4; z++) canvas.set(rx + x, ry + x / 2 - 12 + z, z === 3 ? STONE[2] : STONE[4])
-  }
-}
-
-function net(canvas: Canvas, x: number, y: number) {
-  for (let dy = -2; dy <= 2; dy++) for (let dx = -5; dx <= 5; dx++) if ((dx * dx) / 25 + (dy * dy) / 4 <= 1) canvas.set(x + dx, y + dy, (dx + dy) % 2 === 0 ? SACK[3] : SACK[1])
-}
-
-// The dock's shore building (CLAUDE.md §6.4; its jetty is drawn apart, over the water) in three looks per level,
-// picked by the building:
-//   level 1: a thatched fishing shed with a rack of fish; a mossy shed with a rowboat on the shore; a stone hut in
-//     the reeds;
-//   level 2: a red-roofed boathouse with barrels; a timber crane over stacked crates; a little lighthouse;
-//   level 3: a great slate hall with a moored sailboat's mast; a fish market under an awning with pennants; a
-//     smokehouse with a tall chimney.
-function dock(variant = 0, level = 1): Sprite {
-  const v = variant % 3
-  const { canvas, cx, base, h } = footprint(2, 66 + (level - 1) * 22)
-  const tops: { x: number; y: number; chimney: boolean }[] = []
-  const hx = cx + 10
-  const hy = base - h + 4
-  if (level === 1) {
-    const roofs = v === 0 ? THATCH : v === 1 ? MOSSY : MOSSY
-    const walls = v === 2 ? DARK_STONE : LOG_WALLS
-    tops.push(hall(canvas, hx, hy, { w: 30, wall: 16, roof: 18, walls, roofs, masonry: v === 2, bay: 12, door: true, chimney: 0.4 }))
-    if (v === 0) fishRack(canvas, cx - 34, base - h + 6)
-    if (v === 1) rowboat(canvas, cx - 36, base - h + 2)
-    if (v === 2) for (let i = 0; i < 14; i++) for (let z = 0; z < 6 + (i % 3) * 2; z++) canvas.set(cx - 34 + i * 2, base - h + 8 + i - z, REEDS[z > 5 ? 2 : 1])
-    net(canvas, cx - 6, base - 8)
-    if (v === 1) overgrow(canvas, hx - 34, hy - 50, hx + 34, hy, 0.06, 31)
-  } else if (level === 2) {
-    if (v === 0) {
-      tops.push(hall(canvas, hx, hy, { w: 34, wall: 22, roof: 20, walls: LOG_WALLS, roofs: ROOF, bay: 12, door: true, chimney: 0.4 }))
-      for (const dx of [16, 24]) barrel(canvas, cx + dx, base - 9 + dx / 4)
-      rowboat(canvas, cx - 36, base - h + 4)
-      fishRack(canvas, cx - 42, base - h + 18)
-      net(canvas, cx - 14, base - 8)
-      crate(canvas, cx - 24, base - 6, 8)
-      crate(canvas, cx - 30, base - 10, 7)
-    } else if (v === 1) {
-      // The harbour-master's shed behind; before it a crane, a post and a jib with a rope and hook, crates stacked by it.
-      tops.push(hall(canvas, cx + 24, base - h + 10, { w: 22, wall: 16, roof: 14, walls: LOG_WALLS, roofs: SHINGLE, bay: 10, door: true, chimney: 0.35 }))
-      const px = cx - 6
-      const py = base - h + 10
-      for (let z = 0; z < 40; z++) for (const dx of [-1, 0, 1, 2]) canvas.set(px + dx, py - z, TIMBER[dx < 1 ? 2 : 1])
-      for (let t = 0; t < 24; t++) for (const d of [0, 1]) canvas.set(px - t, py - 38 + d + Math.round(t * 0.2), TIMBER[1 + d])
-      for (let z = 0; z < 22; z++) canvas.set(px - 22, py - 33 + z, SACK[2])
-      for (let d = 0; d < 3; d++) canvas.set(px - 22 + d - 1, py - 11 + Math.abs(d - 1), STEEL_GREY[2])
-      for (let t = 0; t < 12; t++) canvas.set(px + t * 0.6, py - 38 + t * 2.6, TIMBER[0])
-      crate(canvas, cx + 6, base - 12, 10)
-      crate(canvas, cx + 14, base - 16, 10)
-      crate(canvas, cx + 10, base - 24, 8)
-      barrel(canvas, cx - 30, base - 10)
-      // A boat and nets.
-      rowboat(canvas, cx - 40, base - h + 8)
-      net(canvas, cx - 20, base - 6)
-      barrel(canvas, cx - 22, base - 14)
-    } else {
-      // A little lighthouse with a lit lantern at the back, the fishers' shed before it, a boat drawn up, a fish
-      // rack, nets, crates and barrels.
-      const tw = tower(canvas, cx - 20, base - h + 2, 9, 46, KEEP, ROOF, true)
-      for (let y = 0; y < 4; y++) for (let x = -3; x <= 3; x++) canvas.set(tw.x + x, tw.y + 20 + y, EMBER[y < 2 ? 2 : 1])
-      finial(canvas, tw.x, tw.y, 3)
-      tops.push(hall(canvas, hx + 6, hy + 2, { w: 28, wall: 18, roof: 16, walls: LOG_WALLS, roofs: ROOF, bay: 12, door: true, chimney: 0.4 }))
-      fishRack(canvas, cx - 40, base - h + 14)
-      rowboat(canvas, cx - 30, base - 12)
-      net(canvas, cx - 2, base - 6)
-      crate(canvas, cx + 22, base - 12, 8)
-      crate(canvas, cx + 28, base - 16, 8)
-      barrel(canvas, cx + 14, base - 8)
-      barrel(canvas, cx - 12, base - 14)
-    }
-  } else {
-    if (v === 0) {
-      // A sailboat's mast and sail rising behind the hall.
-      const mx = cx - 30
-      const my = base - h - 6
-      for (let z = 0; z < 62; z++) canvas.set(mx, my - z, TIMBER[1])
-      for (let z = 0; z < 50; z++) for (let d = 0; d < Math.round((z / 50) * 20); d++) canvas.set(mx + 1 + d, my - 60 + z, d === 0 ? WALL[2] : WALL[4 - (d % 5 === 0 ? 1 : 0)])
-      tops.push(hall(canvas, hx, hy, { w: 40, wall: 26, roof: 24, walls: LOG_WALLS, roofs: SLATE, bay: 12, door: true, chimney: 0.45 }))
-      for (const dx of [14, 22, 30]) barrel(canvas, cx + dx, base - 9 + dx / 4)
-    } else if (v === 1) {
-      tops.push(hall(canvas, hx, hy, { w: 38, wall: 24, roof: 22, walls: LOG_WALLS, roofs: SLATE, bay: 12, door: true }))
-      awning(canvas, hx, hy, 38, BLUE_STRIPE, 6, 34, 18, 12)
-      counter(canvas, hx, hy, 38, 8, 32, 'food')
-      for (const [dx, c] of [[-40, FLAG], [-22, BLUE_STRIPE]] as const) {
-        for (let z = 0; z < 26; z++) canvas.set(cx + dx, base - 8 - z, TIMBER[1])
-        for (let y = 0; y < 5; y++) for (let x = 1; x <= 8 - y; x++) canvas.set(cx + dx + x, base - 34 + y, c[y < 2 ? 1 : 0])
-      }
-      rowboat(canvas, cx + 4, base - 12)
-    } else {
-      tops.push(hall(canvas, hx, hy, { w: 38, wall: 26, roof: 22, walls: DARK_STONE, roofs: SLATE, masonry: true, bay: 12, glow: true, door: true }))
-      tops.push(stack(canvas, hx + 16, hy - 26 - 14, 26, 6))
-      fishRack(canvas, cx - 36, base - h + 6)
-      for (const dx of [14, 22]) barrel(canvas, cx + dx, base - 9 + dx / 4)
-      net(canvas, cx - 6, base - 8)
-    }
-  }
-  return smoky(canvas.sprite(cx, base, 0), tops)
 }
 
 // Plank jetty `w`×`h` tiles over the water, its planks across direction `along`; the deck stands `lift` pixels above
@@ -1542,443 +948,6 @@ function builder(frame: number, tunic: Uint32Array, cap: Uint32Array): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
-// A small tent on four posts under a canopy of `cloth`, standing on (x, base), with goods under it.
-function tent(canvas: Canvas, x: number, base: number, w: number, cloth: Uint32Array, plain = false) {
-  hall(canvas, x, base, { w, wall: 14, roof: Math.round(w * 0.7), walls: WALL, roofs: ROOF, open: true, cloth, plain })
-}
-
-// A weighing scale on a post standing on (sx, sy).
-function scale(canvas: Canvas, sx: number, sy: number) {
-  for (let z = 0; z < 16; z++) canvas.set(sx, sy - z, TIMBER[1])
-  for (let x = -6; x <= 6; x++) canvas.set(sx + x, sy - 16, BRASS[2])
-  for (const side of [-6, 6]) for (let x = -2; x <= 2; x++) canvas.set(sx + side + x, sy - 11, BRASS[x < 0 ? 3 : 1])
-}
-
-// The market (CLAUDE.md §9.7). Level 1 comes in two looks picked by the building: a stall under a red-and-white
-// canopy heaped with produce, or under blue-and-white with crates. Levels 2 and 3 (tents of many colours round a
-// scale; a timber stall with a sign; a market square round a fountain) are drawn ahead for when the market grows.
-function market(variant = 0, level = 1): Sprite {
-  const v = variant % 2
-  const { canvas, cx, base, h } = footprint(2, 70 + (level - 1) * 18)
-  if (level === 1) {
-    hall(canvas, cx, base - 8, { w: 50, wall: 20, roof: 22, walls: WALL, roofs: ROOF, open: true, cloth: v ? CANOPY_BLUE : CANOPY })
-    counter(canvas, cx, base - 8, 50, 8, 44, v ? 'cloth' : 'food')
-    if (v) {
-      crate(canvas, cx + 18, base - 8, 9)
-      crate(canvas, cx + 26, base - 12, 8)
-    } else {
-      barrel(canvas, cx + 20, base - 8)
-      shadeBlobs(canvas, [{ x: cx + 28, y: base - 10, r: 4 }, { x: cx + 32, y: base - 13, r: 3.5 }], SACK, 3)
-    }
-    return canvas.sprite(cx, base, 0)
-  }
-  if (level === 2) {
-    if (!v) {
-      tent(canvas, cx - 22, base - h + 2, 20, CANOPY_GOLD, true)
-      tent(canvas, cx + 22, base - h + 2, 20, CANOPY_BROWN, true)
-      tent(canvas, cx, base - 6, 24, CANOPY, false)
-      scale(canvas, cx - 30, base - 6)
-      // A rug laid out with goods.
-      for (let y = 0; y < 6; y++) for (let x = 0; x < 14; x++) canvas.set(cx + 18 + x, base - 10 + y - Math.round(x * 0.5), (x + y) % 4 === 0 ? BRASS[2] : rgb(0x5a3a7a))
-    } else {
-      hall(canvas, cx + 4, base - 10, { w: 40, wall: 22, roof: 20, walls: LOG_WALLS, roofs: SHINGLE, bay: 0, door: true })
-      awning(canvas, cx + 4, base - 10, 40, STRIPE, 6, 34, 16, 12)
-      counter(canvas, cx + 4, base - 10, 40, 8, 32, 'food')
-      // A signboard on a post.
-      for (let z = 0; z < 20; z++) canvas.set(cx - 40, base - 10 - z, TIMBER[1])
-      for (let y = 0; y < 8; y++) for (let x = 0; x < 10; x++) canvas.set(cx - 39 + x, base - 30 + y, y === 0 || y === 7 || x === 0 || x === 9 ? TIMBER[0] : PLANK[3])
-      barrel(canvas, cx + 24, base - 8)
-    }
-    return canvas.sprite(cx, base, 0)
-  }
-  // A market square: tents round a fountain, a cart of goods.
-  tent(canvas, cx, base - h - 14, 18, CANOPY_GOLD, false)
-  tent(canvas, cx - 28, base - h, 18, CANOPY, false)
-  tent(canvas, cx + 28, base - h, 18, CANOPY_BLUE, false)
-  const fx = cx
-  const fy = base - h + 6
-  shadeBlobs(canvas, [{ x: fx, y: fy - 2, r: 8 }], STONE, 17, 0.5)
-  for (let z = 0; z < 12; z++) canvas.set(fx, fy - 4 - z, STONE[4])
-  for (let dx = -3; dx <= 3; dx++) canvas.set(fx + dx, fy - 16, rgb(0x9ad0e8))
-  tent(canvas, cx - 16, base - 4, 16, CANOPY_BROWN, true)
-  tent(canvas, cx + 16, base - 4, 16, CANOPY_GOLD, true)
-  cart(canvas, cx + 20, base - 4)
-  banner(canvas, cx, base - h - 14 - 26, 9)
-  return canvas.sprite(cx, base, 0)
-}
-
-// A straw training dummy on a post standing on (x, y).
-function dummy(canvas: Canvas, x: number, y: number) {
-  for (let z = 0; z < 14; z++) canvas.set(x, y - z, TIMBER[1])
-  for (let x2 = -4; x2 <= 4; x2++) canvas.set(x + x2, y - 10, TIMBER[2])
-  shadeBlobs(canvas, [{ x, y: y - 14, r: 3.5 }, { x, y: y - 8, r: 3 }], THATCH, 3)
-}
-
-// An archery target on legs standing on (x, y).
-function target(canvas: Canvas, x: number, y: number) {
-  for (const d of [-3, 3]) for (let z = 0; z < 8; z++) canvas.set(x + d, y - z, TIMBER[1])
-  for (let dy = -5; dy <= 5; dy++) for (let dx = -4; dx <= 4; dx++) {
-    const r = Math.hypot(dx * 1.2, dy)
-    if (r <= 5) canvas.set(x + dx, y - 12 + dy, r < 1.5 ? CRIMSON[3] : r < 3 ? PLASTER[4] : r < 4.2 ? CRIMSON[2] : THATCH[3])
-  }
-}
-
-// A pennant on a pole standing on (x, y).
-function pennant(canvas: Canvas, x: number, y: number, tall = 22) {
-  for (let z = 0; z < tall; z++) canvas.set(x, y - z, TIMBER[1])
-  for (let fy = 0; fy < 5; fy++) for (let fx = 1; fx <= 8 - fy; fx++) canvas.set(x + fx, y - tall + 1 + fy, FLAG[fy < 2 ? 2 : 1])
-}
-
-// A palisade of sharpened stakes along the two front edges of a footprint (cx, base, h), with a gap at the front
-// corner for the way in.
-function palisade(canvas: Canvas, cx: number, base: number, h: number, gap = 8) {
-  for (const side of [-1, 1]) {
-    for (let t = gap; t < h * 2 - 6; t += 2) {
-      const x = cx + side * t
-      const y = base - 2 - t / 2
-      for (let z = 0; z < 10; z++) canvas.set(x, y - z, z > 7 ? LOGS[3] : LOGS[side < 0 ? 2 : 1])
-    }
-  }
-}
-
-// A catapult standing on (x, base).
-function catapult(canvas: Canvas, x: number, base: number) {
-  for (let t = 0; t < 16; t++) for (const d of [0, 6]) canvas.set(x + t, base - 3 + t / 2 - d * 0.5 + d, TIMBER[1])
-  for (const [dx, dy] of [[2, 1], [14, 7]]) for (let a = 0; a < 16; a++) {
-    const t = (a / 16) * Math.PI * 2
-    canvas.set(x + dx + Math.round(Math.cos(t) * 2), base + dy + Math.round(Math.sin(t) * 3), TIMBER[0])
-  }
-  for (let z = 0; z < 16; z++) canvas.set(x + 6 - Math.round(z * 0.5), base - 2 - z, TIMBER[2])
-  shadeBlobs(canvas, [{ x: x - 2, y: base - 19, r: 2.5 }], STONE, 5)
-}
-
-// The barracks (CLAUDE.md §9.7), two looks per level picked by the building:
-//   level 1: a stone hall under red tiles in a fenced yard of dummies and targets; the same, ivy-grown, with a lean-to;
-//   level 2: a gilded hall between two roofed towers over a training yard; a hall with stables and banners;
-//   level 3 (drawn ahead for when the barracks grows): a walled keep with a catapult; a fort round a tall
-//     tower over a yard of targets and shields.
-function barracks(variant = 0, level = 1): Sprite {
-  const v = variant % 2
-  const { canvas, cx, base, h } = footprint(3, 110 + (level - 1) * 30)
-  // Trampled yard.
-  for (let y = base - h * 2; y <= base; y++) {
-    for (let x = cx - (h * 2 - 4); x <= cx + (h * 2 - 4); x++) {
-      const a = (x - cx) / (h * 2 - 6)
-      const b = (y - (base - h)) / (h - 3)
-      if (Math.abs(a) + Math.abs(b) <= 1) canvas.set(x, y, pick(SOIL, 1.5 + hash(x >> 1, y, 83) * 1.2))
-    }
-  }
-  const tops: { x: number; y: number; chimney: boolean }[] = []
-  if (level === 1) {
-    const top = hall(canvas, cx + 18, base - h + 4, { w: 56, wall: 28, roof: 30, walls: DARK_STONE, roofs: ROOF, masonry: true, bay: 16, door: true, chimney: 0.6 })
-    tops.push(top)
-    pennant(canvas, top.x, top.y, 14)
-    if (v) {
-      overgrow(canvas, cx - 50, base - h - 70, cx + 80, base - 10, 0.12, 51, DARK_STONE)
-      hall(canvas, cx - 30, base - 18, { w: 16, wall: 14, roof: 8, walls: WALL, roofs: SHINGLE, open: true, roofed: true })
-      rack(canvas, cx - 10, base - 10)
-    } else {
-      for (const [dx, dy] of [[-58, -6], [-40, 2]]) dummy(canvas, cx + dx, base - h + dy + 10)
-      target(canvas, cx - 22, base - 10)
-    }
-    palisade(canvas, cx, base, h)
-  } else if (level === 2) {
-    if (!v) {
-      const hw = 58
-      const hb = base - h + 4
-      const top = hall(canvas, cx + 18, hb, { w: hw, wall: 32, roof: 32, walls: DARK_STONE, roofs: SLATE, masonry: true, bay: 16, door: true, chimney: 0.6, trim: BRASS[1] })
-      tops.push(top)
-      // Round towers on the hall's side corners.
-      for (const side of [-1, 1]) {
-        const t = tower(canvas, cx + 18 + side * hw, hb - hw / 2 + 6, 9, 52, DARK_STONE, SLATE, true)
-        pennant(canvas, t.x, t.y, 10)
-      }
-      for (const side of [-1, 1]) drape(canvas, cx + 18, base - h + 4, 60, side, 12, 28, 16)
-      for (const [dx, dy] of [[-58, -6], [-40, 2], [-22, 8]]) dummy(canvas, cx + dx, base - h + dy + 10)
-    } else {
-      // Stables: an open shed on the left, the hall behind, banners on poles along the yard.
-      const top = hall(canvas, cx + 22, base - h + 2, { w: 54, wall: 32, roof: 30, walls: DARK_STONE, roofs: ROOF, masonry: true, bay: 16, door: true, chimney: 0.6 })
-      tops.push(top)
-      hall(canvas, cx - 36, base - 16, { w: 24, wall: 18, roof: 12, walls: WALL, roofs: ROOF, open: true, roofed: true })
-      for (const dx of [-12, 2, 16]) pennant(canvas, cx + dx, base - 8 + Math.abs(dx) / 4, 26)
-      rack(canvas, cx + 30, base - 10)
-    }
-    palisade(canvas, cx, base, h)
-  } else if (!v) {
-    // A keep inside a curtain wall with round towers, a catapult before the gate.
-    const ring = 80
-    const corner = (dx: number, dy: number) => ({ x: cx + dx * ring, y: base - h + dy * (ring / 2) })
-    const back = corner(0, -1)
-    const left = corner(-1, 0)
-    const right = corner(1, 0)
-    // The back walls first, their inner faces over the yard, then the back tower and the keep.
-    rampart(canvas, left.x + 10, left.y - 5, back.x - 10, back.y + 5, 22, DARK_STONE, false)
-    rampart(canvas, back.x + 10, back.y + 5, right.x - 10, right.y - 5, 22, DARK_STONE, true)
-    tower(canvas, back.x, back.y, 10, 56, DARK_STONE, null, true)
-    const top = hall(canvas, cx, base - h + 20, { w: 44, wall: 50, roof: 26, walls: DARK_STONE, roofs: ROOF, masonry: true, bay: 12, trim: BRASS[1] })
-    tops.push(top)
-    for (const side of [-1, 1]) {
-      const c = side < 0 ? left : right
-      tower(canvas, c.x, c.y, 11, 50, DARK_STONE, null, true)
-      rampart(canvas, c.x - side * 11, c.y + 5, cx + side * 14, base - 13, 22, DARK_STONE, side < 0)
-    }
-    for (let x = -14; x <= 14; x++) for (let z = 0; z < 30; z++) canvas.set(cx + x, base - 6 - z + Math.abs(x) * 0.15, Math.abs(x) < 7 && z < 18 ? TIMBER[0] : pick(DARK_STONE, x < 0 ? 3 : 1.6))
-    for (const dx of [-20, 20]) pennant(canvas, cx + dx, base - 36, 14)
-    catapult(canvas, cx - 50, base - 6)
-  } else {
-    // A fort round a tall tower with a pagoda roof; targets and shields along the yard.
-    const t = hall(canvas, cx + 6, base - h + 10, { w: 22, wall: 70, roof: 24, walls: DARK_STONE, roofs: ROOF, masonry: true, bay: 10, trim: BRASS[1] })
-    pennant(canvas, t.x, t.y, 14)
-    for (const side of [-1, 1]) hall(canvas, cx + side * 40, base - h + 10, { w: 30, wall: 30, roof: 22, walls: DARK_STONE, roofs: ROOF, masonry: true, bay: 12, door: side < 0 })
-    for (const dx of [-60, -46, -32]) target(canvas, cx + dx, base - h + 30 + (dx + 60) / 2)
-    for (let i = 0; i < 6; i++) for (let dy = -3; dy <= 3; dy++) for (let dx = -2; dx <= 2; dx++) if (dx * dx + dy * dy <= 9) canvas.set(cx + 14 + i * 7 + dx, base - 14 - i * 3.5 + dy, (i % 2 ? CRIMSON : CLOTH[1])[Math.abs(dx) + Math.abs(dy) <= 1 ? 3 : 2])
-    palisade(canvas, cx, base, h, 12)
-  }
-  return smoky(canvas.sprite(cx, base, 0), tops)
-}
-
-// The spy house (CLAUDE.md §9.7), two looks per level picked by the building:
-//   level 1: a dark townhouse with lit slits of windows and a crow on the roof; an ivy-grown stone house with a
-//     cellar hatch and a lean-to;
-//   level 2: a tall narrow brick house with chimneys and a ladder; a timber-framed house with an outside stair;
-//   level 3: a stone house with a lookout tower and balconies; a dark timbered manor with a tower and scaffolding.
-const SHADOW_WALLS = ramp(0x1e1a24, 0x2a2532, 0x37314a, 0x4a4260, 0x5e5478)
-const BRICK = ramp(0x3a1a14, 0x5a2a1e, 0x7a3a28, 0x9a4e36, 0xb4664a)
-function crow(canvas: Canvas, x: number, y: number) {
-  for (const [dx, dy] of [[0, 0], [1, 0], [2, 0], [-1, 1], [0, 1], [1, 1], [2, 1], [3, 1], [0, 2], [1, 2], [2, 2], [-2, 0]]) canvas.set(x + dx, y + dy, rgb(0x16141a))
-  canvas.set(x - 2, y, BRASS[3])
-}
-function spyHouse(variant = 0, level = 1): Sprite {
-  const v = variant % 2
-  const { canvas, cx, base } = footprint(2, 100 + (level - 1) * 26)
-  const tops: { x: number; y: number; chimney: boolean }[] = []
-  const hb = base - 6
-  if (level === 1) {
-    const top = hall(canvas, cx, hb, { w: 38, wall: 34, roof: 32, walls: v ? KEEP : SHADOW_WALLS, roofs: SLATE, masonry: true, bay: 12, door: true, chimney: 0.5 })
-    tops.push(top)
-    crow(canvas, top.x - 4, top.y + 4)
-    if (v) {
-      overgrow(canvas, cx - 40, base - 80, cx + 40, base, 0.16, 61, KEEP)
-      hall(canvas, cx + 24, base - 6, { w: 12, wall: 12, roof: 6, walls: WALL, roofs: SHINGLE, open: true, roofed: true })
-      // A cellar hatch by the wall.
-      for (let t = 0; t < 10; t++) for (let d = 0; d < 5; d++) canvas.set(cx - 30 + t + d, base - 10 + t / 2 - d / 2, d === 0 || t === 0 ? TIMBER[0] : PLANK[2])
-    } else {
-      barrel(canvas, cx + 22, base - 8)
-    }
-  } else if (level === 2) {
-    const walls = v ? WALL : BRICK
-    const top = hall(canvas, cx + 2, hb, { w: 34, wall: 54, roof: 30, walls, roofs: SLATE, masonry: !v, bay: 9, door: true, chimney: 0.35 })
-    tops.push(top)
-    tops.push(stack(canvas, cx + 16, hb - 54 - 12, 16))
-    crow(canvas, top.x - 4, top.y + 4)
-    if (v) {
-      // An outside stair up the left wall to a door on the upper floor.
-      for (let i = 0; i < 12; i++) for (let d = 0; d < 6; d++) canvas.set(cx - 34 + i * 2 + d, base - 10 - i * 2.5 + d * 0.5, d === 0 ? TIMBER[0] : PLANK[i % 2 ? 2 : 3])
-      overgrow(canvas, cx - 40, base - 70, cx + 40, base, 0.05, 63)
-      crate(canvas, cx + 22, base - 8, 8)
-      barrel(canvas, cx + 30, base - 12)
-    } else {
-      // A ladder up to the roof.
-      for (let z = 0; z < 44; z++) for (const dx of [0, 4]) canvas.set(cx + 26 + dx, base - 8 - z, TIMBER[1])
-      for (let z = 2; z < 44; z += 4) for (let dx = 0; dx < 5; dx++) canvas.set(cx + 26 + dx, base - 8 - z, TIMBER[2])
-    }
-  } else {
-    const walls = v ? SHADOW_WALLS : KEEP
-    const t = hall(canvas, cx - 4, base - 36, { w: 12, wall: 80, roof: 18, walls, roofs: SLATE, masonry: true, bay: 6, trim: v ? undefined : BRASS[1] })
-    finial(canvas, t.x, t.y, 4)
-    crow(canvas, t.x + 2, t.y + 8)
-    const top = hall(canvas, cx + 6, hb, { w: 40, wall: 40, roof: 28, walls, roofs: SLATE, masonry: true, bay: 10, door: true, chimney: 0.6 })
-    tops.push(top)
-    tops.push(stack(canvas, cx - 24, hb - 40 - 6, 14))
-    // Balconies on the left wall.
-    for (const lift of [20, 32]) {
-      for (let tt = 0; tt < 18; tt++) for (let d = 0; d < 2; d++) canvas.set(cx - 30 + tt, hb - lift + tt / 2 + d, d === 0 ? PLANK[3] : TIMBER[1])
-      for (let tt = 0; tt < 18; tt += 3) for (let z = 0; z < 4; z++) canvas.set(cx - 30 + tt, hb - lift + tt / 2 - z, TIMBER[0])
-    }
-    if (v) {
-      // Scaffolding up the right wall.
-      for (const dx of [16, 30]) for (let z = 0; z < 46; z++) canvas.set(cx + dx, base - 10 - dx / 4 - z, TIMBER[1])
-      for (let z = 10; z < 46; z += 12) for (let dx = 16; dx <= 30; dx++) canvas.set(cx + dx, base - 10 - dx / 4 - z, PLANK[2])
-    }
-    barrel(canvas, cx - 34, base - 10)
-  }
-  // A lantern by the door.
-  for (let z = 0; z < 8; z++) canvas.set(cx - 30, base - 30 - z, TIMBER[0])
-  for (let y = 0; y < 5; y++) for (let x = -2; x <= 2; x++) canvas.set(cx - 30 + x, base - 29 + y, Math.abs(x) === 2 || y === 0 || y === 4 ? TIMBER[0] : EMBER[2])
-  return smoky(canvas.sprite(cx, base, 0), tops)
-}
-
-// The watchtower: a battered stone footing, a tall braced timber shaft, an overhanging railed lookout (its plank floor
-// seen from above) with a beacon fire, and a steep slate roof with the kingdom's pennant. It stands in the middle of
-// its tile.
-// Two looks per level, picked by the building: level 1 the timber tower on a stone footing, or on a plank base with a
-// rope ladder; level 2 (drawn ahead) taller, with shields on its railing and banners, or ringed by sharpened stakes
-// with a pulley; level 3 (drawn ahead) a round stone tower, with braziers on its battlements or a bell under a roof.
-function watchtower(variant = 0, level = 1): Sprite {
-  if (level >= 3) return stoneWatchtower(variant % 2)
-  const v = variant % 2
-  const { canvas, cx, base } = footprint(1, level === 2 ? 200 : 180)
-  // The ground under the middle of the tile; heights rise from here.
-  const g = base - TILE_HEIGHT / 2
-  // Stone footing, wider at the foot, its top a paved ring.
-  const foot = 12
-  if (v === 1 && level === 1) canvas.solid(ellipseAt(cx, g, 12), foot - 1, foot)
-  else canvas.solid(ellipseAt(cx, g, 15), 0, foot)
-  for (let z = 0; z <= foot; z++) {
-    if (v === 1 && level === 1) break
-    const r = 15 - z * 0.25
-    for (let x = Math.ceil(-r); x <= r; x++) {
-      const f = x / r
-      const curve = Math.sqrt(Math.max(0, 1 - f * f)) * r * 0.5
-      const course = Math.floor(z / 3)
-      const mortar = z % 3 === 0 || (x + (course & 1) * 3) % 6 === 0
-      const tone = 3.4 - (f + 1) * 1.5 - (mortar ? 0.9 : 0) + (hash(x >> 1, course, 17) - 0.5) * 0.6
-      canvas.set(cx + x, Math.round(g - z + curve), pick(DARK_STONE, tone))
-    }
-  }
-  const ring = 12
-  for (let x = -ring; x <= ring; x++) {
-    const curve = Math.sqrt(Math.max(0, 1 - (x / ring) ** 2)) * ring * 0.5
-    for (let y = -curve; y <= curve; y++) canvas.set(cx + x, Math.round(g - foot + y), v === 1 && level === 1 ? PLANK[(x + Math.round(y)) % 3 === 0 ? 2 : 3] : pick(DARK_STONE, 3.2 - (x / ring) * 0.8))
-  }
-  // Legs under the plank base.
-  if (v === 1 && level === 1) for (const dx of [-11, -4, 4, 11]) for (let z = 0; z < foot; z++) canvas.set(cx + dx, g - z + 3 - Math.abs(dx) * 0.2, TIMBER[0])
-  // The timber shaft: a square frame seen corner-on, planked between the posts, braced crosswise on each face.
-  const half = 8
-  const z0 = foot + 2
-  const z1 = level === 2 ? 96 : 80
-  canvas.solid(diamondAt(cx, g, half), z0, z1)
-  const at = (x: number, z: number) => Math.round(g - z + (half - Math.abs(x)) / 2)
-  for (let z = z0; z <= z1; z++) {
-    for (let x = -half; x <= half; x++) canvas.set(cx + x, at(x, z), PLANK[(x < 0 ? 3 : 1) - (Math.abs(x) % 3 === 0 ? 1 : 0)])
-  }
-  for (const side of [-1, 1]) {
-    // Three crosses of braces up each face.
-    for (let leg = 0; leg < 3; leg++) {
-      const lo = z0 + 3 + leg * 22
-      for (let t = 0; t <= half; t++) {
-        const x = side * t
-        canvas.set(cx + x, at(x, lo + t * 2.3), TIMBER[side < 0 ? 1 : 0])
-        canvas.set(cx + x, at(x, lo + (half - t) * 2.3), TIMBER[side < 0 ? 1 : 0])
-      }
-    }
-    for (let z = z0; z <= z1; z++) canvas.set(cx + side * half, at(side * half, z), TIMBER[0])
-  }
-  for (let z = z0; z <= z1; z++) canvas.set(cx, at(0, z), TIMBER[2])
-  for (const lo of [40, 62]) for (let z = lo; z < lo + 8; z++) canvas.set(cx - 4, at(-4, z), TIMBER[0])
-  // The lookout: a plank floor overhanging the shaft, seen from above, its front edge on joists.
-  const deck = 15
-  const floor = z1 + 3
-  canvas.solid(diamondAt(cx, g, deck), z1, floor)
-  const back = (x: number, z: number) => Math.round(g - z - (deck - Math.abs(x)) / 2)
-  const front = (x: number, z: number) => Math.round(g - z + (deck - Math.abs(x)) / 2)
-  for (let x = -deck; x <= deck; x++) {
-    for (let z = z1; z < floor; z++) canvas.set(cx + x, front(x, z), PLANK[x < 0 ? 2 : 1])
-    if (Math.abs(x) % 4 === 1) canvas.set(cx + x, front(x, z1 - 1), TIMBER[0])
-    for (let y = back(x, floor); y <= front(x, floor); y++) {
-      // Boards run along one side of the floor.
-      const seam = (x + (y - g) * 2) % 6 === 0
-      canvas.set(cx + x, y, PLANK[seam ? 2 : 3 + (hash(x >> 2, y, 41) > 0.7 ? 1 : 0)])
-    }
-  }
-  // Behind the fire: the railing along the back edges and the back corner post, in shadow.
-  const rail = (edge: (x: number, z: number) => number, shade: number) => {
-    for (let x = -deck; x <= deck; x++) {
-      const post = Math.abs(x) % 5 === 0
-      for (let z = floor; z < floor + (post ? 7 : 1); z++) canvas.set(cx + x, edge(x, z), TIMBER[shade])
-      canvas.set(cx + x, edge(x, floor + 6), TIMBER[Math.min(2, shade + 1)])
-    }
-  }
-  rail(back, 0)
-  const eave = z1 + 22
-  for (let z = floor; z <= eave; z++) canvas.set(cx, back(0, z), TIMBER[0])
-  // The beacon: a brazier on the middle of the floor with flames licking up out of it.
-  const fireY = g - floor - 1
-  for (let x = -4; x <= 4; x++) canvas.set(cx + x, fireY, TIMBER[0])
-  for (let x = -3; x <= 3; x++) canvas.set(cx + x, fireY + 1, TIMBER[0])
-  for (let y = 1; y <= 10; y++) {
-    const w = Math.max(0, 4 - Math.floor(y / 2))
-    for (let x = -w; x <= w; x++) {
-      if (hash(x, y, 29) > 0.75 && y > 3) continue
-      canvas.set(cx + x, fireY - y, EMBER[Math.abs(x) >= w && y < 6 ? 0 : y < 3 ? 1 : y < 7 ? 2 : 1])
-    }
-  }
-  // In front: the railing along the front edges and the posts at the side and front corners up to the roof.
-  rail(front, 1)
-  for (const x of [-deck, 0, deck]) for (let z = floor; z <= eave; z++) canvas.set(cx + x, front(x, z), TIMBER[x < 0 ? 2 : x === 0 ? 1 : 0])
-  // A steep pyramid roof of slate, its front ridge facing the viewer.
-  const roof = 18
-  const apex = eave + 32
-  canvas.solid(diamondAt(cx, g, roof), eave, apex, [cx, g])
-  // The corner posts holding up the roof.
-  for (const x of [-deck, 0, deck]) canvas.solid(diamondAt(cx + x, g + (deck - Math.abs(x)) / 2, 1), floor, eave)
-  for (let x = -roof; x <= roof; x++) {
-    const bottom = Math.round(g - eave + (roof - Math.abs(x)) / 2)
-    const topY = Math.round(g - apex + (Math.abs(x) / roof) * (apex - eave))
-    for (let y = topY; y <= bottom; y++) {
-      const shingle = (bottom - y) % 4 === 0
-      canvas.set(cx + x, y, pick(SLATE, (x < 0 ? 3.6 : 1.6) - (shingle ? 0.7 : 0) + (hash(x, y >> 2, 23) - 0.5) * 0.4))
-    }
-    canvas.set(cx + x, bottom + 1, TIMBER[0])
-  }
-  for (let y = g - apex; y <= g - eave + roof / 2; y++) canvas.set(cx, y, SLATE[5])
-  finial(canvas, cx, g - apex, 4)
-  banner(canvas, cx, g - apex - 4, 9)
-  if (v === 1 && level === 1) {
-    // A rope ladder down the lit face.
-    for (let z = foot; z < z1; z++) for (const dx of [-6, -2]) canvas.set(cx + dx, at(dx, z) + 1, SACK[2])
-    for (let z = foot + 2; z < z1; z += 4) for (let dx = -6; dx <= -2; dx++) canvas.set(cx + dx, at(dx, z) + 1, SACK[1])
-  }
-  if (level === 2) {
-    // Shields along the front railing, banners off the corners.
-    for (const x of [-10, -3, 4, 11]) for (let dy = -3; dy <= 3; dy++) for (let dx = -2; dx <= 2; dx++) if (dx * dx + dy * dy <= 8) canvas.set(cx + x + dx, front(x, floor + 3) + dy, (x % 2 ? CRIMSON : CLOTH[1])[Math.abs(dx) + Math.abs(dy) <= 1 ? 3 : 2])
-    for (const x of [-deck, deck]) pennant(canvas, cx + x, front(x, eave) - 2, 12)
-    if (v) {
-      // Sharpened stakes leaning out round the foot, and a pulley with a rope.
-      for (let i = 0; i < 9; i++) {
-        const a = (i / 9) * Math.PI
-        const sx = cx + Math.round(Math.cos(a) * 20)
-        const sy = g + Math.round(Math.sin(a) * 9)
-        for (let t = 0; t < 10; t++) canvas.set(sx + Math.round(Math.cos(a) * t * 0.6), sy - t, t > 7 ? LOGS[3] : LOGS[1])
-      }
-      for (let z = 20; z < z1; z++) canvas.set(cx + deck - 2, front(deck - 2, z), SACK[2])
-    }
-  }
-  return canvas.sprite(cx, base, 0)
-}
-
-// The stone watchtower of level 3 (drawn ahead): a round crenellated tower with braziers burning on its top, or a
-// bell under a little roof and red bands.
-function stoneWatchtower(v: number): Sprite {
-  const { canvas, cx, base } = footprint(1, 150)
-  const g = base - TILE_HEIGHT / 2
-  const top = tower(canvas, cx, g + 6, 15, 86, DARK_STONE, v ? null : null, true)
-  if (v) {
-    for (const z of [30, 60]) for (let x = -15; x <= 15; x++) {
-      const curve = Math.sqrt(Math.max(0, 1 - (x / 15) ** 2)) * 7.5
-      for (let d = 0; d < 3; d++) canvas.set(cx + x, Math.round(g + 6 - z + curve) - d, CRIMSON[x < 0 ? 2 : 1])
-    }
-    // The bell under a little roof on posts.
-    for (const dx of [-6, 6]) for (let z = 0; z < 14; z++) canvas.set(cx + dx, top.y - z, TIMBER[1])
-    for (let dx = -8; dx <= 8; dx++) for (let d = 0; d < 4; d++) canvas.set(cx + dx, top.y - 14 - d + Math.abs(dx) * 0.4, SLATE[3 - (d === 0 ? 1 : 0)])
-    shadeBlobs(canvas, [{ x: cx, y: top.y - 7, r: 4 }], BRASS, 8)
-    for (const dx of [-12, 12]) pennant(canvas, cx + dx, top.y - 2, 14)
-  } else {
-    for (const dx of [-9, 0, 9]) {
-      for (let y = 0; y < 3; y++) canvas.set(cx + dx, top.y + 2 - y, STEEL_GREY[1])
-      for (let z = 0; z < 5; z++) for (let d = -1; d <= 1; d++) if (Math.abs(d) < 2 - z / 3) canvas.set(cx + dx + d, top.y - 1 - z, EMBER[z < 2 ? 1 : 2])
-    }
-    for (const dx of [-14, 14]) pennant(canvas, cx + dx, top.y, 12)
-  }
-  // An arched door at the foot.
-  for (let x = -4; x <= 4; x++) for (let z = 0; z < 12 + Math.sqrt(Math.max(0, 16 - x * x)); z++) canvas.set(cx - 7 + x, g + 12 - z + Math.round(x * 0.1), TIMBER[z < 1 ? 0 : 1])
-  return canvas.sprite(cx, base, 0)
-}
-
-const PLASTER = ramp(0x8a8270, 0xb4ac98, 0xd4ccb6, 0xe8e2cc, 0xf6f2e2)
-const TERRACOTTA = ramp(0x5a2416, 0x7a3420, 0x9a4a2c, 0xb8603a, 0xd07a4c, 0xe49464)
-const VERDIGRIS = ramp(0x1e4a44, 0x2a6a5e, 0x3a8a78, 0x52a690, 0x74c2aa, 0x9adcc4)
-
 // A flat paved yard over a footprint's diamond.
 function yard(canvas: Canvas, cx: number, base: number, h: number, colors: Uint32Array, seed: number) {
   canvas.paving = true
@@ -1990,284 +959,6 @@ function yard(canvas: Canvas, cx: number, base: number, h: number, colors: Uint3
     }
   }
   canvas.paving = false
-}
-
-// The university (CLAUDE.md §9.8): level 1 a stone college under slate with an observatory tower, its green dome
-// crowned by a gilded armillary; level 2 a bigger college with a clock tower, a bookcase out front, a banner and ivy;
-// level 3 a grand hall of gilded gables with an arched gate under a crest, a telescope on the roof, crates of books
-// and maps, and ivy over it all.
-function armillary(canvas: Canvas, ax: number, ay: number, r = 4) {
-  for (let a = 0; a < r * 6; a++) {
-    const t = (a / (r * 6)) * Math.PI * 2
-    canvas.set(ax + Math.round(Math.cos(t) * r), ay + Math.round(Math.sin(t) * r), BRASS[a < r * 3 ? 3 : 1])
-  }
-  for (let d = -r; d <= r; d++) canvas.set(ax + d, ay, BRASS[2])
-  for (let z = 0; z < r + 2; z++) canvas.set(ax, ay + r + z, BRASS[1])
-}
-
-// A bookcase standing on (x, base): shelves of coloured spines under a little roof.
-function bookcase(canvas: Canvas, x: number, base: number, wide = 14, tall = 18) {
-  for (let i = 0; i <= wide; i++) {
-    const g = base - i / 2
-    for (let z = 0; z <= tall; z++) {
-      const shelf = z % 5 === 0
-      const side = i === 0 || i === wide
-      canvas.set(x + i, g - z, side || shelf ? PLANK[side ? 1 : 2] : CLOTH[(i + Math.floor(z / 5)) % CLOTH.length][hash(i, z >> 2, 5) > 0.5 ? 2 : 1])
-    }
-    canvas.set(x + i, g - tall - 1, PLANK[4])
-  }
-}
-
-// Steps up to a door on the left wall of a hall standing on (cx, base) with half-width w.
-function steps(canvas: Canvas, cx: number, base: number, w: number) {
-  const t0 = Math.round(w * 0.62) - 2
-  for (let i = 0; i < 3; i++) {
-    for (let t = t0 - i; t <= t0 + Math.max(5, Math.round(w * 0.2)) + 2 + i; t++) {
-      const x = cx - (w - t) - i * 2
-      const g = base - w / 2 + t / 2 + i
-      canvas.set(x, g - 2 + i, KEEP[i === 0 ? 3 : 2])
-      canvas.set(x, g - 1 + i, KEEP[1])
-    }
-  }
-}
-
-function university(level = 1): Sprite {
-  const { canvas, cx, base, h } = footprint(3, 140 + (level - 1) * 24)
-  yard(canvas, cx, base, h, level === 1 ? GREENS : KEEP, 91)
-  const tops: { x: number; y: number; chimney: boolean }[] = []
-  if (level === 1) {
-    const dome = tower(canvas, cx + 32, base - h - 14, 10, 58, KEEP, VERDIGRIS, true)
-    armillary(canvas, dome.x, dome.y - 7)
-    const hb = base - 14
-    tops.push(hall(canvas, cx - 6, hb, { w: 54, wall: 32, roof: 28, walls: KEEP, roofs: SLATE, masonry: true, bay: 12, door: true, chimney: 0.6 }))
-    steps(canvas, cx - 6, hb, 54)
-  } else if (level === 2) {
-    // The clock tower behind on the right: a tall square tower under a green spire, a clock face on its lit side.
-    const tb = base - h - 6
-    const clock = hall(canvas, cx + 28, tb, { w: 14, wall: 74, roof: 26, walls: KEEP, roofs: VERDIGRIS, masonry: true, bay: 0, trim: BRASS[2] })
-    finial(canvas, clock.x, clock.y, 5)
-    const fx = cx + 28 - 7
-    const fy = tb - 7 - 58
-    for (let y = -5; y <= 5; y++) for (let x = -4; x <= 4; x++) if ((x * x) / 16 + (y * y) / 25 <= 1) canvas.set(fx + x, fy + y + Math.round(x * 0.5), (x * x) / 16 + (y * y) / 25 > 0.7 ? BRASS[1] : rgb(0xf0e6c8))
-    for (let z = 0; z < 4; z++) canvas.set(fx, fy - z, TIMBER[0])
-    for (let d = 0; d < 3; d++) canvas.set(fx + d, fy + Math.round(d * 0.5), TIMBER[0])
-    const hb = base - 12
-    tops.push(hall(canvas, cx - 8, hb, { w: 58, wall: 38, roof: 30, walls: KEEP, roofs: SLATE, masonry: true, bay: 11, door: true, chimney: 0.62 }))
-    steps(canvas, cx - 8, hb, 58)
-    drape(canvas, cx - 8, hb, 58, -1, 10, 34, 20)
-    overgrow(canvas, cx - 70, base - 90, cx + 50, base - 10, 0.12, 93, KEEP)
-    bookcase(canvas, cx + 30, base - 16)
-    // Flower beds by the steps.
-    for (let i = 0; i < 10; i++) canvas.set(cx - 50 + i * 3, base - 18 + Math.round(i * 1.5), FRUIT[i % FRUIT.length])
-  } else {
-    // A wing behind with a telescope on its roof, the main hall, and two gilded gables on the front.
-    const wing = hall(canvas, cx + 6, base - h - 14, { w: 44, wall: 46, roof: 26, walls: KEEP, roofs: SLATE, masonry: true, bay: 11, trim: BRASS[2], chimney: 0.5 })
-    tops.push(wing)
-    const hb = base - 10
-    tops.push(hall(canvas, cx, hb, { w: 62, wall: 42, roof: 26, walls: KEEP, roofs: SLATE, masonry: true, bay: 12, trim: BRASS[2] }))
-    for (const side of [-1, 1]) {
-      const g = hall(canvas, cx + side * 30, hb - 12, { w: 16, wall: 46, roof: 24, walls: KEEP, roofs: SLATE, masonry: true, bay: 8, trim: BRASS[2] })
-      finial(canvas, g.x, g.y, 4)
-    }
-    // The telescope: a brass tube on a tripod, pointing up at the sky.
-    const sx = cx - 34
-    const sy = base - h - 38
-    for (const d of [-4, 0, 4]) for (let z = 0; z < 8; z++) canvas.set(sx + d - Math.round(d * z * 0.1), sy - z, TIMBER[1])
-    for (let t = 0; t < 16; t++) for (let d = -1; d <= 1; d++) canvas.set(sx - 6 + t, sy - 8 - Math.round(t * 0.55) + d, d === -1 ? BRASS[3] : t > 13 ? BRASS[0] : BRASS[2])
-    // The arched gate at the front corner, a crest over it.
-    for (let x = -9; x <= 9; x++) {
-      const top = 20 + Math.sqrt(Math.max(0, 81 - x * x)) * 0.7
-      for (let z = 0; z < top; z++) canvas.set(cx + x, hb - z + Math.abs(x) * 0.5, Math.abs(x) >= 8 || z >= top - 1.5 ? KEEP[4] : z < 2 ? KEEP[1] : TIMBER[0])
-    }
-    for (let y = -5; y <= 5; y++) for (let x = -4; x <= 4; x++) if (Math.abs(x) <= 4 - Math.max(0, y - 1)) canvas.set(cx + x, hb - 36 + y, Math.abs(x) === 4 - Math.max(0, y - 1) || y === -5 ? BRASS[1] : x < 0 ? CRIMSON[2] : BRASS[2])
-    overgrow(canvas, cx - 90, base - 120, cx + 90, base - 6, 0.16, 97, KEEP)
-    crate(canvas, cx + 22, base - 10, 10)
-    crate(canvas, cx + 32, base - 15, 9)
-    for (let i = 0; i < 4; i++) for (let x = 0; x < 6; x++) canvas.set(cx - 38 + x, base - 14 - i * 2, CLOTH[i % 4][x < 3 ? 2 : 1])
-    // A map spread on the ground.
-    for (let y = 0; y < 4; y++) for (let x = 0; x < 9; x++) canvas.set(cx - 22 + x, base - 8 + y - Math.round(x * 0.3), y === 0 || x === 0 ? SACK[2] : rgb(0xe8d8a8))
-  }
-  return smoky(canvas.sprite(cx, base, 0), tops)
-}
-
-// A white cloth with a red cross hung on the left wall of a hall, its top-left at (fx, fy).
-function redCross(canvas: Canvas, fx: number, fy: number) {
-  for (let y = 0; y < 11; y++) for (let x = 0; x < 9; x++) canvas.set(fx + x, fy + y + Math.floor(x / 2), x === 0 || x === 8 || y === 10 ? CRIMSON[1] : PLASTER[4])
-  for (let i = 2; i <= 8; i++) {
-    for (const w of [0, 1]) {
-      canvas.set(fx + 4 + w, fy + i + 2, CRIMSON[2])
-      canvas.set(fx + i - 1, fy + 4 + w + Math.floor((i - 1) / 2), CRIMSON[2])
-    }
-  }
-}
-
-// A wooden bench standing on (x, base).
-function bench(canvas: Canvas, x: number, base: number) {
-  for (let t = 0; t < 12; t++) {
-    canvas.set(x + t, base - 4 + t / 2, PLANK[3])
-    canvas.set(x + t, base - 3 + t / 2, PLANK[1])
-  }
-  for (const t of [1, 10]) for (let z = 0; z < 3; z++) canvas.set(x + t, base - z + t / 2, TIMBER[1])
-}
-
-// Rows of herbs or flowers starting at (x, y), running down to the right.
-function beds(canvas: Canvas, x: number, y: number, rows = 3, length = 14) {
-  for (let r = 0; r < rows; r++) for (let t = 0; t < length; t++) canvas.set(x + t, y - r * 4 + Math.floor(t / 2), hash(t, r, 13) > 0.4 ? GREENS[1 + (t % 3)] : FRUIT[(t + r) % 4])
-}
-
-// A dormer window on the left face of a hip roof: a little gable with a lit pane.
-function dormer(canvas: Canvas, x: number, y: number, roofs: Uint32Array) {
-  for (let z = 0; z < 6; z++) for (let dx = 0; dx < 6; dx++) canvas.set(x + dx, y - z + dx / 2, dx === 0 || dx === 5 || z === 0 ? PLASTER[2] : z > 1 && z < 5 && dx > 1 && dx < 4 ? GLASS[2] : PLASTER[4])
-  for (let d = 0; d < 5; d++) for (let dx = -1; dx <= 6; dx++) if (Math.abs(dx - 2.5) <= 4 - d) canvas.set(x + dx, y - 6 - d + dx / 2, roofs[3 - (d === 0 ? 1 : 0)])
-}
-
-// The hospital (CLAUDE.md §9.8), two looks per level picked by the building: 0 a whitewashed house (a timber-framed
-// hall with a herb garden and a stretcher at 2, a long stone infirmary with dormers, a well and a red-cross banner at
-// 3); 1 a stone house with herbs drying (a timber hall with a field tent at 2, a dormered house in a fenced garden at 3).
-function hospital(variant = 0, level = 1): Sprite {
-  const v = variant % 2
-  const { canvas, cx, base, h } = footprint(2, 90 + (level - 1) * 18)
-  yard(canvas, cx, base, h, level === 3 ? KEEP : v ? KEEP : PLASTER, 47)
-  const tops: { x: number; y: number; chimney: boolean }[] = []
-  const hb = base - 8
-  if (level === 1) {
-    const w = 36
-    tops.push(hall(canvas, cx, hb, { w, wall: 24, roof: 22, walls: v ? KEEP : PLASTER, roofs: TERRACOTTA, masonry: true, bay: 12, door: true, chimney: v ? 0.5 : undefined }))
-    redCross(canvas, cx - 16, hb - 34)
-    if (v) {
-      // Herbs hung up to dry on a line along the wall.
-      for (let t = 0; t < 14; t++) canvas.set(cx + 8 + t, hb - 22 + t / 2, TIMBER[1])
-      for (let t = 1; t < 14; t += 3) for (let z = 0; z < 4; z++) canvas.set(cx + 8 + t, hb - 21 + t / 2 + z, GREENS[2])
-      bench(canvas, cx - 34, base - 14)
-    } else {
-      for (const dx of [-32, -26, 20]) shadeBlobs(canvas, [{ x: cx + dx, y: base - 10 + dx / 8, r: 3 }], GREENS, dx)
-      bench(canvas, cx + 18, base - 4)
-    }
-  } else if (level === 2) {
-    const w = 40
-    tops.push(hall(canvas, cx + 4, hb - 4, { w, wall: 34, roof: 28, walls: WALL, roofs: TERRACOTTA, bay: 11, door: true, chimney: 0.45 }))
-    redCross(canvas, cx - 14, hb - 46)
-    if (v) {
-      // A field tent of canvas beside the hall.
-      tent(canvas, cx + 26, base - 6, 16, ramp(0x8a7a5a, 0xc8b88e, 0xe8dcc0), true)
-      barrel(canvas, cx - 30, base - 10)
-    } else {
-      beds(canvas, cx - 40, base - 12, 3, 16)
-      // A stretcher on the ground.
-      for (let t = 0; t < 14; t++) for (const d of [0, 3]) canvas.set(cx + 14 + t, base - 8 + t / 2 + d, TIMBER[1])
-      for (let t = 2; t < 12; t++) for (let d = 1; d < 3; d++) canvas.set(cx + 14 + t, base - 8 + t / 2 + d, PLASTER[3])
-      barrel(canvas, cx + 30, base - 12)
-    }
-  } else if (!v) {
-    const w = 46
-    tops.push(hall(canvas, cx, hb - 4, { w, wall: 40, roof: 30, walls: KEEP, roofs: TERRACOTTA, masonry: true, bay: 10, door: true, chimney: 0.3 }))
-    tops.push(stack(canvas, cx + 18, hb - 4 - 40 - 20, 14))
-    for (const t of [-34, -22]) dormer(canvas, cx + t, hb - 4 - 40 - 8 + Math.abs(t) / 4, TERRACOTTA)
-    redCross(canvas, cx - 18, hb - 52)
-    // A banner pole with the red cross, and a well.
-    for (let z = 0; z < 36; z++) canvas.set(cx - 48, base - 14 - z, TIMBER[1])
-    redCross(canvas, cx - 47, base - 48)
-    shadeBlobs(canvas, [{ x: cx + 26, y: base - 10, r: 5 }], STONE, 19)
-    for (let x = -2; x <= 2; x++) canvas.set(cx + 26 + x, base - 13, rgb(0x3a7ab8))
-  } else {
-    const w = 40
-    tops.push(hall(canvas, cx + 2, hb - 4, { w, wall: 30, roof: 28, walls: PLASTER, roofs: TERRACOTTA, masonry: true, bay: 11, door: true, chimney: 0.4 }))
-    for (const t of [-28, -16]) dormer(canvas, cx + 2 + t, hb - 4 - 30 - 8 + Math.abs(t) / 4, TERRACOTTA)
-    redCross(canvas, cx - 14, hb - 42)
-    picket(canvas, cx - 4, base + 4, 6, 36)
-    beds(canvas, cx - 40, base - 12, 2, 14)
-    // Lanterns on posts by the path.
-    for (const dx of [-24, 12]) {
-      for (let z = 0; z < 14; z++) canvas.set(cx + dx, base - 6 - z, TIMBER[0])
-      for (let y = 0; y < 3; y++) canvas.set(cx + dx, base - 21 + y, EMBER[2])
-    }
-  }
-  return smoky(canvas.sprite(cx, base, 0), tops)
-}
-
-// A gilded cross standing on (x, y).
-function cross(canvas: Canvas, x: number, y: number, tall = 8) {
-  for (let z = 0; z < tall; z++) canvas.set(x, y - z, BRASS[z > tall - 3 ? 3 : 2])
-  for (let d = -2; d <= 2; d++) canvas.set(x + d, y - tall + 3, BRASS[3])
-}
-
-// A brazier burning on a post, standing on (x, base).
-function brazier(canvas: Canvas, x: number, base: number) {
-  for (let z = 0; z < 12; z++) canvas.set(x, base - z, TIMBER[0])
-  for (let d = -2; d <= 2; d++) canvas.set(x + d, base - 12, STEEL_GREY[1])
-  for (let z = 0; z < 5; z++) for (let d = -1; d <= 1; d++) if (Math.abs(d) < 2 - z / 3) canvas.set(x + d, base - 13 - z, EMBER[z < 2 ? 1 : 2])
-}
-
-// A statue on a plinth, standing on (x, base).
-function statue(canvas: Canvas, x: number, base: number) {
-  for (let z = 0; z < 5; z++) for (let d = -3; d <= 3; d++) canvas.set(x + d, base - z, KEEP[d < 0 ? 3 : 1])
-  for (let z = 5; z < 16; z++) for (let d = -2; d <= 2; d++) if (z < 13 || Math.abs(d) < 2) canvas.set(x + d, base - z, STONE[d < 0 ? 4 : 2])
-}
-
-// The temple (CLAUDE.md §9.8), two looks per level picked by the building:
-//   level 1: a stone chapel beside a little green-domed tower; an old chapel overgrown with ivy;
-//   level 2: a gilded chapel with a bell tower and a porch; a chapel with a green-spired tower, braziers and a well;
-//   level 3: a domed basilica with a columned porch and banners; a spired church with statues and a lantern.
-function temple(variant = 0, level = 1): Sprite {
-  const v = variant % 2
-  const { canvas, cx, base, h } = footprint(2, 120 + (level - 1) * 34)
-  yard(canvas, cx, base, h, level === 1 ? KEEP : GREENS, 37)
-  const hb = base - 8
-  if (level === 1) {
-    if (!v) {
-      const t = tower(canvas, cx + 22, base - h - 2, 7, 40, KEEP, VERDIGRIS, true)
-      cross(canvas, t.x, t.y, 7)
-    }
-    const top = hall(canvas, cx - 2, hb, { w: 38, wall: 26, roof: 26, walls: KEEP, roofs: SLATE, masonry: true, bay: 0, door: true })
-    cross(canvas, top.x, top.y, 8)
-    if (v) {
-      overgrow(canvas, cx - 50, base - 60, cx + 50, base, 0.16, 41, KEEP)
-      bench(canvas, cx + 14, base - 4)
-      barrel(canvas, cx + 30, base - 12)
-    }
-  } else if (level === 2) {
-    // The bell tower behind on the right, a square tower under a spire.
-    const bell = hall(canvas, cx + 22, base - h - 4, { w: 10, wall: 56, roof: 22, walls: KEEP, roofs: v ? VERDIGRIS : SLATE, masonry: true, bay: 0, trim: BRASS[2] })
-    cross(canvas, bell.x, bell.y, 8)
-    hall(canvas, cx - 4, hb, { w: 40, wall: 30, roof: 30, walls: KEEP, roofs: SLATE, masonry: true, bay: 10, glow: true, door: true, trim: v ? undefined : BRASS[2] })
-    // A porch over the door.
-    hall(canvas, cx - 26, base - 2, { w: 10, wall: 16, roof: 10, walls: KEEP, roofs: SLATE, masonry: true, bay: 0, door: true })
-    if (v) {
-      for (const dx of [-42, -12]) brazier(canvas, cx + dx, base - 8 + dx / 10)
-      shadeBlobs(canvas, [{ x: cx + 26, y: base - 10, r: 5 }], STONE, 21)
-      for (let x = -2; x <= 2; x++) canvas.set(cx + 26 + x, base - 13, rgb(0x3a7ab8))
-    }
-  } else if (!v) {
-    // The domed tower behind, the nave under green copper, a columned porch with banners.
-    const t = tower(canvas, cx + 18, base - h - 4, 11, 70, KEEP, null, true)
-    // A dome of green copper on the tower.
-    for (let y = 0; y <= 12; y++) {
-      const half = Math.round(Math.sqrt(Math.max(0, 1 - (y / 12) ** 2)) * 11)
-      for (let x = -half; x <= half; x++) canvas.set(t.x + x, t.y + 4 - y, pick(VERDIGRIS, x < 0 ? 4 : x < half / 2 ? 3 : 1))
-    }
-    cross(canvas, t.x, t.y - 8, 9)
-    hall(canvas, cx - 4, hb, { w: 42, wall: 34, roof: 26, walls: KEEP, roofs: VERDIGRIS, masonry: true, bay: 10, glow: true, door: true, trim: BRASS[2] })
-    for (const side of [-1, 1]) drape(canvas, cx - 4, hb, 42, side, 8, 30, 16)
-    // Columns of a porch along the front of the left wall.
-    for (let i = 0; i < 4; i++) for (let z = 0; z < 22; z++) canvas.set(cx - 40 + i * 7, base - 10 + i * 3.5 - z, KEEP[z % 7 === 0 ? 2 : 4])
-    for (let i = 0; i <= 24; i++) for (let d = 0; d < 3; d++) canvas.set(cx - 42 + i, base - 32 + i / 2 - d, KEEP[3 - d])
-  } else {
-    // Spires at the corners of a gothic church.
-    for (const [dx, dy] of [[-20, -h - 8], [24, -h - 6]]) {
-      const sp = tower(canvas, cx + dx, base + dy, 6, 56, KEEP, SLATE, true)
-      cross(canvas, sp.x, sp.y, 6)
-    }
-    const top = hall(canvas, cx, hb, { w: 40, wall: 32, roof: 30, walls: KEEP, roofs: SLATE, masonry: true, bay: 9, glow: true, door: true })
-    cross(canvas, top.x, top.y, 8)
-    for (const dx of [-30, 2]) {
-      const sp = tower(canvas, cx + dx, base - 6 + Math.abs(dx) / 4, 5, 38, KEEP, SLATE, true)
-      finial(canvas, sp.x, sp.y, 3)
-    }
-    statue(canvas, cx - 44, base - 14)
-    statue(canvas, cx + 30, base - 12)
-    brazier(canvas, cx + 16, base - 4)
-  }
-  return canvas.sprite(cx, base, 0)
 }
 
 // Barn reds (the second look an older, ox-blood barn) and the white of its trim.
@@ -2424,220 +1115,9 @@ function warehouse(variant = 0, level = 1): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
-// A gilded dome sitting on (x, y), `r` pixels across half-way.
-function goldDome(canvas: Canvas, x: number, y: number, r: number, onion = false) {
-  const tall = Math.round(r * (onion ? 1.5 : 1))
-  for (let z = 0; z <= tall; z++) {
-    const f = z / tall
-    const half = Math.round(onion ? r * Math.sin(Math.min(1, (1 - f) * 1.15) * Math.PI * 0.6 + 0.35) * (1 - f * 0.3) : Math.sqrt(Math.max(0, 1 - f * f)) * r)
-    for (let dx = -half; dx <= half; dx++) canvas.set(x + dx, y - z, BRASS[dx < -half / 3 ? 3 : dx < half / 3 ? 2 : 1])
-  }
-  finial(canvas, x, y - tall, 4)
-}
-
-// An iron railing along the front left edge, from (x, y) for `length` pixels.
-function railing(canvas: Canvas, x: number, y: number, length: number) {
-  for (let t = 0; t <= length; t++) {
-    if (t % 3 === 0) for (let z = 0; z < 9; z++) canvas.set(x + t, y + t / 2 - z, z === 8 ? BRASS[2] : STEEL_GREY[0])
-    canvas.set(x + t, y + t / 2 - 7, STEEL_GREY[1])
-  }
-}
-
-// A chest of coins standing on (x, base).
-function chest(canvas: Canvas, x: number, base: number) {
-  for (let t = 0; t < 9; t++) for (let z = 0; z < 6; z++) canvas.set(x + t, base - z + t / 2, z === 5 || t === 0 || t === 8 ? BRASS[1] : PLANK[2])
-  for (let t = 1; t < 8; t++) canvas.set(x + t, base - 6 + t / 2, BRASS[3])
-}
-
-// The treasury (CLAUDE.md §6.4), two looks per level picked by the building: a squat stone strong-house under slate
-// with a gilded edge (a kennel and coin chests in the second look); a gilded dome on it at level 2, behind an iron
-// railing with banners, or with a balcony and armoured guards on a paved path; at level 3 a castle of a treasury
-// under a great golden onion dome with gilded turrets, crenellations, chests and a cart of gold.
-function treasury(variant = 0, level = 1): Sprite {
-  const v = variant % 2
-  const { canvas, cx, base, h } = footprint(2, 100 + (level - 1) * 30)
-  yard(canvas, cx, base, h, KEEP, 71)
-  const hb = base - 8
-  if (level < 3) {
-    const top = hall(canvas, cx, hb, { w: 42, wall: 30 + (level - 1) * 4, roof: 20, walls: DARK_STONE, roofs: SLATE, masonry: true, bay: 0, door: true, trim: BRASS[2] })
-    if (level === 2) goldDome(canvas, top.x, top.y + 6, 8)
-    for (let i = 0; i < 4; i++) canvas.set(cx - 16 + i * 2, hb - 12 + i, BRASS[3])
-    if (level === 1 && !v) {
-      shadeBlobs(canvas, [{ x: cx + 4, y: base - 4, r: 3.5 }, { x: cx + 8, y: base - 3, r: 3 }], BRASS, 3)
-      chest(canvas, cx + 16, base - 8)
-    } else if (level === 1) {
-      // A kennel by the wall, barrels and a chest.
-      hall(canvas, cx - 30, base - 10, { w: 8, wall: 7, roof: 6, walls: LOG_WALLS, roofs: SHINGLE, bay: 0, door: true })
-      barrel(canvas, cx + 18, base - 8)
-      barrel(canvas, cx + 26, base - 12)
-      chest(canvas, cx + 6, base - 4)
-    } else if (!v) {
-      railing(canvas, cx - 52, base - 22, 40)
-      for (const side of [-1, 1]) drape(canvas, cx, hb, 42, side, 8, 30, 14)
-      chest(canvas, cx + 14, base - 6)
-      shadeBlobs(canvas, [{ x: cx + 4, y: base - 4, r: 3.5 }], BRASS, 3)
-    } else {
-      // A balcony on the left wall, guards in armour either side of the door.
-      for (let t = 0; t < 18; t++) for (let d = 0; d < 3; d++) canvas.set(cx - 38 + t, hb - 24 + t / 2 + d, d === 0 ? PLANK[3] : TIMBER[1])
-      for (let t = 0; t < 18; t += 3) for (let z = 0; z < 5; z++) canvas.set(cx - 38 + t, hb - 24 + t / 2 - z, TIMBER[0])
-      for (const dx of [-26, -10]) armour(canvas, cx + dx, base - 6 + dx / 6)
-      for (let t = 0; t < 20; t++) for (let d = 0; d < 6; d++) canvas.set(cx - 20 - t + d, base - 4 - t / 2 + d / 2, KEEP[(t + d) % 3 === 0 ? 2 : 3])
-    }
-    return canvas.sprite(cx, base, 0)
-  }
-  // Level 3: a walled treasury under a great golden onion dome, gilded turrets at the corners.
-  for (const [dx, dy] of [[-30, -h + 2], [30, -h + 2]]) {
-    const t = tower(canvas, cx + dx, base + dy, 6, 40, DARK_STONE, null, true)
-    goldDome(canvas, t.x, t.y + 2, 6, true)
-  }
-  const top = hall(canvas, cx, hb - 4, { w: 40, wall: 40, roof: 6, walls: DARK_STONE, roofs: SLATE, masonry: true, bay: 10, glow: true, door: true, trim: BRASS[2] })
-  goldDome(canvas, top.x, top.y + 8, 22, true)
-  // Battlements along the top of the walls.
-  for (const side of [-1, 1]) for (let t = 0; t <= 40; t++) if (t % 6 < 3) for (let z = 0; z < 3; z++) canvas.set(cx + side * (40 - t), hb - 4 - 20 + t / 2 - 40 - z, DARK_STONE[side < 0 ? 4 : 2])
-  for (const dx of [-20, 18]) {
-    const t = tower(canvas, cx + dx, base - 6 + Math.abs(dx) / 4, 5, 30, DARK_STONE, null, true)
-    goldDome(canvas, t.x, t.y + 2, 5, true)
-  }
-  for (const dx of [-40, 34]) brazier(canvas, cx + dx, base - 10)
-  chest(canvas, cx + 6, base - 4)
-  chest(canvas, cx + 22, base - 10)
-  cart(canvas, cx - 34, base - 6)
-  shadeBlobs(canvas, [{ x: cx - 28, y: base - 16, r: 3 }, { x: cx - 24, y: base - 17, r: 3 }], BRASS, 5)
-  return canvas.sprite(cx, base, 0)
-}
-
 // The prison (CLAUDE.md §9.7): a squat dark keep with barred slits and an iron-bound door, a yard in front fenced with
 // spiked iron bars. Full, a captive queen stands in the yard behind the bars, her crown still on, a guard by the gate.
 const BARS = ramp(0x16161c, 0x2a2a34, 0x464652, 0x6a6a78)
-const GOWN = ramp(0x3a0a2a, 0x5a1442, 0x7e2060, 0xa4307e)
-const FLESH = ramp(0x6b4630, 0x93633f, 0xb88458, 0xd8a678)
-function prison(variant = 0, full = false): Sprite {
-  const v = variant % 2
-  const { canvas, cx, base, h } = footprint(2, 96)
-  // Flagstones over the yard.
-  for (let y = base - h * 2; y <= base; y++) {
-    for (let x = cx - (h * 2 - 2); x <= cx + (h * 2 - 2); x++) {
-      const a = (x - cx) / (h * 2 - 4)
-      const b = (y - (base - h)) / (h - 2)
-      if (Math.abs(a) + Math.abs(b) > 1) continue
-      const seam = (x + y * 2) % 7 === 0 || (x - y * 2) % 9 === 0
-      canvas.set(x, y, seam ? STONE[1] : pick(STONE, 2 + hash(x >> 2, y >> 1, 211) * 1.5))
-    }
-  }
-  const walls = v ? SHADOW_WALLS : KEEP
-  const hb = base - h + 6
-  const top = hall(canvas, cx + 10, hb, { w: 30, wall: 38, roof: 16, walls, roofs: SLATE, masonry: true, door: true })
-  // Barred slits along both walls.
-  for (const side of [-1, 1]) {
-    for (const t of [8, 16, 24]) {
-      if (side < 0 && t > 16) continue
-      const x0 = cx + 10 + side * (30 - t)
-      const g = hb - 15 + t / 2
-      for (let z = 18; z < 30; z++) for (let d = 0; d < 4; d++) canvas.set(x0 + side * d, g - z + (side * d) / 2 * side, d === 0 || d === 3 ? BARS[0] : z % 3 === 0 ? BARS[2] : BARS[0])
-    }
-  }
-  if (full) {
-    // The queen in the yard, behind the bars drawn next: a long gown, arms at her sides, a gilded crown.
-    const qx = cx - 10
-    const qy = base - 13
-    for (let z = 0; z < 12; z++) {
-      const half = z < 8 ? 4 - Math.floor(z / 3) : 1
-      for (let d = -half; d <= half; d++) canvas.set(qx + d, qy - z, GOWN[d < 0 ? 3 : d === 0 ? 2 : 1])
-    }
-    for (let z = 12; z < 15; z++) for (let d = -1; d <= 1; d++) canvas.set(qx + d, qy - z, FLESH[d < 0 ? 3 : 2])
-    for (let d = -2; d <= 2; d++) canvas.set(qx + d, qy - 15, GOWN[0])
-    for (const d of [-1, 0, 1]) canvas.set(qx + d, qy - 16, BRASS[2])
-    for (const d of [-1, 1]) canvas.set(qx + d, qy - 17, BRASS[3])
-    canvas.set(qx, qy - 17, BRASS[1])
-  }
-  // Iron bars along the two front edges of the yard, spiked at the top, a gate in the middle of the left one.
-  for (const side of [-1, 1]) {
-    for (let t = 4; t < h * 2 - 4; t += 3) {
-      const x = cx + side * t
-      const y = base - 2 - t / 2
-      const gate = side < 0 && t > h - 6 && t < h + 4
-      const tall = gate ? 14 : 12
-      for (let z = 0; z < tall; z++) canvas.set(x, y - z, z === tall - 1 ? BARS[3] : BARS[side < 0 ? 2 : 1])
-      canvas.set(x, y - 5, BARS[0])
-    }
-    for (let t = 4; t < h * 2 - 4; t++) for (const z of [1, 9]) canvas.set(cx + side * t, base - 2 - t / 2 - z, BARS[side < 0 ? 1 : 0])
-  }
-  // A lantern by the door.
-  canvas.set(top.x - 18, hb - 14, EMBER[2])
-  canvas.set(top.x - 18, hb - 13, EMBER[1])
-  if (full) {
-    // Her guard at the gate, a spear on his shoulder.
-    const gx = cx - h - 6
-    const gy = base - h / 2 + 2
-    for (let z = 0; z < 10; z++) for (let d = -1; d <= 1; d++) canvas.set(gx + d, gy - z, z < 4 ? BARS[1] : z < 9 ? CRIMSON[d < 0 ? 3 : 2] : FLESH[2])
-    for (let z = 0; z < 16; z++) canvas.set(gx + 3, gy - z, z > 13 ? BLADE[2] : TIMBER[1])
-  }
-  return smoky(canvas.sprite(cx, base, 0), [top])
-}
-
-// The house of entertainment (CLAUDE.md §7.8): a tall half-timbered hall with a red roof and lit windows, a little
-// stage under a striped canopy at its side, strings of flags across a paved yard with tables, barrels and lanterns,
-// where the crown's patrols stop to drink and leave a tip.
-const BUNTING = [ramp(0xa82430), ramp(0xe2c058), ramp(0x3758a4), ramp(0x2a7a48), ramp(0xf6f2e2)]
-function tavern(variant = 0): Sprite {
-  const v = variant % 2
-  const { canvas, cx, base, h } = footprint(2, 112)
-  // Flagstones over the yard.
-  for (let y = base - h * 2; y <= base; y++) {
-    for (let x = cx - (h * 2 - 2); x <= cx + (h * 2 - 2); x++) {
-      const a = (x - cx) / (h * 2 - 4)
-      const b = (y - (base - h)) / (h - 2)
-      if (Math.abs(a) + Math.abs(b) > 1) continue
-      const seam = (x + y * 2) % 6 === 0 || (x - y * 2) % 8 === 0
-      canvas.set(x, y, seam ? PLASTER[0] : pick(PLASTER, 1 + hash(x >> 2, y >> 1, 233) * 1.6))
-    }
-  }
-  const hb = base - h + 2
-  const top = hall(canvas, cx - 6, hb, { w: 34, wall: 34, roof: 26, walls: WALL, roofs: v ? ROOF : SLATE, bay: 9, door: true, glow: true, chimney: 0.45 })
-  // The stage: an open stall under a striped canopy, front right.
-  const stage = hall(canvas, cx + 30, base - 10, { w: 12, wall: 14, roof: 9, walls: WALL, roofs: ROOF, open: true, cloth: v ? CRIMSON : ramp(0x23347a, 0x3758a4, 0x7a96ea) })
-  // Strings of little flags sagging from the hall's front corner out to poles at the yard's edge.
-  const flags = (x0: number, y0: number, x1: number, y1: number, seed: number) => {
-    for (let t = 0; t <= 1; t += 1 / 60) {
-      const x = x0 + (x1 - x0) * t
-      const y = y0 + (y1 - y0) * t + Math.sin(t * Math.PI) * 6
-      canvas.set(x, y, TIMBER[0])
-      const k = Math.floor(t * 60)
-      if (k % 4 !== 0) continue
-      const c = BUNTING[(k / 4 + seed) % BUNTING.length]
-      for (let d = 1; d <= 3; d++) for (let e = -(3 - d) / 2; e <= (3 - d) / 2; e++) canvas.set(x + e, y + d, c[0])
-    }
-  }
-  const pole = (x: number, y: number, tall: number) => {
-    for (let z = 0; z < tall; z++) canvas.set(x, y - z, TIMBER[z === tall - 1 ? 2 : 1])
-    // A lantern hung at its top.
-    canvas.set(x + 1, y - tall + 2, EMBER[2])
-    canvas.set(x + 1, y - tall + 3, EMBER[1])
-  }
-  pole(cx - 52, base - h + 4, 30)
-  pole(cx, base - 2, 30)
-  pole(cx + 52, base - h + 2, 30)
-  flags(cx - 30, hb - 34, cx - 52, base - h + 4 - 28, 0)
-  flags(cx - 30, hb - 34, cx, base - 2 - 28, 2)
-  flags(cx + 6, hb - 30, cx + 52, base - h + 2 - 28, 4)
-  // Tables with benches in the yard, a barrel by each.
-  for (const [tx, ty] of [[cx - 30, base - 12], [cx - 12, base - 6]]) {
-    for (let t = 0; t < 10; t++) for (let d = 0; d < 3; d++) canvas.set(tx + t, ty - 4 + t / 2 - d / 2, d === 0 ? PLANK[3] : PLANK[2])
-    for (const leg of [1, 8]) for (let z = 0; z < 3; z++) canvas.set(tx + leg, ty - 1 + leg / 2 - z, PLANK[0])
-    for (let t = 0; t < 10; t++) canvas.set(tx + t + 2, ty + 1 + t / 2, PLANK[1])
-    canvas.set(tx + 3, ty - 6, BRASS[2])
-    canvas.set(tx + 6, ty - 5, BRASS[3])
-  }
-  barrel(canvas, cx - 44, base - h + 10)
-  barrel(canvas, cx + 18, base - 4)
-  barrel(canvas, cx + 22, base - 6)
-  // A musician on the stage: a figure with a lute.
-  const mx = stage.x
-  const my = base - 16
-  for (let z = 0; z < 9; z++) for (let d = -1; d <= 1; d++) canvas.set(mx + d, my - z, z < 7 ? (v ? BUNTING[1][0] : CRIMSON[2 + (d < 0 ? 1 : 0)]) : FLESH[2])
-  for (let d = 0; d < 4; d++) canvas.set(mx + 2 + d, my - 4 - d / 2, TIMBER[2])
-  return smoky(canvas.sprite(cx, base, 0), [top])
-}
 
 // The shipyard (CLAUDE.md §8.5): a plank yard at the water's edge with a shed of tools and pitch, and a slipway with a
 // hull being built on it, drawn as a real shell (keel, frames, planks) seen from the corner: bare frames on the keel at
@@ -2878,319 +1358,23 @@ function monument(variant = 0): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
-// The mysterious fisher's hut: a crooked shack on stilts with a mossy thatch, a net drying on poles, and an odd
-// violet lantern burning by the door.
-const MOSS = ramp(0x2a3a1c, 0x3a4e24, 0x51662e, 0x6a7e3a, 0x86984a, 0xa4b060)
-const ARCANE = ramp(0x3a1a5a, 0x6a2aa0, 0x9a4ae0, 0xd090ff)
-// Four looks, picked by the building: the hut on stilts with a net and a ladder; with fish drying, a smoking stack
-// and a rowboat; with lanterns, barrels and a pole; swallowed by the roots and crown of a great tree.
-function fisherHut(variant = 0): Sprite {
-  const v = variant % 4
-  const { canvas, cx, base } = footprint(1, v === 3 ? 80 : 64)
-  // A deck on stilts, then the hut on it.
-  for (const dx of [-16, -6, 6, 16]) for (let z = 0; z < 9; z++) canvas.set(cx + dx, base - 3 - z + Math.round(Math.abs(dx) * 0.1), TIMBER[0])
-  for (let t = -20; t <= 20; t++) for (let d = 0; d < 3; d++) canvas.set(cx + t, base - 11 + Math.abs(t) * 0.12 + d, PLANK[d === 0 ? 3 : 1])
-  const top = hall(canvas, cx, base - 12, { w: 19, wall: 14, roof: 18, walls: LOGS, roofs: MOSS, bay: 0, door: true })
-  // A ladder down from the deck.
-  for (let z = 0; z < 10; z++) for (const dx of [0, 4]) canvas.set(cx - 14 + dx + z * 0.3, base - 10 + z, TIMBER[1])
-  for (let z = 1; z < 10; z += 3) for (let dx = 0; dx < 5; dx++) canvas.set(cx - 14 + dx + z * 0.3, base - 10 + z, TIMBER[2])
-  const lantern = (lx: number, ly: number) => {
-    for (let z = 0; z < 14; z++) canvas.set(lx, ly - z, TIMBER[1])
-    for (let y = 0; y < 5; y++) for (let x = -2; x <= 2; x++) canvas.set(lx + x, ly - 14 + y, Math.abs(x) === 2 || y === 0 ? TIMBER[0] : ARCANE[y < 2 ? 3 : 2])
-  }
-  if (v === 0) {
-    for (const px of [12, 24]) for (let z = 0; z < 14; z++) canvas.set(cx + px, base - 6 - z, TIMBER[1])
-    for (let y = 0; y < 9; y++) for (let x = 13; x < 24; x++) if ((x + y) % 3 === 0 || (x - y) % 3 === 0) canvas.set(cx + x, base - 18 + y + Math.round(Math.sin(x * 0.6)), STONE[3])
-    lantern(cx - 22, base - 14)
-  } else if (v === 1) {
-    stack(canvas, top.x + 4, top.y + 10, 8, 3)
-    // Fish drying on a line.
-    for (let t = 0; t < 14; t++) canvas.set(cx - 30 + t, base - 26 + t / 2, TIMBER[1])
-    for (let t = 1; t < 14; t += 3) for (let z = 0; z < 4; z++) canvas.set(cx - 30 + t, base - 25 + t / 2 + z, BLADE[z < 2 ? 2 : 1])
-    rowboat(canvas, cx + 6, base - 4, 16)
-  } else if (v === 2) {
-    lantern(cx - 22, base - 14)
-    lantern(cx + 20, base - 18)
-    barrel(canvas, cx + 10, base - 10)
-    barrel(canvas, cx + 16, base - 13)
-    crate(canvas, cx - 8, base - 9, 7)
-    // A pole with a crossbar, a pennant at its top.
-    for (let z = 0; z < 26; z++) canvas.set(top.x + 6, top.y + 12 - z, TIMBER[1])
-    for (let d = -4; d <= 4; d++) canvas.set(top.x + 6 + d, top.y - 6, TIMBER[1])
-  } else {
-    // Roots coiling down over the deck into the water, a dark crown of leaves over the roof.
-    for (let r = 0; r < 9; r++) {
-      const rx = cx - 20 + r * 5
-      for (let z = 0; z < 22; z++) canvas.set(rx + Math.round(Math.sin(z * 0.4 + r) * 2), base - 2 - z + Math.abs(rx - cx) * 0.2, BARK[z % 4 === 0 ? 2 : 1])
-    }
-    shadeBlobs(
-      canvas,
-      [
-        { x: cx - 14, y: top.y + 4, r: 12 },
-        { x: cx + 12, y: top.y + 2, r: 13 },
-        { x: cx, y: top.y - 8, r: 14 },
-        { x: cx - 20, y: top.y + 16, r: 8 },
-        { x: cx + 20, y: top.y + 14, r: 9 },
-      ],
-      ramp(0x14261a, 0x1e3a22, 0x2c5230, 0x3e6c3a),
-      61,
-    )
-    // Vines hanging from the crown.
-    for (let i = 0; i < 8; i++) for (let z = 0; z < 8 + (i % 3) * 4; z++) canvas.set(cx - 22 + i * 6, top.y + 18 + z, IVY_LEAF[(z + i) % 3])
-  }
-  return canvas.sprite(cx, base, 0)
-}
-
 // ---- The great works of a 5th-level palace (CLAUDE.md §9.8) ---------------------------------------------------------
 
-// A crenellated parapet along the two front edges of the top of a hall on (cx, hb) with half-width w.
-function parapet(canvas: Canvas, cx: number, hb: number, w: number, wall: number, walls: Uint32Array) {
-  const h = w / 2
-  for (const side of [-1, 1]) {
-    for (let t = 0; t <= w; t++) {
-      if (t % 6 >= 3 && t > 1 && t < w - 1) continue
-      for (let z = 1; z <= 4; z++) canvas.set(cx + side * (w - t), hb - h + t / 2 - wall - z, walls[z === 4 ? (side < 0 ? 4 : 3) : side < 0 ? 3 : 1])
-    }
+// A record whose entries are made when first read (sprites take a while to draw; most are never shown).
+function lazy<T>(makers: Record<string, () => T>): Record<string, T> {
+  const out = {} as Record<string, T>
+  for (const [key, make] of Object.entries(makers)) {
+    Object.defineProperty(out, key, {
+      enumerable: true,
+      configurable: true,
+      get() {
+        const value = make()
+        Object.defineProperty(out, key, { value, enumerable: true })
+        return value
+      },
+    })
   }
-  canvas.solid(diamondAt(cx, hb - h, w), wall, wall + 4)
-}
-
-// Narrow lit windows in two rows up both walls of a hall on (cx, hb): a keep's arrow slits.
-function slits(canvas: Canvas, cx: number, hb: number, w: number, wall: number) {
-  const h = w / 2
-  for (const side of [-1, 1]) {
-    for (let t = 8; t <= w - 6; t += 10) {
-      for (const row of [0.3, 0.64]) {
-        const z0 = Math.round(wall * row)
-        for (let z = z0; z < z0 + 8; z++) {
-          for (let d = 0; d < 2; d++) canvas.set(cx + side * (w - t - d), hb - h + (t + d) / 2 - z, z === z0 + 7 ? DARK_STONE[0] : GLASS[side < 0 ? 2 : 1])
-        }
-      }
-    }
-  }
-}
-
-// The citadel: a great square donjon of dark stone under a low lead roof behind a crenellated parapet, lit slits up
-// its walls, with a curtain wall along the front edges and open towers at its ends (level 1); the curtain wall all
-// round with a gatehouse between two towers, crimson drapes on the donjon and braziers at the gate (level 2); a taller
-// donjon with a roofed upper tier, roofed towers with gilded finials and banners, a gilded portcullis and guards in
-// armour at the gate (level 3). The second look roofs the towers in moss-grown slate.
-function citadel(variant = 0, level = 1): Sprite {
-  const v = variant % 2
-  const { canvas, cx, base, w, h } = footprint(3, 150 + level * 26)
-  yard(canvas, cx, base, h, DARK_STONE, 131)
-  const ring = w - 12
-  const corner = (dx: number, dy: number) => ({ x: cx + dx * ring, y: base - h + dy * (ring / 2) })
-  const back = corner(0, -1)
-  const left = corner(-1, 0)
-  const right = corner(1, 0)
-  const curtain = 10 + level * 3
-  const r = 6 + level
-  const roofs = level >= 3 ? (v ? MOSSY : SLATE) : null
-  const tops: { x: number; y: number }[] = []
-  if (level >= 2) {
-    rampart(canvas, left.x + r, left.y - r / 2, back.x - r, back.y + r / 2, curtain, DARK_STONE, false)
-    rampart(canvas, back.x + r, back.y + r / 2, right.x - r, right.y - r / 2, curtain, DARK_STONE, true)
-    tops.push(tower(canvas, back.x, back.y, r, curtain + 16, DARK_STONE, roofs, true))
-  }
-  // The donjon, and at level 3 the upper tier rising out of its roof.
-  const kw = [34, 40, 44][level - 1]
-  const kwall = [58, 72, 84][level - 1]
-  const keepBase = base - h + Math.round(kw / 2) + 2
-  let top = hall(canvas, cx, keepBase, { w: kw, wall: kwall, roof: 6, walls: DARK_STONE, roofs: SLATE, masonry: true })
-  slits(canvas, cx, keepBase, kw, kwall)
-  parapet(canvas, cx, keepBase, kw, kwall, DARK_STONE)
-  if (level >= 2) for (const side of [-1, 1]) drape(canvas, cx, keepBase, kw, side, Math.round(kw * 0.4), kwall - 8, 22)
-  if (level >= 3) {
-    top = hall(canvas, cx, keepBase - kwall - 2, { w: 20, wall: 22, roof: 24, walls: DARK_STONE, roofs: v ? MOSSY : SLATE, masonry: true, bay: 8, trim: BRASS[2] })
-    finial(canvas, top.x, top.y, 6)
-  }
-  banner(canvas, top.x, top.y - (level >= 3 ? 6 : 2), 13)
-  // The side towers, then the curtain wall along the two front edges, then the gate.
-  tops.push(tower(canvas, left.x, left.y, r + 1, curtain + 14, DARK_STONE, roofs, true))
-  tops.push(tower(canvas, right.x, right.y, r + 1, curtain + 14, DARK_STONE, roofs, true))
-  const gate = { x: cx, y: base - 6 }
-  const gw = level >= 2 ? 14 : 9
-  rampart(canvas, left.x + r, left.y + r / 2, gate.x - gw, gate.y - gw / 2, curtain, DARK_STONE, true)
-  rampart(canvas, right.x - r, right.y + r / 2, gate.x + gw, gate.y - gw / 2, curtain, DARK_STONE, false)
-  const gateTall = curtain + 8 + level * 2
-  const half = level >= 2 ? 12 : 7
-  for (let x = -half; x <= half; x++) {
-    const ground = gate.y - 6 + Math.abs(x) * 0.15
-    for (let z = 0; z <= gateTall; z++) {
-      const arch = Math.abs(x) <= 5 && z < 12 + Math.sqrt(Math.max(0, 25 - x * x)) * 0.8
-      let color = pick(DARK_STONE, (x < 0 ? 3 : 1.6) - (z % 3 === 0 || (x + (Math.floor(z / 3) & 1) * 2) % 5 === 0 ? 0.8 : 0))
-      if (arch) color = level >= 3 ? (Math.abs(x) % 3 === 0 && z > 2 ? BRASS[1] : z % 4 === 0 && z > 2 ? BRASS[0] : TIMBER[0]) : z > 1 && Math.abs(x) < 5 ? PLANK[x < 0 ? 3 : 1] : TIMBER[0]
-      if (z > gateTall - 3 && (x + half) % 5 >= 3) continue
-      canvas.set(cx + x, ground - z, color)
-    }
-  }
-  canvas.solid(diamondAt(cx, gate.y - 6, half), 0, gateTall)
-  if (level >= 2) {
-    for (const side of [-1, 1]) tops.push(tower(canvas, gate.x + side * 15, gate.y, 6, gateTall + 8, DARK_STONE, roofs))
-    for (const side of [-1, 1]) brazier(canvas, cx + side * 26, base - 4)
-  }
-  if (level >= 3) {
-    for (const dx of [-8, 8]) armour(canvas, cx + dx, base - 1)
-    for (const [i, t] of tops.entries()) {
-      finial(canvas, t.x, t.y, 4)
-      if (i === tops.length - 3 || i === tops.length - 4) banner(canvas, t.x, t.y - 4, 9)
-    }
-  }
-  return canvas.sprite(cx, base, 0)
-}
-
-// The founder in bronze (gilded at level 3) on a pedestal standing on (x, pb): a crowned figure in a long cloak, his
-// sword raised at level 2 and up, a gilded plaque on the pedestal.
-function founder(canvas: Canvas, x: number, pb: number, level: number) {
-  const tall = 12 + level * 3
-  hall(canvas, x, pb, { w: 11, wall: tall, roof: 1, walls: KEEP, roofs: KEEP, masonry: true, trim: BRASS[1] })
-  for (let t = 3; t <= 7; t++) for (let z = Math.round(tall * 0.35); z < Math.round(tall * 0.7); z++) canvas.set(x - 11 + t, pb - 5.5 + t / 2 - z, BRASS[z % 3 === 0 ? 1 : 2])
-  const metal = level >= 3 ? BRASS : VERDIGRIS
-  const foot = pb - 6 - tall
-  const tone = (d: number, half: number) => metal[d < 0 ? 3 : d < half / 2 ? 2 : 1]
-  for (let z = 0; z < 22; z++) {
-    // Legs, a cloak flaring to the feet, broad shoulders, a neck and a head.
-    const half = z < 4 ? 2 : z < 15 ? Math.round(4 - (z - 4) / 5) : z < 17 ? 4 : z < 18 ? 1 : z === 18 || z === 21 ? 1 : 2
-    for (let d = -half; d <= half; d++) {
-      if (z < 4 && d === 0) continue
-      const cloak = level >= 2 && z >= 4 && z < 17 && (d === -half || d === half)
-      canvas.set(x + d, foot - z, cloak ? CRIMSON[d < 0 ? 3 : 1] : tone(d, half))
-    }
-  }
-  // The crown.
-  for (let d = -2; d <= 2; d++) canvas.set(x + d, foot - 22, BRASS[d < 0 ? 3 : 2])
-  for (const d of [-2, 0, 2]) canvas.set(x + d, foot - 23, BRASS[3])
-  if (level >= 2) {
-    // A sword held high in the right hand.
-    for (let z = 0; z < 14; z++) canvas.set(x + 5, foot - 14 - z, z < 2 ? BRASS[2] : BLADE[z < 13 ? 1 : 2])
-    for (const d of [4, 6]) canvas.set(x + d, foot - 16, BRASS[2])
-    canvas.set(x + 4, foot - 14, tone(1, 4))
-  }
-  canvas.solid(diamondAt(x, pb - 5.5, 5), tall, tall + 25)
-}
-
-// A small obelisk of black stone with a gilded tip standing on (x, base).
-function obelisk(canvas: Canvas, x: number, base: number, tall = 34) {
-  for (let z = 0; z < 3; z++) for (let d = -4; d <= 4; d++) canvas.set(x + d, base - z, KEEP[d < 0 ? 3 : 1])
-  for (let z = 3; z < tall; z++) {
-    const half = Math.round(3 - (z / tall) * 1.6)
-    for (let d = -half; d <= half; d++) canvas.set(x + d, base - z, z % 9 === 0 ? BRASS[d < 0 ? 3 : 1] : pick(BASALT, d < 0 ? 3.2 : 1.4))
-  }
-  for (let y = 0; y < 4; y++) for (let d = -Math.floor(y / 2); d <= Math.floor(y / 2); d++) canvas.set(x + d, base - tall - 3 + y, BRASS[d < 0 ? 3 : 2])
-  canvas.solid(diamondAt(x, base - 1, 3), 0, tall + 3)
-}
-
-// The dynasty's memorial: the founder's statue on a pedestal in a paved square between flower beds and two braziers
-// (level 1); a colonnade with a gilded architrave curving round behind it, crimson drapes and clipped hedges (level 2);
-// a triumphal arch with a gilded attic and the dynasty's crown behind a gilded statue, black obelisks at the sides and
-// an eternal flame before it (level 3). The second look plants roses in the beds.
-function memorial(variant = 0, level = 1): Sprite {
-  const v = variant % 2
-  const { canvas, cx, base, h } = footprint(2, 100 + (level - 1) * 30)
-  yard(canvas, cx, base, h, KEEP, 97)
-  const blooms = v ? [CRIMSON[3], rgb(0xf6f2e2)] : [BRASS[3], rgb(0x9a5ab0)]
-  const bed = (x: number, y: number, r: number, seed: number) => {
-    shadeBlobs(canvas, [{ x, y, r }], GREENS, seed, 0.5)
-    for (let i = 0; i < r * 3; i++) canvas.set(x - r + Math.round(hash(i, 1, seed) * r * 2), y - Math.round(hash(i, 2, seed) * r * 0.8), blooms[i % 2])
-  }
-  if (level === 2) {
-    // The colonnade along the two back edges, columns under a gilded architrave.
-    for (const side of [-1, 1]) {
-      const x0 = cx + side * 50
-      const y0 = base - h - 6
-      const x1 = cx
-      const y1 = base - h * 2 + 9
-      canvas.solid([x0, y0 - 1.5, x1, y1 - 1.5, x1, y1 + 1.5, x0, y0 + 1.5], 0, 34)
-      for (let i = 0; i <= 44; i++) {
-        const f = i / 44
-        const x = Math.round(x0 + (x1 - x0) * f)
-        const g = y0 + (y1 - y0) * f
-        if (i % 8 <= 2) for (let z = 0; z < 30; z++) canvas.set(x, g - z, KEEP[i % 8 === 0 ? (side < 0 ? 4 : 2) : side < 0 ? 3 : 1])
-        for (let z = 30; z < 35; z++) canvas.set(x, g - z, z === 34 ? BRASS[3] : z === 30 ? BRASS[1] : KEEP[side < 0 ? 3 : 2])
-      }
-    }
-  }
-  if (level >= 3) {
-    // The triumphal arch: a block of pale stone with an arched way through each face and a gilded attic.
-    const aw = 28
-    const ab = base - h + 10
-    const wall = 50
-    hall(canvas, cx, ab, { w: aw, wall, roof: 3, walls: KEEP, roofs: KEEP, masonry: true, trim: BRASS[2] })
-    for (const side of [-1, 1]) {
-      for (let t = 7; t <= aw - 7; t++) {
-        const mid = aw / 2
-        const span = mid - 7
-        const rise = Math.sqrt(Math.max(0, 1 - ((t - mid) / span) ** 2)) * span * 0.8
-        for (let z = 0; z < 26 + rise; z++) canvas.set(cx + side * (aw - t), ab - aw / 2 + t / 2 - z, z > 24 + rise ? BRASS[1] : SHADOW_WALLS[side < 0 ? 1 : 0])
-        for (let z = wall - 9; z < wall - 4; z++) canvas.set(cx + side * (aw - t), ab - aw / 2 + t / 2 - z, BRASS[z === wall - 9 ? 1 : side < 0 ? 3 : 2])
-      }
-    }
-    // The dynasty's crown over the attic.
-    const ty = ab - aw / 2 - wall - 6
-    for (let d = -5; d <= 5; d++) for (let z = 0; z < 4; z++) canvas.set(cx + d, ty - z, BRASS[d < 0 ? 3 : 2])
-    for (const d of [-5, 0, 5]) for (let z = 4; z < 7; z++) canvas.set(cx + d, ty - z, BRASS[3])
-    canvas.set(cx, ty - 2, CRIMSON[3])
-    for (const side of [-1, 1]) obelisk(canvas, cx + side * 46, base - h + 4)
-  }
-  if (level === 1) {
-    bed(cx - 30, base - h + 4, 9, 101)
-    bed(cx + 30, base - h + 4, 9, 103)
-  } else if (level === 2) {
-    for (const side of [-1, 1]) shadeBlobs(canvas, [{ x: cx + side * 30, y: base - h + 8, r: 6 }, { x: cx + side * 40, y: base - h + 3, r: 5 }], GREENS, 107 + side, 0.6)
-  }
-  founder(canvas, cx, base - 10, level)
-  if (level >= 3) {
-    // The eternal flame in a wide bowl before the statue.
-    for (let d = -4; d <= 4; d++) for (let z = 0; z < 3; z++) canvas.set(cx - 14 + d, base - 6 - z, z === 2 ? BRASS[2] : STEEL_GREY[1])
-    for (let z = 0; z < 7; z++) for (let d = -3; d <= 3; d++) if (Math.abs(d) < 3.5 - z / 2) canvas.set(cx - 14 + d, base - 9 - z, EMBER[z < 3 ? 1 : 2])
-    bed(cx + 24, base - 10, 6, 109)
-  } else {
-    for (const side of [-1, 1]) brazier(canvas, cx + side * 18, base - 6)
-  }
-  return canvas.sprite(cx, base, 0)
-}
-
-// The guild hall: a tall timber-framed hall with a chimney, a striped awning over a counter of cloth on its left wall
-// and a sign of gilded scales out front (level 1); a stone ground floor with a jettied timber storey over it, a belfry
-// behind, guild drapes and a cart of goods (level 2); a grand hall of stone and gilded trim with a golden-domed belfry,
-// an arcade of stalls under a gold canopy, chests of coin and the guild's scales (level 3). The second look roofs it in
-// slate.
-function guildHall(variant = 0, level = 1): Sprite {
-  const v = variant % 2
-  const { canvas, cx, base, h } = footprint(2, 110 + (level - 1) * 34)
-  yard(canvas, cx, base, h, PLASTER, 113)
-  const hb = base - 8
-  const roofs = v ? SLATE : ROOF
-  let top: ReturnType<typeof hall>
-  if (level === 1) {
-    top = hall(canvas, cx - 4, hb, { w: 40, wall: 34, roof: 30, walls: WALL, roofs, bay: 9, door: true, chimney: 0.42 })
-    awning(canvas, cx - 4, hb, 40, BLUE_STRIPE, 6, 22, 16, 11)
-    counter(canvas, cx - 4, hb, 40, 8, 20, 'cloth')
-    crate(canvas, cx + 18, base - 8, 9)
-    barrel(canvas, cx + 28, base - 12)
-  } else {
-    // The belfry behind on the right.
-    const belfry = tower(canvas, cx + 24, base - h - 8, 6, 62 + (level - 2) * 14, KEEP, level >= 3 ? null : roofs, true)
-    if (level >= 3) goldDome(canvas, belfry.x, belfry.y + 2, 6, true)
-    else finial(canvas, belfry.x, belfry.y, 4)
-    const ground = 22
-    hall(canvas, cx - 4, hb, { w: 42, wall: ground, roof: 4, walls: KEEP, roofs: KEEP, masonry: true, bay: 10, glow: level >= 3, door: true, trim: level >= 3 ? BRASS[2] : undefined })
-    top = hall(canvas, cx - 4, hb - ground - 3, { w: 45, wall: 22, roof: 30, walls: WALL, roofs, bay: 9, chimney: 0.42, trim: level >= 3 ? BRASS[2] : undefined })
-    for (const side of [-1, 1]) drape(canvas, cx - 4, hb - ground - 3, 45, side, 9, 20, 13)
-    if (level === 2) {
-      cart(canvas, cx + 16, base - 4)
-      crate(canvas, cx - 40, base - 20, 8)
-    } else {
-      hall(canvas, cx + 30, base - 12, { w: 12, wall: 14, roof: 9, walls: WALL, roofs: ROOF, open: true, cloth: CANOPY_GOLD })
-      chest(canvas, cx + 8, base - 6)
-      chest(canvas, cx + 18, base - 4)
-      shadeBlobs(canvas, [{ x: cx - 30, y: base - 14, r: 3 }, { x: cx - 26, y: base - 15, r: 3 }], BRASS, 9)
-    }
-  }
-  // The guild's sign: gilded scales on a post at the front left.
-  scale(canvas, cx - 44, base - 16)
-  return smoky(canvas.sprite(cx, base, 0), [top])
+  return out
 }
 
 const variants = <T>(count: number, make: (i: number) => T) => Array.from({ length: count }, (_, i) => make(i))
@@ -3242,34 +1426,36 @@ const lonePiece = (look: WallKind) => (look === 'gateY' ? 12 : 3)
 
 // Variants for each look; a building picks one by its id. Building sites come in one size per footprint tile count.
 // Looks for levels 2 and 3 of the buildings that can be raised; level 1 is STRUCTURE_SPRITES.
-export const LEVEL_SPRITES: Partial<Record<BuildingKind, Sprite[][]>> = {
-  tradePost: [2, 3].map((level) => [tradePostLevel(0, level), tradePostLevel(1, level)]),
-  house: [2, 3].map((level) => variants(4, (v) => house(v, level))),
-  farm: [2, 3].map((level) => variants(3, (v) => farm(v, level))),
-  lumberCamp: [2, 3].map((level) => variants(2, (v) => lumberCamp(v, level))),
-  forge: [2, 3].map((level) => variants(3, (v) => forge(v, level))),
-  dock: [2, 3].map((level) => variants(3, (v) => dock(v, level))),
-  market: [2, 3].map((level) => variants(2, (v) => market(v, level))),
-  barracks: [2, 3].map((level) => variants(2, (v) => barracks(v, level))),
-  spyHouse: [2, 3].map((level) => variants(2, (v) => spyHouse(v, level))),
-  watchtower: [2, 3].map((level) => variants(2, (v) => watchtower(v, level))),
-  university: [2, 3].map((level) => [university(level)]),
-  hospital: [2, 3].map((level) => variants(2, (v) => hospital(v, level))),
-  temple: [2, 3].map((level) => variants(2, (v) => temple(v, level))),
-  warehouse: [2, 3].map((level) => variants(2, (v) => warehouse(v, level))),
-  treasury: [2, 3].map((level) => variants(2, (v) => treasury(v, level))),
-  shipyard: [2, 3].map((level) => variants(2, (v) => shipyard(v, level))),
-  citadel: [2, 3].map((level) => variants(2, (v) => citadel(v, level))),
-  memorial: [2, 3].map((level) => variants(2, (v) => memorial(v, level))),
-  guildHall: [2, 3].map((level) => variants(2, (v) => guildHall(v, level))),
-}
+export const LEVEL_SPRITES: Partial<Record<BuildingKind, Sprite[][]>> = lazy({
+  tradePost: () => [2, 3].map((level) => [tradePostLevel(0, level), tradePostLevel(1, level)]),
+  house: () => [2, 3].map((level) => variants(4, (v) => house(v, level))),
+  farm: () => [2, 3].map((level) => variants(3, (v) => farm(v, level))),
+  lumberCamp: () => [2, 3].map((level) => variants(2, (v) => lumberCamp(v, level))),
+  forge: () => [2, 3].map((level) => variants(3, (v) => forge(v, level))),
+  dock: () => [2, 3].map((level) => variants(3, (v) => dock(v, level))),
+  market: () => [2, 3].map((level) => variants(2, (v) => market(v, level))),
+  barracks: () => [2, 3].map((level) => variants(2, (v) => barracks(v, level))),
+  spyHouse: () => [2, 3].map((level) => variants(2, (v) => spyHouse(v, level))),
+  watchtower: () => [2, 3].map((level) => variants(2, (v) => watchtower(v, level))),
+  university: () => [2, 3].map((level) => [university(level)]),
+  hospital: () => [2, 3].map((level) => variants(2, (v) => hospital(v, level))),
+  temple: () => [2, 3].map((level) => variants(2, (v) => temple(v, level))),
+  warehouse: () => [2, 3].map((level) => variants(2, (v) => warehouse(v, level))),
+  treasury: () => [2, 3].map((level) => variants(2, (v) => treasury(v, level))),
+  shipyard: () => [2, 3].map((level) => variants(2, (v) => shipyard(v, level))),
+  citadel: () => [2, 3].map((level) => variants(2, (v) => citadel(v, level))),
+  memorial: () => [2, 3].map((level) => variants(2, (v) => memorial(v, level))),
+  guildHall: () => [2, 3].map((level) => variants(2, (v) => guildHall(v, level))),
+})
 
 // The palace in each kingdom colour and at each level, made when first seen.
 const palaces = new Map<string, Sprite>()
 export const palaceIn = (color: string | undefined, level = 1): Sprite => {
   const hue = color && color in KINGDOM_COLORS ? color : 'royal'
   const key = `${hue}:${level}`
-  if (!palaces.has(key)) palaces.set(key, palace(hue === 'royal' ? ROYAL : KINGDOM_COLORS[hue as KingdomColor].roofs, level))
+  const roofs = hue === 'royal' ? ROYAL : KINGDOM_COLORS[hue as KingdomColor].roofs
+  // A lord's palace is drawn as a model; the crown capitals' royal keep (level 6) keeps its own drawing.
+  if (!palaces.has(key)) palaces.set(key, level >= 6 ? palace(roofs, level) : palaceModel(roofs, level))
   return palaces.get(key)!
 }
 
@@ -3281,43 +1467,43 @@ export const looksOf = (look: StructureLook, level = 1): Sprite[] =>
       ? (LEVEL_SPRITES[look]?.[level - 2] ?? STRUCTURE_SPRITES[look])
       : STRUCTURE_SPRITES[look]
 
-export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = {
-  palace: [palace()],
-  house: variants(4, (v) => house(v)),
-  farm: variants(3, (v) => farm(v)),
-  lumberCamp: variants(2, (v) => lumberCamp(v)),
-  forge: variants(3, (v) => forge(v)),
-  tradePost: [tradePostLevel(0, 1), tradePostLevel(1, 1)],
-  tradePostRuined: [0, 1].map((v) => ruinOf(tradePostLevel(v, 1), 42 + v)),
-  dock: variants(3, (v) => dock(v)),
-  market: variants(2, (v) => market(v)),
-  barracks: variants(2, (v) => barracks(v)),
-  spyHouse: variants(2, (v) => spyHouse(v)),
-  watchtower: variants(2, (v) => watchtower(v)),
-  wall: [wallLook('wall', 3, 0)],
-  gate: [wallLook('gate', 3, 0)],
-  gateY: [wallLook('gateY', 12, 0)],
-  towerWall: [wallLook('towerWall', 3, 0)],
-  university: [university()],
-  hospital: variants(2, (v) => hospital(v)),
-  temple: variants(2, (v) => temple(v)),
-  warehouse: variants(2, (v) => warehouse(v)),
-  treasury: variants(2, (v) => treasury(v)),
-  fisherHut: variants(4, (v) => fisherHut(v)),
-  prison: variants(2, (v) => prison(v)),
-  prisonFull: variants(2, (v) => prison(v, true)),
-  tavern: variants(2, (v) => tavern(v)),
-  shipyard: variants(2, (v) => shipyard(v)),
-  citadel: variants(2, (v) => citadel(v)),
-  memorial: variants(2, (v) => memorial(v)),
-  guildHall: variants(2, (v) => guildHall(v)),
+export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = lazy({
+  palace: () => [palaceModel(ROYAL)],
+  house: () => variants(4, (v) => house(v)),
+  farm: () => variants(3, (v) => farm(v)),
+  lumberCamp: () => variants(2, (v) => lumberCamp(v)),
+  forge: () => variants(3, (v) => forge(v)),
+  tradePost: () => [tradePostLevel(0, 1), tradePostLevel(1, 1)],
+  tradePostRuined: () => [0, 1].map((v) => ruinOf(tradePostLevel(v, 1), 42 + v)),
+  dock: () => variants(3, (v) => dock(v)),
+  market: () => variants(2, (v) => market(v)),
+  barracks: () => variants(2, (v) => barracks(v)),
+  spyHouse: () => variants(2, (v) => spyHouse(v)),
+  watchtower: () => variants(2, (v) => watchtower(v)),
+  wall: () => [wallLook('wall', 3, 0)],
+  gate: () => [wallLook('gate', 3, 0)],
+  gateY: () => [wallLook('gateY', 12, 0)],
+  towerWall: () => [wallLook('towerWall', 3, 0)],
+  university: () => [university()],
+  hospital: () => variants(2, (v) => hospital(v)),
+  temple: () => variants(2, (v) => temple(v)),
+  warehouse: () => variants(2, (v) => warehouse(v)),
+  treasury: () => variants(2, (v) => treasury(v)),
+  fisherHut: () => variants(4, (v) => fisherHut(v)),
+  prison: () => variants(2, (v) => prison(v)),
+  prisonFull: () => variants(2, (v) => prison(v, true)),
+  tavern: () => variants(2, (v) => tavern(v)),
+  shipyard: () => variants(2, (v) => shipyard(v)),
+  citadel: () => variants(2, (v) => citadel(v)),
+  memorial: () => variants(2, (v) => memorial(v)),
+  guildHall: () => variants(2, (v) => guildHall(v)),
   // A crown capital's own, never a lord's.
-  cathedral: variants(2, (v) => cathedral(v)),
-  monument: variants(2, (v) => monument(v)),
-  brokenWall: [wallLook('brokenWall', 3, 0)],
-  scaffold: [scaffold(1), scaffold(2), scaffold(3)],
-  jetty: [new Canvas(1, 1).sprite(0, 0, 0)],
-}
+  cathedral: () => variants(2, (v) => cathedral(v)),
+  monument: () => variants(2, (v) => monument(v)),
+  brokenWall: () => [wallLook('brokenWall', 3, 0)],
+  scaffold: () => [scaffold(1), scaffold(2), scaffold(3)],
+  jetty: () => [new Canvas(1, 1).sprite(0, 0, 0)],
+})
 
 export const VILLAGER_SPRITES = [SACK, CLOTH[2], CLOTH[1], CLOTH[3]].map((tunic) => [peasant(0, tunic), peasant(1, tunic)])
 // Builders at work on a site, in a few tunics and caps: hammer up, hammer down, two walking steps with a plank.
@@ -3385,8 +1571,9 @@ export function structureParts(world: World, s: Structure): Part[] {
     const base = once(`${key}:${s.look === 'watchtower'}`, () => plinth(s.size, left, front, right, z, colors, flat || s.look === 'watchtower' ? 0 : 3))
     parts.push({ sprite: base, fx, fy, z: front, solid: !flat })
   }
-  parts.push({ sprite: looks[s.variant % looks.length], fx, fy, z, solid: !flat })
-  if (s.look === 'farm' && (s.level ?? 1) >= 2) parts.push({ sprite: once(`farmProps:${s.level}:${s.variant % 3}`, () => farmProps(s.level!, s.variant)), fx, fy, z, solid: false, stands: true })
+  // What moves on the map (see buildingKit → animate) shows its still look, the moving parts laid over it.
+  parts.push({ sprite: stillOf(looks[s.variant % looks.length]), fx, fy, z, solid: !flat })
+  if (s.look === 'farm' && (s.level ?? 1) >= 2) parts.push({ sprite: stillOf(once(`farmProps:${s.level}:${s.variant % 3}`, () => farmProps(s.level!, s.variant))), fx, fy, z, solid: false, stands: true })
   if (s.pier) parts.push(pierPart(s, s.pier, at))
   return parts
 }

@@ -402,6 +402,54 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   vinçli çeşitte liman barakası, fenerli çeşitte fener kulesinin önünde
   balıkçı kulübesi). Oyunda henüz olmayan seviyeler (pazar 2–3, kışla 3,
   gözcü kulesi 2–3) için görseller hazırdır.
+- **Binalar model olarak çizilir** (`apps/web/src/game/buildingKit.ts`):
+  her bina küçük bir 3B modeldir (kutu duvarlar, kırma/beşik/sundurma
+  çatılar, silindir kuleler, koni çatılar, kubbeler), piksel piksel derinlik
+  testiyle boyanır ve sol üstten gelen ışıkla gölgelenir; tonlar arası geçiş
+  dither ile yapılır. Malzemeler dokuludur: düzensiz kesme taş sıraları,
+  moloz taş, bağdadi (ahşap çatkı + sıva, çaprazlı), dikey tahta, yuvarlak
+  kütük; çatılar kiremit kanalları, arduvaz, ahşap padavra, saman demetleri,
+  kurşun ya da çizgili bez; saçak altı ve duvar dibi koyulaşır. Pencerelerin
+  çerçevesi, haç kayıtları, panjurları, çiçek saksıları ya da demir
+  parmaklıkları; kapıların kemeri, demir kuşakları ve önlerinde basamak
+  vardır. Pencere camı gündüz koyu (gökyüzü yansımalı), gece yanar. Her
+  binanın işini anlatan eşyaları vardır (fıçı, sandık, çuval, araba, odun
+  yığını, tezgâh, raf, fener, insanlar). Gölge için duvar, çatı ve kule
+  katıları çizilirken kaydedilir (§4.2.1 gölgeler); eşyalar katı sayılmaz.
+  Binalar: saray 1–5 (sur, yuvarlak kuleler, kale; çatılar krallığın
+  renginde; 6. seviye taç kalesi eski çiziminde kalır), ev (bağdadi/kiremit,
+  badanalı/saman, taş/arduvaz, kütük/yosunlu padavra; 3. seviyede taş
+  zemin kat üstüne çıkmalı üst kat), tarla, oduncu (kütük ev ya da açık
+  sundurma, uçları görünen kütük yığınları, kalas istifi, odun), silah
+  atölyesi (ocak, körük, örs, silah rafları, su fıçısı; 3. seviyede su
+  çarkı), ticaret noktası, pazar (çizgili tezgâhlar, kemerli pazar hanı,
+  saat kulesi, çeşme), kışla (talim alanı, saman kuklalar, hedefler,
+  ahır), casus evi (dar, üç katlı, çıkmalı is lekeli ev, kapalı panjurlar,
+  tek yanan pencere, kapı feneri, kukuletalı adam, mahyada kuzgunlar, arka
+  mahzen kapısı), gözcü kulesi, hapishane (parmaklıklı taş zindan, demir
+  parmaklıklı avlu, gardiyan; doluyken avluda taçlı kraliçe), üniversite,
+  hastane (şifacıların altın kâsesi tabelası, şifalı ot tarhları, çamaşır
+  ipinde çarşaflar; kızıl haç yok), tapınak (çan kuleli kilise ya da
+  sütunlu kubbe), hazine, eğlence merkezi, iskele, balıkçı kulübesi, kale,
+  anıt ve lonca binası. Ambar (ahır) ve tersane kendi çizimlerindedir.
+- **Hareketli binalar** (`buildingKit.ts` → `animate`, `stillOf`,
+  `animOf`): bir bina kare kare çizilir; haritada binanın **durgun hâli**
+  (havada hareket eden parçalar — bayraklar, insanlar, alet — çıkarılmış,
+  binanın üstünde hareket eden parçalar duruş hâlinde) çizilir, üstüne
+  yalnızca o karede değişen pikselleri taşıyan küçük bir kare konur
+  (`createWorld.ts` → `addMoving`). Kareler saatten seçilir, her binanın
+  kendi evresi vardır; yalnızca ekrandakiler, ½× ve üstünde ve "Detay
+  animasyonları" açıkken oynar (yoksa ilk karede durur). Kareler gölge
+  düşürmez; başka binaların gölgesi üstlerine düşer. Tarlada ekinler
+  rüzgârda dalga dalga sallanır (buğday, keten; balkabağı yaprakları
+  kıpırdar; tarla karesi zeminle gölgelerin arasında çizilir), korkuluğun
+  kolları sallanır; oduncuda adam kütüğe balta indirir (yongalar uçar),
+  2. seviyeden iki biçkici bıçkı çeker; silah atölyesinde ocağın ateşi
+  titrer, körük iner kalkar, demirci örse vurur (kıvılcımlar), 3. seviye su
+  çarkı döner; saray, kışla, kale, eğlence merkezi ve gözcü kulesinde
+  bayraklar dalgalanır; gözcü kulesi, tapınak, kale ve anıtta mangal
+  ateşleri titrer; eğlence merkezinde ozan ud çalar, casus evinde bir kuzgun
+  kanat çırpar. Menülerdeki resimler binanın tam (ilk kare) hâlidir.
 
 ### 4.3 Harita üretimi
 
@@ -1342,6 +1390,11 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   ilişkiye "ilişki geliştir" elçisi gönderilemez. Aynı taca bağlı ya da
   henüz biat etmemiş lordlar arasında eski kural geçerlidir (0'dan başlar,
   en fazla +100). Krallık ayrıntısı bu sınırı yazar.
+- **Anında haber:** Kendi devriyen ya da rakip tacın haraççıları sarayına
+  vardığı an istemci sunucuyu dürter (`settle`), elçinin penceresi onlar
+  kapıya gelirken açılır, dakikalık tick beklenmez. Devriyenin rotası hedef
+  lorda göre önbelleğe alınır (diğer lordlar yüklenmeden çizilen devriye
+  yanlış lorda gitmez).
 - **Devriyeler** (`cities.json` → `crown.patrol`; mantık
   `packages/shared/src/patrols.ts`, sunucu `supabase/functions/_shared/patrols.ts`,
   `patrol_visits` tablosu): her taç krallığı başkentinden **tek, büyük bir
@@ -1367,8 +1420,12 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   bölüğü havadaymış gibi gösteriyordu; `sprites.ts` → `NO_SHADOW`).
   - **Kendi tacının devriyesi** lordun **eğlence merkezine** uğrar, içer,
     eğlenir ve **120 altın bahşiş** bırakır. Eğlence merkezi yoksa sarayın
-    önüne gelip geçer, bahşiş bırakmaz.
-  - **Haraççılar** (haritada görünmez): Rakip taç, öbür taca bağlı her
+    önüne gelip geçer, bahşiş bırakmaz; ama elçi "Taç devriyesi uğradı"
+    haberini getirir (`patrol_visit`), lord kapısındaki askerleri sessizce
+    izlemez.
+  - **Haraççılar** (haritada görünür: tacın renginde küçük bir kol, rakip
+    başkentten lordun sarayına haraç isteme anında varacak şekilde yola
+    çıkar, cevap süresince kapıda bekler, sonra döner; herkes görür): Rakip taç, öbür taca bağlı her
     lordun kapısına **30 dakikada bir** haraççı gönderir (`patrol.tribute`
     → `everySeconds`); her lordun geliş anı tohumdan sabittir, aralık hep
     30 dakikadır (`tributeVisitAt`). Haraççı **hazinenin sabit %5'ini**
@@ -2781,6 +2838,35 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   sentezlenir (`apps/web/src/audio/sfx.ts`): savaş davulu ve boru,
   savaş ilanı, elçi borusu, kötü haber çanı, inşaat başlarken testere ve
   tokmak, bina bitince çekiç, günün olayları için arp.
+  Hafif bir sıkıştırıcı efektlerin yüksekliğini eşitler.
+  - **Her pencerenin kendi sesi vardır** (hepsi 1 saniyenin altında, pencere
+    açılınca bir kez çalar; `sfx.ts` → `playOnce`). Elçi haberlerinin sesi
+    `NoticeArt.tsx` → `soundForNotice` ile türünden ya da sahne ailesinden
+    seçilir: taç armağanı borazan fanfarı, taç devriyesinin uğrayışı nal sesi
+    ve kısa boru, haraççı sayılan altın ve sert davul, handaki devriye ud ve
+    tezahürat, hediye parıltı ve altın, nezaket elçisi yumuşak boru, ret
+    düşen iki nota, ittifak sıcak iki notalı bakır (bozulunca düşen tritone),
+    barış çanlar, savaş ilanı savaş borusu ve davul trampeti, sınırdaki ordu
+    pes davullar, hakaret keskin bakır vuruşu, casus pizzikato ve kapanan
+    kapı, sabotaj çatırdayan ateş, ayaklanma kalabalık uğultusu, kaçırma
+    ürkütücü pes ton, yağma kılıç şakırtısı, deniz muharebesi dalga ve
+    şakırtı (abluka dalga ve pes boru), kuşatma mancınık gümlemesi, kasaba
+    alınınca zafer fanfarı ve tezahürat, muharebe başı davullar, sonu
+    kazanana zafer borusu, kaybedene hüzünlü boru; kral ordunun başında
+    görkemli boru, kral düşünce ağır çan, kasaba satışı kasa zili ve altın,
+    kervan dönüşü araba ve altın, ulaşmayan emir düşen ıslık, kuleler ok
+    vızıltısı. Hanedan haberleri (doğumda müzik kutusu ninnisi, ölümde cenaze
+    çanı, taç giyme, naipler, reşit olma, kraliçenin gelişi çanları), taç
+    elçisinin isteği (saray fanfarı), sefer dönüşü (nal sesi ve boru), taçların
+    tanıtımı (fanfar) ve "Sen yokken" raporu (sayfa çevirme) da kendi
+    sesleriyle açılır.
+  - **Elçinin sesi:** Elçinin sözleri yazılırken (`Advisor.tsx`) elçi
+    Animal Crossing gibi anlamsız hecelerle mırıldanır (`sfx.ts` → `babble`):
+    her 2–3 harfte bir, en sık 70 ms'de bir, 60–90 ms'lik pes, yaşlı bir ses;
+    hecenin ünlüsüne göre iki formant süzgeci, heceden heceye değişen perde,
+    soruda yükselen ton. Yazı noktalama işaretlerinde durur, elçi de susar;
+    yazı atlanınca ya da pencere kapanınca ses biter. Efekt ayarına ve sesine
+    bağlıdır, kısıktır.
 - **Lobi tarayıcısı:** halka açık lobiler listesi, özel lobiye kodla katılım.
 - **Sunucu otoriter (authoritative) mimari:** Tüm oyun durumu sunucuda;
   istemci yalnızca görüntüler ve komut gönderir (hile önleme).

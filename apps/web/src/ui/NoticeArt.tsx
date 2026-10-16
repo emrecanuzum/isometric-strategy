@@ -4,6 +4,7 @@ import { KINGDOM_COLORS } from '../game/buildingSprites'
 import type { KingdomColor } from '../game/buildingSprites'
 import type { Notice } from '../net/online'
 import type { Online } from './hud/online'
+import type { Cue } from '../audio/sfx'
 import {
   C, DIRT, FIRE, GOLD, GRASS, H, INK, PLASTER, ROBE, SAND, SKINS, STONE, THATCH, TILE, W, WOOD,
   ball, basket, birds, camel, clamp, cloud, conifer, fields, flames, glint, glow, horse, house, land, mix, noise, note,
@@ -1177,6 +1178,8 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
       return L('tribute', crown, 'bad', 'refused')
     case 'patrol_tip':
       return L('tavern', crown, 'good')
+    case 'patrol_visit':
+      return L('envoy', crown, 'good')
     case 'crown_gift':
       return L('gift', crown, 'good')
     case 'town_revolt':
@@ -1195,6 +1198,97 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
       return L('battle', null, 'bad')
     default:
       return L('envoy', null, 'good')
+  }
+}
+
+// The sound each notice comes with when its dialog opens (CLAUDE.md §11): by kind where the kind tells more, else by
+// its scene family and tone.
+export function soundForNotice(n: Notice, online: Online): Cue {
+  const p = n.payload as Record<string, unknown>
+  const look = noticeLook(n, online)
+  const me = online.kingdoms.find((k) => k.id === online.me)
+  const good = look.tone === 'good'
+  switch (n.kind) {
+    case 'battle_start':
+      return p.kind === 'revolt' ? 'revolt' : p.kind === 'siege' ? 'siege' : 'battle'
+    case 'battle_end': {
+      // Won or lost by the player's side: the battle's sides if known, else whether it cost him soldiers.
+      const report = p.report as { winner?: string; losses?: Record<string, number> } | undefined
+      const b = online.battles.find((x) => x.id === p.battle)
+      const attacker = b ? b.attackers.some((f) => f.kingdom === online.me) : null
+      const won = attacker !== null ? (p.winner === 'attackers') === attacker : !((report?.losses?.[me?.name ?? ''] ?? 0) > 0)
+      return won ? 'victory' : 'sorrow'
+    }
+    case 'patrol_visit':
+      return 'greeting'
+    case 'crown_gift':
+      return 'crown'
+    case 'king_command':
+      return p.lead ? 'king' : 'courtesy'
+    case 'king_fell':
+      return 'kingFell'
+    case 'town_sale':
+      return 'sale'
+    case 'ransom_paid':
+      return 'sale'
+    case 'cargo_home':
+      return 'cargo'
+    case 'cargo_lost':
+      return 'raid'
+    case 'order_failed':
+      return 'lost'
+    case 'tower_losses':
+      return 'tower'
+    case 'siege_people':
+      return 'revolt'
+    case 'queen_released':
+      return 'wedding'
+    case 'war_declared':
+      return 'warHorn'
+    case 'peace_enforced':
+      return good ? 'peace' : 'sorrow'
+    case 'town_siege_lifted':
+      return 'victory'
+    case 'town_held':
+      return 'sorrow'
+    case 'town_taken':
+      return good ? 'triumph' : 'sorrow'
+    case 'fleet_turned':
+      return 'lost'
+  }
+  switch (look.family) {
+    case 'tribute':
+      return 'tribute'
+    case 'tavern':
+      return 'tavern'
+    case 'gift':
+      return 'gift'
+    case 'envoy':
+      return good ? 'courtesy' : 'refused'
+    case 'alliance':
+      return good ? 'alliance' : 'allianceBroken'
+    case 'peace':
+      return 'peace'
+    case 'war':
+      return look.variant === 'camp' ? 'threat' : good ? 'king' : 'warHorn'
+    case 'insult':
+      return 'insult'
+    case 'spy':
+      return good ? 'spy' : 'spyLost'
+    case 'sabotage':
+      return 'sabotage'
+    case 'revolt':
+      return good ? 'triumph' : 'revolt'
+    case 'kidnap':
+      return 'kidnap'
+    case 'raid':
+      return good ? 'victory' : 'raid'
+    case 'naval':
+      return look.variant === 'calm' ? 'calm' : look.variant === 'blockade' ? 'blockade' : 'naval'
+    case 'siege':
+      return 'siege'
+    case 'battle':
+      return 'battle'
   }
 }
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../icons'
+import { babble } from '../../audio/sfx'
 import { EnvoyPortrait } from './EnvoyPortrait'
 import {
   ADVISOR_EVERY_MINUTES, IDLE_LINES, LATER, LATER_ANSWERS, SMALL_TALK, SNOOZE_MINUTES, STEPS, TIPS, TOPICS, TUTORIAL_DONE,
@@ -83,23 +84,76 @@ export function AdvisorSettings({ storeKey }: { storeKey: string }) {
 // ---- Typing ---------------------------------------------------------------------------------------------------------
 
 const CHARS_PER_SECOND = 55
+// He catches his breath at punctuation (ms after the mark).
+const PAUSES: Record<string, number> = { '.': 260, '!': 260, '?': 280, '…': 320, ',': 120, ';': 140, ':': 140, '\n': 180 }
+
+// When each letter appears (ms from the start): an even pace, with a pause after punctuation (once after a run of
+// marks such as "..." or "?!").
+function typingTimes(text: string) {
+  const chars = [...text]
+  const times: number[] = []
+  let at = 0
+  for (let i = 0; i < chars.length; i++) {
+    at += 1000 / CHARS_PER_SECOND
+    times.push(at)
+    const pause = PAUSES[chars[i]]
+    if (pause && !(chars[i + 1] in PAUSES)) at += pause
+  }
+  return times
+}
 
 function useTyping(text: string) {
+  const length = [...text].length
   const [shown, setShown] = useState(0)
   useEffect(() => {
     setShown(0)
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return setShown(text.length)
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return setShown(length)
+    const times = typingTimes(text)
     const start = performance.now()
     let raf = 0
+    let n = 0
     const step = (now: number) => {
-      const n = Math.min(text.length, Math.floor(((now - start) / 1000) * CHARS_PER_SECOND))
+      while (n < length && times[n] <= now - start) n++
       setShown(n)
-      if (n < text.length) raf = requestAnimationFrame(step)
+      if (n < length) raf = requestAnimationFrame(step)
     }
     raf = requestAnimationFrame(step)
     return () => cancelAnimationFrame(raf)
-  }, [text])
-  return { shown, done: shown >= text.length, finish: () => setShown(text.length) }
+  }, [text, length])
+  return { shown, done: shown >= length, finish: () => setShown(length) }
+}
+
+// His mumbling voice under the typing (CLAUDE.md §11): a syllable every two or three letters, at most one every
+// 70 ms, silent at punctuation and spaces, and nothing at all when the lord skips to the end.
+const LETTER = /\p{L}/u
+function useBabble(text: string, shown: number) {
+  const last = useRef({ text: '', shown: 0, letters: 0, at: 0, every: 3 })
+  useEffect(() => {
+    const m = last.current
+    if (m.text !== text) Object.assign(m, { text, shown: 0, letters: 0, at: 0 })
+    const from = m.shown
+    m.shown = shown
+    // Skipped (or a whole page at once): no burst of syllables.
+    if (shown <= from || shown - from > 6) return
+    const chars = [...text]
+    for (let i = from; i < shown; i++) {
+      const ch = chars[i]
+      if (!LETTER.test(ch)) {
+        if (ch in PAUSES || ch === ' ') m.letters = Math.min(m.letters, 1)
+        continue
+      }
+      m.letters++
+      const now = performance.now()
+      if (m.letters >= m.every && now - m.at >= 70) {
+        const rest = chars.slice(i, i + 12).join('')
+        const question = /^[^.!?]*\?/.test(rest) && /\?/.test(rest.slice(0, 6))
+        babble(chars.slice(Math.max(0, i - 2), i + 1).join(''), question)
+        m.letters = 0
+        m.at = now
+        m.every = 2 + ((i * 7) % 2)
+      }
+    }
+  }, [text, shown])
 }
 
 // ---- What he says -----------------------------------------------------------------------------------------------------
@@ -298,7 +352,8 @@ export function Advisor({
 
 function Panel({ speech, onReply, onTopic, onClose }: { speech: Speech; onReply: (r: Reply) => void; onTopic: (t: Topic) => void; onClose: () => void }) {
   const { shown, done, finish } = useTyping(speech.text)
-  const paragraphs = useMemo(() => speech.text.slice(0, shown).split('\n\n'), [speech.text, shown])
+  useBabble(speech.text, shown)
+  const paragraphs = useMemo(() => [...speech.text].slice(0, shown).join('').split('\n\n'), [speech.text, shown])
   return (
     <section className="advisor frame" role="dialog" aria-label="Elçi" aria-live="polite">
       <div className="advisor-face">

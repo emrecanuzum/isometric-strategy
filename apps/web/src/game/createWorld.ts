@@ -25,6 +25,8 @@ import type { MapArmy, MapBattle } from './armies'
 import { createCaravans } from './caravans'
 import { cityArea, cityAreaAt, cityAt, cityInfo, cityStructures, cityTrails } from './cities'
 import { BUILDER_SPRITES, CHIMNEYS, VILLAGER_SPRITES, linkWalls, structureParts } from './buildingSprites'
+import { animOf } from './buildingKit'
+import type { Anim } from './buildingKit'
 import { openGate } from './wallSprites'
 import { Canvas, SPRITES, lightsOf, outlineOf, rgb, silhouetteOf } from './sprites'
 import { daylight, nightness, sunShadow } from './daylight'
@@ -285,6 +287,8 @@ export async function createWorld(
 
   const camera = new Container()
   const ground = new Container()
+  // What moves on the fields (the crops in the wind), over the ground and under the shadows.
+  const fields = new Container()
   ground.sortableChildren = true
   const territory = new Graphics()
   const rivalLines = new Graphics()
@@ -369,7 +373,7 @@ export async function createWorld(
   }
   // The target an aimed army has snapped to, outlined over everything on the ground.
   const aimLines = new Graphics()
-  camera.addChild(ground, shadows.layer, rivalLines, territory, armyRoutes, fleetRoutes, ambient.under, caravans.layer, fleetMarks, marks, clogSigns, ambient.sky, cursor, carried, highlight, aimLines)
+  camera.addChild(ground, fields, shadows.layer, rivalLines, territory, armyRoutes, fleetRoutes, ambient.under, caravans.layer, fleetMarks, marks, clogSigns, ambient.sky, cursor, carried, highlight, aimLines)
   app.stage.addChild(camera)
   // Day and night: the whole map is multiplied by the colour of the light at this hour of the game day. Lit windows
   // and the labels sit above it, in a layer that follows the camera, so night never dims them.
@@ -570,7 +574,7 @@ export async function createWorld(
       // Trees lifted round the armies keep the visibility of their chunk.
       for (const child of caravans.layer.children) {
         if (child.label === 'tree') continue
-        child.visible = child.label === 'occluder' || child.label === 'inn' || child.label === 'shade' || child.label === 'ship' || child.label.startsWith('army')
+        child.visible = child.label === 'occluder' || child.label === 'anim' || child.label === 'inn' || child.label === 'shade' || child.label === 'ship' || child.label.startsWith('army')
       }
       return
     }
@@ -1277,7 +1281,48 @@ export async function createWorld(
   const gates = new Set<number>()
   // Lit windows of the player's buildings, in the glow layer.
   let windows: Sprite[] = []
+  // The moving parts of buildings (see buildingKit → animate): a sprite over each, its frames stepped by the clock.
+  interface Moving {
+    sprite: Sprite
+    anim: Anim
+    frames: Texture[]
+    phase: number
+    frame: number
+  }
+  let moving: Moving[] = []
+  function addMoving(anim: Anim, x: number, y: number, z: number, seed: number, layer: Container) {
+    const first = anim.frames[0]
+    const sprite = new Sprite(textureOf(first))
+    sprite.anchor.set(first.anchorX / first.width, first.anchorY / first.height)
+    sprite.position.set(x, y)
+    sprite.zIndex = z
+    sprite.label = 'anim'
+    layer.addChild(sprite)
+    moving.push({ sprite, anim, frames: anim.frames.map(textureOf), phase: hash(seed, 7, 911) * anim.frames.length, frame: 0 })
+  }
+  app.ticker.add(() => {
+    if (moving.length === 0) return
+    const scale = camera.scale.x
+    const on = detail && scale >= 0.5
+    const t = performance.now() / 1000
+    const left = -camera.x / scale - 160
+    const top = -camera.y / scale - 160
+    const right = (app.screen.width - camera.x) / scale + 160
+    const bottom = (app.screen.height - camera.y) / scale + 160
+    for (const m of moving) {
+      const { x, y } = m.sprite.position
+      if (on && (x < left || x > right || y < top || y > bottom)) continue
+      const k = on ? Math.floor(t * m.anim.fps + m.phase) % m.frames.length : 0
+      if (k === m.frame) continue
+      m.frame = k
+      const look = m.anim.frames[k]
+      m.sprite.texture = m.frames[k]
+      m.sprite.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
+    }
+  })
   function placeOccluders(structures: Structure[]) {
+    for (const m of moving) m.sprite.destroy()
+    moving = []
     for (const o of occluders) o.sprite.destroy()
     for (const w of windows) w.destroy()
     windows = []
@@ -1290,6 +1335,11 @@ export async function createWorld(
     const chimneys: { x: number; y: number; depth: number }[] = []
     occluders = structures.flatMap((s) => {
       const parts = structureParts(world, s)
+      // Moving crops lie on the ground, under the shadows.
+      for (const part of parts) {
+        const anim = animOf(part.sprite)
+        if (anim?.ground) addMoving(anim, (part.fx - part.fy) * (TILE_WIDTH / 2), (part.fx + part.fy) * (TILE_HEIGHT / 2) - part.z, 0, s.x * 977 + s.y, fields)
+      }
       const solidParts = parts.filter((p) => p.solid || p.stands)
       if (solidParts.length === 0) return []
       const blocking = parts.some((p) => p.solid)
@@ -1391,6 +1441,11 @@ export async function createWorld(
       for (const l of lights) l.depth = redepth.get(l.depth) ?? l.depth
     }
     placeBuilders(structures)
+    // Moving parts just over the building they belong to (under the shade other buildings throw on it).
+    for (const o of occluders) {
+      const anim = animOf(o.look)
+      if (anim && !anim.ground) addMoving(anim, o.sprite.x, o.sprite.y, o.sprite.zIndex + 0.004, o.x * 977 + o.y, caravans.layer)
+    }
     // Lit windows shine in the glow layer above everything, so the buildings in front of a house would not hide them:
     // each one is cut down to the pixels no building drawn after it covers.
     for (const { lit, sx, sy, depth } of lights) {
@@ -1516,7 +1571,7 @@ export async function createWorld(
 
   function sortWalkers() {
     if (occluders.length === 0) return
-    const walkers = caravans.layer.children.filter((c) => c.visible && c.label !== 'occluder' && c.label !== 'shade' && c.label !== 'army-ring' && c.label !== 'tree' && c.label !== 'inn' && c.label !== 'builder')
+    const walkers = caravans.layer.children.filter((c) => c.visible && c.label !== 'occluder' && c.label !== 'anim' && c.label !== 'shade' && c.label !== 'army-ring' && c.label !== 'tree' && c.label !== 'inn' && c.label !== 'builder')
     for (const o of occluders) {
       if (!o.gate) continue
       const open = walkers.some(({ position: { x: px, y: py } }) => {
@@ -1533,7 +1588,7 @@ export async function createWorld(
       }
     }
     for (const child of caravans.layer.children) {
-      if (!child.visible || child.label === 'occluder' || child.label === 'shade' || child.label === 'army-ring' || child.label === 'tree' || child.label === 'inn' || child.label === 'builder') continue
+      if (!child.visible || child.label === 'occluder' || child.label === 'anim' || child.label === 'shade' || child.label === 'army-ring' || child.label === 'tree' || child.label === 'inn' || child.label === 'builder') continue
       const { x: px, y: py } = child.position
       for (const o of occluders) {
         if (o.walked || px < o.left || px > o.right || py < o.top || py > o.sy + 2) continue

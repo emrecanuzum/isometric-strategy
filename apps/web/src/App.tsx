@@ -19,6 +19,9 @@ import {
   patrolSlotMs,
   patrolTarget,
   visitKind,
+  tributeCrowns,
+  tributeSlotAt,
+  tributeVisitAt,
   capitalGate,
   lobbyTripMs,
   tradeTripMs,
@@ -85,7 +88,7 @@ import type { AimMark, Hover, ProgressMark, RivalTerritory, WorldView } from './
 import { KINGDOM_COLORS } from './game/buildingSprites'
 import type { KingdomColor } from './game/buildingSprites'
 import { serverNow } from './net/clock'
-import { CHAT_KEEP, CommandError, loadChat, loadMine, loadRivals, markSeen, postChat, send, sendFor, subscribe } from './net/online'
+import { CHAT_KEEP, CommandError, loadChat, loadMine, loadRivals, markSeen, postChat, send, sendFor, settle, subscribe } from './net/online'
 import type { ChatMessage, Command, IntelReport, Lobby, Mine, Notice, Rival } from './net/online'
 import { useLayer } from './net/layer'
 import type { MapArmy } from './game/armies'
@@ -238,46 +241,6 @@ const REFUSALS: Record<string, string> = {
 const refusal = (e: unknown) => {
   const code = e instanceof CommandError ? e.message : 'server'
   return REFUSALS[code] ?? BUILD_ERRORS[code as BuildError] ?? 'Komut reddedildi'
-}
-
-// The sound each kind of news comes with (the envoy's fanfare otherwise).
-const NOTICE_CUES: Record<string, Cue> = {
-  battle_start: 'battle',
-  battle_end: 'battle',
-  war_declared: 'war',
-  tower_losses: 'bad',
-  king_command: 'good',
-  king_fell: 'bad',
-  siege_people: 'bad',
-  operation_struck: 'bad',
-  spy_caught: 'bad',
-  spy_lost: 'bad',
-  alliance_broken: 'bad',
-  order_failed: 'bad',
-  peace_enforced: 'war',
-  envoy_courtesy: 'good',
-  queen_released: 'good',
-  ransom_paid: 'coin',
-  envoy_insult: 'war',
-  army_threat: 'war',
-  trade_raided: 'battle',
-  raid_repelled: 'good',
-  town_siege: 'war',
-  town_taken: 'coin',
-  town_held: 'bad',
-  town_revolt: 'bad',
-  town_lost_revolt: 'bad',
-  town_sale: 'coin',
-  cargo_home: 'coin',
-  cargo_lost: 'bad',
-  patrol_tribute: 'war',
-  patrol_tip: 'coin',
-  crown_gift: 'coin',
-  patrol_ignored: 'bad',
-  patrol_taken: 'bad',
-  naval_battle: 'battle',
-  blockade_lifted: 'good',
-  fleet_turned: 'bad',
 }
 
 // News that goes against the player: kept under the journal's "Önemli" tab.
@@ -864,7 +827,7 @@ function App({
         ? FORTUNE_TEXTS[(events.find((e) => e.kind === 'fortune') as { fortune: string }).fortune]?.tone === 'bad'
           ? 'omen'
           : 'fortune'
-        : events.some((e) => e.kind === 'researched' || e.kind === 'trained' || e.kind === 'expedition' || e.kind === 'goal')
+        : events.some((e) => e.kind === 'researched' || e.kind === 'trained' || e.kind === 'goal')
           ? 'good'
           : events.some((e) => e.kind === 'built')
             ? 'build'
@@ -1571,7 +1534,8 @@ function App({
     const t = serverNow()
     const times = patrolTimes(patrolSlotAt(t))
     const next = [times.arrive, times.leave, times.home, times.start + patrolSlotMs()].find((x) => x > t) ?? t + 1000
-    const id = window.setTimeout(() => setPatrolStep((n) => n + 1), next - t + 50)
+    // The tribute collectors set out and turn back at times of their own: looked at every few seconds.
+    const id = window.setTimeout(() => setPatrolStep((n) => n + 1), Math.min(next - t + 50, 5000))
     return () => clearTimeout(id)
   }, [patrolStep])
   const patrolRoutes = useRef(new Map<string, Point[] | null>())
@@ -1580,10 +1544,57 @@ function App({
     const t = serverNow()
     const slot = patrolSlotAt(t)
     const times = patrolTimes(slot)
-    if (t >= times.home) return []
     const lords: Lord[] = JSON.parse(lordsKey).map(([id, liege]: [number, number | null]) => ({ id, liege }))
     const towns = new Map<number, TownBuilding[]>([[mine.id, (shown?.buildings ?? []) as TownBuilding[]], ...rivals.map((r) => [r.id, r.buildings] as [number, TownBuilding[]])])
     const out: MapArmy[] = []
+    // The road from a capital's gate to the free ground in front of a building (the squads are drawn large: the free
+    // tile nearest that spot, off every building and field), worked out once.
+    const routeTo = (key: string, city: { x: number; y: number }, stop: { x: number; y: number; size: number }) => {
+      if (!patrolRoutes.current.has(key)) {
+        const blocked = patrolBlocker(view.world, [...towns.values()].map((buildings) => ({ buildings })))
+        const front = { x: stop.x + stop.size + 1.6, y: stop.y + stop.size + 1.6 }
+        let door = front
+        let best = Infinity
+        for (let dy = -6; dy <= 6; dy++) {
+          for (let dx = -6; dx <= 6; dx++) {
+            const x = Math.floor(front.x) + dx
+            const y = Math.floor(front.y) + dy
+            const d = Math.hypot(x + 0.5 - front.x, y + 0.5 - front.y)
+            if (d >= best || !walkable(view.world, x, y)) continue
+            let clear = true
+            for (let oy = -1; oy <= 1 && clear; oy++) for (let ox = -1; ox <= 1 && clear; ox++) clear = !blocked(x + ox, y + oy)
+            if (!clear) continue
+            best = d
+            door = { x: x + 0.5, y: y + 0.5 }
+          }
+        }
+        patrolRoutes.current.set(key, patrolRoute(view.world, city, capitalGate(city), door, blocked) ?? patrolRoute(view.world, city, capitalGate(city), door))
+      }
+      return patrolRoutes.current.get(key)
+    }
+    // A rival crown's tribute collectors (CLAUDE.md §7.8): they ride out so as to reach the lord's palace the moment
+    // the demand is made, wait there while it may be answered, and ride home. Everyone sees them.
+    const spec = balance.cities.crown.patrol
+    const ride = spec.out * patrolSlotMs()
+    const wait = spec.answerSeconds * 1000
+    const tributeSlot = tributeSlotAt(t)
+    for (const lord of lords) {
+      const palace = (towns.get(lord.id) ?? []).find((b) => b.kind === 'palace' && b.doneAt <= t)
+      if (!palace) continue
+      for (const crown of tributeCrowns(view.world.cities.length, lord.liege)) {
+        const city = view.world.cities[crown]
+        for (const s of [tributeSlot - 1, tributeSlot, tributeSlot + 1]) {
+          const arrive = tributeVisitAt(view.world.seed, crown, lord.id, s)
+          if (t < arrive - ride || t >= arrive + wait + ride) continue
+          const route = routeTo(`tribute:${crown}:${lord.id}:${palace.x},${palace.y}`, city, palace)
+          if (!route || route.length === 0) continue
+          const back = t >= arrive + wait
+          const [path, departAt, arriveAt] = back ? [[...route].reverse(), arrive + wait, arrive + wait + ride] : [route, arrive - ride, arrive]
+          out.push({ id: -(100000 + lord.id * 8 + crown), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 3, catapult: false, train: 2, size: 1.3, trainAhead: back })
+        }
+      }
+    }
+    if (t >= times.home) return out
     view.world.cities.forEach((city, crown) => {
       for (let p = 0; p < balance.cities.crown.patrol.perCrown; p++) {
         const target = patrolTarget(view.world.seed, crown, p, slot, lords)
@@ -1593,30 +1604,8 @@ function App({
         // Its own crown's patrol stops at the house of entertainment, if there is one; otherwise at the palace.
         const stop = (visitKind(crown, liege) === 'tip' && done.find((b) => b.kind === 'tavern')) || done.find((b) => b.kind === 'palace')
         if (!stop) continue
-        const key = `${crown}:${p}:${slot}`
-        if (!patrolRoutes.current.has(key)) {
-          const blocked = patrolBlocker(view.world, [...towns.values()].map((buildings) => ({ buildings })))
-          // Out in front of the building, clear of its walls (the patrol's squads are drawn large): the free tile
-          // nearest that spot, off every building and field.
-          const front = { x: stop.x + stop.size + 1.6, y: stop.y + stop.size + 1.6 }
-          let door = front
-          let best = Infinity
-          for (let dy = -6; dy <= 6; dy++) {
-            for (let dx = -6; dx <= 6; dx++) {
-              const x = Math.floor(front.x) + dx
-              const y = Math.floor(front.y) + dy
-              const d = Math.hypot(x + 0.5 - front.x, y + 0.5 - front.y)
-              if (d >= best || !walkable(view.world, x, y)) continue
-              let clear = true
-              for (let oy = -1; oy <= 1 && clear; oy++) for (let ox = -1; ox <= 1 && clear; ox++) clear = !blocked(x + ox, y + oy)
-              if (!clear) continue
-              best = d
-              door = { x: x + 0.5, y: y + 0.5 }
-            }
-          }
-          patrolRoutes.current.set(key, patrolRoute(view.world, city, capitalGate(city), door, blocked) ?? patrolRoute(view.world, city, capitalGate(city), door))
-        }
-        const route = patrolRoutes.current.get(key)
+        // The lord in the key: drawn before the other lords had loaded, the patrol may have been sent elsewhere.
+        const route = routeTo(`${crown}:${p}:${slot}:${target}:${stop.id}`, city, stop)
         if (!route || route.length === 0) continue
         // Through the stay the column stands halted along the road it came by, then rides back with its tail leading.
         const back = t >= times.leave
@@ -1624,10 +1613,36 @@ function App({
         out.push({ id: -(crown * 16 + p + 1), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 4, catapult: false, train: 5, size: 1.6, trainAhead: back })
       }
     })
-    if (patrolRoutes.current.size > 64) patrolRoutes.current.clear()
+    if (patrolRoutes.current.size > 256) patrolRoutes.current.clear()
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, lordsKey, patrolStep, mapBuildings, rivals])
+
+  // When the crown's patrol or a rival crown's collectors reach the player's palace, the server is nudged at that
+  // moment so the envoy's dialog comes as they arrive, not at the next minute's tick.
+  useEffect(() => {
+    if (!view || view.world.cities.length === 0 || !shown) return
+    const t = serverNow()
+    const lords: Lord[] = JSON.parse(lordsKey).map(([id, liege]: [number, number | null]) => ({ id, liege }))
+    const due: number[] = []
+    for (const slot of [patrolSlotAt(t), patrolSlotAt(t) + 1]) {
+      view.world.cities.forEach((_, crown) => {
+        for (let p = 0; p < balance.cities.crown.patrol.perCrown; p++) if (patrolTarget(view.world.seed, crown, p, slot, lords) === mine.id) due.push(patrolTimes(slot).arrive)
+      })
+    }
+    const wait = balance.cities.crown.patrol.answerSeconds * 1000
+    for (const crown of tributeCrowns(view.world.cities.length, shown.liege)) {
+      for (const s of [tributeSlotAt(t), tributeSlotAt(t) + 1]) {
+        const arrive = tributeVisitAt(view.world.seed, crown, mine.id, s)
+        due.push(arrive, arrive + wait)
+      }
+    }
+    const next = Math.min(...due.filter((x) => x > t))
+    if (!Number.isFinite(next)) return
+    const id = window.setTimeout(() => settle(lobby.id).then(() => refreshAll()), next - t + 1500)
+    return () => clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, lordsKey, patrolStep, mine.id, shown?.liege])
 
   // A town's rebels camped at its gate (CLAUDE.md §8.4), drawn as a squad in black and grey, everyone sees them.
   const rebelSquads = useMemo(
@@ -1709,16 +1724,12 @@ function App({
 
   // The envoy's dialogs, one at a time, once their moment has come.
   const notice = layer.notices.find((n) => Date.parse(n.show_at) <= now) ?? null
-  // Every piece of news is also written in the journal, on the envoy's paper, and announced with a sound.
-  const heard = useRef(new Set<number>())
+  // Every piece of news is also written in the journal, on the envoy's paper (its sound plays as its dialog opens:
+  // Envoy.tsx → soundForNotice).
   useEffect(() => {
     for (const n of layer.notices) {
       const at = Date.parse(n.show_at)
       if (at > now) continue
-      if (!heard.current.has(n.id)) {
-        heard.current.add(n.id)
-        play(NOTICE_CUES[n.kind] ?? 'envoy')
-      }
       const { icon, title, text } = describeNotice(n, online)
       noteJournal(n.id, at, { icon, title, text: text || undefined, important: noticeHurts(n, kingdom?.name) })
     }

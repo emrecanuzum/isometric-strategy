@@ -1,6 +1,7 @@
 import { balance, booksOf, crisisKey, fortunesBegun, goalRank, idleFactor, isCrisis, isDilemma, population, soldiersOf, storageCap, yearMs } from '@game/shared'
 import type { Kingdom, Pact, Resource, SeenSnapshot, SoldierLoss } from '@game/shared'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { playOnce } from '../audio/sfx'
 import { squad } from '../game/armies'
 import { STRUCTURE_SPRITES, palaceIn } from '../game/buildingSprites'
 import { tent } from '../game/campSprites'
@@ -765,7 +766,7 @@ interface Page {
 }
 
 const MILITARY = new Set(['king_fell', 'siege_people', 'naval_battle', 'blockade_lifted', 'fleet_turned', 'battle_start', 'battle_end', 'town_siege', 'town_taken', 'town_held', 'town_siege_lifted', 'town_revolt', 'town_lost_revolt', 'tower_losses', 'army_threat', 'trade_raided', 'raid_repelled', 'war_declared', 'peace_enforced', 'order_failed', 'cargo_lost', 'cargo_home'])
-const TRIBUTE = new Set(['patrol_tribute', 'patrol_taken', 'patrol_tip', 'patrol_ignored', 'tribute_ended', 'crown_gift'])
+const TRIBUTE = new Set(['patrol_tribute', 'patrol_taken', 'patrol_tip', 'patrol_visit', 'patrol_ignored', 'tribute_ended', 'crown_gift'])
 
 const duration = (ms: number) => {
   const minutes = Math.round(ms / 60_000)
@@ -790,6 +791,8 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
 }) {
   const [data, setData] = useState<{ notices: Notice[]; battles: Battle[]; wars: Pact[]; towns: { name: string; owner_id: number | null; taken_at: string }[] } | null>(null)
   const [page, setPage] = useState(0)
+  // Pages turned: the report of what happened while away.
+  useEffect(() => playOnce(`away:${lobby}:${since}`, 'report'), [lobby, since])
   useEffect(() => {
     const iso = new Date(since).toISOString()
     Promise.all([
@@ -949,7 +952,7 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
     // Tribute: the crowns' patrols, and what was paid and received between lords.
     const tribute: Line[] = data.notices.filter((n) => TRIBUTE.has(n.kind)).map((n) => {
       const { icon, title, text } = describe(n, online)
-      return { icon, text: text ? `${title}: ${text}` : title, tone: n.kind === 'patrol_tip' || n.kind === 'crown_gift' ? 'up' : 'down' }
+      return { icon, text: text ? `${title}: ${text}` : title, tone: n.kind === 'patrol_tip' || n.kind === 'patrol_visit' || n.kind === 'crown_gift' ? 'up' : 'down' }
     })
     if (was) {
       const paid = since0((b) => b.crownPaid)

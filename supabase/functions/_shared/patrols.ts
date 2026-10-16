@@ -78,6 +78,8 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
         })
         if (tip) await notify(lobby, [target], 'patrol_tip', { crown, amount }, arrive)
         if (gift) await notify(lobby, [target], 'crown_gift', { crown, name: gift.name, gold: giftGold, goods }, arrive)
+        // With neither a tip nor a gift, the patrol still says it came (no lord sees soldiers at his gate in silence).
+        if (!tip && !gift) await notify(lobby, [target], 'patrol_visit', { crown, relation: game.balance.cities.crown.relation.visit }, arrive)
       }
     }
   }

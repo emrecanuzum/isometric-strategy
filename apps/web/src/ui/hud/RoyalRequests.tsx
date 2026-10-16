@@ -2,7 +2,8 @@ import { NoticeArt } from '../NoticeArt'
 import { EnvoyPortrait } from '../advisor/EnvoyPortrait'
 import { balance, goldCap, isWeaponItem, palaceLevel, questError, questProgress, royalAnswer, royalError, royalHave, royalRequest } from '@game/shared'
 import type { Kingdom, Market, RoyalItem, RoyalRequest, World } from '@game/shared'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { playOnce } from '../../audio/sfx'
 import { cityInfo } from '../../game/cities'
 import { Icon } from '../icons'
 import type { IconName } from '../icons'
@@ -69,6 +70,9 @@ export function RoyalDialog({ world, kingdom, req, online, onClose }: { world: W
   const info = cityInfo(world, req.crown)
   const r = balance.cities.crown.royal
   const have = royalHave(kingdom, req.item)
+  // The court's herald, once per request.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => playOnce(`royal:${req.crown}:${req.n}`, 'royal'), [req.crown, req.n])
   return (
     <div className="modal" role="dialog" aria-labelledby="royal-title">
       <section className="dialog frame fortune-dialog envoy-dialog good">

@@ -1,10 +1,12 @@
+import { useEffect } from 'react'
 import { balance, overreachOf } from '@game/shared'
 import type { Envoy as EnvoyRow, Operation, PeaceTerms, SpyTopic } from '@game/shared'
 import type { Notice } from '../net/online'
 import { Icon } from './icons'
 import type { IconName } from './icons'
 import { RESOURCE_NAMES } from './names'
-import { NoticeArt, noticeLook } from './NoticeArt'
+import { NoticeArt, noticeLook, soundForNotice } from './NoticeArt'
+import { playOnce } from '../audio/sfx'
 import { EnvoyPortrait } from './advisor/EnvoyPortrait'
 import { ENVOY_NAMES, OPERATION_NAMES, TOPIC_NAMES, describeTerms } from './hud/diplomacy'
 import type { Online } from './hud/online'
@@ -243,6 +245,12 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
     }
     case 'patrol_tip':
       return { icon: 'gold', title: 'Devriye eğlenip gitti', text: `${crown(p.crown)} devriyesi eğlence merkezinde soluklandı, içti, şarkı söyledi ve ${fmt(Number(p.amount))} altın bahşiş bıraktı.` }
+    case 'patrol_visit':
+      return {
+        icon: 'crown',
+        title: 'Taç devriyesi uğradı',
+        text: `${crown(p.crown)} devriyesi sarayının önüne geldi, selam verdi ve yoluna devam etti; tacınla ilişkin +${fmt(Number(p.relation ?? 1))}. Bir eğlence merkezin (4. seviye saray) olsaydı içip eğlenir ve bahşiş bırakırlardı.`,
+      }
     case 'crown_gift': {
       const goods = Object.entries((p.goods ?? {}) as Record<string, number>).map(([g, v]) => `${fmt(v)} ${RESOURCE_NAMES[g as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? g}`)
       return {
@@ -303,6 +311,9 @@ export function EnvoyDialog({ notice, online, onClose }: { notice: Notice; onlin
   const demand = notice.kind === 'patrol_tribute' && Number(p.expiresAt) > Date.now()
   const battle = notice.kind.startsWith('battle') ? (p.battle as number) : null
   const look = noticeLook(notice, online)
+  // Each notice's own sound, once, as its dialog opens.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => playOnce(`notice:${notice.id}`, soundForNotice(notice, online)), [notice.id])
   return (
     <div className="modal" role="dialog" aria-labelledby="envoy-title">
       <section className={`dialog frame fortune-dialog envoy-dialog ${look.tone}`}>

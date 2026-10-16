@@ -1,6 +1,7 @@
 import { balance, cityCenter, crownPower } from '@game/shared'
 import type { Kingdom, World } from '@game/shared'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { playOnce } from '../audio/sfx'
 import { squad } from '../game/armies'
 import { STRUCTURE_SPRITES, palaceIn } from '../game/buildingSprites'
 import { cityInfo } from '../game/cities'
@@ -67,6 +68,8 @@ export function CrownIntro({ world, kingdom, online, lobby, onSwear, onClose }: 
   onClose(): void
 }) {
   const [page, setPage] = useState(0)
+  // The crowns announce themselves with a fanfare.
+  useEffect(() => playOnce(`crown-intro:${lobby}`, 'crown'), [lobby])
   const [asking, setAsking] = useState<number | null>(null)
   const infos = world.cities.map((_, i) => cityInfo(world, i))
   const lords = online.kingdoms.map((k) => ({ liege: k.liege ?? null, score: k.score?.total ?? 0 }))

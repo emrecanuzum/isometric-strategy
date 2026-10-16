@@ -1,6 +1,7 @@
 import { SKILLS, ageOf, balance, dynastyEffects, ofAge, randomName, rulerSkills } from '@game/shared'
 import type { Dynasty, Kingdom, Person, Skill } from '@game/shared'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { playOnce } from '../../audio/sfx'
 import { DynastyArt, Portrait } from '../DynastyArt'
 import { Icon } from '../icons'
 import type { Online } from './online'
@@ -273,8 +274,13 @@ const TITLES: Record<HouseNews['kind'], string> = {
   wedding: 'Kraliçe saraya geldi',
 }
 
+const HOUSE_CUES = { birth: 'birth', death: 'death', coronation: 'coronation', council: 'council', ofAge: 'ofAge', wedding: 'wedding' } as const
+
 export function HouseDialog({ news, kingdom, now, online, onClose }: { news: HouseNews; kingdom: Kingdom; now: number; online?: Online | null; onClose(): void }) {
   const p = news.person
+  // The house's news, each with its own sound: a lullaby, the funeral bell, a coronation fanfare…
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => playOnce(`house:${news.key}`, HOUSE_CUES[news.kind]), [news.key])
   const role = news.kind === 'wedding' ? 'queen' : news.kind === 'death' || news.kind === 'coronation' ? 'king' : p.sex === 'm' ? 'prince' : 'princess'
   const text =
     news.kind === 'birth'
