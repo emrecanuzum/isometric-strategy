@@ -1297,63 +1297,120 @@ small {
   color: var(--gold);
 }
 
-.worldmap-scroll {
+/* The world map's viewport: the sheet inside is moved and sized by WorldMap (wheel, drag, pinch); nothing scrolls. */
+.worldmap-port {
+  position: relative;
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  display: flex;
-  container-type: size;
-  touch-action: pan-x pan-y;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
 }
 
-.worldmap-pad {
-  flex: none;
-  margin: auto;
-}
-
-.worldmap-pad.zoomed {
-  padding: 40cqh 30cqw;
+.worldmap-port.dragging {
+  cursor: grabbing;
 }
 
 .worldmap-sheet {
-  position: relative;
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
 }
 
-.worldmap-view {
+.worldmap-lines {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   overflow: hidden;
   pointer-events: none;
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
 }
 
-.worldmap-view polygon {
+.worldmap-lines .river {
+  stroke: #4a90c8;
+}
+
+.worldmap-lines .road-edge,
+.worldmap-lines .road,
+.worldmap-lines .under,
+.worldmap-lines .edge,
+.worldmap-lines .view {
+  vector-effect: non-scaling-stroke;
+}
+
+.worldmap-lines .road-edge {
+  stroke: #3a2619;
+}
+
+.worldmap-lines .road {
+  stroke: #e2c48a;
+}
+
+/* A lord's lands: a translucent diamond in its colour, a dark line under the coloured edge. */
+.worldmap-lines .realm .fill {
+  fill-opacity: 0.38;
+  stroke: none;
+}
+
+.worldmap-lines .realm .under {
+  stroke: rgba(18, 13, 11, 0.85);
+  stroke-width: 5px;
+}
+
+.worldmap-lines .realm .edge {
+  stroke-width: 2.5px;
+}
+
+.worldmap-lines .realm.mine .under {
+  stroke-width: 6px;
+}
+
+.worldmap-lines .realm.mine .edge {
+  stroke-width: 3px;
+}
+
+.worldmap-lines .view {
   fill: rgba(255, 255, 255, 0.08);
   stroke: #fff;
   stroke-width: 2px;
-  vector-effect: non-scaling-stroke;
   paint-order: stroke;
   filter: drop-shadow(0 0 1px #120d0b);
+}
+
+/* The crowns' castles and the lords' banners stand on their spot (the banner on its pole). */
+.worldmap-icon {
+  position: absolute;
+  display: block;
+  transform: translate(-50%, -100%);
+  filter: drop-shadow(1px 1px 0 rgba(18, 13, 11, 0.6));
+  pointer-events: none;
+}
+
+.worldmap-icon.banner {
+  transform: translate(-17%, -100%);
 }
 
 .worldmap-sheet canvas {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   image-rendering: pixelated;
-  cursor: crosshair;
 }
 
-.worldmap-inn,
-.worldmap-name,
+.worldmap-pin,
 .worldmap-here {
   position: absolute;
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
 
-.worldmap-inn .icon {
+.worldmap-pin .icon {
   display: block;
 }
 
@@ -1439,24 +1496,27 @@ small {
   outline: 2px solid #b0201a;
 }
 
+/* Labels are placed by WorldMap (top-left corner, clear of the icons and of each other). */
 .worldmap-name {
-  padding: 0 calc(var(--px) * 3);
-  background: rgb(18 13 11 / 75%);
-  font-size: 13px;
+  position: absolute;
+  padding: 1px calc(var(--px) * 3);
+  background: rgb(18 13 11 / 80%);
+  box-shadow: 0 0 0 1px rgb(18 13 11 / 90%);
   font-weight: 600;
+  line-height: 1.2;
   white-space: nowrap;
-  transform: translate(-50%, -150%);
+  text-shadow: 1px 1px 0 #120d0b;
+  pointer-events: none;
 }
 
 .worldmap-name.mine {
-  font-size: 15px;
-  box-shadow: var(--outline);
+  box-shadow: 0 0 0 1px #f2d16b, 0 0 0 2px #120d0b;
 }
 
-/* A free city: its name in gold, with a crown-coloured rim. */
+/* A crown's capital: its name in gold, with a gilded rim. */
 .worldmap-name.city {
   color: #f6e3a1;
-  box-shadow: 0 0 0 1px #c8952e;
+  box-shadow: 0 0 0 1px #c8952e, 0 0 0 2px #120d0b;
 }
 
 .worldmap-here {
@@ -2560,12 +2620,11 @@ small {
   50% { opacity: 1; }
 }
 
+/* Fixed on the screen above the minimap's top fitting (MinimapCorners → Caption places it), over the whole HUD. */
 .mm-caption {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  transform: translateX(-50%);
-  max-width: 100%;
+  position: fixed;
+  z-index: 12;
+  max-width: calc(100vw - 16px);
   padding: calc(var(--px) * 3) calc(var(--px) * 6);
   font-size: 13px;
   white-space: nowrap;
@@ -2695,6 +2754,63 @@ small {
   12.5% { opacity: 0.6; }
   25% { opacity: 0.3; }
   37.5% { opacity: 0.15; }
+}
+
+/* A disabled button tells why (lib/whyTooltip.ts): it is transparent to the pointer so the reason bubble can find
+   it under the cursor (browsers send disabled controls no pointer events), and the bubble is fixed on the page. */
+button:disabled[data-why],
+button:disabled[title] {
+  pointer-events: none;
+}
+
+:root.why-hover,
+:root.why-hover * {
+  cursor: not-allowed !important;
+}
+
+.why-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1000;
+  box-sizing: border-box;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: calc(var(--px) * 3) calc(var(--px) * 5);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--parch-ink);
+  background: var(--parch);
+  --hi: var(--parch-hi);
+  --lo: var(--parch-lo);
+  box-shadow: var(--bevel), var(--outline), 0 calc(var(--px) * 2) 0 0 rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  white-space: pre-line;
+  visibility: hidden;
+}
+
+.why-tip.on {
+  visibility: visible;
+}
+
+/* The pointer: a notched pixel arrow toward the button. */
+.why-tip::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--arrow, 50%) - var(--px) * 3);
+  width: calc(var(--px) * 6);
+  height: calc(var(--px) * 3);
+  background: var(--ink);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+.why-tip[data-side='top']::after {
+  top: calc(100% + var(--px));
+}
+
+.why-tip[data-side='bottom']::after {
+  bottom: calc(100% + var(--px));
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
 }
 
 /* A button waiting for the server's answer to its command (lib/busyButtons.ts): three pixels blink in turn after
@@ -3000,12 +3116,6 @@ button[data-busy]::after {
     padding: 0 2px;
     font-size: 10px;
     line-height: 14px;
-  }
-
-  .mm-caption {
-    left: 0;
-    transform: none;
-    max-width: calc(100vw - 2 * var(--gap));
   }
 
   .spinner:not(.big) {
@@ -5110,6 +5220,150 @@ kbd {
   color: var(--muted);
 }
 
+/* A list that shows three rows (40 px portraits, 50 px tall) and scrolls inside itself beyond them: the crowns'
+   past rulers, the house's dead (hud/crownHouse.tsx, hud/dynasty.tsx). */
+.ancestors.scroll3 {
+  max-height: calc(150px + var(--px) * 8);
+  overflow-y: auto;
+  padding-right: calc(var(--px) * 2);
+  overscroll-behavior: contain;
+}
+
+/* Diplomasi → Krallık: the two crowns side by side, a slim power strip, one crown's page with a back button and a row
+   of pills (hud/cities.tsx → CrownsPanel). Only the diplomacy tabs above look like tabs. */
+.crown-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: calc(var(--px) * 4);
+  margin-bottom: calc(var(--px) * 4);
+}
+
+.crown-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 4);
+  border: var(--px) solid color-mix(in srgb, var(--crown) 60%, #120d0b);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--crown) 22%, transparent), transparent 70%), rgba(18, 13, 11, 0.55);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+.crown-card:hover,
+.crown-card:focus-visible {
+  border-color: var(--gold);
+}
+
+.crown-card.sworn {
+  box-shadow: inset 0 0 0 var(--px) var(--gold-2);
+}
+
+.crown-card .meter {
+  width: 100%;
+}
+
+.crown-card small {
+  color: var(--muted);
+}
+
+.crown-card-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  font-size: 14px;
+}
+
+.crown-card-ruler {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+
+.crown-card .dot,
+.crown-pill .dot {
+  display: inline-block;
+  width: calc(var(--px) * 3);
+  height: calc(var(--px) * 3);
+  margin-left: calc(var(--px) * 2);
+  background: #b0302a;
+}
+
+.crown-badge {
+  padding: 0 calc(var(--px) * 3);
+  border: var(--px) solid var(--gold-2);
+  color: var(--gold);
+  font-size: 12px;
+}
+
+.crown-badge.rival {
+  border-color: var(--muted);
+  color: var(--muted);
+}
+
+.crown-strip {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 1);
+  margin-bottom: calc(var(--px) * 4);
+}
+
+.crown-strip-bar {
+  display: flex;
+  height: calc(var(--px) * 4);
+  border: var(--px) solid #120d0b;
+}
+
+.crown-strip small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.crown-page-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+  padding-bottom: calc(var(--px) * 3);
+  margin-bottom: calc(var(--px) * 3);
+  border-bottom: var(--px) solid color-mix(in srgb, var(--crown) 55%, #120d0b);
+}
+
+.crown-page-head > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.crown-page-head small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.crown-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 2);
+  margin-bottom: calc(var(--px) * 4);
+}
+
+.crown-pill {
+  padding: calc(var(--px) * 1) calc(var(--px) * 5);
+  border: var(--px) solid transparent;
+  border-radius: 999px;
+  background: rgba(18, 13, 11, 0.45);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.crown-pill.on {
+  border-color: var(--gold-2);
+  color: var(--gold);
+}
+
 /* A crown's lords and the lord's standing with each (Diplomasi → Krallık; hud/crownHouse.tsx). */
 .crown-lords {
   display: flex;
@@ -6202,4 +6456,22 @@ input:not([type='range']):focus-visible {
 
 .summary-more {
   color: var(--gold);
+}
+
+/* The great works (CLAUDE.md §9.10): a stage's deliveries, one meter per resource. */
+.project-goods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 2) calc(var(--px) * 6);
+}
+
+.project-goods span {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+}
+
+.projects .btn {
+  justify-self: start;
+  align-self: flex-start;
 }

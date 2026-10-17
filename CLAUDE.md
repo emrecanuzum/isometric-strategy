@@ -211,6 +211,9 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   çalıları**. Kayaların aydınlık yüzlerinde liken, diplerinde yosun vardır.
   Yoğunluk bölgeden bölgeye değişir (taşlık kesimler ve sakin kesimler).
   Ağaç yerleşimi zeminle aynı sınırı kullanır.
+  Dağ eteklerinde tohumdan 30 **mağara ağzı** açılır (kayaya oyulmuş karanlık
+  kemer, önünde düşmüş taşlar; hepsi birbirine benzer, yağmacı klanlarının
+  yaşadığı mağaralar dışarıdan ayırt edilmez; §7.9.1).
 - **Ağaçlar türlerine göre öbeklenir:** yapraklı ağaçlar, çamlar, daha koyu
   ve sık katlı **ladinler**, beyaz gövdeli **huş** koruları, erken sararan
   (pas ve altın renkli) küçük ağaç kümeleri; açık arazide tek tük **kavak**
@@ -306,8 +309,16 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   pruvası, direği ve yelkeni güvertenin üstünde görünür. Hiçbir gemi
   köprünün üstünde ya da altında demirlemez, beklemez (`near`).
   Köprüden geçen ordular (yol köprü karolarında zigzag çizse ya da sunucunun
-  yolu çizilen köprünün bir iki karo yanından geçse de) güvertenin ortasından
-  düz yürür.
+  yolu çizilen köprünün birkaç karo yanından geçse de) güvertenin ortasından
+  düz yürür ve **sıçramaz** (`apps/web/src/game/marchView.ts`): yolun sudan
+  geçen kesimi, sudan bir karo önceki noktadan bir karo sonrakine kadar
+  (köprü yoldan uzaksa daha geniş, ordu en çok %35 hızlanacak kadar), en
+  yakın güvertenin ucuna, oradan güverte boyunca öbür ucuna ve yola geri
+  çizilir; ordu rampaya güvertenin hizasında, uçtan 0,8 karo öteden çıkar.
+  Kesim aynı sürede yürünür, başında ve sonunda ordu sunucunun hesapladığı
+  yerdedir (yalnızca çizim; sunucunun konumu değişmez). Köprünün yanından,
+  ucuna çok yakın geçen yürüyen güverteye sıçramaz: güvertenin yüksekliği
+  kenarlarına doğru zemine iner (`surfaceHeight`).
   Parçalar piksel bazında derinlik testiyle çizilir, öndeki kıyı
   köprünün ucunu örter. Güverte yaklaşık 1,5 karo, taş köprü 1,35 karo
   geniştir.
@@ -366,6 +377,32 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   - **Bulutlar:** ¼× ve altında yarı saydam, yavaş sürüklenen iri
     bulutlar ve gölgeleri; boyutları buluttan buluta değişir. Dört tip: kümülüs (yığın), stratus (uzun katman), sirrus
     (ince tüy) ve dağınık küçük kümeler.
+  - **Yağmur** (yalnızca görsel ve ses; `packages/shared/src/weather.ts` →
+    `weatherAt`, `lightningAt`; çizim `apps/web/src/game/weather.ts`;
+    değerler `config/balance/weather.json`): lobi geneli yağmur, fırtına,
+    sel, dolu fırtınası ve soğuk dalgası (§9.8) sürerken yağmur yağar
+    (fırtına en sert, şimşekli; dolu ve soğuk dalgası soluk, yavaş düşen
+    sulu kar). Bunların dışında da lobi tohumundan ara sıra geçici
+    sağanaklar olur (20 dakikalık pencerelerin ~%30'unda 2,5–7 dk);
+    kuraklık, dolunay, kutup ışıkları, tutulma, gökkuşağı ve kuyruklu
+    yıldız sürerken sağanak olmaz. Hava lobi anahtarından (`lobbyKeyOf`)
+    ve saatten hesaplanır, saklanmaz; herkes aynı gökyüzünü görür.
+    Bulutlar yağmurdan 45 sn önce toplanır, yağmur 30 sn'de başlayıp
+    diner. Yağarken harita **grileşir**: zeminin üstüne soğuk gri bir
+    perde iner ve gün ışığının rengi koyulaşıp grileşir (gece yağmuru
+    daha karanlıktır); haritanın üstünde yumuşak kenarlı, düzensiz koyu bulut gölgeleri
+    rüzgârla sürüklenir. Ekranda her yakınlaştırmada eğik, keskin piksel
+    yağmur çizgileri düşer (rüzgâr yönü 15 dakikada bir değişir, yoğunluk
+    yağmura göre; çizgi kalınlığı yakınlaştırmayla 1–3 piksel). 1× ve
+    yakında damlalar yere düşer: çimende ve toprakta küçük sıçrama
+    taçları, nehir ve gölde yayılan halkalar (köprüde taç); sıçramalar
+    zeminin hemen üstünde, binaların ve yürüyenlerin altında çizilir.
+    Fırtınada ara sıra şimşek çakar (ekran bir an ağarır, ardından
+    1 saniyenin altında gök gürültüsü). Yağmurun kısık bir sesi vardır
+    (sentezlenmiş gürültü, efekt sesine bağlı; sekme gizliyken susar).
+    Güç tasarrufunda yalnız grilik ve seyrek çizgiler kalır (bulut
+    gölgesi, sıçrama ve ses yok). Geliştirmede `?rain=1` / `storm` /
+    `sleet` / `shower` havayı zorlar (yalnız `bun run dev`).
 - **Su** derinliğe göre bantlı renk değiştirir, kıyıda köpük ve kumsal
   (kumsal kıyı boyunca genişleyip daralır, bazı kesimlerde hiç yoktur ve
   çim suya iner),
@@ -1426,7 +1463,10 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     bahşişini** çarpar: açgözlü ×1,2 / ×0,8, cömert ×0,85 / ×1,25, sert ×1,1 /
     ×0,9, dindar ×0,95 / ×1,1, adil ×1 / ×1 (sunucuda `patrols.ts` →
     `crownTraitAt`, `tributeDemand(gold, factor)`; %5'lik haraç 4,25–6 arası
-    olur).
+    olur). Bütün bu çarpanlar (taçların rekabetiyle birlikte, `crownWays`)
+    Politika bölümünde (beklenen bahşiş ve haraç payı), taç panelinde, eğlence
+    merkezinin menüsünde ve haraççıların haberinde ("hükümdarı açgözlü ×1,2 ·
+    taç savaşı ×1,25") yazar.
   - **Tahta geçiş haberi:** bir taçta hükümdar ölüp yenisi tahta çıkınca elçi
     **her lorda** (biat etsin etmesin) haber getirir (`crown_succession`:
     ölen, yaşı, yeni hükümdar ve huyu, naip, akrabalık): taht salonunda bir
@@ -1438,7 +1478,39 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     son haber verilen saltanatı lobi ve lord başına hatırlanır; ilk girişte
     var olan saltanatlar haber sayılmaz; yokken birden çok geçiş olduysa
     yalnızca her tacın sonuncusu pencereyle gelir, hepsi günlüğe yazılır.
-    Yeni hükümdarın ilişkiye etkisi yoktur (yalnızca huyunun etkileri).
+    Haber hiçbir yerde saklanmaz ama her cihazda aynıdır: açılışta sunucunun
+    son görülme anından (`lastSeenAt`) sonraki geçişler sayılır (tarayıcının
+    hatırladığı son an daha yeniyse ondan sonrakiler); oyuncu "Sen yokken"
+    raporuyla dönerse aradaki geçişler (ve taç savaşları) raporun **Dünyada
+    olanlar** sayfasında yazar, ayrıca pencere açılmaz. Böylece bir cihazda
+    görülen haber öbüründe yeniden gelmez (öbür cihaz açılınca son görülme
+    çoktan sonradır).
+  - **Yeni hükümdarın ilk günleri:** tahta çıkan hükümdar kendi lordlarına
+    huyuna göre bir kez yaklaşır: o taca bağlı her lordun ilişkisi taç giyme
+    anındaki üretim turunda cömertte **+8**, adilde ve dindarda **+5**, sertte
+    0, açgözlüde **−4** değişir (`traits.*.welcome`), sonra olağan hızla
+    dinlenme değerine döner. `advance` içinde saatten hesaplanır (sunucu ve
+    istemci aynı turu bulur); taca geçişten (`liegeAt`) önceki taç giymeler
+    sayılmaz.
+- **Taçların rekabeti** (`cities.json` → `crown.rivalry`; `crownHouse.ts` →
+  `crownRivalryAt`, `crownWays`): iki taç her **3 saatlik** dönemde **barış**,
+  **gerginlik** ya da **taç savaşı** hâlindedir. Hâl lobi numarası ve dönemden
+  çekilir, bir öncekine bağlıdır (8 dönem geriden barışla başlayan bir zincir):
+  barıştan gerginliğe %35, savaşa %5; gerginlikten savaşa %30, barışa %30;
+  savaştan barışa %45, gerginliğe %35. Hükümdarların huyu savaş olasılığını
+  kaydırır (sert +6, açgözlü +5, cömert −4, dindar −3, adil −2 puan; dönemin
+  başında tahtta olanlar, barıştan alınır). Etkileri küçüktür: gerginlikte
+  haraççılar hazinenin ×1,1'i kadarını, savaşta ×1,25'ini ister; savaşta taç
+  kendi lordlarını kollar, devriyenin bahşişi ×1,2 (huyun çarpanıyla
+  çarpılır; sunucu `patrols.ts`, arayüz aynı `crownWays` ile önceden yazar).
+  Savaş bittiğinde (dönem sınırında hâl savaştan çıkınca) **kazanan** tohumdan
+  çekilir, hükümdarların askerlik yeteneği şansı kaydırır (puan farkı başına
+  %4); kazanan tacın lordlarının o taçla ilişkisi o turda **+4** artar
+  (`advance`; taca geçişten sonra biten savaşlar). Savaşın başlaması ve
+  bitmesi elçiyle her lorda duyurulur (`crown_rivalry`; tarayıcıda, tahta
+  geçiş haberleriyle aynı kuralla), gerginlik yalnızca günlüğe yazar.
+  Diplomasi → Krallık sayfası (taç kartlarının altında) hâli, kalan süreyi, etkileri ve son
+  dönemleri gösterir; taç sekmelerinin Saray bölümünde de yazar.
 - **Oyuncular krallık değil, lorddur.** Oyunda yalnızca iki krallık vardır
   (taçlar); oyuncunun toprağı "lordluk"tur. Menüdeki sekmenin adı
   **Saray**dır; arayüz oyuncuya "krallığın" demez, önerilen adlar
@@ -1496,8 +1568,15 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   iri, **arka arkaya 5 bölüklük bir kol** olarak herkese görünür: bölükler
   aynı yolu biraz arayla izler, her biri kendi yönünü alır; yolun başında
   öndekinin çevresinde toplanırlar. Lordun sarayına (ya da eğlence
-  merkezine) varınca kol yolda, binanın önünde arka arkaya durur (hiçbir
-  bölük binanın üstüne çıkmaz); dönüşte arkadaki bölükler önden gider.
+  merkezine) varınca kol **binanın önündeki boşluğa doluşur**
+  (`patrolRoutes.ts` → `haltSpots`): öndeki bölük binanın önüne en yakın,
+  çevresi açık boş kareye (binanın arkasındaki kareler, sıkışık kareler
+  daha az tercih edilir) gelir, arkadakiler son 8 karoda sıklaşıp onun
+  çevresindeki boş karelere (birbirinden ~1,3 karo arayla, öndekinden en
+  çok 3,6 karo, sur ya da bina aşmadan ulaşılan) dağılır; hiçbir bölük
+  binanın ya da tarlanın üstüne çıkmaz. Dönüşte ilk 8 karoda yeniden kol
+  olurlar, arkadaki bölükler önden gider. Haraççılar da sarayın önünde aynı
+  biçimde toplanır.
   Konumları saatten
   hesaplanır. Ordu sancakları gölge düşürmez (yüksekten düşen uzun gölge
   bölüğü havadaymış gibi gösteriyordu; `sprites.ts` → `NO_SHADOW`).
@@ -1621,18 +1700,28 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   dolmadan bitirip **ödülü alır**: 100–250 altın (hazineye sığdığı kadar;
   yer azsa önceden uyarılır) ve o taçla ilişki (kendi tacı +5, öbürü +3).
   2. seviye saray ister; ilişki −50'nin altındaysa taç bir şey istemez.
-- **Diplomasi → Krallık** (`cities.tsx` → `CrownsPanel`): üstte her taç için
-  bir alt sekme (başkentin adıyla; ödülü bekleyen görevde nokta) ve **Güç
-  dengesi** (taçların gücü ve taçların pazarı); son bakılan hatırlanır
-  (`usePart` anahtarları `crowns`, `crown-part`). Bir tacın içi üç bölümdür:
-  **Hanedan** (hükümdarın portresi, yaşı, yetenekleri ve huyu ile etkisi; eşi;
+- **Diplomasi → Krallık** (`cities.tsx` → `CrownsPanel`): sekme düğmesi
+  gibi görünen tek sıra Diplomasi'nin kendi sekmeleridir. Krallık sayfası iki
+  büyük **taç kartıyla** açılır (yan yana: tacın sancağı ve adı kendi renginde,
+  hükümdarın portresi, adı ve yaşı, naip varsa yazar, seninle ilişki çubuğu,
+  "biat ettiğin taç" / "rakip taç" rozeti, ödülü bekleyen görevde kırmızı
+  nokta); altında ince bir **güç şeridi** (iki tacın güç payı ve rekabet
+  hâli), sonra **taçların rekabeti**, **taçların gücü** ve **taçların
+  pazarı**. Bir karta dokunmak o tacın sayfasını açar: başlıkta "← Krallıklar"
+  düğmesi, sancak, tacın adı ve hükümdarı; altında ince bir hap sırası
+  (**Hanedan / Saray / Politika**). Son bakılan sayfa ve bölüm hatırlanır
+  (`usePart` anahtarları `crowns`: `list` / `c0` / `c1`, ve `crown-part`).
+  **Hanedan:** hükümdarın portresi, yaşı, yetenekleri ve huyu ile etkisi; eşi;
   çocukları, veliaht ve tahttaki sıraları, reşit olmayanlar, ölenler; naip;
-  önceki hükümdarlar yıllarıyla), **Saray** (tacın sana bakışı: ilişki çubuğu
-  ve kalemleri — bağlılık, hanedan bağları, dinlenme değeri, şu anki sapma ve
-  saatlik geri dönüşü, ilişkiyi değiştirenler; tacın **lordları** puan
-  çubuklarıyla ve her biriyle senin ilişkin, tıklayınca Diplomasi'de açılır;
-  iki tacın lordları arasında süren savaş sayısı) ve **Politika** (aşağıdaki
-  kart). İhanet teklifi açıksa (§9.1.1) sekmenin en üstünde durur. Politika
+  önceki hükümdarlar yıllarıyla (liste üç satır yüksekliğinde bir kutudur,
+  fazlası kutunun içinde kayar; lordun kendi hanedanının "Atalar ve ölenler"
+  listesi de öyle, `.ancestors.scroll3`). **Saray:** tacın sana bakışı
+  (ilişki çubuğu ve kalemleri: bağlılık, hanedan bağları, dinlenme değeri, şu
+  anki sapma ve saatlik geri dönüşü, ilişkiyi değiştirenler); tacın
+  **lordları** puan çubuklarıyla ve her biriyle senin ilişkin, tıklayınca
+  Diplomasi'de açılır; iki tacın lordları arasında süren savaş sayısı ve
+  taçların hâli. **Politika:** aşağıdaki kart. İhanet teklifi açıksa (§9.1.1)
+  iki sayfanın da en üstünde durur. Politika
   kartı: hükümdar ve başkent, seninle ilişkisi (çubuk), **politikaları**
   (lobi pazarından o an hangi malı dakikada kaç birim aldığı, yönettiği mal ve
   senin fiyat etkin, bu saatin siparişi ve ödediği, devriye mi haraççı mı
@@ -1685,7 +1774,13 @@ Değerler `config/balance/outlaws.json` → `bands`, `road`; mantık
   tohumundan bir ticaret yolu karosunda (yol ya da köprü; taç
   başkentlerinin 44 karo yakınında değil, çeteler birbirinden en az 110
   karo uzak) doğar ve yolu izleyerek en çok **70 karoluk bir kesimi**
-  tutar (`stretchTiles`; 24 karodan kısa kesim seçilmez). Çete bu kesimde
+  tutar (`stretchTiles`; 24 karodan kısa kesim seçilmez). Kesim yalnızca **kuru
+  karadaki yol karolarından** geçer: köprü ve suya giren ham yol karoları
+  sayılmaz (istemci dere boyunca uzanan yolları kıyıdan dolaştırıp yeniden
+  çizdiği için, `chunkPainter.ts` → `drawnRoads`), kesim suya vardığı yerde
+  biter; çapraz adım ancak iki yanı da kuruysa atılır, çete suya köşe
+  kesmez (`bun scripts/outlaw-water-check.ts`: çetelerin bütün yürüyüşü
+  karada, korsanların bütün turu suda mı). Çete bu kesimde
   saniyede **0,45 karo** ile ileri geri yürür (ordular saniyede 1 karo:
   yağmacılar ordulardan yavaştır, yakalamak zor değildir). Konumları
   patrol gibi **saatten ve tohumdan** hesaplanır (`bandAt`, çizim için
@@ -1704,10 +1799,9 @@ Değerler `config/balance/outlaws.json` → `bands`, `road`; mantık
   filoların etiketi gibi bir **etiket** durur ama tehditkâr: neredeyse kara
   zemin, kan kırmızısı kenar ve kırmızı yazı ("Uzun Yusuf çetesi ·
   yağmacı"; `armies.ts` → `mapTag`). Etiket her yakınlaştırmada görünür,
-  büyük haritada çeteyi bulmak kolaydır. Küçük haritada ve dünya haritasında
-  çeteler ve korsan tekneleri **kan kırmızısı kenarlı kara sancakla** (dünya
-  haritasında kara bir karo; lejantta "Yağmacı / korsan") gösterilir, 2
-  saniyede bir yerleri güncellenir.
+  büyük haritada çeteyi bulmak kolaydır; yalnızca en uzak yakınlaştırmada
+  (⅛×) çeteler ve etiketleri gizlenir. Çeteler ve korsan tekneleri küçük
+  haritada ve dünya haritasında gösterilmez.
 - **Tuttukları yol:** Bir çete kesiminin 8 karo yakınındaki yol karolarını
   tutar (`holdTiles`). Bir lordun **ticaret noktasının 70 karo çevresindeki**
   yol karolarının ayaktaki çetelerce tutulan payı (`roadHeld`, 0–1) o lordun
@@ -1771,6 +1865,89 @@ Değerler `config/balance/outlaws.json` → `bands`, `road`; mantık
   tutuyor" kartı (Ticaret sekmesini açar), küçük haritanın **Sıcak
   noktalar** düğmesinde ticaret noktanın yolunu tutan çeteler ve peşindeki
   orduların durur.
+
+### 7.9.1 Yağmacı mağaraları ve klanlar (şu an uygulanan)
+
+Çeteler başıboş değildir: her biri dağlarda bir **mağarada** yaşayan bir
+**yağmacı klanına** bağlıdır. Değerler `config/balance/outlaws.json` →
+`caves`, `clans`; mantık `packages/shared/src/caves.ts`; sunucu
+`supabase/functions/_shared/caves.ts`; arayüz `apps/web/src/ui/hud/outlaws.tsx`
+(`CaveSheet`, `ClanTrail`, `CaveSiege`); çizim `sprites.ts` → `caveMouth`,
+`chunkPainter.ts` → `caveTiles`.
+
+- **Mağaralar:** Lobi başına **30 mağara** (`caves.count`), lobi tohumundan
+  (`caveSpots`; saklanmaz, sunucu ve istemci aynı yeri bulur). Her biri bir
+  **dağ eteğinde**dir: kar sınırının altında bir dağ karosu, önünde (ağzında)
+  serbest bir kara karosu ve onun ardında bir kara karosu daha; ağız orduların
+  yürüdüğü geniş karaya açılır (en az 4000 karoluk kara parçası), mağaralar
+  birbirinden en az 70 karo, taç başkentlerinden 60 karo, harita kenarından 60
+  karo uzaktır. Haritada kayaya oyulmuş **karanlık kemerli bir ağız** olarak
+  zemine boyanır (alçak kaya tümseği, düşmüş taşlar, eşikte yosun; ağzın
+  baktığı yana göre sol ya da sağ çeşidi; ağzın önünde ağaç ya da kaya olmaz).
+  **Bütün mağaralar birbirine benzer:** klanın yaşadığı mağara dışarıdan
+  ayırt edilmez; mağaraları bulmak zordur.
+- **Klanlar:** Aynı anda **3 klan** (`clans.count`) vardır; çete `idx % 3`
+  klanına bağlıdır (9 çetede klan başına 3). Her klanın tohumdan bir adı
+  ("Kurtpençe klanı", yuva sırası ve kuşağından) vardır; çetenin haritadaki
+  etiketi "Kara Yusuf çetesi · Kurtpençe klanı" yazar. Klanlar
+  `lobby_outlaws`'ta `kind 'clan'` satırlarıdır (`idx` = yuva sırası): kuşağı
+  (`gen`, kaç klanın yok edildiği), mağaraya yerleştiği an (`born_at`), süren
+  kuşatma (`battle`), direndiği kuşatmalarda düşenler (`losses`), yıkılmış
+  mağaralar (`fallen`: mağara, an, kim, klanın adı) ve yaşadığı mağara
+  (`cave`). **`cave` sütununu yalnız sunucu okur** (lordlara sütun yetkisi
+  verilmez); hangi mağarada kimin yaşadığı ancak izi sürülerek öğrenilir.
+  Lobinin ilk klanları sunucunun ilk işleyişinde yerleşir (`ensureClans`):
+  mağara tohum, yuva ve kuşaktan çekilir, başka bir klanın tuttuğu,
+  yıkılmış ya da bir lordun son hududuna 24 karo / bir kasabaya 20 karo yakın
+  mağara seçilmez (`pickCave`).
+- **Büyüme (yaşayan dünya):** Mağarayı koruyanlar 16–24 kişiyle başlar,
+  klan yerleştikçe her 20 dakikada +1 (en çok +16; `clanGarrison`), direndiği
+  kuşatmalarda düşenler eksilir; mağaradaki **ganimet** 250 altın, 150 savaş
+  malzemesi, 120 yapı malzemesi, 100 yemekle başlar ve klan yağmaladıkça saatte
+  +40 / +25 / +20 / +20 büyür (en çok 8 saat; `clanHoard`).
+- **İz sürmek:** Bir lordun ordusu bir klanın çetesini yendikçe yakalananlar
+  konuşur (`followTrail`, lordun durumunda `caveTrail`, yalnız kendisi görür):
+  ilk zaferde izlerin **yönü** (son savaş yerinden ekrana göre "kuzeydoğu
+  yönündeki dağlar"), ikinci zaferde **aşağı yukarı uzaklığı** (25 karoya
+  yuvarlı), **3. zaferde mağara bulunur** (casus evi olan lord 2 zaferde;
+  `clans.discovery`). İz klanın kuşağına bağlıdır: klan yok olursa yeni klanın
+  izi baştan sürülür. Elçi her adımda haber getirir (`cave_trail`) ve mağara
+  bulununca "X mağarası bulundu!" (`cave_found`). Çetenin penceresinde klanın
+  bölümü izleri ("3 / 3 iz") ve bulunduysa kuşatmayı gösterir.
+- **Bulunan mağara:** Yalnız bulan lordun haritasında mağaranın ağzında
+  klanın birkaç nöbetçisi "Kurtpençe klanı · mağara" etiketiyle durur ve
+  **Sıcak noktalar** düğmesinde "X mağarası" olarak çıkar. Mağaraya (ya da
+  nöbetçilere) tıklamak klanın mağara penceresini açar: klan, ona bağlı
+  çeteler, koruyanların yaklaşık sayısı, ganimet ve **Mağarayı kuşat** (ordu
+  seçilir, sonra gönderilir; orduyu "Hareket" ile nöbetçilerin üstüne
+  göndermek de kuşatır). Bulunmamış bir mağaraya tıklamak yalnızca sıradan bir
+  mağara anlatır (birkaç çeşit metin); yıkılmış bir mağara "Yağmacıların eski
+  mağarası" olarak kimin aldığını yazar.
+- **Kuşatma:** Emir `army` komutuyla `{ kind: 'cave', slot }` (öteki emirler
+  gibi elçiyle ya da hemen; sunucu lordun o kuşaktaki klanın mağarasını
+  bildiğini denetler, yoksa `'cave'` hatası). Ordu mağaranın ağzına yürür
+  (hedef `cave`), varınca sunucu (`settleCaves`) muharebeyi başlatır (tür
+  `cave`, olağan zar turları, izlenebilir). Mağarayı aynı anda tek ordu
+  kuşatır (öbürü sırasını bekler). Savunanlar kendi mağaralarındadır: moral
+  70, saha bilgisi 100, %40 okçu ve zarlarına mancınıkların silemediği
+  **+1,2** (`caveBonus`). Ordu vardığında klan çoktan yok edilmişse elçi
+  "Mağara boş" der (`cave_empty`).
+- **Sonuç:** Kazanılırsa klan **yok olur**: mağaradaki ganimet lordun
+  ambarına ve hazinesine girer (sınıra kadar), lordun **Zafer** puanına mağara
+  başına 100 eklenir (`record.cavesTaken`, `clans.scorePerCave`), klanın
+  çeteleri yollardan **hemen dağılır**; ve **aynı anda yeni bir klan** başka
+  bir mağarada (tutulmamış, yıkılmamış, lordlardan uzak) yeni bir adla doğar
+  (`gen` +1, `born_at`). Yeni klanın çeteleri **10 dakika** sonra aynı yollara
+  çıkar (`bandDelaySeconds`; `clanBandsUntil`, çetenin `downUntil`'ine
+  eklenir). Bütün lordlara elçi haber getirir ("X klanı yok edildi; dağlarda
+  yeni bir çete türedi: Y"; `clan_destroyed`), kazanan lord savaş sonu
+  haberinde ganimeti ve yeni klanın adını okur. Kaybedilirse ordu eve çekilir,
+  mağara düşenleri kadar zayıflar. Mağara kuşatması sıralamada muharebe
+  zaferi sayılmaz, kahırdan ölüm getirmez.
+- **Haberler:** Çizimleri kuşatma sahnesidir (is karası klan; alındı:
+  sancak çekilir, direndi: kuşatanlar çekilir), iz haberleri yolda elçi
+  sahnesi; sesleri gerilimli davul, zafer fanfarı ya da hüzünlü boru. Hepsi
+  "Sen yokken" raporunun askeri sayfasında da durur.
 
 ## 8. Askeri Sistem
 
@@ -2309,7 +2486,10 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   diye duyurulur (`Person.ruled` false; eski ölüler hükümdar sayılır).
 - **Saray sekmesinin bölümleri:** Saray sekmesi üç alt sekmeye ayrılır:
   **Seviye** (saray kartı, hudut ve saray yükseltme, iskele, Bağlılık),
-  **Hanedan** ve **Yapılar** (kurulu / sınır listesi); hepsinin altında
+  **Hanedan**, **Seferler**, **Hedefler**, **Projeler** (büyük işler,
+  şenlik, taca bağış; §9.10) ve **Yapılar** (kurulu / sınır listesi; başlıkta ve her yapının
+  altında kaç tanesinin bir üst seviyeye çıkabileceği, kaçının şu an hemen
+  yükseltilebileceği); hepsinin altında
   **Lordluğu sıfırla** durur ("her şey en baştan başlar" açıklamasıyla). Önce
   düğme "Emin misin?" diye sorar, sonra elçi "Emin misiniz, lordum?"
   penceresiyle son kez sorar; ancak orada "Evet, her şeyi sıfırla" denince
@@ -2494,8 +2674,9 @@ Değerler `config/balance/dynasty.json` → `intrigue`; mantık
     getirir (`liege_changed`). **Sadık kalırsa:** eski taç özür diler: ilişki
     +20 ve 250 altın (hazineye sığdığı kadar). Her iki cevap elçi haberiyle
     gelir (`liege_switch`). Teklif bir kez verilir, süresi dolunca geçersizdir
-    (sunucu `switch_expired` ile reddeder); taç sezonun geri kalanında yine
-    değiştirilemez.
+    (sunucu `switch_expired` ile reddeder) ve ilk üretim turunda durumdan
+    silinir (`advance`); taç sezonun geri kalanında yine değiştirilemez. Elçi
+    (danışman) teklif açıkken kalan süreyle birlikte hatırlatır.
 
 ### 9.2 Diplomatik durumlar
 
@@ -2846,7 +3027,23 @@ mertebesindedir.
   ayrı parçadır, böylece arama suru delemez ve kapıyı bulur; dar köprüler de
   bulunur), sonra seçilen hücre koridorunda karo karo; yol, arazinin izin
   verdiği yerde düzleştirilir. Böylece ordular nehirleri köprülerden ve en
-  kısa yoldan geçer. Binaların (tarla hariç) ve ayakta duran **surların**
+  kısa yoldan geçer. **Yollar tercih edilir:** ticaret yolunun (köprüler
+  dahil) ve lordların döşediği yolların yanındaki karolar daha ucuzdur: yolun
+  üstü ×0,92, bir karo yanı ×0,8, iki karo yanı ×0,9 (`military.json` →
+  `route`); ordu yakındaki yolu, yol en çok ~%25 uzatıyorsa kullanır ve yolun
+  ortasından değil bir karo yanından yürür (düzleştirme yolu ancak daha pahalı
+  değilse kısaltır). **Kapıdan ortadan geçer:** yol bir sur kapısından
+  geçiyorsa kapı karosunun ortası ve giriş/çıkış kenarlarının ortası sabittir,
+  kapıya 1,4 karo kala yol kapının doğrultusuna döner (`gateApproach`,
+  `gateLead`; devriyeler lordların kapılarından da böyle geçer). **Yollar
+  kıvrımlıdır:** 8 karodan uzun, yol kenarında olmayan düz bacaklara ~6 karoda
+  bir, yanlara en çok 1,1 karo sapan noktalar eklenir (koordinattan
+  belirlenimci), sonra köşeler üç geçişte yuvarlatılır (köşe başına en çok 2,5
+  karo; kesişen kısa yol araziden ya da binadan geçiyorsa o köşe kalır).
+  Sonuç bir karonun yüzde biri hassasiyetle saklanır; süre bu son yolun
+  uzunluğundan hesaplanır, sunucu ve istemci aynı yolu kullanır
+  (`military.ts` → `findRoute`; `scripts/route-check.ts` ve
+  `scripts/bridge-check.ts` gerçek bir haritada denetler). Binaların (tarla hariç) ve ayakta duran **surların**
   içinden geçmez; **sur kapısından** yalnızca sahibinin orduları geçer
   (yıkık sur geçilir). Bir binanın üstüne gönderilen ordu yanındaki boş
   karoda, bir saraya gönderilen ordu sarayın kapısının (ön köşesi) önünde
@@ -2879,7 +3076,7 @@ mertebesindedir.
 - Gece yanan pencerelerin çevresinde yumuşak bir **parıltı** vardır (aynı
   ışıklar bulanıklaştırılıp gecenin üstüne eklenir).
 - Ordular (ve devriyeler) köprüden geçerken güvertenin üstünde yürür,
-  suyun hizasında değil (`chunkPainter.ts` → `surfaceHeight`). Bölükteki
+  suyun hizasında değil (`chunkPainter.ts` → `surfaceHeight`, `marchView.ts`). Bölükteki
   her asker gölgesini kendi ayağından düşürür (arka saflar havada
   görünmez; `armies.ts` → `squad`, piksel başına `lift`).
 - Ordular binalar, surlar ve yürüyenlerle aynı derinlik sıralamasında
@@ -2912,8 +3109,8 @@ mertebesindedir.
   etiket taşır ("Uzun Yusuf çetesi · yağmacı", "Akçay asileri").
   Kalabalığı önlemek için üst üste binen etiketlerden yalnız öncelikli olan
   çizilir (seçili ordun, kendi orduların, yağmacılar/asiler, taç kolları,
-  ötekiler); en uzak yakınlaştırmada (⅛×) yalnız kendi orduların ve
-  yağmacılar/asiler etiketlidir.
+  ötekiler); en uzak yakınlaştırmada (⅛×) yalnız kendi orduların
+  etiketlidir; yağmacı çeteleri orada hiç çizilmez.
 - Muharebe başlayınca ve bitince **elçi** ekranda bir pencereyle haber
   verir (kim, nerede, sonuç, kayıplar).
 - **Savaş izleme:** Savaş penceresinin (ve kasaba kuşatmasının) üstünde
@@ -3031,6 +3228,8 @@ krallıkta birer tane olur ve 3 seviyelidir.
     altına hücum, çekirge istilası, dolu fırtınası, deprem, kutup ışıkları
     (yalnız gece), güneş tutulması (yalnız gündüz), gökkuşağı (yalnız
     gündüz), ejderha söylentisi, taç düğünü.
+    Yağmur, fırtına, sel, dolu fırtınası ve soğuk dalgası haritada da
+    görünür (yağmur ve grilik, §4.2.1).
   - **Krallığa özel** (%40): salgın, halk şenliği, orman yangını, maden
     damarı, gezgin tüccarlar, ambar yangını, define, hacılar, göçebe
     çadırları, gezgin ozan, kurt sürüsü, maden göçüğü, haydut baskını,
@@ -3061,6 +3260,36 @@ krallıkta birer tane olur ve 3 seviyelidir.
   karar süresi dolan, kimsenin cevaplamadığı krizde köylüleri seferber eder
   (aynı bedelle) ve her seferinde 15 altın alır (`events.crisis.steward`);
   hazinede yoksa bir şey yapamaz. Çevrimdışı lord için işe yarar.
+- **Afetin bedeli** (`institutions.json` → `events.crisis.toll`;
+  `packages/shared/src/disasters.ts` → `crisisToll`): bir kriz nasıl
+  karşılanırsa karşılansın karar süresi dolunca depodan bir pay götürür;
+  köylüler ve ordu yalnızca kaybı azaltır. Pay krize göre (orman yangını
+  yapı malzemesinin %12'si, ambar yangını yemeğin %12'si, sel yemek ve yapı
+  malzemesinin %6'sı, deprem yapı malzemesinin %8'i ve altının %4'ü (onarım),
+  fırtına %5 yapı, çekirge %10 yemek, dolu %5 yemek, soğuk dalgası %6 yapı
+  (odun), salgınlar %4 yemek ve %3 altın (ilaç), kurtlar %4 yemek, maden
+  göçüğü %8 savaş malzemesi, haydutlar %4 yapı, %4 savaş ve %3 altın) ×
+  seçim (bir şey yapma 1, köylüler 0,5, ordu 0,4; kâhya köylüler sayılır).
+  **Dolu depo belayı çeker:** deponun doluluğu %70'i geçtikçe pay artar, tam
+  doluyken iki katıdır (`fullAt`, `fullBoost`). Adil kalsın diye yalnızca
+  250 birimin üstü sayılır (`floor`) ve bir afet bir maldan en çok %25 alır
+  (`maxShare`). Hiçbir şey yapılmazsa olayın kendi zararı (`lose`, hastalık)
+  da üstüne gelir. Örnek: 6.800'lük dolu ambarda orman yangını köylülerle
+  ~790, hiçbir şey yapmadan ~1.570 yapı malzemesi yakar. Kriz penceresi her
+  seçeneğin altında "Yine de ~N … gider" diye yazar.
+- **Fare, rutubet, pas** (`events.hoard`; `hoardsBetween`, `hoardStrike`):
+  her 30 dakikalık pencerede %40 ihtimalle (krallığın yeri ve kuruluşundan
+  tohumlu, saklanmaz) bir an çekilir; o anda ambarın %85'inden dolu bir mal
+  varsa (birden çoksa zar seçer) **Ambar fareleri** (yemek), **Rutubet ve
+  kurt** (yapı malzemesi) ya da **Pas ve küf** (savaş malzemesi) o malın
+  %4–10'unu (doluluğa göre) yer. Seçim yoktur; günlüğe Önemli olarak yazar.
+  Ağzına kadar dolu tutulan ambar böylece kendiliğinden erir.
+- **Çevrimdışıyken de gelir:** krizler ve bozulmalar `advance` içinde, o
+  anki depoyla, üretim turu turu işlenir; lord yokken de (dönüşte ya da
+  sunucu krallığı ilerlettiğinde) aynı sırayla uygulanır: cevapsız kriz tam
+  zararını verir, kâhya varsa köylüleri seferber eder. 6 saatlik bir
+  yokluğun hesabı ~60 ms sürer. Defter (`books.disasterLost`, `disasters`,
+  `stewarded`) ne gittiğini toplar; "Sen yokken" raporu buradan okur.
 - **İki yollu olaylar (seçim):** Güneş tutulması, ejderha söylentisi, taç
   düğünü, göçebe çadırları, gezgin ozan, kayıp kervan, aziz kalıntısı ve
   şövalye turnuvası (ve §9.9'un kuyruklu yıldız, gezgin bilgin, şenlik
@@ -3146,14 +3375,18 @@ krallıkta birer tane olur ve 3 seviyelidir.
   vardır (`apps/web/src/ui/AwayReport.tsx`):
   **Sen yokken köyde neler oldu** (ilk sayfa, kısa özet: yokluk boyunca
   başlayan günün olaylarının (`fortunesBegun`) sayısı, kaçının kötü /
-  hayırlı olduğu ve adları tek satırda; afetlerin kaçının karşılandığı
-  (kâhya, köylüler) ve kaçının zararını verdiği, seçimlerin kaçında yol
-  seçildiği; olaylar tek tek yazılmaz; dönen seferler, tamamlanan
-  hedefler ve unvan), **Mali rapor** (yokluk süresi, hazine ve depoların öncesi/sonrası;
-  defterden gerçek vergi, tüccar geliri, maaş, boşa giden altın, hazine
-  dolu diye bekleyen seferler ve geri kalan harcama; nüfus, mutluluk,
-  yokluk cezası; seferlerden gelen altın ayrı yazar), **Seferler** (dönen
-  her seferin yolda başına gelenler, ganimeti, kayıpları; hâlâ yolda olanlar;
+  hayırlı olduğu, ilk üçünün adı ve seçimlerin kaçında yol seçildiği tek
+  satırda; afetler tek satırda: kaç afet, kaçını kâhya / sen karşıladın,
+  kaçı karşılanmadı, kaç kez fare/çürük/pas ve toplam giden mal (defterden);
+  dönen seferler toplam ganimetle tek satırda, tamamlanan hedefler ve unvan
+  tek satırda, büyük işler tek satırda ("Ulu Katedral 3/5 (yapılıyor)")),
+  **Mali rapor** (depo: dört kaynağın şimdiki hâli ve farkı tek satırda;
+  gelen altın (vergi, tüccar, kasaba ve olaylar, seferler, ganimet, diğer)
+  tek satırda; giden altın (maaşlar, kasaba bakımı, yağmacılar, inşaat ve
+  alımlar) tek satırda; dolu hazine/ambarda boşa giden, bekleyen ve yarım
+  yükle giden seferler tek satırda; köylü ve mutluluk; yokluk cezası),
+  **Seferler** (dönen her sefer tek satırda: ganimeti, bulduğu, kayıpları;
+  hâlâ yolda olanlar;
   sayfanın resmi son seferin sahnesidir), **Askeri rapor** (muharebeler, kuşatmalar, kasabalar,
   kuleler, sınırdaki ordular, asker sayısı ve kayıpların nedeni),
   **Haraçlar** (toplamlar: rakip tacın haraççıları kaç kez geldi ve
@@ -3162,9 +3395,11 @@ krallıkta birer tane olur ve 3 seviyelidir.
   kaç kez geldi ve toplam altın ve mallar; lordlar arası ödenen/alınan
   haraç), **Elçiler ve
   casuslar** ve **Dünyada olanlar** (kim kime savaş açtı, hangi savaş
-  bitti, kim kiminle çarpıştı ve kim kazandı, kim hangi kasabayı fethetti).
+  bitti, kim kiminle çarpıştı ve kim kazandı, kim hangi kasabayı fethetti, taçlarda kim ölüp kim tahta çıktı, taç savaşları başladı mı bitti mi).
   Askeri rapor ve Elçiler sayfalarında aynı başlıklı haberler birleşir
-  ("… (5 kez; sonuncusu)"). Raporda yalnızca maddelerin listesi kayar;
+  ("… (5 kez; sonuncusu)"). Hiçbir sayfa 7 satırı geçmez, kaydırma
+  gerekmez: uzun sayfa ilk 6 satırı ve "… ve N haber daha (ayrıntısı
+  günlükte)" yazar (`PAGE_LINES`). Raporda yalnızca maddelerin listesi kayar;
   resim, başlık ve Geri / İleri düğmeleri hep yerinde durur.
   Öncesi/sonrası sunucudaki `seen` özetinden okunur (her cihazda aynı). Rapor açıkken elçi pencereleri beklemez; kapatınca rapordaki
   haberler okunmuş sayılır (günlükte yine durur).
@@ -3213,7 +3448,9 @@ krallıkta birer tane olur ve 3 seviyelidir.
   (yemek azalıyor, tarla yok, ambar ya da hazine dolu, tüccar boşta, saray
   yükseltilebilir, biat edilmedi, kraliçe yok, kışla/casus evi/pazar/ambar/
   sur yok, evler dolu, boşta köylü, gece mesaisi yorgunluğu, mutsuz ya da
-  hasta halk, tacın görevi, alınabilecek kasaba, oynanabilir mini oyun…).
+  hasta halk, dolu ambarlar varken büyük işler (Saray → Projeler), tacın
+  görevi, alınabilecek kasaba, oynanabilir mini oyun, rakip
+  taca geçme teklifi, taç savaşı, haraççıları çok isteyen rakip hükümdar…).
   Cevaplar: işe girişmek (ilgili sekmeyi ya da alt bölümü açar, yapıyı
   yerleştirmeye başlar ya da binanın menüsünü açıp kamerayı oraya götürür),
   "Sonra" (konuyu bir süre ertelemek) ya da bir şaka (şakayla karşılık
@@ -3317,6 +3554,46 @@ içerik. Değerler `config/balance/expeditions.json`, `goals.json` ve
   Ünlü Lord → Efsanevi Lord → Destansı Hükümdar); unvan Saray sekmesinde
   yazar.
 
+### 9.10 Büyük işler, şenlik ve taca bağış (şu an uygulanan)
+
+Her şeyi en üste çıkarmış, ambarı ve hazinesi dolu lordun mallarını
+harcayacağı büyük hedefler. Değerler `config/balance/projects.json`; mantık
+`packages/shared/src/projects.ts`; arayüz `apps/web/src/ui/hud/projects.tsx`
+(Saray → **Projeler**); sunucuda `project` komutu (`action`: `give` + `id`,
+`festival`, `donate` + `good`).
+
+- **Büyük işler** (4. seviye saray): üç iş, her biri **5 aşama**. Her
+  aşama bir teslimat ister (işin temel maliyeti × 1 / 1,5 / 2 / 3 / 4, 50'ye
+  yuvarlı) ve ambardan çok olduğu için istendiği kadar seferde verilir:
+  **"Depodan aktar"** kalan ihtiyaçtan depoda olanı aktarır ama her ambarın
+  ve hazinenin %25'ini yedekte bırakır (`keep`; halk aç, hazine boş kalmaz).
+  Teslimat tamamlanınca ustalar aşamayı yapar (20 dk / 30 dk / 45 dk / 1 sa /
+  1,5 sa); yapılırken yeni teslimat alınmaz. Durum `Kingdom.projects`
+  (`stage`: biten aşama, `paid`: teslim edilen, `until`: yapımın bitişi);
+  biten aşamayı `advance` kaydeder ve günlüğe yazar, sayaçlarda görünür.
+
+  | İş | Temel (altın / yemek / yapı / savaş) | 5 aşamada toplam | Aşama başına |
+  | --- | --- | --- | --- |
+  | **Ulu Katedral** | 2500 / 1500 / 6000 / 600 | 28,8K / 17,3K / 69K / 6,9K | mutluluk +2 |
+  | **Büyük Çarşı** | 3000 / 5000 / 3000 / 400 | 34,5K / 57,5K / 34,5K / 4,6K | tüccar ve deniz ticareti +%2 |
+  | **Şövalye Tarikatı** | 2500 / 2000 / 2000 / 5000 | 28,8K / 23K / 23K / 57,5K | askerlerin zarı +0,1 (`battleSpirit`) |
+
+  Her aşama +120 Gelişim puanı, iş bitince +200 daha ve bağlı olunan taçla
+  ilişki +15 (iş başına 800 puan; üçü 2.400). **Denge:** dolu bir lord (≈7K
+  hazine, 6–7K ambar, saatte ~2K altın) bir seferde ~5K mal ve ~5K altın
+  aktarabilir; üç işin toplamı ~92K altın, ~98K yemek, ~127K yapı ve ~69K
+  savaş malzemesidir. Altın darboğazdır (~40–45 saatlik gelir), yani üç iş
+  günde birkaç kez giren gelişmiş bir lordu birkaç gün (sezonun ikinci
+  haftasına kadar) meşgul eder; tek bir iş ~1 gün sürer. Haritada ayrı bir
+  yapısı yoktur (ileride: anıt görseli).
+- **Halk şenliği** (3. seviye saray): 600 altın + 3000 yemek; 30 dakika
+  mutluluk +10; saatte bir düzenlenir (`festivalUntil`, `festivalAt`).
+- **Taca bağış** (biat etmiş, 2. seviye saray): bir maldan 2000 birim taca
+  gider, o taçla ilişki +4; 15 dakikada bir (`donatedAt`); ilişki 100'deyse
+  verilmez.
+- Elçi, ambarlardan biri %85'i ya da hazine %90'ı geçince ve bir işe
+  aktarılacak mal varsa Projeler'e çağırır (`greatWorks`).
+
 ---
 
 ## 10. Puanlama ve Sezon Sonu
@@ -3326,7 +3603,8 @@ içerik. Değerler `config/balance/expeditions.json`, `goals.json` ve
 - **Hazine:** altın / 10 + depodaki mallar / 25.
 - **Gelişim:** saray seviyesi × 120, kurum binaları (üniversite, hastane,
   tapınak, kışla, casus evi, pazar, ambar, hisar, lonca konağı) seviye × 30,
-  hanedan anıtı seviye × 100, diğer binalar seviye × 10, sur ve kapı 1.
+  hanedan anıtı seviye × 100, diğer binalar seviye × 10, sur ve kapı 1;
+  büyük işlerin her aşaması 120, biten iş +200 (§9.10).
 - **Nüfus:** köylü + asker × 3. **Ordu:** asker × 2 + cephanelik / 10 +
   gemi gücü × 2.
 - **Zafer:** kazanılan muharebe × 40, alınan saray (kuşatma) × 120,
@@ -3362,6 +3640,20 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   içinden köşedeki menünün "Ana menü"süyle dönülür. Lobi silinirse
   içindeki oyuncular kendiliğinden ana menüye döner (yayın + dakikalık
   yoklama).
+- **Kapalı düğmeler nedenini söyler:** Devre dışı (disabled) her düğme,
+  üstüne gelince (dokunmatikte dokununca, birkaç saniye) neden kapalı
+  olduğunu küçük bir parşömen balonda yazar: "Ordu sarayın önünde
+  durmalı", "Yeterli altın yok (eksik: 120)", "İnşaat yeri dolu (2/2)",
+  "3 dk 20 sn sonra". Neden düğmenin `data-why` özniteliğindedir (yoksa
+  `title` okunur) ve onu kapatan hata/koşul mantığından türetilir
+  (`upgradeError`, `buildError`, `roleError`… ve yardımcılar
+  `apps/web/src/ui/why.ts` → `lackWhy`, `waitWhy`, `buildWhy`). Tarayıcılar
+  kapalı düğmelere işaretçi olayı göndermediği için bu düğmeler CSS'te
+  işaretçiye saydamdır; `apps/web/src/lib/whyTooltip.ts` imlecin altındaki
+  kapalı düğmeyi kendisi bulur, balonu sayfaya sabit (kaydırılan panelde
+  kesilmez) çizer, ekrana sığmazsa alta döner; kapalı düğmeye tıklama
+  arkasındaki öğeye geçmez. Yeni bir kapalı düğme her zaman `data-why`
+  taşımalıdır.
 - **Komut bekleyen düğmeler:** Sunucuya komut gönderen her düğme cevabı
   bekler; bileşen başına kod gerekmez (`apps/web/src/lib/busyButtons.ts`,
   `net/online.ts` → `invoke`). Bir tıklamanın içinde başlayan komut o
@@ -3382,9 +3674,28 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   açılır. Dokunmatik
   ekranda bir karta dokunmak bilgi kartını açar; kartın altındaki "Depoya
   git" / "Halka git" ilgili sekmeyi açar, başka yere dokunmak kartı kapatır.
-- Dünya haritası (telefonda küçük haritaya dokununca) yakınlaştırılınca her
-  yöne, yukarı-aşağı da kaydırılabilir; yakınlaştırma bakılan yeri ortaya
-  getirir. M tuşu açıp kapatır, Esc kapatır.
+- **Dünya haritası** (M, küçük haritanın üst ucu; telefonda küçük haritaya
+  dokununca) yalnızca **gezinmek** içindir: tıklanan yere gidilmez, kamera
+  kıpırdamaz (`apps/web/src/game/WorldMap.tsx`). Fare tekerleği imlecin
+  altındaki yeri sabit tutarak yakınlaştırır/uzaklaştırır (bütün dünyanın
+  ekrana sığdığı 1× ile 6× arası), çift tık 2 kat yakınlaştırır, − / +
+  düğmeleri ekranın ortasına doğru yumuşakça yakınlaştırır; sürükleyerek
+  (telefonda tek parmakla) her yöne kaydırılır, iki parmakla sıkıştırınca
+  yakınlaşır. Harita ekrandan kaçırılamaz: ekrandan küçükken ortada durur,
+  büyükken ekranın ortası hep haritanın üstündedir. Geniş ekranda bütün dünya
+  açılır, uzun ekranda (telefon) bakılan yerin çevresi biraz yakın açılır;
+  boyut değişince ortadaki yer korunur. M tuşu açıp kapatır, Esc kapatır.
+  Yollar, nehirler, lordların toprakları ve bakılan yer çerçevesi her
+  yakınlıkta keskin kalan vektör çizgilerdir. Her lordun toprağı kendi
+  renginde yarı saydam bir baklava, koyu bir alt çizgi üstünde kendi
+  renginde (oyuncununki altın) kenarla çizilir; ortasında altın tepelikli
+  direkte lordun renginde piksel bir sancak durur. Taç başkentleri küçük
+  haritadaki iki kuleli kalenin büyüğüdür (tacın renginde). Sancak, kale,
+  han ve kasaba simgeleri ile adlar yakınlaştıkça haritadan yavaş büyür
+  (uzakta küçülüp kaybolmaz, yakında devleşmez). Adlar simgenin üstüne,
+  yer yoksa altına, sağına ya da soluna yerleşir; hiçbir yere sığmayan ad
+  (oyuncununki hariç) yakınlaştırılana kadar gizlenir, adlar üst üste
+  binmez.
 - **Küçük haritanın çerçevesi** baklavayı izleyen, ekran pikseliyle boyanmış
   bir piksel sanatıdır (`apps/web/src/game/minimapFrame.ts` → `paintFrame`,
   başlıklar `paintCap`; kenarları gerçek 2:1 izometrik basamaklardır):
@@ -3398,7 +3709,8 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   piksel kalınlık) ve tıklamayı haritaya geçirir.
 - Küçük haritada her krallığın **hududu kendi renginde** yarı saydam bir
   alan ve çerçeveyle (oyuncununki altın çerçeveli) boyanır. Simgeler (kale,
-  kasaba, devriye) büyüktür; krallık sancakları onlardan biraz küçüktür.
+  kasaba, devriye) büyüktür, taç kaleleri en büyüğüdür; krallık sancakları
+  kasabalardan biraz küçüktür.
 - Küçük haritada krallıklar renkli sancakla, **taç başkentleri**
   tacın renginde (kızıl / lacivert) küçük bir **kale** simgesiyle (iki
   kuleli, kapılı; üstünde sancak yok),
@@ -3445,7 +3757,9 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   filolarım** (Tab, sayfada odaklı bir şey yokken; sayı rozeti) ve alt
   uçta **Fotoğraf modu** (P). Sıcak noktalar ve ordular düğmesi her
   basışta sıradakine geçer: kamera oraya gider (ordu ya da filo seçilir),
-  küçük haritanın üstünde "2/3 · …" diye kısa bir yazı çıkar; yoksa düğme
+  küçük haritanın üst ucunun üstünde, düğmeye binmeden ve bütün arayüzün
+  önünde (ekranın kenarlarından taşmadan) "2/3 · …" diye kısa bir yazı
+  çıkar (`MinimapCorners.tsx` → `Caption`); yoksa düğme
   sönüktür. Kısayollar yazı yazarken ve Ctrl/Cmd/Alt basılıyken çalışmaz.
   **Fotoğraf modu** bütün arayüzü gizler (yalnız harita kalır), kenarları
   hafifçe karartır ve sol altta lordun adını ve tarihi yazar; Boşluk
@@ -3564,7 +3878,7 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
 | `kingdom_daily` | günlük istatistik |
 | `chat_messages` | lobi, gönderen krallık, ad, renk, metin, zaman |
 | `minigame_scores` | mini oyun puanları: lobi, lord, oyuncu, oyun, puan, zaman, ad/renk/lobi adı (yalnız sunucu yazar) |
-| `lobby_outlaws` | yağmacı çeteleri ve korsan tekneleri (§7.9, §8.5): tür, sıra, kaç kez yenildiği, `down_until`, süren muharebe, `shift`, kayıplar (yalnız sunucu yazar; satırı olmayan dokunulmamıştır) |
+| `lobby_outlaws` | yağmacı çeteleri, korsan tekneleri ve yağmacı klanları (§7.9, §7.9.1, §8.5): tür (`band` / `boat` / `clan`), sıra, kaç kez yenildiği (klanda kuşağı), `down_until`, süren muharebe, `shift`, kayıplar; klanda `born_at`, `fallen` ve yalnız sunucunun okuduğu `cave` (yalnız sunucu yazar; satırı olmayan dokunulmamıştır) |
 
 ---
 
@@ -3605,6 +3919,38 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
   altında 6), detay animasyonları (sallanan ağaçlar, hareketli binalar),
   kuşlar, bulutlar ve gece ışıltısı kapanır; piksel oranı 2'den büyük
   ekranlarda tuval 1,5 ile çizilir.
+- **Çizim yükü (şu an uygulanan; ölçüm: 1440×900, 1× yakınlık, ormanlık bir
+  yer, ana iş parçacığının dolu payı):** duruyorken %31 → %16, sürüklerken
+  %76 → %35, fırtınada duruyorken %12 (yağmur kendisi ölçülemeyecek kadar
+  az tutar). Uzun süre gezinmede bellek ve doku sayısı büyümez.
+  - Bir chunk ekrandan çok büyük olduğu için sallanan ağaçlar da tek tek
+    ayıklanır (`createWorld.ts` → `treeView`, `treeShown`): ekranın (gölge
+    yönünde geniş payla) dışındaki ağaçlar ve gölgeleri çizilmez. Önce
+    ağaçların üçte ikisi ekran dışındaydı ama her kare sıralanıp
+    gölgeleniyordu.
+  - Gölge katmanı kendi render grubudur (`shadows.ts`): yürüyenlerin
+    katmanı her kare yeniden sıralandığında (yürüyen her şey derinliğini
+    değiştirir) Pixi yalnızca o katmanın çizim listesini yeniden kurar,
+    gölgeleri değil. Değişmeyen bir şeyin gölgesi her kare yeniden hesaplanmaz
+    (bakış, yön, güneş adımı, yer ve ölçek hatırlanır); binaların birbirine
+    düşen gölgesi için her kare bütün binalardan bir metin anahtarı kurulmaz.
+  - Kasaba adları ve ilerleme çubukları, aynı kasabalar/çubuklar aynı ad ve
+    renkle yeniden verildiğinde (rakipler her yenilendiğinde) yeniden
+    yazılmaz; kuşatmasız kasabanın çubuğu her kare silinmez.
+  - **Paket bölme:** oyun (harita, Pixi, bütün paneller ve resimler) ayrı bir
+    parçadır (`Root.tsx` → `lazy(App)`): giriş ekranı ve menü 2,19 MB (733 KB
+    gzip) yerine 665 KB (207 KB gzip) indirir; oyun parçası menü açılır
+    açılmaz arkada indirilir.
+  - **Ağ:** katmanın dakikalık yenilemesi sekme gizliyken durur, sekme
+    dönünce bir kez yenilenir. Vadesi geçmiş bir şey için sunucuyu dürtme
+    (`settle` + bütün katmanı yeniden çekme, 11 sorgu) 5 sn'de bir değil, art
+    arda 5 / 10 / 20 / en çok 30 sn arayla yapılır; gizli sekme dürtmez
+    (`net/layer.ts`). Elçi haberleri günlüğe bir kez yazılır, her saniye
+    bütün haberler yeniden tarif edilmez.
+  - **Sunucu tick'i:** krallıklar bir tick'te ~10 kez bütün `state`'leriyle
+    okunuyordu; şimdi ilk okumadan sonra yalnızca sürümlerine bakılır
+    (`server.ts` → `freshKingdoms`), bir krallık yazılmamışsa önceki satırlar
+    kullanılır (her durum yazımı sürümü artırır).
 
 ---
 

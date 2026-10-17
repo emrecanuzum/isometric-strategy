@@ -12,9 +12,10 @@ import { ensureTowns, settleQuell, settleTowns } from './towns.ts'
 import { settlePatrols } from './patrols.ts'
 import { settleNavy } from './navy.ts'
 import { settleOutlawBattle, settleOutlaws } from './outlaws.ts'
+import { settleCaveBattle, settleCaves } from './caves.ts'
 import { settleHouses, settlePretender } from './house.ts'
 import type { EnvoyRow } from './diplomacy.ts'
-import { admin, changeRelation, grantClaim, iso, loadKingdoms, ms, mutateKingdom, nameOf, notify, pactsOf, settleFoodDemand, syncWarFlags, worldOf } from './server.ts'
+import { admin, changeRelation, freshKingdoms, grantClaim, iso, loadKingdoms, ms, mutateKingdom, nameOf, notify, pactsOf, settleFoodDemand, syncWarFlags, worldOf } from './server.ts'
 import type { Kingdom, LobbyWorld, Point, Row } from './server.ts'
 
 // deno-lint-ignore no-explicit-any
@@ -111,30 +112,36 @@ export async function tick(lobby: string, simAt: number, now: number) {
   const { data: ending } = await admin.from('battles').select('*').eq('lobby_id', lobby).eq('resolved', false).lte('ends_at', iso(now))
   for (const battle of ending ?? []) await finishBattle(battle, world, now)
 
-  rows = await loadKingdoms(lobby)
+  rows = await freshKingdoms(lobby, rows)
   pacts = await pactsOf(lobby)
   await moveArmies(lobby, world, rows, pacts, Math.max(simAt, now - BEHIND_MS), now)
 
   // Towns: placed if the lobby has none yet, and their sieges begun, broken off and ended.
   await ensureTowns(lobby, world, rows)
-  await settleTowns(lobby, world, await loadKingdoms(lobby), await pactsOf(lobby), now)
+  await settleTowns(lobby, world, (rows = await freshKingdoms(lobby, rows)), await pactsOf(lobby), now)
   // The lords' houses: kin grown unhappy, pretenders rising, their camps fought and marching (CLAUDE.md §9.1.1).
-  await settleHouses(lobby, world, await loadKingdoms(lobby), now)
+  await settleHouses(lobby, world, (rows = await freshKingdoms(lobby, rows)), now)
   // The crown kingdoms' patrols reaching lords.
-  await settlePatrols(lobby, world, await loadKingdoms(lobby), now)
+  await settlePatrols(lobby, world, (rows = await freshKingdoms(lobby, rows)), now)
   // Fleets meeting at the lords' docks: blockades, raids and sorties (CLAUDE.md §8.5).
-  await settleNavy(lobby, await loadKingdoms(lobby), await pactsOf(lobby), now)
+  await settleNavy(lobby, (rows = await freshKingdoms(lobby, rows)), await pactsOf(lobby), now)
   // Bandits and pirates: chases caught, called off or sent on, and each lord's share of their hold (CLAUDE.md §7.9).
   try {
-    await settleOutlaws(lobby, world, await loadKingdoms(lobby), Math.max(simAt, now - BEHIND_MS), now)
+    await settleOutlaws(lobby, world, (rows = await freshKingdoms(lobby, rows)), Math.max(simAt, now - BEHIND_MS), now)
   } catch (e) {
     console.error('settleOutlaws', e)
+  }
+  // The bandit clans in their caves: settled, and the sieges of the caves begun (CLAUDE.md §7.9.1).
+  try {
+    await settleCaves(lobby, world, (rows = await freshKingdoms(lobby, rows)), now)
+  } catch (e) {
+    console.error('settleCaves', e)
   }
   // Which lords are at war (their people grow slower), and food's price as the world's people grow (CLAUDE.md §5.2, §9.7).
   // Tributes between lords: what the payers really pay reaches the receivers.
   await settleTributes(lobby, await pactsOf(lobby), now)
   await syncWarFlags(lobby, now)
-  await settleFoodDemand(lobby, await loadKingdoms(lobby), now)
+  await settleFoodDemand(lobby, (rows = await freshKingdoms(lobby, rows)), now)
 }
 
 // A siege at a lord's palace has begun: a share of the people flee at once, and while it lasts more leave (the lord's
@@ -205,7 +212,7 @@ async function moveArmies(lobby: string, world: LobbyWorld, rows: Row[], pacts: 
       })
       if (Object.keys(stored).length > 0 || wasted > 0) await notify(lobby, [a.kingdom_id], 'cargo_home', { goods: stored, wasted }, at)
       l.engaged = true
-    } else if (a.goal.kind === 'move' || a.goal.kind === 'town' || a.goal.kind === 'camp') {
+    } else if (a.goal.kind === 'move' || a.goal.kind === 'town' || a.goal.kind === 'camp' || a.goal.kind === 'cave') {
       await admin.from('armies').update({ status: 'idle' }).eq('id', a.id)
       a.status = 'idle'
     }
@@ -472,7 +479,7 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
   // (Not for a skirmish with bandits: a nuisance, not a war; nor against a pretender: the throne itself is at stake
   // there, see settlePretender.)
   const house = battle.kind === 'pretender' || battle.kind === 'usurp'
-  for (const id of battle.kind === 'outlaw' ? [] : new Set((plan.winner === 'attackers' ? battle.defenders : battle.attackers).map((f) => f.kingdom))) {
+  for (const id of battle.kind === 'outlaw' || battle.kind === 'cave' ? [] : new Set((plan.winner === 'attackers' ? battle.defenders : battle.attackers).map((f) => f.kingdom))) {
     if (winners.has(id) || id === 0 || house) continue
     // A lord who led his army into the lost battle may fall in it (more often); the army goes on without him.
     const led = [...battle.attackers, ...battle.defenders].find((f) => f.kingdom === id && f.king && f.army !== null)
@@ -493,7 +500,7 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
   }
   const siegeTaken = battle.kind === 'siege' && plan.winner === 'attackers'
   // Putting down a town's own rebels is no victory for the ranking.
-  for (const id of battle.kind === 'revolt' || battle.kind === 'outlaw' || house ? [] : winners) {
+  for (const id of battle.kind === 'revolt' || battle.kind === 'outlaw' || battle.kind === 'cave' || house ? [] : winners) {
     if (id === 0) continue
     await mutateKingdom(id, at, (k) => {
       const record = { ...(k.record ?? {}) }
@@ -547,15 +554,22 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
   const quelled = battle.kind === 'revolt' ? await settleQuell(battle as never, at) : null
   if (quelled) report.town = quelled
   // A band of bandits beaten (gone for a while, its hoard to the lord) or holding on (CLAUDE.md §7.9).
-  const outlaw = battle.kind === 'outlaw' ? await settleOutlawBattle(battle as never, at) : null
+  const outlaw = battle.kind === 'outlaw' ? await settleOutlawBattle(battle as never, at, world) : null
   if (outlaw) {
     report.outlaw = outlaw.name
     if (outlaw.loot) report.loot = outlaw.loot
+  }
+  // A clan's cave taken (the clan wiped out, its hoard to the lord, a new clan elsewhere) or holding out (CLAUDE.md §7.9.1).
+  const den = battle.kind === 'cave' ? await settleCaveBattle(battle as never, at, world) : null
+  if (den) {
+    report.outlaw = den.name
+    if (den.loot) report.loot = den.loot
+    if (den.next) report.next = den.next
   }
   // A pretender put down, holding his camp, or on the throne (CLAUDE.md §9.1.1).
   const claimant = house ? await settlePretender(battle, at) : null
   if (claimant) report.pretender = claimant
   await admin.from('battles').update({ report }).eq('id', battle.id)
   const kingdoms = [...new Set([...battle.attackers, ...battle.defenders].map((f) => f.kingdom))].filter((k) => k !== 0)
-  await notify(lobby, kingdoms, 'battle_end', { battle: battle.id, kind: battle.kind, winner: plan.winner, report, ...(quelled && { town: quelled.town, name: quelled.name }), ...(outlaw && { name: outlaw.name }), ...(claimant && { name: claimant.name, usurped: !!claimant.usurped }) }, Math.min(at, now))
+  await notify(lobby, kingdoms, 'battle_end', { battle: battle.id, kind: battle.kind, winner: plan.winner, report, ...(quelled && { town: quelled.town, name: quelled.name }), ...(outlaw && { name: outlaw.name }), ...(den && { name: den.name, next: den.next }), ...(claimant && { name: claimant.name, usurped: !!claimant.usurped }) }, Math.min(at, now))
 }

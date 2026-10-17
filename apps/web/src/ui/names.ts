@@ -203,6 +203,13 @@ export const FORTUNE_TEXTS: Record<string, { title: string; text: string; tone: 
   refugees: { title: 'Göçmen aileler', text: 'Savaştan kaçan birkaç aile hududuna sığındı; yurt arıyorlar.', tone: 'bad', icon: 'people' },
 }
 
+// Stores left brimming struck by rats, rot and rust (CLAUDE.md §9.8; institutions.json events.hoard).
+export const HOARD_TEXTS: Record<string, { title: string; text: string }> = {
+  rats: { title: 'Ambar fareleri', text: 'Ağzına kadar dolu ambarlara fareler dadandı; çuvallar delik deşik.' },
+  rot: { title: 'Rutubet ve kurt', text: 'Üst üste yığılan keresteyi rutubet ve kurt sardı.' },
+  rust: { title: 'Pas ve küf', text: 'Tıka basa dolu cephane depolarında demir paslandı, deri küflendi.' },
+}
+
 // The answers to a crisis (CLAUDE.md §9.8): what the villagers and the army do against each, and what happens if
 // nothing is done.
 export const CRISIS_TEXTS: Record<string, { villagers: string; army: string; none: string }> = {

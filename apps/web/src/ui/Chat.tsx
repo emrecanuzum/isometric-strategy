@@ -256,7 +256,7 @@ export function Chat({
         <ol className="chat-kingdoms">
           {kingdoms.map((k) => (
             <li key={k.id}>
-              <button className={k.id === mine ? 'own' : undefined} onClick={() => onKingdom(k.id)} disabled={k.id === mine}>
+              <button className={k.id === mine ? 'own' : undefined} onClick={() => onKingdom(k.id)} disabled={k.id === mine} data-why="Bu senin lordluğun">
                 <i style={{ background: swatch(k.color) }} />
                 <span>
                   <b style={{ color: `color-mix(in srgb, ${swatch(k.color)} 45%, #f3e6c8)` }}>
@@ -311,7 +311,7 @@ export function Chat({
           disabled={!canPost}
           aria-label="Mesaj"
         />
-        <button className="btn small" disabled={!canPost || sending || !draft.trim()}>
+        <button className="btn small" disabled={!canPost || sending || !draft.trim()} data-why={!canPost ? 'Yazmak için önce lordluğunu kur' : sending ? 'Mesajın gönderiliyor' : 'Önce bir mesaj yaz'}>
           Gönder
         </button>
       </form>
@@ -335,7 +335,7 @@ function Ranking({ kingdoms, mine, onKingdom, banner }: { kingdoms: KingdomInfo[
     <ol className="chat-ranking">
       {ranked.map((k, i) => (
         <li key={k.id} className={k.id === mine ? 'own' : undefined}>
-          <button onClick={() => k.id !== mine && onKingdom(k.id)} disabled={k.id === mine}>
+          <button onClick={() => k.id !== mine && onKingdom(k.id)} disabled={k.id === mine} data-why="Bu senin lordluğun">
             <span className="rank">{i + 1}.</span>
             <i style={{ background: swatch(k.color) }} />
             <span className="who">

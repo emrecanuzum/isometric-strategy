@@ -6,6 +6,7 @@ import * as game from './game.js'
 import { admin, iso, refuse } from './server.ts'
 import { townAt, townsOf } from './towns.ts'
 import { orderChase } from './outlaws.ts'
+import { orderCave } from './caves.ts'
 import type { Kingdom, LobbyWorld, Point, Row } from './server.ts'
 
 export interface ArmyRow {
@@ -25,7 +26,7 @@ export interface ArmyRow {
   // siege to that town (CLAUDE.md §8.4).
   // `chase`: after a band of bandits (CLAUDE.md §7.9), since `since` (ms). `camp`: sent against its own lord's
   // pretender's camp (CLAUDE.md §9.1.1).
-  goal: { kind: 'move' | 'home' | 'siege' | 'town' | 'chase' | 'camp'; kingdom?: number; town?: number; retreat?: boolean; band?: number; since?: number }
+  goal: { kind: 'move' | 'home' | 'siege' | 'town' | 'chase' | 'camp' | 'cave'; kingdom?: number; town?: number; retreat?: boolean; band?: number; since?: number; slot?: number; gen?: number }
   morale: number
   familiarity: number
   camp: Point
@@ -43,6 +44,8 @@ export type Order =
   | { kind: 'merge'; with: number }
   // After a band of bandits (CLAUDE.md §7.9): to where it can meet it, and on until it does.
   | { kind: 'chase'; band: number }
+  // On a bandit clan's cave the lord has found (CLAUDE.md §7.9.1): march there and lay siege to it.
+  | { kind: 'cave'; slot: number }
 
 // Where a kingdom's soldiers gather: just outside the palace's front corner.
 export const doorOf = (state: Kingdom): Point | null => game.palaceDoor(state?.buildings) as Point | null
@@ -170,6 +173,7 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
     return null
   }
   if (order.kind === 'chase') return await orderChase(world, army, owner, kingdoms, order.band, at)
+  if (order.kind === 'cave') return await orderCave(world, army, owner, kingdoms, order.slot, at)
   if (order.kind === 'home') {
     const door = doorOf(owner)
     if (!door) return 'route'

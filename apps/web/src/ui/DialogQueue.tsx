@@ -20,7 +20,7 @@ export const useQueue = () => useContext(QueueContext)
 
 // The standard footer: the dialog's own buttons on the left, the place in the line in the middle, the forward button
 // on the right ("İleri" while more are waiting, "Tamam" on the last).
-export function DialogFoot({ children, onNext, label, disabled }: { children?: ReactNode; onNext: () => void; label?: string; disabled?: boolean }) {
+export function DialogFoot({ children, onNext, label, disabled, why }: { children?: ReactNode; onNext: () => void; label?: string; disabled?: boolean; why?: string }) {
   const { pos, total, closeAll } = useQueue()
   const more = total > pos
   return (
@@ -40,7 +40,7 @@ export function DialogFoot({ children, onNext, label, disabled }: { children?: R
       ) : (
         <span />
       )}
-      <button className="btn small primary dialog-next" disabled={disabled} onClick={onNext}>
+      <button className="btn small primary dialog-next" disabled={disabled} data-why={why ?? 'Cevap bekleniyor'} onClick={onNext}>
         {label ?? (more ? 'İleri' : 'Tamam')}
       </button>
     </div>

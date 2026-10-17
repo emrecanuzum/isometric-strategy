@@ -1225,6 +1225,7 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
     case 'fleet_turned':
       return L('naval', own, 'bad', 'calm')
     case 'battle_start':
+      if (p.kind === 'cave') return L('siege', BANDIT_HEX, 'bad')
       if (p.kind === 'outlaw') return L('raid', BANDIT_HEX, 'bad', 'repelled')
       if (p.kind === 'revolt' || p.kind === 'pretender') return L('revolt', null, 'bad')
       return p.kind === 'siege' ? L('siege', null, 'bad') : L('battle', null, 'bad')
@@ -1233,6 +1234,7 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
       if (p.kind === 'revolt' || p.kind === 'pretender') return L('revolt', null, won ? 'good' : 'bad', won ? 'free' : undefined)
       if (p.kind === 'usurp') return L('siege', null, won ? 'bad' : 'good', won ? 'taken' : 'held')
       if (p.kind === 'outlaw') return L('raid', BANDIT_HEX, won ? 'good' : 'bad', won ? 'repelled' : undefined)
+      if (p.kind === 'cave') return L('siege', BANDIT_HEX, won ? 'good' : 'bad', won ? 'taken' : 'held')
       return p.kind === 'siege' ? L('siege', null, 'bad', won ? 'taken' : 'held') : L('battle', null, 'bad')
     }
     case 'siege_people':
@@ -1278,6 +1280,15 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
     // Bandits on the roads and pirates on the water (CLAUDE.md §7.9, §8.5): the caravan raid and the sea fight, in black.
     case 'outlaw_chase':
       return L('raid', BANDIT_HEX, 'good', 'repelled')
+    // The trail to a bandit clan's cave, the cave found, and a clan wiped out (CLAUDE.md §7.9.1).
+    case 'cave_trail':
+      return L('envoy', BANDIT_HEX, 'good', 'lost')
+    case 'cave_found':
+      return L('siege', BANDIT_HEX, 'good')
+    case 'cave_empty':
+      return L('envoy', own, 'bad', 'lost')
+    case 'clan_destroyed':
+      return L('siege', BANDIT_HEX, 'good', 'taken')
     case 'outlaw_road':
       return L('raid', BANDIT_HEX, 'bad')
     case 'outlaw_road_clear':
@@ -1317,6 +1328,15 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
     // The crowns' houses and the lord's fealty (CLAUDE.md §7.8, §9.1.1).
     case 'crown_succession':
       return L('royal', crown, 'good', p.regent ? 'regent' : undefined)
+    case 'crown_rivalry':
+      // The two crowns' colours on the two sides (the winner's first when a war ends).
+      return p.stance === 'war'
+        ? { family: 'war', other: CROWN_COLORS[0], own: CROWN_COLORS[1], tone: 'bad' }
+        : p.prev === 'war'
+          ? { family: 'peace', other: CROWN_COLORS[Number(p.winner ?? 0) % 2], own: CROWN_COLORS[(Number(p.winner ?? 0) + 1) % 2], tone: 'good' }
+          : p.stance === 'tension'
+            ? { family: 'war', variant: 'camp', other: CROWN_COLORS[0], own: CROWN_COLORS[1], tone: 'bad' }
+            : { family: 'peace', other: CROWN_COLORS[0], own: CROWN_COLORS[1], tone: 'good' }
     case 'liege_switch':
       return p.accept ? L('alliance', CROWN_COLORS[Number(p.to ?? 0) % CROWN_COLORS.length], 'good') : L('gift', CROWN_COLORS[Number(p.from ?? 0) % CROWN_COLORS.length], 'good')
     case 'liege_changed':
@@ -1382,6 +1402,14 @@ export function soundForNotice(n: Notice, online: Online): Cue {
       return 'lost'
     case 'outlaw_chase':
       return 'threat'
+    case 'cave_trail':
+      return 'threat'
+    case 'cave_found':
+      return 'triumph'
+    case 'cave_empty':
+      return 'lost'
+    case 'clan_destroyed':
+      return 'victory'
     case 'outlaw_road':
       return 'raid'
     case 'outlaw_road_clear':
@@ -1421,6 +1449,8 @@ export function soundForNotice(n: Notice, online: Online): Cue {
       return 'kingFell'
     case 'crown_succession':
       return p.regent ? 'death' : 'coronation'
+    case 'crown_rivalry':
+      return p.stance === 'war' ? 'warHorn' : p.prev === 'war' ? (p.winner !== null && p.winner !== undefined ? 'triumph' : 'peace') : p.stance === 'tension' ? 'threat' : 'peace'
     case 'liege_switch':
       return p.accept ? 'alliance' : 'gift'
     case 'liege_changed':

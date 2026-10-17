@@ -1,4 +1,4 @@
-import { BUILDINGS, GOODS, atFloor, balance, basePrice, constructing, fortuneEffects, guildOf, idleFactor, lobbyTripMs, priceAt, researchEffects, tradeLoad, tradePrice } from '@game/shared'
+import { BUILDINGS, GOODS, atFloor, balance, basePrice, constructing, fortuneEffects, guildOf, idleFactor, lobbyTripMs, priceAt, projectEffects, researchEffects, tradeLoad, tradePrice } from '@game/shared'
 import type { Cost, Good, Kingdom, Market, Resource, Survey } from '@game/shared'
 import { useState } from 'react'
 import type React from 'react'
@@ -74,7 +74,7 @@ export function GoodChoice({
 }) {
   // A trip's load (bigger to a free city), as much of it as the stores hold, at the price the merchant is paid.
   const load = tradeLoad(kingdom)
-  const bonus = (1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade + guildOf(kingdom, now).trade) * idleFactor(kingdom, now)
+  const bonus = (1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade + guildOf(kingdom, now).trade + projectEffects(kingdom, now).trade) * idleFactor(kingdom, now)
   const idle = selected === null && !!kingdom.trade.idle
   return (
     <div className="goods choices" role="radiogroup" aria-label="Satılacak mal">
@@ -316,6 +316,7 @@ export function SitePicker({
                 className={c === color ? 'swatch active' : 'swatch'}
                 style={{ '--swatch': KINGDOM_COLORS[c].swatch } as React.CSSProperties}
                 disabled={taken.has(c)}
+                data-why={`${KINGDOM_COLORS[c].name} başka bir lordun; bir renk lobide yalnızca bir lordundur`}
                 onClick={() => setColor(c)}
               />
             ))}
@@ -325,7 +326,7 @@ export function SitePicker({
           </span>
         </div>
       </div>
-      <button className="btn primary wide" disabled={!survey || !trimmed || !color} onClick={() => color && onFound(trimmed, color)}>
+      <button className="btn primary wide" disabled={!survey || !trimmed || !color} data-why={!survey ? 'Önce bir yer seç' : !trimmed ? 'Lordluğuna bir ad ver' : 'Bir renk seç'} onClick={() => color && onFound(trimmed, color)}>
         <Icon name="crown" size={16} /> Burada kur
       </button>
     </section>

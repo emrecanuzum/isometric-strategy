@@ -73,7 +73,7 @@ export function Tutorial() {
         ))}
       </div>
       <div className="row spread">
-        <button className="btn small" onClick={() => setPage(page - 1)} disabled={page === 0}>
+        <button className="btn small" onClick={() => setPage(page - 1)} disabled={page === 0} data-why="İlk sayfadasın">
           Geri
         </button>
         <span className="tutorial-dots" aria-label={`Sayfa ${page + 1} / ${PAGES.length}`}>
@@ -81,7 +81,7 @@ export function Tutorial() {
             <i key={i} className={i === page ? 'on' : undefined} />
           ))}
         </span>
-        <button className="btn small" onClick={() => setPage(page + 1)} disabled={page === PAGES.length - 1}>
+        <button className="btn small" onClick={() => setPage(page + 1)} disabled={page === PAGES.length - 1} data-why="Son sayfadasın">
           İleri
         </button>
       </div>

@@ -1,4 +1,4 @@
-import { balance, crisisDecideMs, crisisKey, dilemmaDecideMs, dilemmaOptions } from '@game/shared'
+import { balance, crisisDecideMs, crisisKey, crisisToll, dilemmaDecideMs, dilemmaOptions } from '@game/shared'
 import type { ChoiceOption, CrisisChoice, DilemmaChoice, EconomyEvent, Good, Kingdom } from '@game/shared'
 import { EventArt } from './EventArt'
 import { StoryScene, fortuneStory } from './storyScenes'
@@ -25,6 +25,13 @@ export function optionNote(o: ChoiceOption) {
     ...(o.researchRush ? [`süren araştırma ${Math.round(o.researchRush)} sn erken biter`] : []),
     ...(o.people ? [`${o.people} köylü yerleşir (boş ev varsa)`] : []),
   ].join(' · ')
+}
+
+// What a crisis would take from the stores if met that way now (CLAUDE.md §9.8): " · ~786 yapı malzemesi gider".
+function tollNote(kingdom: Kingdom | null, kind: string, choice: CrisisChoice, now: number) {
+  if (!kingdom) return ''
+  const lost = Object.entries(crisisToll(kingdom, kind, choice, now)).filter(([, v]) => (v ?? 0) > 0)
+  return lost.length > 0 ? ` Yine de ~${lost.map(([r, v]) => `${Math.round(v ?? 0)} ${resourceName(r)}`).join(', ')} gider.` : ''
 }
 
 const short = (o: ChoiceOption, stock: Kingdom['stock'] | undefined) =>
@@ -94,7 +101,7 @@ export function FortuneDialog({
             <div className="crisis">
               {answered ? (
                 <p className={answered === 'none' ? 'down' : 'up'}>
-                  {answered === 'none' ? 'Bir şey yapılmadı; olay etkisini gösterecek.' : answered === 'villagers' || answered === 'army' ? `${crisis[answered]}: zarar önlendi.` : ''}
+                  {answered === 'none' ? 'Bir şey yapılmadı; olay etkisini gösterecek.' : answered === 'villagers' || answered === 'army' ? `${crisis[answered]}: asıl zarar önlendi.${tollNote(kingdom, event.fortune, answered, now)}` : ''}
                 </p>
               ) : now > deadline ? (
                 <p className="down">Karar vermek için geç kaldın; olay etkisini gösterdi.</p>
@@ -108,20 +115,20 @@ export function FortuneDialog({
                     <button className="btn crisis-choice" onClick={() => onAnswer('villagers')}>
                       <b>{crisis.villagers}</b>
                       <small>
-                        Zarar önlenir; {Math.round(c.villagers.seconds / 60)} dakika iş gücü %{Math.round(-c.villagers.work * 100)} düşer.
+                        Asıl zarar önlenir; {Math.round(c.villagers.seconds / 60)} dakika iş gücü %{Math.round(-c.villagers.work * 100)} düşer.{tollNote(kingdom, event.fortune, 'villagers', now)}
                       </small>
                     </button>
-                    <button className="btn crisis-choice" disabled={soldiers < c.army.minSoldiers} onClick={() => onAnswer('army')}>
+                    <button className="btn crisis-choice" disabled={soldiers < c.army.minSoldiers} data-why={`Sarayda en az ${c.army.minSoldiers} asker olmalı (${soldiers} var)`} onClick={() => onAnswer('army')}>
                       <b>{crisis.army}</b>
                       <small>
                         {soldiers < c.army.minSoldiers
                           ? `Sarayda en az ${c.army.minSoldiers} asker olmalı.`
-                          : `Zarar önlenir; ${c.army.loss}, nadiren ${c.army.loss + 1} asker kaybedilir ve ordu ${Math.round(c.army.lockSeconds / 60)} dakika sefere çıkamaz.`}
+                          : `Asıl zarar önlenir; ${c.army.loss}, nadiren ${c.army.loss + 1} asker kaybedilir ve ordu ${Math.round(c.army.lockSeconds / 60)} dakika sefere çıkamaz.${tollNote(kingdom, event.fortune, 'army', now)}`}
                       </small>
                     </button>
                     <button className="btn crisis-choice" onClick={() => onAnswer('none')}>
                       <b>{crisis.none}</b>
-                      <small>Kimse yorulmaz; ama olayın kötü etkisi tam olarak yaşanır.</small>
+                      <small>Kimse yorulmaz; ama olayın kötü etkisi tam olarak yaşanır.{tollNote(kingdom, event.fortune, 'none', now)}</small>
                     </button>
                   </div>
                 </>
@@ -143,7 +150,7 @@ export function FortuneDialog({
                     {(['a', 'b'] as const).map((way) => {
                       const lack = short(options[way], kingdom?.stock)
                       return (
-                        <button key={way} className="btn crisis-choice" disabled={lack} onClick={() => onChoose(way)}>
+                        <button key={way} className="btn crisis-choice" disabled={lack} data-why={`Yetersiz kaynak: ${optionNote({ cost: options[way].cost })}`} onClick={() => onChoose(way)}>
                           <b>{dilemma[way]}</b>
                           <small>{lack ? `Yetersiz kaynak: ${optionNote({ cost: options[way].cost })}` : optionNote(options[way]) || 'Bir bedeli yok.'}</small>
                         </button>

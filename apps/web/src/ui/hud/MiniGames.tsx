@@ -227,7 +227,7 @@ export function GamePanel({ game, data }: { game: ArcadeGame; data: HudData }) {
           {left <= 0 && back ? `, ${secs(back - now)} sonra yeniden ödül verir` : ''}.
         </p>
         <div className="minigame-actions">
-          <button className="btn wide" disabled={why !== null || open || !online} onClick={start}>
+          <button className="btn wide" disabled={why !== null || open || !online} data-why={!online ? 'Sunucuya bağlı değil' : open ? 'Oyun zaten açık' : why === 'busy' ? `${secs(gameReadyAt(kingdom, game) - now)} sonra yeniden oynanır` : why === 'building' ? 'Bu oyunun binası (ya da eğlence merkezi) henüz bitmedi' : 'Şu an oynanamaz'} onClick={start}>
             <span>
               <Icon name={GAME_ICONS[game]} size={16} /> Oyna
             </span>

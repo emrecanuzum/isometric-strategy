@@ -211,7 +211,7 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
                         // Already on its way here to lay siege: say so rather than offer to send it again.
                         const going = !siege && a.goal.kind === 'town' && a.goal.town === town.id && Date.parse(a.arrive_at) > now
                         return (
-                          <button className="btn small" disabled={!!siege || going} onClick={() => onSend(a.id, middle)}>
+                          <button className="btn small" disabled={!!siege || going} data-why={siege ? (siege.army === a.id ? 'Bu ordu zaten kuşatıyor' : 'Kasabayı başka bir ordu kuşatıyor; aynı anda tek ordu kuşatabilir') : 'Ordu zaten kuşatmak için yolda'} onClick={() => onSend(a.id, middle)}>
                             {siege && siege.army === a.id
                               ? 'Kuşatıyor'
                               : going
@@ -348,7 +348,7 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, par
             <button
               className={sure ? 'btn small danger' : 'btn small'}
               disabled={besieged}
-              title={besieged ? 'Kuşatma altındaki kasaba bırakılamaz' : undefined}
+              data-why="Kuşatma altındaki kasaba bırakılamaz"
               onClick={() => (sure ? (setSure(false), onRelease()) : setSure(true))}
               onBlur={() => setSure(false)}
             >
@@ -486,7 +486,7 @@ function TownMarket({ town, kingdom, mine, holder, armies, atGate, market, relat
                         </button>
                       ))}
                     </div>
-                    <button className="btn small" disabled={picked < 1} onClick={() => onBuy(a.id, picked)}>
+                    <button className="btn small" disabled={picked < 1} data-why="Önce bir miktar seç" onClick={() => onBuy(a.id, picked)}>
                       <Icon name="gold" size={16} /> {fmt(picked)} {name} satın al · {fmt(Math.ceil(picked * unit))} altın
                     </button>
                   </>

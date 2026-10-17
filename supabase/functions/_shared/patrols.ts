@@ -71,8 +71,8 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
         const favour = game.byPower(share[crown] ?? 0.5, game.balance.cities.crown.power.favour)
         // A brother of the lord at the patrol's head: a bigger tip, a warmer crown (CLAUDE.md §9.1.1).
         const kin = game.patrolFavour(settled)
-        // The reigning ruler's ways: a generous one tips more (CLAUDE.md §7.8, crownHouse.ts).
-        const ways = game.crownTraitAt(row.state, crown, arrive)
+        // The reigning ruler's ways and the crowns' rivalry: a generous ruler, a crown at war tips more (CLAUDE.md §7.8).
+        const ways = game.crownWays(row.state, crown, arrive)
         const amount = tip ? Math.round(spec.tip * favour * kin.tip * ways.tip) : 0
         const written = await claim({ crown, patrol, slot, kingdom_id: target, kind: tip ? 'tip' : 'visit', amount, status: 'done', visit_at: iso(arrive), expires_at: null })
         if (!written) continue
@@ -108,7 +108,7 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
         // once, without asking.
         const late = expires <= now
         const gold = Math.floor(game.advance(row.state, arrive).kingdom.stock?.gold ?? 0)
-        const amount = game.tributeDemand(gold, game.crownTraitAt(row.state, crown, arrive).tribute)
+        const amount = game.tributeDemand(gold, game.crownWays(row.state, crown, arrive).tribute)
         if (amount < 1) continue
         const written = await claim({ crown, patrol: -1, slot, kingdom_id: row.id, kind: 'tribute', amount, status: late ? 'done' : 'pending', visit_at: iso(arrive), expires_at: iso(expires) })
         if (!written) continue

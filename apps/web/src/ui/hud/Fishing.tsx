@@ -75,7 +75,7 @@ export function FisherPanel({ data, hall = false }: { data: HudData; hall?: bool
           çubuk dolarsa tutarsın. Bazen bir kese mal, bazen de bir şişe içinde başka bir lord hakkında bir not çıkar.
         </p>
         <div className="minigame-actions">
-          <button className="btn wide" disabled={why !== null || open} onClick={cast}>
+          <button className="btn wide" disabled={why !== null || open} data-why={open ? 'Olta zaten suda' : why === 'busy' ? `${secs(castReadyAt(kingdom) - now)} sonra yeniden atılır` : 'Balıkçı kulübesi (ya da eğlence merkezi) henüz bitmedi'} onClick={cast}>
             <span>
               <Icon name="food" size={16} /> Oltayı at
             </span>

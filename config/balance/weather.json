@@ -1,0 +1,31 @@
+{
+  "fortunes": {
+    "rain": { "rain": 0.6, "grey": 0.65, "wind": 0.25 },
+    "storm": { "rain": 1, "grey": 0.9, "wind": 0.55, "lightning": true },
+    "flood": { "rain": 0.8, "grey": 0.75, "wind": 0.3 },
+    "hailstorm": { "rain": 0.75, "grey": 0.8, "wind": 0.35, "sleet": true },
+    "coldSnap": { "rain": 0.45, "grey": 0.55, "wind": 0.2, "sleet": true }
+  },
+  "clearKinds": ["drought", "fullMoon", "aurora", "eclipse", "rainbow", "comet"],
+  "showers": {
+    "windowSeconds": 1200,
+    "chance": 0.3,
+    "minSeconds": 150,
+    "maxSeconds": 420,
+    "minRain": 0.25,
+    "maxRain": 0.6
+  },
+  "gatherSeconds": 45,
+  "fadeSeconds": 30,
+  "windWindowSeconds": 900,
+  "minWind": 0.12,
+  "maxWind": 0.35,
+  "lightning": { "slotSeconds": 6, "chance": 0.22, "flashSeconds": 0.35 },
+  "draw": {
+    "maxDrops": 420,
+    "saverShare": 0.35,
+    "splashZoom": 1,
+    "greyWash": 0.24,
+    "darken": 0.22
+  }
+}

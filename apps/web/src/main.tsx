@@ -8,6 +8,7 @@ import './fonts'
 import './index.css'
 import Root from './Root.tsx'
 import { watchForUpdates } from './lib/version'
+import './lib/whyTooltip'
 
 // iOS Safari ignores `user-scalable=no` and zooms the page on pinch (double-tap zoom is
 // already off through `touch-action: none` in index.css). The map zooms with its buttons only,

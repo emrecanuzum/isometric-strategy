@@ -667,3 +667,58 @@ export function startBattleMusic(): () => void {
     window.setTimeout(() => bus.disconnect(), 1200)
   }
 }
+
+// ---- Rain (CLAUDE.md §4.2.1) ----------------------------------------------------------------------------------------
+
+// A soft loop of rain while it rains on the map: looping noise through a band of hiss and a low patter, on the effects'
+// volume. `level` 0…1 follows how hard it rains; 0 fades it out and stops it.
+let rain: { src: AudioBufferSourceNode; gain: GainNode } | null = null
+let rainStop = 0
+export function setRainSound(level: number) {
+  const want = enabled && ctx && ctx.state === 'running' ? Math.min(1, Math.max(0, level)) : 0
+  if (!ctx) return
+  const c = ctx
+  if (want <= 0.01) {
+    if (!rain) return
+    rain.gain.gain.setTargetAtTime(0.0001, c.currentTime, 0.4)
+    if (!rainStop) {
+      const r = rain
+      rainStop = window.setTimeout(() => {
+        r.src.stop()
+        r.src.disconnect()
+        if (rain === r) rain = null
+        rainStop = 0
+      }, 2000)
+    }
+    return
+  }
+  if (rainStop) {
+    clearTimeout(rainStop)
+    rainStop = 0
+  }
+  if (!rain) {
+    const src = noiseSource()
+    src.loop = true
+    const hiss = c.createBiquadFilter()
+    hiss.type = 'bandpass'
+    hiss.frequency.value = 2400
+    hiss.Q.value = 0.5
+    const low = c.createBiquadFilter()
+    low.type = 'lowpass'
+    low.frequency.value = 5200
+    const gain = c.createGain()
+    gain.gain.value = 0.0001
+    src.connect(hiss).connect(low).connect(gain).connect(out!)
+    src.start(c.currentTime, Math.random() * 1.5)
+    rain = { src, gain }
+  }
+  rain.gain.gain.setTargetAtTime(0.22 * want, c.currentTime, 0.8)
+}
+
+// A distant roll of thunder after a lightning flash (under a second, like every cue).
+export function thunder(strength = 1) {
+  if (!enabled || !ctx || ctx.state !== 'running') return
+  const t = ctx.currentTime + 0.15
+  noise(t, 0.9, { type: 'lowpass', hz: 420, to: 90, gain: 0.35 * strength, attack: 0.08 })
+  noise(t + 0.1, 0.7, { type: 'lowpass', hz: 220, to: 70, gain: 0.25 * strength, attack: 0.15 })
+}

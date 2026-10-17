@@ -20,7 +20,8 @@ import {
   territoryRect,
   territoryStage,
 } from '@game/shared'
-import type { Band, Boat, ChaseError, Kingdom, OutlawRow, Point, World } from '@game/shared'
+import type { Band, Boat, ChaseError, Clan, Kingdom, OutlawRow, Point, World } from '@game/shared'
+import { DIR_NAMES, caveSpots, clanBandsUntil, clanGarrison, clanHoard, clansOf, hash, trailOf, winsToFind } from '@game/shared'
 import { useState } from 'react'
 import { Icon } from '../icons'
 import { RESOURCE_NAMES } from '../names'
@@ -38,7 +39,8 @@ const dec = (v: number) => (Math.round(v * 10) / 10).toLocaleString('tr-TR')
 const minutes = (ms: number) => Math.max(1, Math.ceil(ms / 60_000))
 const centre = (b: { x: number; y: number; size: number }): Point => ({ x: b.x + b.size / 2, y: b.y + b.size / 2 })
 
-export type OutlawPick = { kind: 'band' | 'boat'; idx: number }
+// 'clan': a clan by its slot (its cave, when found); 'cave': a cave of the mountains by its number (CLAUDE.md §7.9.1).
+export type OutlawPick = { kind: 'band' | 'boat' | 'clan' | 'cave'; idx: number }
 
 // The lobby's bands and boats as the layer has them.
 export const lobbyBands = (world: World, rows: OutlawRow[]) => bandsOf(world, world.seed, rows)
@@ -83,6 +85,7 @@ export function OutlawSheet({ world, pick, online, kingdom, now, onShow, onClose
   onShow(at: Point): void
   onClose(): void
 }) {
+  if (pick.kind === 'clan' || pick.kind === 'cave') return <CaveSheet key={`${pick.kind}${pick.idx}`} world={world} pick={pick} online={online} kingdom={kingdom} now={now} onShow={onShow} onClose={onClose} />
   if (pick.kind === 'band') {
     const band = lobbyBands(world, online.outlaws).find((b) => b.idx === pick.idx)
     return band ? <BandSheet key={`b${band.idx}`} world={world} band={band} online={online} kingdom={kingdom} now={now} onShow={onShow} onClose={onClose} /> : null
@@ -91,7 +94,7 @@ export function OutlawSheet({ world, pick, online, kingdom, now, onShow, onClose
   return boat ? <BoatSheet key={`s${boat.idx}`} world={world} boat={boat} online={online} kingdom={kingdom} now={now} onShow={onShow} onClose={onClose} /> : null
 }
 
-function Head({ icon, title, sub, onShow, onClose }: { icon: 'swords' | 'ship'; title: string; sub: string; onShow(): void; onClose(): void }) {
+function Head({ icon, title, sub, onShow, onClose }: { icon: 'swords' | 'ship' | 'pin'; title: string; sub: string; onShow(): void; onClose(): void }) {
   return (
     <header className="sheet-head">
       <Icon name={icon} size={32} />
@@ -158,6 +161,7 @@ function BandSheet({ world, band, online, kingdom, now, onShow, onClose }: { wor
           {up && <Stat label="Senin ticaretine etkisi" value={mine ? pct(mine.share) : '—'} note={mine ? `ticaret noktanın çevresindeki yolun bu kadarını bu çete tutuyor` : 'ticaret noktan yok'} />}
           <Stat label="Yendiğinde ganimet" value={lootText(bandLoot(band.soldiers))} note="savaş malzemesi, altın ve yapı malzemesi; çete bir süre sonra biraz daha kalabalık geri gelir" />
         </Section>
+        <ClanTrail world={world} slot={band.clan} online={online} kingdom={kingdom} now={now} />
         {up && (
           <Section title="Takip et" icon="swords" aside={`${armies.length} ordu`}>
             <p className="hint">
@@ -172,7 +176,7 @@ function BandSheet({ world, band, online, kingdom, now, onShow, onClose }: { wor
                   <small className="hint">{waiting ? ` · elçi ${Math.max(1, Math.ceil((Date.parse(waiting.effective_at) - now) / 1000))} sn'de ulaşır` : ` · ${far(a)} karo geride`}</small>
                 </span>
                 {!waiting && (
-                  <button className="btn small" disabled={a.status === 'battle'} onClick={() => halt(a)}>
+                  <button className="btn small" disabled={a.status === 'battle'} data-why="Ordu savaşta; emir alamaz" onClick={() => halt(a)}>
                     Takibi bırak
                   </button>
                 )}
@@ -187,7 +191,7 @@ function BandSheet({ world, band, online, kingdom, now, onShow, onClose }: { wor
                     const busy = chasing(a) || a.status === 'battle'
                     const soldiers = a.soldiers ?? 0
                     return (
-                      <button key={a.id} role="radio" aria-checked={picked === a.id} className={picked === a.id ? 'chase-pick active' : 'chase-pick'} disabled={busy} onClick={() => setPicked(a.id)}>
+                      <button key={a.id} role="radio" aria-checked={picked === a.id} className={picked === a.id ? 'chase-pick active' : 'chase-pick'} disabled={busy} data-why={chasing(a) ? 'Bu ordu zaten peşinde' : 'Ordu savaşta'} onClick={() => setPicked(a.id)}>
                         <b>
                           {i + 1}. ordu · {fmt(soldiers)} asker
                         </b>
@@ -202,7 +206,7 @@ function BandSheet({ world, band, online, kingdom, now, onShow, onClose }: { wor
                     )
                   })}
                 </div>
-                <button className="btn primary wide" disabled={!pick || chasing(pick) || pick.status === 'battle' || !!fighting} onClick={() => pick && online.act({ type: 'army', army: pick.id, order: { kind: 'chase', band: band.idx } })}>
+                <button className="btn primary wide" disabled={!pick || chasing(pick) || pick.status === 'battle' || !!fighting} data-why={!pick ? 'Önce bir ordu seç' : chasing(pick) ? 'Bu ordu zaten peşinde' : pick.status === 'battle' ? 'Ordu savaşta' : 'Çeteyle çarpışma sürüyor'} onClick={() => pick && online.act({ type: 'army', army: pick.id, order: { kind: 'chase', band: band.idx } })}>
                   <Icon name="swords" size={16} /> {pick ? `${armies.indexOf(pick) + 1}. orduyla takip et` : 'Önce bir ordu seç'}
                 </button>
               </>
@@ -281,7 +285,7 @@ function BoatSheet({ world, boat, online, kingdom, now, onShow, onClose }: { wor
                     const mightF = shipMight(f.ships)
                     const far = farOf(f)
                     return (
-                      <button key={f.id} role="radio" aria-checked={picked === f.id} className={picked === f.id ? 'chase-pick active' : 'chase-pick'} disabled={chasing || !!why} onClick={() => setPicked(f.id)}>
+                      <button key={f.id} role="radio" aria-checked={picked === f.id} className={picked === f.id ? 'chase-pick active' : 'chase-pick'} disabled={chasing || !!why} data-why={chasing ? 'Bu filo zaten peşinde' : why ? (CHASE_ERRORS[why] ?? 'Bu filo takip edemez') : undefined} onClick={() => setPicked(f.id)}>
                         <b>
                           {i + 1}. filo <ShipRow ships={f.ships} />
                         </b>
@@ -296,7 +300,7 @@ function BoatSheet({ world, boat, online, kingdom, now, onShow, onClose }: { wor
                     )
                   })}
                 </div>
-                <button className="btn primary wide" disabled={!pick || pick.chase?.boat === boat.idx || !!chaseBoatError(world, kingdom, pick.id, boat, now)} onClick={() => pick && online.act({ type: 'fleet', action: 'chase', fleet: pick.id, boat: boat.idx })}>
+                <button className="btn primary wide" disabled={!pick || pick.chase?.boat === boat.idx || !!chaseBoatError(world, kingdom, pick.id, boat, now)} data-why={!pick ? 'Önce bir filo seç' : pick.chase?.boat === boat.idx ? 'Bu filo zaten peşinde' : (CHASE_ERRORS[chaseBoatError(world, kingdom, pick.id, boat, now) as ChaseError] ?? 'Bu filo takip edemez')} onClick={() => pick && online.act({ type: 'fleet', action: 'chase', fleet: pick.id, boat: boat.idx })}>
                   <Icon name="ship" size={16} /> {pick ? `${fleets.indexOf(pick) + 1}. filoyla takip et` : 'Önce bir filo seç'}
                 </button>
               </>
@@ -338,5 +342,158 @@ export function PirateSection({ kingdom }: { kingdom: Kingdom }) {
         {dec(balance.navy.ships.corsair.might)}).
       </p>
     </Section>
+  )
+}
+
+// ---- The bandit clans and their caves (CLAUDE.md §7.9.1) ------------------------------------------------------------
+
+const C = balance.outlaws.clans
+const CAVE_FLAVOUR = [
+  'Kayaların arasında karanlık bir ağız. İçeriden yalnızca rüzgârın uğultusu ve damlayan suyun sesi geliyor.',
+  'Girişi yarı yarıya taşlarla örtülü, eski bir mağara. Yerde kurumuş yapraklar ve bir tilkinin izleri var.',
+  'Serin, nemli bir mağara. Duvarlarında yosun, tavanında yarasalar; kimin uğradığını söylemek zor.',
+  'Çobanların yağmurdan kaçtığı türden sığ bir mağara. Kül izleri var ama ne kadar eski olduğu belli değil.',
+  'Dar bir yarıktan içeri giden derin bir mağara. Sesin yankısı uzun sürüyor; içerisi göründüğünden büyük olabilir.',
+]
+
+// The lord's trail to a clan's cave (on a band's sheet and the clan's): the hints won so far, the cave once found, and
+// "Mağarayı kuşat".
+function ClanTrail({ world, slot, online, kingdom, now }: { world: World; slot: number; online: Online; kingdom: Kingdom; now: number }) {
+  const clan = clansOf(world.seed, online.outlaws)[slot]
+  if (!clan) return null
+  const trail = trailOf(kingdom.caveTrail, clan)
+  const need = winsToFind(kingdom, now)
+  const found = trail?.cave !== undefined ? caveSpots(world, world.seed)[trail.cave] : undefined
+  return (
+    <>
+      <Section title={clan.name} icon="scroll" aside={found ? 'mağara bulundu' : `${trail?.wins ?? 0} / ${need} iz`}>
+        <p className="hint">
+          Bu çete dağlarda, bir mağarada yaşayan {clan.name}na bağlı. Klanın çetelerini yendikçe yakalananlar konuşur ve izler mağaraya çıkar: {need} zaferde mağarayı bulursun
+          {need < C.discovery.wins ? ' (casus evin izleri çabuk sürüyor)' : ' (casus evin olursa daha çabuk)'}.
+        </p>
+        {!found && !trail && <Stat label="İzler" value="henüz yok" note="klanın bir çetesini yen" />}
+        {!found && trail && (
+          <Stat
+            label="İzler"
+            value={`${DIR_NAMES[(trail.dir ?? 0) % 8]} yönündeki dağlar`}
+            note={`${trail.far ? `son savaştan aşağı yukarı ${fmt(trail.far)} karo ötede; ` : ''}${need - trail.wins} zafer daha`}
+          />
+        )}
+      </Section>
+      {found && <CaveSiege world={world} clan={clan} cave={found} online={online} kingdom={kingdom} now={now} />}
+    </>
+  )
+}
+
+// Lay siege to a clan's cave the lord has found: pick an army, send it (march there; the siege begins at the mouth).
+function CaveSiege({ world, clan, cave, online, kingdom, now }: { world: World; clan: Clan; cave: { mouth: Point }; online: Online; kingdom: Kingdom; now: number }) {
+  const armies = online.armies.filter((a) => a.kingdom_id === online.me)
+  const [picked, setPicked] = useState<number | null>(null)
+  const pick = armies.find((a) => a.id === picked)
+  const guards = clanGarrison(world.seed, clan, now)
+  const rough = `${Math.max(1, guards - 3)}–${guards + 3}`
+  const land = territoryRect(kingdom.site, territoryStage(kingdom, now))
+  const inside = (p: Point) => p.x >= land.x && p.y >= land.y && p.x < land.x + land.size && p.y < land.y + land.size
+  const delay = Math.round((balance.time.messengerDelayGameDays * balance.time.gameDayMs) / 1000)
+  const envoy = (a: (typeof armies)[number]) => !inside(armyAt(a, now)) && !(a.contact_until && Date.parse(a.contact_until) > now) && !leadsArmy(kingdom, a.led_by, now)
+  const going = (a: (typeof armies)[number]) =>
+    (a.goal.kind === 'cave' && a.goal.slot === clan.slot) || online.orders.some((o) => o.army_id === a.id && !o.applied_at && o.payload.kind === 'cave' && o.payload.slot === clan.slot)
+  const fighting = clan.battle !== null ? online.battles.find((b) => b.id === clan.battle && !b.resolved) : undefined
+  return (
+    <Section title="Mağarayı kuşat" icon="swords" aside={`~${rough} yağmacı`}>
+      <p className="hint">
+        Ordun mağaranın ağzına yürür ve vardığında kuşatma başlar. Yağmacılar kendi mağaralarında savaşır: zarlarına +{dec(C.caveBonus)} eklenir, morali ve saha bilgisi yüksektir.
+        Kazanırsan klan yok olur, çeteleri yollardan dağılır ve mağaradaki ganimet senin olur; ama dağlarda hemen yeni bir klan türer.
+      </p>
+      <Stat label="Mağarayı koruyanlar" value={`~${rough}`} note="klan mağarasına yerleştikçe kalabalıklaşır" />
+      <Stat label="Mağaradaki ganimet" value={lootText(clanHoard(clan, now))} note="klan yağmaladıkça büyür (ambar ve hazine sınırına kadar alınır)" />
+      {fighting && <p className="hint">Mağara şu an kuşatılıyor.</p>}
+      {armies.length === 0 ? (
+        <p className="hint">Sahada ordun yok. Ordu sekmesinden garnizondan bir ordu çıkar.</p>
+      ) : (
+        <>
+          <div className="chase-picks" role="radiogroup" aria-label="Kuşatacak ordu">
+            {armies.map((a, i) => {
+              const at = armyAt(a, now)
+              const far = Math.round(Math.hypot(at.x - cave.mouth.x, at.y - cave.mouth.y))
+              const soldiers = a.soldiers ?? 0
+              const busy = going(a) || a.status === 'battle'
+              return (
+                <button key={a.id} role="radio" aria-checked={picked === a.id} className={picked === a.id ? 'chase-pick active' : 'chase-pick'} disabled={busy} onClick={() => setPicked(a.id)}>
+                  <b>
+                    {i + 1}. ordu · {fmt(soldiers)} asker
+                  </b>
+                  <small>
+                    {far} karo uzakta · {envoy(a) ? `emir elçiyle (${delay} sn)` : 'emir hemen'}
+                  </small>
+                  <small className={soldiers >= guards + 4 ? 'up' : soldiers < guards ? 'down' : undefined}>
+                    güç {fmt(soldiers)} / ~{rough}
+                    {going(a) ? ' · yolda' : a.status === 'battle' ? ' · savaşta' : ''}
+                  </small>
+                </button>
+              )
+            })}
+          </div>
+          <button className="btn primary wide" disabled={!pick || going(pick) || pick.status === 'battle'} onClick={() => pick && online.act({ type: 'army', army: pick.id, order: { kind: 'cave', slot: clan.slot } })}>
+            <Icon name="swords" size={16} /> {pick ? `${armies.indexOf(pick) + 1}. orduyla mağarayı kuşat` : 'Önce bir ordu seç'}
+          </button>
+        </>
+      )}
+    </Section>
+  )
+}
+
+// A cave of the mountains, or a clan by its slot: the clan's sheet when the lord has found its cave; else a razed den
+// or just a cave (every cave looks alike until its clan is found).
+function CaveSheet({ world, pick, online, kingdom, now, onShow, onClose }: { world: World; pick: OutlawPick; online: Online; kingdom: Kingdom; now: number; onShow(at: Point): void; onClose(): void }) {
+  const caves = caveSpots(world, world.seed)
+  const clans = clansOf(world.seed, online.outlaws)
+  const foundClan = (c: Clan) => {
+    const t = trailOf(kingdom.caveTrail, c)
+    return t?.cave !== undefined ? t.cave : null
+  }
+  const clan = pick.kind === 'clan' ? clans[pick.idx] : clans.find((c) => foundClan(c) === pick.idx)
+  const caveIdx = pick.kind === 'cave' ? pick.idx : clan ? foundClan(clan) : null
+  const cave = caveIdx !== null && caveIdx !== undefined ? caves[caveIdx] : undefined
+  if (!cave) return null
+  const here = cave.mouth
+  if (clan && foundClan(clan) === cave.idx) {
+    const bandsOfClan = lobbyBands(world, online.outlaws).filter((b) => b.clan === clan.slot)
+    const until = clanBandsUntil(clan)
+    return (
+      <section className="sheet frame" aria-labelledby="outlaw-title">
+        <Head icon="swords" title={`${clan.name} mağarası`} sub="Yağmacı klanının yuvası · yalnız sen biliyorsun" onShow={() => onShow(here)} onClose={onClose} />
+        <div className="sheet-body">
+          <Section title="Klan" icon="scroll">
+            <p className="hint">
+              {clan.name} dağların eteğindeki bu mağarada yaşıyor; ticaret yollarındaki {bandsOfClan.length} çete ona bağlı ({bandsOfClan.map((b) => b.name).join(', ')}).
+              {until !== null && until > now ? ` Klan buraya yeni yerleşti; çeteleri ${minutes(until - now)} dakika sonra yollara çıkar.` : ''}
+            </p>
+          </Section>
+          <ClanTrail world={world} slot={clan.slot} online={online} kingdom={kingdom} now={now} />
+        </div>
+      </section>
+    )
+  }
+  const razed = clans.flatMap((c) => c.fallen).filter((f) => f.cave === cave.idx).sort((a, b) => b.at - a.at)[0]
+  return (
+    <section className="sheet frame" aria-labelledby="outlaw-title">
+      <Head icon="pin" title={razed ? 'Yağmacıların eski mağarası' : 'Mağara'} sub="Dağ eteğinde bir mağara" onShow={() => onShow(here)} onClose={onClose} />
+      <div className="sheet-body">
+        <Section title="Ne var" icon="scroll">
+          <p className="hint">
+            {razed
+              ? `Bir zamanlar ${razed.name} burada yaşardı; ${razed.byName ?? 'bir lordun'} ordusu mağarayı aldı ve klanı yok etti. İçeride kırık mızraklar, sönmüş ocaklar ve boşaltılmış sandıklar kaldı.`
+              : CAVE_FLAVOUR[Math.floor(hash(cave.idx, 3, world.seed + 6301) * CAVE_FLAVOUR.length) % CAVE_FLAVOUR.length]}
+          </p>
+          {!razed && (
+            <p className="hint">
+              Dağlarda pek çok mağara var; yağmacı klanları bunlardan birkaçında yaşar ve dışarıdan hepsi birbirine benzer. Bir klanın mağarasını bulmak için çetelerinden birkaçını
+              yen: yakalananlar konuşur, izler mağaraya çıkar.
+            </p>
+          )}
+        </Section>
+      </div>
+    </section>
   )
 }

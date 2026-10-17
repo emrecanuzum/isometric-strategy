@@ -610,6 +610,64 @@
         "fee": {
           "gold": 15
         }
+      },
+      "toll": {
+        "choice": {
+          "none": 1,
+          "villagers": 0.5,
+          "army": 0.4
+        },
+        "fullAt": 0.7,
+        "fullBoost": 1,
+        "maxShare": 0.25,
+        "floor": 250,
+        "kinds": {
+          "forestFire": {
+            "materials": 0.12
+          },
+          "granaryFire": {
+            "food": 0.12
+          },
+          "flood": {
+            "food": 0.06,
+            "materials": 0.06
+          },
+          "storm": {
+            "materials": 0.05
+          },
+          "earthquake": {
+            "materials": 0.08,
+            "gold": 0.04
+          },
+          "locusts": {
+            "food": 0.1
+          },
+          "hailstorm": {
+            "food": 0.05
+          },
+          "coldSnap": {
+            "materials": 0.06
+          },
+          "plague": {
+            "food": 0.04,
+            "gold": 0.03
+          },
+          "epidemic": {
+            "food": 0.04,
+            "gold": 0.03
+          },
+          "wolves": {
+            "food": 0.04
+          },
+          "mineCollapse": {
+            "arms": 0.08
+          },
+          "bandits": {
+            "materials": 0.04,
+            "arms": 0.04,
+            "gold": 0.03
+          }
+        }
       }
     },
     "choice": {
@@ -833,6 +891,18 @@
             "happiness": 5
           }
         }
+      }
+    },
+    "hoard": {
+      "windowSeconds": 1800,
+      "chance": 0.4,
+      "fullAt": 0.85,
+      "minShare": 0.04,
+      "maxShare": 0.1,
+      "kinds": {
+        "rats": "food",
+        "rot": "materials",
+        "rust": "arms"
       }
     }
   },

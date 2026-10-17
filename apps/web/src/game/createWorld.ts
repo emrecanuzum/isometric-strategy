@@ -31,6 +31,7 @@ import { openGate } from './wallSprites'
 import { Canvas, SPRITES, lightsOf, outlineOf, rgb, silhouetteOf } from './sprites'
 import { daylight, nightness, sunShadow } from './daylight'
 import { createShadows } from './shadows'
+import { createWeather } from './weather'
 import { createPacer } from './pacing'
 import { innLook } from './innSprites'
 import type { Sprite as Sprite_ } from './sprites'
@@ -215,6 +216,8 @@ export interface WorldView {
   setPowerSave(on: boolean): void
   // Frames the map drew in the last second (for measuring).
   fps(): number
+  // The lobby's key (lobbyKeyOf), which the weather follows (see weather.ts); undefined for a clear sky.
+  setWeather(key: number | undefined): void
   // Keeps the camera on whatever `target` says each frame (an army on the march), until null is given or the map is
   // dragged; `onStop` hears when a drag ended it.
   follow(target: (() => Point | null) | null, onStop?: () => void): void
@@ -470,6 +473,11 @@ export async function createWorld(
   // Armies stand in the same layer as buildings and walkers, so a wall or a house in front of an army hides it.
   const armies = createArmies(world, caravans.layer, armyRoutes, armyLabels)
   app.stage.addChild(light, above)
+  // Rain (see weather.ts): splashes on the ground under the buildings, the grey and the falling rain under the light.
+  const weather = createWeather(world)
+  camera.addChildAt(weather.ground, camera.getChildIndex(shadows.layer) + 1)
+  app.stage.addChildAt(weather.screen, app.stage.getChildIndex(light))
+  app.stage.addChildAt(weather.flash, app.stage.getChildIndex(light) + 1)
   for (const inn of world.inns) {
     // Inns are painted into the ground, but trees lifted out of it to sway stand in the walkers' layer: a copy of the
     // inn stands there too, so the trees behind it stay behind it.
@@ -495,7 +503,7 @@ export async function createWorld(
     const t = performance.now() / 1000
     for (const chunk of chunks.values()) {
       if (!chunk.sprite.visible) continue
-      for (const tree of chunk.trees) tree.skew.x = Math.sin(t * 1.4 + tree.x * 0.031 + tree.y * 0.047) * 0.045
+      for (const tree of chunk.trees) if (tree.visible) tree.skew.x = Math.sin(t * 1.4 + tree.x * 0.031 + tree.y * 0.047) * 0.045
     }
   })
   // The aimed army's target: redrawn when the zoom changes, so its dashes stay the same size on screen.
@@ -542,16 +550,23 @@ export async function createWorld(
     if (moveOrders.length === 0) moveMarks.clear()
   })
   // Town names and siege bars, at a fixed size on screen above each town.
-  let townMarks: { mark: TownMark; text: Text; bar: Graphics }[] = []
+  let townMarks: { mark: TownMark; text: Text; bar: Graphics; drawn?: boolean }[] = []
   app.ticker.add(() => {
     const now = clock()
-    for (const { mark, text, bar } of townMarks) {
+    for (const entry of townMarks) {
+      const { mark, text, bar } = entry
       const top = groundToScreen(world, mark.at)
       const k = 1 / camera.scale.x
       text.position.set(top.x, top.y - 70 - 6 * k)
       text.scale.set(k)
+      // A town under no siege has nothing to draw: its bar is cleared once, not every frame.
+      if (!mark.siege) {
+        if (entry.drawn) bar.clear()
+        entry.drawn = false
+        continue
+      }
       bar.clear()
-      if (!mark.siege) continue
+      entry.drawn = true
       const f = Math.min(1, Math.max(0, (now - mark.siege.startedAt) / (mark.siege.endsAt - mark.siege.startedAt)))
       const w = 72
       bar.rect(-w / 2 - 2, -2, w + 4, 10).fill(0x120d0b)
@@ -623,7 +638,8 @@ export async function createWorld(
       for (const key of chunks.keys()) staleSince.set(key, version)
       refresh()
     }
-    const color = daylight(hour)
+    weather.update(clock(), { x: camera.x, y: camera.y, scale: camera.scale.x }, app.screen.width, app.screen.height)
+    const color = weather.light(daylight(hour))
     if (color === lightColor && light.width === app.screen.width && light.height === app.screen.height) return
     lightColor = color
     light.clear().rect(0, 0, app.screen.width, app.screen.height).fill(color)
@@ -804,6 +820,7 @@ export async function createWorld(
     ground.addChild(sprite)
     const bytes = bitmap.width * bitmap.height * 4
     textureBytes += bytes
+    const treeRect = treeView()
     const trees = (lifted ?? []).map((t) => {
       const look = SPRITES[t.set][t.index]
       const tree = new Sprite(textureOf(look))
@@ -814,11 +831,27 @@ export async function createWorld(
       // where they meet the ground, so a deer in the woods walks behind the trees in front of it.
       tree.zIndex = at.y
       tree.label = 'tree'
+      tree.visible = treeShown(tree, treeRect)
       caravans.layer.addChild(tree)
       return tree
     })
     chunks.set(key, { sprite, bitmap, lod, bytes, version, trees, lift, near })
   }
+
+  // A chunk is far bigger than the screen, so the swaying trees of the chunks in view are culled one by one as well
+  // (CLAUDE.md §12): two thirds of them were off screen, yet sorted, batched and shadowed every frame. A tree stands
+  // up from its foot and its shadow falls to the right and down (long at dawn), hence the uneven margins.
+  const TREE_MARGIN = { left: 320, right: 160, top: 160, bottom: 320 }
+  function treeView() {
+    const k = camera.scale.x
+    return {
+      left: -camera.x / k - TREE_MARGIN.left,
+      right: (app.screen.width - camera.x) / k + TREE_MARGIN.right,
+      top: -camera.y / k - TREE_MARGIN.top,
+      bottom: (app.screen.height - camera.y) / k + TREE_MARGIN.bottom,
+    }
+  }
+  const treeShown = (tree: Sprite, v: ReturnType<typeof treeView>) => tree.x >= v.left && tree.x <= v.right && tree.y >= v.top && tree.y <= v.bottom
 
   // The middle of the screen stays over the map (a little way into the mountains that ring it, no further), so the
   // camera cannot wander off into the dark.
@@ -876,9 +909,10 @@ export async function createWorld(
     wanted = [...visible]
       .filter((key) => chunks.get(key)?.lod !== lod || chunks.get(key)!.lift !== liftFor(key, lod) || chunks.get(key)!.near !== nearFor(key, lod) || (staleSince.get(key) ?? 0) > chunks.get(key)!.version)
       .sort((a, b) => distance(a) - distance(b))
+    const treeRect = treeView()
     for (const [key, chunk] of chunks) {
       chunk.sprite.visible = visible.has(key)
-      for (const tree of chunk.trees) tree.visible = chunk.sprite.visible
+      for (const tree of chunk.trees) tree.visible = chunk.sprite.visible && treeShown(tree, treeRect)
       if (!chunk.sprite.visible && textureBytes > TEXTURE_BUDGET_BYTES) drop(key)
     }
     dispatch()
@@ -1997,6 +2031,7 @@ export async function createWorld(
       saver = on
       pacer.setSaver(on)
       ambient.setLite(on)
+      weather.setSaver(on)
       const resolution = canvasResolution(on)
       if (app.renderer.resolution !== resolution) {
         app.renderer.resolution = resolution
@@ -2005,6 +2040,7 @@ export async function createWorld(
       wake()
     },
     fps: () => pacer.fps(),
+    setWeather: (key) => weather.setKey(key),
     setDetail(on) {
       if (on === detail) return
       detail = on
@@ -2062,6 +2098,12 @@ export async function createWorld(
       }
     },
     setTowns(marks) {
+      // The same towns under the same names and colours (most calls: the rivals are fetched again): the names, which
+      // are costly to draw, are kept and only told the new marks (CLAUDE.md §12).
+      if (marks.length === townMarks.length && marks.every((m, i) => townMarks[i].mark.name === m.name && townMarks[i].mark.color === m.color)) {
+        townMarks = townMarks.map((t, i) => ({ ...t, mark: marks[i] }))
+        return
+      }
       for (const { text, bar } of townMarks) {
         text.destroy()
         bar.destroy()
@@ -2085,6 +2127,10 @@ export async function createWorld(
       })
     },
     setProgress(marks) {
+      if (marks.length === progressMarks.length && marks.every((m, i) => progressMarks[i].mark.label === m.label && progressMarks[i].mark.color === m.color)) {
+        progressMarks = progressMarks.map((p, i) => ({ ...p, mark: marks[i] }))
+        return
+      }
       for (const { bar, text } of progressMarks) {
         bar.destroy()
         text?.destroy()
@@ -2117,6 +2163,7 @@ export async function createWorld(
     zoomBy: (step) => zoomTo(zoomIndex + step, { x: app.screen.width / 2, y: app.screen.height / 2 }),
     destroy() {
       pacer.destroy()
+      weather.destroy()
       clearTimeout(cameraTimer)
       app.canvas.removeEventListener('wheel', onWheel)
       app.canvas.removeEventListener('pointerleave', leaveMap)

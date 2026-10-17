@@ -1,7 +1,7 @@
 import {
   ARCADE_GAMES, BUILDINGS, allShips, balance, countShips, buildingCount, clogsOf, crownQuest, fealtyOpen, fishError, gameError, goldCap, hasPalace,
   hasTradePost, palaceLevel, popCapFor, population, queenError, questProgress, storageCap, upgradeError,
-  campSoldiers, hasOpinion, ofAge, opinionOf, siblingsOf,
+  campSoldiers, PROJECT_IDS, projectError, hasOpinion, ofAge, opinionOf, siblingsOf, crownHouseAt, crownWays, liegeSwitchError,
 } from '@game/shared'
 import type { BuildingKind, Kingdom } from '@game/shared'
 import type { IconName } from '../icons'
@@ -248,6 +248,27 @@ export const TIPS: Tip[] = [
     ],
   },
   {
+    // A rich lord with brimming stores and a great work waiting for them (CLAUDE.md §9.10).
+    id: 'greatWorks',
+    when: ({ kingdom: k, now }) =>
+      hasPalace(k) &&
+      ((['food', 'materials', 'arms'] as const).some((g) => k.stock[g] >= storageCap(k, now) * 0.85) || k.stock.gold >= goldCap(k, now) * 0.9) &&
+      PROJECT_IDS.some((id) => projectError(k, id, now) === null),
+    say: () => [
+      'Lordum, ambarlar tıka basa dolu; dolu ambar fareyi, pası ve yangını çeker. Saray → Projeler\'de büyük işler bekliyor: katedral, çarşı, şövalye tarikatı. Malı taşa ve şana çevirelim.',
+      'Bu bolluk çürümeden bir şeye dönüşmeli, lordum. Ustalar büyük bir iş için hazır; her aşama kalıcı bir katkı ve sıralamada puan getirir. Projeler bölümüne bakalım mı?',
+      'Lordum, hazinedar da ambarcı da yer kalmadı diye ağlıyor. Ulu Katedral\'e kereste, Büyük Çarşı\'ya yemek, Şövalye Tarikatı\'na demir gönderelim; afetler yakmadan.',
+      'Dolu ambar, lordum, deprem de sel de geldiğinde en çok yanan ambardır. Fazlayı büyük işlere aktaralım; adınız taşlara kazınsın.',
+    ],
+    go: { label: 'Projelere git', act: tab('kingdom', 'palace', 'projects') },
+    jokes: [
+      ['Fareler de bir şey yesin', 'Yiyorlar, lordum; dün biri bana selam verdi. O kadar rahatlar.'],
+      ['Ben zenginliğimi seyrederim', 'Seyredin, lordum; ama pas da seyrediyor ve daha hızlı yiyor.'],
+      ['Katedral mi? Ben dindar değilim', 'Çarşı da var, lordum, tarikat da. Taş her inanca uyar.'],
+      ['Bir kule de bana dikin', 'Önce katedralin çan kulesi, lordum; sonra belki bir elçi heykeli.'],
+    ],
+  },
+  {
     id: 'storeFull',
     when: ({ kingdom: k, now }) => hasPalace(k) && (['food', 'materials', 'arms'] as const).some((g) => k.stock[g] >= storageCap(k, now) * 0.97),
     say: ({ kingdom: k, now }) => {
@@ -397,6 +418,59 @@ export const TIPS: Tip[] = [
     },
     go: { label: 'Hanedana bak', act: tab('kingdom', 'palace', 'house') },
     jokes: [['Kardeşim beni sever', 'Severdi, lordum. Şimdi çadırında sizin portrenize ok atıyor.']],
+  },
+  {
+    // The liege backed a beaten pretender: the lord may go over to the rival crown, for a while (CLAUDE.md §9.1.1).
+    id: 'liegeOffer',
+    when: ({ kingdom: k, now, crowns }) => !!k.liegeOffer && !liegeSwitchError(k, now, crowns),
+    say: ({ kingdom: k, now, online }) => {
+      const o = k.liegeOffer!
+      const m = Math.max(1, Math.ceil((o.until - now) / 60_000))
+      const from = online.crowns[o.from] ?? 'tacınız'
+      const to = online.crowns[o.to] ?? 'rakip taç'
+      return [
+        `Lordum, ${from} kardeşiniz ${o.name}'in tarafını tuttu. Bunu yutacak mıyız? ${m} dakika içinde ${to} tarafına geçebiliriz; ya da sadık kalır, özürlerini ve altınlarını alırız.`,
+        `${from} size sırtını döndü, lordum. ${to} kapısını açık tutuyor, ama yalnızca ${m} dakika daha. Karar sizin: intikam mı, özür mü?`,
+        `Bir taç kendi lorduna karşı davacıyı destekler mi? ${from} destekledi. ${m} dakikanız var, lordum: ${to} sancağına geçin ya da sadakatinizin bedelini isteyin.`,
+      ]
+    },
+    go: { label: 'Kararı ver', act: tab('diplomacy', 'diplomacy', 'crowns') },
+    jokes: [['İkisine de biat etsem?', 'Denendi, lordum. O lordun başı şimdi iki başkentin surlarında, yarısı birinde yarısı öbüründe.']],
+    snooze: 5,
+  },
+  {
+    // The two crowns at war (CLAUDE.md §7.8): tribute is dearer, the liege's patrol tips more.
+    id: 'crownWar',
+    when: ({ kingdom: k, now, crowns }) => crowns > 1 && k.lobbyKey !== undefined && k.liege !== undefined && k.liege !== null && crownWays(k, k.liege, now).rivalry.stance === 'war',
+    say: ({ kingdom: k, now }) => {
+      const w = crownWays(k, k.liege!, now)
+      const m = Math.max(1, Math.ceil((w.rivalry.until - now) / 60_000))
+      const fx = balance.cities.crown.rivalry.effects.war
+      return [
+        `Taçlar savaşta, lordum! ${m} dakika daha sürecek gibi. Rakip haraççılar ×${String(fx.tribute).replace('.', ',')} ister; hazineyi şişirmeyin, harcayın.`,
+        `Sınırlarda taç savaşı var. Tacımız sadık lordlarını kolluyor: devriyenin bahşişi ×${String(fx.tip).replace('.', ',')}. Bir eğlence merkeziniz varsa şimdi tam zamanı.`,
+        `Lordum, iki taç birbirine girdi. Savaş bittiğinde kazanan tacın lordları gururlanır; dua edelim de bizimki kazansın.`,
+      ]
+    },
+    go: { label: 'Krallık bölümü', act: tab('diplomacy', 'diplomacy', 'crowns') },
+    jokes: [['Ben de katılayım mı?', 'Taçlar lordların kılıcını değil kesesini ister, lordum. Kesenizi sıkı tutun.']],
+    snooze: 60,
+  },
+  {
+    // A rival ruler who asks a lot (CLAUDE.md §7.8): keep the treasury lean.
+    id: 'rivalRuler',
+    when: ({ kingdom: k, now, crowns }) => crowns > 1 && k.lobbyKey !== undefined && k.liege !== undefined && k.liege !== null && crownWays(k, k.liege === 0 ? 1 : 0, now).trait.tribute > 1,
+    say: ({ kingdom: k, now, online }) => {
+      const rival = k.liege === 0 ? 1 : 0
+      const h = crownHouseAt(k, rival, now)
+      const t = crownWays(k, rival, now).trait
+      return [
+        `${online.crowns[rival] ?? 'Rakip taç'} tahtında ${h.title} oturuyor, lordum; ${t.name.toLocaleLowerCase('tr-TR')} biri. Haraççıları hazinenin daha çoğunu ister: altını hazinede bekletmeyin.`,
+        `Rakip tacın hükümdarı ${h.title} pek ${t.name.toLocaleLowerCase('tr-TR')}, lordum. Haraç günü gelmeden altını binalara, askere ya da siparişlere yatırın.`,
+      ]
+    },
+    go: { label: 'Krallık bölümü', act: tab('diplomacy', 'diplomacy', 'crowns') },
+    snooze: 90,
   },
   {
     id: 'kinSour',
@@ -1409,6 +1483,9 @@ export const TOPICS: Topic[] = [
       `İki taç krallığı vardır: ${online.crowns.join(' ve ') || 'iki başkent'}. Oyuncular onlardan birine biat eden lordlardır; biat sezon boyunca kalıcıdır ve sarayın ${balance.cities.crown.requiredForPalaceLevel}. seviyesi için şarttır.`,
       `Kendi tacınızın devriyesi eğlence merkezinize uğrar ve bahşiş bırakır. Rakip taç her ${min(balance.cities.crown.patrol.tribute.everySeconds)} dakikada bir haraççı gönderir ve hazinenin ${pct(balance.cities.crown.patrol.tribute.share)}'ini ister: öde ya da reddet.`,
       `Cevap vermezseniz haraç kendiliğinden ödenir; oyundaysanız ${pct(balance.cities.crown.patrol.tribute.afkFactor - 1)} fazlasıyla. Taçla ilişkiniz armağanları, görevleri ve fiyatlarınızı belirler.`,
+      `Taçların da hanedanı vardır: hükümdarlar bizim gibi yaşlanır, ölür, yerine oğulları ya da kızları geçer. Her hükümdarın bir huyu vardır; açgözlüsünün haraççıları daha çok ister, cömerdinin devriyesi daha çok bahşiş bırakır. Yeni hükümdar tahta çıkınca kendi lordlarına huyuna göre yaklaşır.`,
+      `İki taç ${Math.round(balance.cities.crown.rivalry.windowSeconds / 3600)} saatlik dönemlerde barış, gerginlik ya da savaş hâlindedir. Savaşta haraç ×${String(balance.cities.crown.rivalry.effects.war.tribute).replace('.', ',')}, bahşiş ×${String(balance.cities.crown.rivalry.effects.war.tip).replace('.', ',')} olur; kazanan tacın lordları +${balance.cities.crown.rivalry.victoryRelation} ilişki kazanır.`,
+      `Tacınız kardeşinizin isyanını desteklerse ve siz isyanı bastırırsanız, ${balance.cities.crown.switch.offerMinutes} dakika içinde rakip taca geçebilirsiniz. Biatin bozulabildiği tek an budur.`,
     ],
     go: { label: 'Krallık bölümü', act: tab('diplomacy', 'diplomacy', 'crowns') },
   },

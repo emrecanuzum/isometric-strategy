@@ -40,7 +40,7 @@ export function armyStatus(army: Army, now: number, rest: ReturnType<typeof rest
   // At the gates of a palace still shielded from the last siege: the siege begins when the shield ends.
   if (army.goal.kind === 'siege' && now >= arrive && shieldOf(army.goal.kingdom) > now) return `Kapıda bekliyor · kuşatmaya ${clock(shieldOf(army.goal.kingdom) - now)}`
   if (now < arrive && army.path.length > 1) {
-    const where = army.goal.kind === 'home' ? ('retreat' in army.goal && army.goal.retreat ? 'Geri çekiliyor' : 'Eve dönüyor') : army.goal.kind === 'siege' ? 'Kuşatmaya gidiyor' : army.goal.kind === 'chase' ? 'Yağmacıların peşinde' : 'Yürüyor'
+    const where = army.goal.kind === 'home' ? ('retreat' in army.goal && army.goal.retreat ? 'Geri çekiliyor' : 'Eve dönüyor') : army.goal.kind === 'siege' ? 'Kuşatmaya gidiyor' : army.goal.kind === 'chase' ? 'Yağmacıların peşinde' : army.goal.kind === 'cave' ? 'Yağmacı mağarasına yürüyor' : 'Yürüyor'
     return `${where} · varış ${clock(arrive - now)}`
   }
   return `Bekliyor · ${REST_NAMES[rest(army.path[army.path.length - 1])]}`
@@ -94,6 +94,8 @@ export function warNotes(online: Online, now: number): WarNote[] {
     if (where) notes.push({ key: `march${a.id}`, text: `Ordun ${where} kuşatmasına gidiyor · varış ${clock(arrive - now)}`, from: Date.parse(a.depart_at), until: arrive })
     // After a band of bandits (CLAUDE.md §7.9).
     if (goal.kind === 'chase') notes.push({ key: `chase${a.id}`, text: `Ordun yağmacıların peşinde · önlerini kesmesine ${clock(arrive - now)}`, from: Date.parse(a.depart_at), until: arrive })
+    // On a bandit clan's cave (CLAUDE.md §7.9.1).
+    if (goal.kind === 'cave') notes.push({ key: `cave${a.id}`, text: `Ordun yağmacı mağarasını kuşatmaya gidiyor · varış ${clock(arrive - now)}`, from: Date.parse(a.depart_at), until: arrive })
   }
   return notes
 }
@@ -102,6 +104,7 @@ export function warNotes(online: Online, now: number): WarNote[] {
 export function battleTitle(b: Battle, online: Online) {
   if (b.kind === 'revolt') return `${online.towns.find((t) => t.id === b.plan.town)?.name ?? 'Kasaba'} ayaklanması`
   if (b.kind === 'outlaw') return `${b.plan.outlaw?.name ?? 'Yağmacılar'} ile çarpışma`
+  if (b.kind === 'cave') return `${b.plan.outlaw?.name ?? 'Yağmacı klanı'} mağarasının kuşatması`
   // A pretender's camp attacked, or his men at the palace (CLAUDE.md §9.1.1).
   const claimant = [...b.attackers, ...b.defenders].find((f) => f.pretender)?.pretender
   if (b.kind === 'pretender') return `${claimant ?? 'Taht davacısı'} karargâhı`
@@ -262,19 +265,19 @@ function Training({ data, has }: { data: HudData; has: boolean }) {
         note={`${unitSpec(unit).trainSeconds} sn`}
       />
       <div className="stepper">
-        <button className="btn icon-only" disabled={n <= 1} onClick={() => setCount(n - 1)} aria-label="Bir asker azalt">
+        <button className="btn icon-only" disabled={n <= 1} data-why="En az 1 asker eğitilir" onClick={() => setCount(n - 1)} aria-label="Bir asker azalt">
           <Icon name="minus" size={16} />
         </button>
         <span className="stepper-value">
           <b>{n}</b> {UNIT_NAMES[unit].toLowerCase()}
         </span>
-        <button className="btn icon-only" disabled={n >= willing} onClick={() => setCount(n + 1)} aria-label="Bir asker ekle">
+        <button className="btn icon-only" disabled={n >= willing} data-why={willing < 1 ? 'Asker olmaya gönüllü kimse yok' : `Gönüllülerin hepsi bu kadar (${willing})`} onClick={() => setCount(n + 1)} aria-label="Bir asker ekle">
           <Icon name="plus" size={16} />
         </button>
-        <button className="btn small" disabled={most <= 1 || n === most} onClick={() => setCount(most)} title="Gönüllülerin ve depoların yettiği kadar">
+        <button className="btn small" disabled={most <= 1 || n === most} data-why={most <= 1 ? 'Gönüllüler ya da depolar yalnızca bir askere yetiyor' : 'Zaten en çok seçili'} onClick={() => setCount(most)} title="Gönüllülerin ve depoların yettiği kadar">
           En çok{most > 1 ? ` (${most})` : ''}
         </button>
-        <button className="btn small" disabled={!!why} onClick={() => online?.act({ type: 'train', count: n, unit })} title={why ? WHY[why] : undefined}>
+        <button className="btn small" disabled={!!why} data-why={why ? WHY[why] : undefined} onClick={() => online?.act({ type: 'train', count: n, unit })} title={why ? WHY[why] : undefined}>
           Eğit {why ? `(${WHY[why]})` : ''}
         </button>
       </div>
@@ -318,13 +321,13 @@ function Garrison({ data, armies }: { data: HudData; armies: number }) {
               <span className="unit-label">
                 <Icon name={UNIT_ICONS[u]} size={16} /> {UNIT_NAMES[u]}
               </span>
-              <button className="btn icon-only" disabled={(units[u] ?? 0) <= 0} onClick={() => step(u, -1)} aria-label="Azalt">
+              <button className="btn icon-only" disabled={(units[u] ?? 0) <= 0} data-why="Bu birlikten seçili asker yok" onClick={() => step(u, -1)} aria-label="Azalt">
                 <Icon name="minus" size={16} />
               </button>
               <span className="stepper-value">
                 <b>{units[u] ?? 0}</b> / {garrison[u]}
               </span>
-              <button className="btn icon-only" disabled={(units[u] ?? 0) >= (garrison[u] ?? 0)} onClick={() => step(u, 1)} aria-label="Artır">
+              <button className="btn icon-only" disabled={(units[u] ?? 0) >= (garrison[u] ?? 0)} data-why="Garnizondaki bu birliğin hepsi seçili" onClick={() => step(u, 1)} aria-label="Artır">
                 <Icon name="plus" size={16} />
               </button>
             </div>
@@ -333,6 +336,7 @@ function Garrison({ data, armies }: { data: HudData; armies: number }) {
             <button
               className="btn small"
               disabled={full || n < 1}
+              data-why={full ? `Sahada en fazla ${balance.military.maxArmies} ordun olabilir` : 'Önce asker seç'}
               onClick={() => (online?.act({ type: 'raise', units }), setPicked(null))}
               title={full ? 'Sahada en fazla 2 ordun olabilir' : undefined}
             >
@@ -341,6 +345,7 @@ function Garrison({ data, armies }: { data: HudData; armies: number }) {
             <button
               className={sureDisband ? 'btn small danger' : 'btn small'}
               disabled={n < 1}
+              data-why="Önce asker seç"
               onClick={() => (sureDisband ? (online?.act({ type: 'disband', units }), setPicked(null), setSureDisband(false)) : setSureDisband(true))}
               onBlur={() => setSureDisband(false)}
               title="Askerler köylüye döner; eğitim maliyeti geri gelmez"
@@ -436,7 +441,7 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
           <button className="btn small" onClick={() => (online.setArmy(army.id), onShow(here))}>
             <Icon name="pin" size={16} /> Göster
           </button>
-          <button className="btn small" disabled={busy} onClick={() => online.target(army.id)}>
+          <button className="btn small" disabled={busy} data-why="Ordu savaşta; emir alamaz" onClick={() => online.target(army.id)}>
             Hareket
           </button>
           <button
@@ -450,12 +455,13 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
           >
             <Icon name="eye" size={16} /> {online.following === army.id ? 'Takibi bırak' : 'Takip et'}
           </button>
-          <button className="btn small" disabled={busy} onClick={() => online.act({ type: 'army', army: army.id, order: { kind: 'home' } })}>
+          <button className="btn small" disabled={busy} data-why="Ordu savaşta; emir alamaz" onClick={() => online.act({ type: 'army', army: army.id, order: { kind: 'home' } })}>
             <Icon name="home" size={16} /> Eve dön
           </button>
           <button
             className="btn small"
             disabled={busy || soldiers < 2 || others.length + 1 >= balance.military.maxArmies}
+            data-why={busy ? 'Ordu savaşta; bölünemez' : soldiers < 2 ? 'Bölmek için en az 2 asker gerekir' : `Sahada en fazla ${balance.military.maxArmies} ordun olabilir`}
             onClick={() => online.act({ type: 'army', army: army.id, order: { kind: 'split', soldiers: Math.floor(soldiers / 2) } })}
             title="Ordunun yarısını ayrı bir orduya ayırır (en fazla 2 ordu)"
           >
@@ -465,6 +471,7 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
             <button
               className="btn small"
               disabled={busy || !home}
+              data-why={busy ? 'Ordu savaşta' : 'Kral yalnızca sarayın önünde komutayı bırakır'}
               onClick={() => online.act({ type: 'king', army: army.id, action: 'leave' })}
               title={home ? 'Kral komutayı bırakıp sarayına döner' : 'Kral yalnızca sarayın önünde komutayı bırakır'}
             >
@@ -474,6 +481,7 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
             <button
               className="btn small"
               disabled={!!kingWhy}
+              data-why={kingWhy ? KING_REASONS[kingWhy] : undefined}
               onClick={() => online.act({ type: 'king', army: army.id, action: 'lead' })}
               title={kingWhy ? KING_REASONS[kingWhy] : 'Emirler elçi beklemeden uygulanır; kralın savaş yeteneği zarlara tam sayılır, ama ordu yenilirse kral düşebilir'}
             >
@@ -481,7 +489,7 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
             </button>
           )}
           {near && (
-            <button className="btn small" disabled={busy} onClick={() => online.act({ type: 'army', army: army.id, order: { kind: 'merge', with: near.id } })}>
+            <button className="btn small" disabled={busy} data-why="Ordu savaşta; birleşemez" onClick={() => online.act({ type: 'army', army: army.id, order: { kind: 'merge', with: near.id } })}>
               Birleştir
             </button>
           )}

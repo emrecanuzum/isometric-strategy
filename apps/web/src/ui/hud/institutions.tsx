@@ -20,11 +20,12 @@ import {
   templeHappiness,
   workerSlots,
 } from '@game/shared'
-import type { Building, Kingdom } from '@game/shared'
+import type { Building, Cost, Kingdom } from '@game/shared'
 import { Fragment, useState } from 'react'
 import { Icon } from '../icons'
 import { FORTUNE_TEXTS, RESEARCH_CATEGORY_NAMES, RESEARCH_NAMES, SCOPE_NAMES } from '../names'
 import { CostList } from '../panels'
+import { lackWhy } from '../why'
 import { Meter, Section, Stat } from './primitives'
 import type { HudData } from './tabs'
 
@@ -123,6 +124,7 @@ function ResearchNode({ id, other, data, onStart }: { id: string; other?: string
           <button
             className="btn small"
             disabled={error !== null}
+            data-why={error === 'cost' ? (lackWhy(kingdom.stock, spec.cost) ?? RESEARCH_BLOCKED.cost) : error ? (RESEARCH_BLOCKED[error] ?? 'Şu an araştırılamaz') : undefined}
             onClick={() => {
               if (closes && !asking) return setAsking(true)
               setAsking(false)
@@ -192,7 +194,7 @@ export function TemplePanel({ data }: { data: HudData }) {
         </p>
         <div className="row">
           <CostList cost={sermon.cost} stock={kingdom.stock} />
-          <button className="btn small" disabled={error !== null} onClick={() => online?.act({ type: 'sermon' })}>
+          <button className="btn small" disabled={error !== null} data-why={error === 'busy' ? `Rahipler dinleniyor; ${secs(ready - now)} sonra` : error === 'cost' ? (lackWhy(kingdom.stock, sermon.cost as Cost) ?? 'Kaynak yetmiyor') : error === 'building' ? 'Tapınak henüz bitmedi' : 'Şu an vaaz verilemez'} onClick={() => online?.act({ type: 'sermon' })}>
             Vaaz ver
           </button>
         </div>

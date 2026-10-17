@@ -96,6 +96,30 @@ export function SkillBars({ skills }: { skills: Record<Skill, number> }) {
   )
 }
 
+// Why a post, a marriage or the crown's aid is refused (the disabled buttons' reasons, CLAUDE.md §11).
+const ROLE_WHY: Record<string, string> = {
+  none: 'Bu hanedan üyesine görev verilemez',
+  age: 'Görev için yaşı yetmiyor',
+  sex: 'Devriyenin başına yalnızca bir prens geçebilir',
+  liege: 'Önce bir taç krallığına biat et',
+  town: 'Elinde kasaba yok (ya da kasaba seçilmedi)',
+  taken: 'Bu görevde zaten başka biri var',
+  rejected: 'Bu görev zaten onda',
+}
+const MARRY_WHY: Record<string, string> = {
+  none: 'Prenses sarayda değil',
+  sex: 'Yalnızca prensesler evlendirilebilir',
+  age: 'Prenses henüz reşit değil',
+  liege: 'Önce bir taç krallığına biat et',
+  cost: 'Çeyiz için yeterli altın yok',
+  town: 'Bu kasaba senin elinde değil',
+}
+const AID_WHY: Record<string, string> = {
+  none: 'Ortada bir taht davacısı yok',
+  liege: 'Bağlı olduğun bir taç yok',
+  asked: 'Bunu taçtan zaten istedin',
+}
+
 // A name typed in, or rolled when none comes to mind: one of the person's own sex, passed over if borne in the house.
 function NameField({ person, label, wide, taken, onSave }: { person: Person; label: string; wide?: boolean; taken: string[]; onSave(name: string): void }) {
   const [name, setName] = useState(person.name)
@@ -111,7 +135,7 @@ function NameField({ person, label, wide, taken, onSave }: { person: Person; lab
       <button type="button" className="btn small" title="Rastgele bir ad" onClick={() => setName(randomName(person.sex, Math.random(), taken.filter((n) => n !== person.name)))}>
         <Icon name="dice" size={16} /> Rastgele
       </button>
-      <button className={wide ? 'btn primary' : 'btn small'} disabled={name.trim().length < 2}>
+      <button className={wide ? 'btn primary' : 'btn small'} disabled={name.trim().length < 2} data-why="Ad en az 2 harf olmalı">
         Koy
       </button>
     </form>
@@ -162,19 +186,19 @@ function RolePicker({ kingdom, p, now, online, onDone }: { kingdom: Kingdom; p: 
     <div className="kin-picker">
       <div className="row">
         <PixelSelect value={town} onChange={setTown} options={held.map((t) => ({ value: t.id, label: t.name ?? `Kasaba ${t.id}` }))} placeholder="Elinde kasaba yok" aria-label="Kasaba" />
-        <button className="btn small" disabled={governor !== null} onClick={() => give('governor', town)}>
+        <button className="btn small" disabled={governor !== null} data-why={governor ? ROLE_WHY[governor] : undefined} onClick={() => give('governor', town)}>
           Vali yap
         </button>
       </div>
       <small>Vali: kasabanın sadakat hedefi +{Math.round(loyalty)} (halk yeteneğiyle artar).</small>
-      <button className="btn small" disabled={roleError(kingdom, p.id, 'commander', now) !== null} onClick={() => give('commander')}>
+      <button className="btn small" disabled={roleError(kingdom, p.id, 'commander', now) !== null} data-why={ROLE_WHY[roleError(kingdom, p.id, 'commander', now) ?? ''] ?? undefined} onClick={() => give('commander')}>
         Tacın devriyesinin başına geçir
       </button>
       <small>
         Devriye komutanı: devriyenin bahşişi +%{tip}, her uğrayışta taçla ilişki +{cmd.visitRelation} fazla, taçla ilişkin +{cmd.crownRest} daha yüksekte dinlenir. Ama taç onu da çok
         sever (+{I.crownBond.commander}): isyan ederse onu destekleyebilir.{p.sex === 'f' ? ' (Yalnızca prensler.)' : ''}
       </small>
-      <button className="btn small" disabled={roleError(kingdom, p.id, 'treasurer', now) !== null} onClick={() => give('treasurer')}>
+      <button className="btn small" disabled={roleError(kingdom, p.id, 'treasurer', now) !== null} data-why={ROLE_WHY[roleError(kingdom, p.id, 'treasurer', now) ?? '']} onClick={() => give('treasurer')}>
         Hazinedar yap
       </button>
       <small>Hazinedar: vergi {pct(tax)} (maliye yeteneğiyle artar).</small>
@@ -205,13 +229,13 @@ function MarryPicker({ kingdom, p, now, online, onDone }: { kingdom: Kingdom; p:
   }
   return (
     <div className="kin-picker">
-      <button className="btn small" disabled={marryError(kingdom, p.id, { kind: 'crown' }, now) !== null} onClick={() => marry({ kind: 'crown' })}>
+      <button className="btn small" disabled={marryError(kingdom, p.id, { kind: 'crown' }, now) !== null} data-why={MARRY_WHY[marryError(kingdom, p.id, { kind: 'crown' }, now) ?? '']} onClick={() => marry({ kind: 'crown' })}>
         {crownName ? `${crownName} sarayına gelin ver` : 'Taca gelin ver (önce biat et)'} · {dowryOf('crown')} altın çeyiz
       </button>
       <small>Taçla ilişkin hemen +{m.crown.relation}, sonra hep +{m.crown.crownRest} daha yüksekte dinlenir; taç hanedanının erkeklerini de biraz daha sever.</small>
       <div className="row">
         <PixelSelect value={town} onChange={setTown} options={towns.map((t) => ({ value: t.id, label: t.name, note: t.free ? 'kimsenin değil' : undefined }))} placeholder="Uygun kasaba yok" aria-label="Kasaba" />
-        <button className="btn small" disabled={!chosen || marryError(kingdom, p.id, { kind: 'town', town: chosen.id, name: chosen.name, free: chosen.free }, now) !== null} onClick={() => chosen && marry({ kind: 'town', town: chosen.id })}>
+        <button className="btn small" disabled={!chosen || marryError(kingdom, p.id, { kind: 'town', town: chosen.id, name: chosen.name, free: chosen.free }, now) !== null} data-why={!chosen ? 'Uygun kasaba yok' : MARRY_WHY[marryError(kingdom, p.id, { kind: 'town', town: chosen.id, name: chosen.name, free: chosen.free }, now) ?? '']} onClick={() => chosen && marry({ kind: 'town', town: chosen.id })}>
           Kasabaya gelin ver · {dowryOf('town')} altın
         </button>
       </div>
@@ -221,7 +245,7 @@ function MarryPicker({ kingdom, p, now, online, onDone }: { kingdom: Kingdom; p:
       </small>
       <div className="row">
         <PixelSelect value={lord} onChange={setLord} options={lords.map((k) => ({ value: k.id, label: k.name }))} placeholder="Lobide başka lord yok" aria-label="Lord" />
-        <button className="btn small" disabled={lord === undefined} onClick={() => lord !== undefined && marry({ kind: 'lord', id: lord })}>
+        <button className="btn small" disabled={lord === undefined} data-why="Lobide başka lord yok" onClick={() => lord !== undefined && marry({ kind: 'lord', id: lord })}>
           Elçiyle teklif et
         </button>
       </div>
@@ -295,7 +319,7 @@ function KinCard({
             </button>
           )}
           {hasOpinion(p, now) && (
-            <button className="btn small" disabled={gift !== null} title={gift === 'cooldown' ? 'Az önce hediye verdin' : gift === 'cost' ? 'Yeterli altın yok' : ''} onClick={() => online?.act({ type: 'house', action: 'gift', id: p.id })}>
+            <button className="btn small" disabled={gift !== null} data-why={gift === 'cooldown' ? 'Az önce hediye verdin; biraz bekle' : gift === 'cost' ? `Yeterli altın yok (eksik: ${Math.ceil(I.gift.gold - kingdom.stock.gold)})` : 'Hediye verilemez'} onClick={() => online?.act({ type: 'house', action: 'gift', id: p.id })}>
               <Icon name="gold" size={16} /> Hediye ({I.gift.gold} altın, +{I.gift.opinion})
             </button>
           )}
@@ -376,10 +400,10 @@ function PretenderPanel({ kingdom, now, online, onShow }: { kingdom: Kingdom; no
             seviyorsa onu destekler.
           </p>
           <div className="row wrap">
-            <button className="btn small" disabled={aidError(kingdom, 'troops') !== null} onClick={() => ask('troops')}>
+            <button className="btn small" disabled={aidError(kingdom, 'troops') !== null} data-why={AID_WHY[aidError(kingdom, 'troops') ?? ''] ?? 'Taç şu an yardım etmez'} onClick={() => ask('troops')}>
               <Icon name="shield" size={16} /> Taçtan asker iste
             </button>
-            <button className="btn small" disabled={aidError(kingdom, 'gold') !== null} onClick={() => ask('gold')}>
+            <button className="btn small" disabled={aidError(kingdom, 'gold') !== null} data-why={AID_WHY[aidError(kingdom, 'gold') ?? ''] ?? 'Taç şu an yardım etmez'} onClick={() => ask('gold')}>
               <Icon name="gold" size={16} /> Taçtan altın iste
             </button>
           </div>
@@ -547,7 +571,7 @@ export function DynastySection({ kingdom, now, online, onShow }: { kingdom: King
         {d.dead.length > 0 && (
           <>
             <h4 className="house-title">Atalar ve ölenler</h4>
-            <ul className="ancestors">
+            <ul className="ancestors scroll3">
               {d.dead.map((p) => (
                 <li key={p.id}>
                   <Portrait seed={p.id * 977 + kingdom.site.x} sex={p.sex} age={ageOf(p, p.diedAt ?? now)} role={p.ruled === false ? roleOfPortrait(p) : p.sex === 'm' ? 'king' : 'queen'} dead size={40} />

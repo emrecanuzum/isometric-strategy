@@ -2,7 +2,7 @@ import { balance } from './balance'
 import type { Point } from './iso'
 import { counterBonus, mightOf } from './units'
 import type { Units } from './units'
-import { Feature, Terrain, mulberry32 } from './worldgen'
+import { Feature, Terrain, hash, mulberry32 } from './worldgen'
 import type { World } from './worldgen'
 
 // Armies (CLAUDE.md §8.2, §9.7). The server keeps an army's route and its start and end times; where it is at any
@@ -19,7 +19,7 @@ export interface Army {
   arrive_at: string
   status: 'moving' | 'idle' | 'battle'
   // Where it is heading: a place, home (to rejoin the garrison) or an enemy palace (to lay siege).
-  goal: { kind: 'move' } | { kind: 'home'; retreat?: boolean } | { kind: 'siege'; kingdom: number } | { kind: 'town'; town: number } | { kind: 'chase'; band: number; since?: number }
+  goal: { kind: 'move' } | { kind: 'home'; retreat?: boolean } | { kind: 'siege'; kingdom: number } | { kind: 'town'; town: number } | { kind: 'chase'; band: number; since?: number } | { kind: 'cave'; slot: number; gen: number }
   // Its morale and its knowledge of the ground as they were when it set off on this route, and where it had camped.
   morale: number
   familiarity: number
@@ -77,7 +77,65 @@ export function buildingBlocker(kingdoms: Holding[], mover?: number, breach?: nu
   }
   const blocked: Blocked = (x, y) => taken.has(y * 65536 + x)
   if (seals.length) SEALS.set(blocked, seals)
+  // What the route finder makes of the ground besides: the lords' laid roads (armies keep beside them) and the gates the
+  // army may pass (it goes through them straight, by the middle).
+  const roads = new Set<number>()
+  const gates = new Set<number>()
+  for (const k of kingdoms) {
+    for (const b of k.buildings ?? []) {
+      if (b.kind === 'road') roads.add(b.y * 65536 + b.x)
+      else if (b.kind === 'gate' && k.id !== undefined && k.id === mover) gates.add(b.y * 65536 + b.x)
+    }
+  }
+  return routeHints(blocked, { roads, gates })
+}
+
+// Laid roads and passable gates the route finder should know of, kept beside a blocker (see buildingBlocker).
+export interface RouteHints {
+  roads: Set<number>
+  gates: Set<number>
+}
+const HINTS = new WeakMap<Blocked, RouteHints>()
+export function routeHints(blocked: Blocked, hints: RouteHints): Blocked {
+  if (hints.roads.size || hints.gates.size) HINTS.set(blocked, hints)
   return blocked
+}
+
+// How far each tile lies from the nearest trade road or bridge (0 on it, up to 3), worked out once per world.
+const ROAD_DISTANCE = new WeakMap<Ground, Uint8Array>()
+function roadDistance(world: Ground): Uint8Array {
+  let far = ROAD_DISTANCE.get(world)
+  if (far) return far
+  const size = world.size
+  far = new Uint8Array(size * size).fill(3)
+  let ring: number[] = []
+  for (let i = 0; i < far.length; i++) {
+    if (world.feature[i] === Feature.Road || world.feature[i] === Feature.Bridge) {
+      far[i] = 0
+      ring.push(i)
+    }
+  }
+  for (let d = 1; d < 3 && ring.length; d++) {
+    const next: number[] = []
+    for (const i of ring) {
+      const x = i % size
+      const y = (i - x) / size
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue
+          const j = ny * size + nx
+          if (far[j] <= d) continue
+          far[j] = d
+          next.push(j)
+        }
+      }
+    }
+    ring = next
+  }
+  ROAD_DISTANCE.set(world, far)
+  return far
 }
 
 // A narrow gap between a standing wall and the water (or a mountain, or the lord's own watchtower) is shut to armies:
@@ -282,9 +340,13 @@ function heapOf() {
 
 // A route over land from `from` to `to` (tile points); null if none. Searched in two steps so it stays quick on a big
 // map yet exact: first over 4×4-tile cells (two neighbouring cells are joined when a walk between them exists inside
-// them, so a narrow bridge is found), then tile by tile inside the corridor of cells that search chose, and the tile
-// path is pulled straight wherever the ground allows.
+// them, so a narrow bridge is found), then tile by tile inside the corridor of cells that search chose. Ground beside
+// a road costs less (balance.military.route), so an army takes a road near its way when the detour is short, walking
+// a tile off its middle. The tile path is then pulled straight wherever the ground allows (and no dearer), passes
+// through a gate by its middle, square to the wall, long open legs get a gentle sway, and the corners are rounded
+// (CLAUDE.md §9.7). What comes out is the route as walked: its length sets the march's time, on server and screens.
 export function findRoute(world: Ground, from: Point, to: Point, blocked?: Blocked): Point[] | null {
+  const hints = blocked ? HINTS.get(blocked) : undefined
   blocked = sealed(world, blocked)
   const size = world.size
   const n = size / CELL
@@ -295,6 +357,21 @@ export function findRoute(world: Ground, from: Point, to: Point, blocked?: Block
   const ty = Math.floor(to.y)
   if (!ok(tx, ty)) return null
   const cellOf = (x: number, y: number) => Math.floor(y / CELL) * n + Math.floor(x / CELL)
+
+  // What a step onto a tile costs, for every tile length walked: less beside a road (trade roads and bridges, and the
+  // lords' laid roads), least a tile off its middle.
+  const R = balance.military.route
+  const far = roadDistance(world)
+  const laid = hints?.roads.size ? hints.roads : null
+  const byDistance = [R.roadOn, R.roadBeside, R.roadNear, 1]
+  const cheapest = Math.min(...byDistance)
+  const weight = (x: number, y: number) => {
+    let d = far[y * size + x]
+    if (laid && d > 0) {
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (laid.has((y + dy) * 65536 + x + dx)) d = Math.min(d, Math.max(Math.abs(dx), Math.abs(dy)))
+    }
+    return byDistance[d]
+  }
 
   // Step one runs over the walkable parts of cells, not whole cells: a cell a wall runs through is two parts, one on
   // either side, so the search cannot slip through the wall there and must find the gate. A part is the tiles of a
@@ -335,6 +412,20 @@ export function findRoute(world: Ground, from: Point, to: Point, blocked?: Block
     const cell = cellOf(x, y)
     const part = partsOf(cell)[(y % CELL) * CELL + (x % CELL)]
     return part < 0 ? -1 : cell * PARTS + part
+  }
+  // A part's cost per tile: its cheapest tile (a road through the cell draws the search along it).
+  const partWeight = new Map<number, number>()
+  const weightOf = (node: number) => {
+    let w = partWeight.get(node)
+    if (w !== undefined) return w
+    const cell = Math.floor(node / PARTS)
+    const labels = partsOf(cell)
+    const x0 = (cell % n) * CELL
+    const y0 = Math.floor(cell / n) * CELL
+    w = 1
+    for (let k = 0; k < PARTS; k++) if (labels[k] === node % PARTS) w = Math.min(w, weight(x0 + (k % CELL), y0 + Math.floor(k / CELL)))
+    partWeight.set(node, w)
+    return w
   }
   // The parts a part steps into across its cell's edge (corners only where neither side tile is blocked).
   const stepsFrom = (node: number) => {
@@ -380,7 +471,7 @@ export function findRoute(world: Ground, from: Point, to: Point, blocked?: Block
   const goalAt = center(goal)
   const h = (node: number) => {
     const c = center(node)
-    return Math.hypot(c.x - goalAt.x, c.y - goalAt.y)
+    return Math.hypot(c.x - goalAt.x, c.y - goalAt.y) * cheapest
   }
   for (const s of starts) {
     cost.set(s, 0)
@@ -399,7 +490,7 @@ export function findRoute(world: Ground, from: Point, to: Point, blocked?: Block
     for (const next of stepsFrom(node)) {
       if (closed.has(next)) continue
       const there = center(next)
-      const g = cost.get(node)! + (here.x !== there.x && here.y !== there.y ? Math.SQRT2 : 1)
+      const g = cost.get(node)! + (here.x !== there.x && here.y !== there.y ? Math.SQRT2 : 1) * ((weightOf(node) + weightOf(next)) / 2)
       if (g >= (cost.get(next) ?? Infinity)) continue
       cost.set(next, g)
       came.set(next, node)
@@ -428,7 +519,7 @@ export function findRoute(world: Ground, from: Point, to: Point, blocked?: Block
   const tiles = heapOf()
   const startTile = fy * size + fx
   const goalTile = ty * size + tx
-  const th = (i: number) => Math.hypot((i % size) - tx, Math.floor(i / size) - ty)
+  const th = (i: number) => Math.hypot((i % size) - tx, Math.floor(i / size) - ty) * cheapest
   tileCost.set(startTile, 0)
   tiles.push(th(startTile), startTile)
   while (tiles.size > 0) {
@@ -438,6 +529,7 @@ export function findRoute(world: Ground, from: Point, to: Point, blocked?: Block
     if (i === goalTile) break
     const x = i % size
     const y = Math.floor(i / size)
+    const wi = weight(x, y)
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         if (!dx && !dy) continue
@@ -447,7 +539,7 @@ export function findRoute(world: Ground, from: Point, to: Point, blocked?: Block
         if (dx && dy && (!ok(x + dx, y) || !ok(x, y + dy))) continue
         const j = ny * size + nx
         if (done.has(j)) continue
-        const g = tileCost.get(i)! + (dx && dy ? Math.SQRT2 : 1)
+        const g = tileCost.get(i)! + (dx && dy ? Math.SQRT2 : 1) * ((wi + weight(nx, ny)) / 2)
         if (g >= (tileCost.get(j) ?? Infinity)) continue
         tileCost.set(j, g)
         tileCame.set(j, i)
@@ -462,14 +554,158 @@ export function findRoute(world: Ground, from: Point, to: Point, blocked?: Block
     path.push({ x: (i % size) + 0.5, y: Math.floor(i / size) + 0.5 })
     if (++guard > size * size) return null
   }
-  const points = [from, ...path.reverse().slice(0, -1), to]
-  // Pulled straight: a point is kept only where the straight walk past it would leave the ground.
-  const route = [points[0]]
+  const tilePoints = [from, ...path.reverse().slice(0, -1), to]
+
+  // Through a gate by its middle, square to the wall: the gate's centre and the middles of the edges it is entered and
+  // left by are kept wherever the rest of the route is pulled and rounded.
+  const points: Point[] = []
+  const fixed: boolean[] = []
+  const gatePins = new Set<Point>()
+  for (let i = 0; i < tilePoints.length; i++) {
+    const p = tilePoints[i]
+    const gate = i > 0 && i < tilePoints.length - 1 && hints?.gates.has(Math.floor(p.y) * 65536 + Math.floor(p.x))
+    if (!gate) {
+      points.push(p)
+      fixed.push(i === 0 || i === tilePoints.length - 1)
+      continue
+    }
+    const a = tilePoints[i - 1]
+    const b = tilePoints[i + 1]
+    const alongX = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y)
+    const ux = alongX ? Math.sign(b.x - a.x) || 1 : 0
+    const uy = alongX ? 0 : Math.sign(b.y - a.y) || 1
+    const c = { x: Math.floor(p.x) + 0.5, y: Math.floor(p.y) + 0.5 }
+    const e = R.gateApproach
+    const lead = R.gateLead
+    // The edges and the centre are pinned (no corner is rounded there); a point further out on either side is kept
+    // too, its corner rounded, so the route swings onto the gate's line before it reaches the gate.
+    const at = (d: number) => ({ x: c.x + ux * d, y: c.y + uy * d })
+    const ends = [at(-e), c, at(e)]
+    for (const p of ends) gatePins.add(p)
+    const before = at(-lead)
+    const after = at(lead)
+    const fits = (q: Point) => ok(Math.floor(q.x), Math.floor(q.y)) && clearLine(world, q, c, blocked)
+    if (i - 1 > 0 && fits(before)) {
+      points.push(before)
+      fixed.push(true)
+    }
+    points.push(...ends)
+    fixed.push(true, true, true)
+    if (i + 1 < tilePoints.length - 1 && fits(after)) {
+      points.push(after)
+      fixed.push(true)
+    }
+  }
+
+  // What walking a straight line costs (its length by the dearest-to-cheapest tiles it crosses, on average).
+  const lineCost = (a: Point, b: Point) => {
+    let sum = 0
+    let count = 0
+    walkTiles(a, b, (x, y) => {
+      sum += weight(x, y)
+      count++
+      return true
+    })
+    return Math.hypot(b.x - a.x, b.y - a.y) * (count ? sum / count : 1)
+  }
+  // The cost walked along the tile path up to each point.
+  const upTo = [0]
+  for (let i = 1; i < points.length; i++) upTo.push(upTo[i - 1] + lineCost(points[i - 1], points[i]))
+
+  // Pulled straight: a point is kept only where the straight walk past it would leave the ground or cost more than the
+  // way round (along a road), and the gate's points always.
+  let route: Point[] = [points[0]]
+  let from0 = 0
   for (let i = 1; i < points.length - 1; i++) {
-    if (!clearLine(world, route[route.length - 1], points[i + 1], blocked)) route.push(points[i])
+    const last = route[route.length - 1]
+    const keep = fixed[i] || !clearLine(world, last, points[i + 1], blocked) || lineCost(last, points[i + 1]) > upTo[i + 1] - upTo[from0] + 0.05
+    if (keep) {
+      route.push(points[i])
+      from0 = i
+    }
   }
   route.push(to)
-  return route
+  const pinned = new Set<Point>([points[0], points[points.length - 1], ...gatePins])
+  const straight = route
+
+  // The share of a straight line's tiles that lie by a road.
+  const roadShare = (a: Point, b: Point) => {
+    let near = 0
+    let count = 0
+    walkTiles(a, b, (x, y) => {
+      if (weight(x, y) < 1) near++
+      count++
+      return true
+    })
+    return count ? near / count : 0
+  }
+  // A gentle sway on long open legs (not along a road, which bends of itself): a point every few tiles a little to one
+  // side and then the other, drawn from the ground's coordinates so the same route always comes out the same.
+  const swayed: Point[] = [route[0]]
+  for (let i = 1; i < route.length; i++) {
+    const a = route[i - 1]
+    const b = route[i]
+    const length = Math.hypot(b.x - a.x, b.y - a.y)
+    if (length >= R.meanderLeg && !(pinned.has(a) && pinned.has(b) && length < 2) && roadShare(a, b) < 0.4) {
+      const steps = Math.max(2, Math.round(length / R.meanderEvery))
+      const nx = -(b.y - a.y) / length
+      const ny = (b.x - a.x) / length
+      const amplitude = Math.min(R.meanderAmplitude, length * 0.08)
+      const side = hash(Math.floor(a.x), Math.floor(a.y), Math.floor(b.x) * 4096 + Math.floor(b.y)) < 0.5 ? -1 : 1
+      for (let k = 1; k < steps; k++) {
+        const f = k / steps
+        const lean = amplitude * (0.55 + 0.45 * hash(Math.floor(a.x * 7 + k), Math.floor(b.y * 7 - k), 9173)) * (k % 2 ? side : -side)
+        const p = { x: a.x + (b.x - a.x) * f + nx * lean, y: a.y + (b.y - a.y) * f + ny * lean }
+        const prev = swayed[swayed.length - 1]
+        if (ok(Math.floor(p.x), Math.floor(p.y)) && clearLine(world, prev, p, blocked) && clearLine(world, p, b, blocked)) swayed.push(p)
+      }
+    }
+    swayed.push(b)
+  }
+  route = swayed
+
+  // The corners rounded (corner cutting, a few passes; the gate's points stay as they are). A cut is taken only where
+  // the short cut across the corner stays on the ground; the rest of each new leg lies on an old one.
+  for (let pass = 0; pass < R.smoothPasses && route.length > 2; pass++) {
+    const out: Point[] = [route[0]]
+    for (let i = 1; i < route.length - 1; i++) {
+      const v = route[i]
+      if (pinned.has(v)) {
+        out.push(v)
+        continue
+      }
+      const a = route[i - 1]
+      const b = route[i + 1]
+      const la = Math.hypot(a.x - v.x, a.y - v.y)
+      const lb = Math.hypot(b.x - v.x, b.y - v.y)
+      const ca = Math.min(R.cornerCut, R.cornerCutMax / Math.max(la, 1e-9))
+      const cb = Math.min(R.cornerCut, R.cornerCutMax / Math.max(lb, 1e-9))
+      const p = { x: v.x + (a.x - v.x) * ca, y: v.y + (a.y - v.y) * ca }
+      const q = { x: v.x + (b.x - v.x) * cb, y: v.y + (b.y - v.y) * cb }
+      if (la > 1e-6 && lb > 1e-6 && clearLine(world, p, q, blocked)) out.push(p, q)
+      else out.push(v)
+    }
+    out.push(route[route.length - 1])
+    route = out
+  }
+
+  // Points that add nothing (on the line between their neighbours) left out, the rest rounded to a hundredth of a tile.
+  const precision = R.precision
+  const lean = (a: Point, p: Point, b: Point) => {
+    const l = Math.hypot(b.x - a.x, b.y - a.y)
+    return l < 1e-9 ? Math.hypot(p.x - a.x, p.y - a.y) : Math.abs((p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x)) / l
+  }
+  const lean0 = 0.03
+  const kept: Point[] = [route[0]]
+  for (let i = 1; i < route.length - 1; i++) {
+    if (pinned.has(route[i]) || lean(kept[kept.length - 1], route[i], route[i + 1]) > lean0) kept.push(route[i])
+  }
+  kept.push(route[route.length - 1])
+  const round = (p: Point, i: number) => (i === 0 || i === kept.length - 1 ? p : { x: Math.round(p.x * precision) / precision, y: Math.round(p.y * precision) / precision })
+  const final = kept.map(round)
+  // Every leg still on open ground (else the route as pulled straight, which is).
+  for (let i = 1; i < final.length; i++) if (!clearLine(world, final[i - 1], final[i], blocked)) return straight
+  return final
 }
 
 // Where a kingdom's soldiers gather: just out in front of the palace gate (its front corner), clear of the walls.

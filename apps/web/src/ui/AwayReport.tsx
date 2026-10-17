@@ -1,4 +1,4 @@
-import { balance, booksOf, crisisKey, fortunesBegun, goalRank, idleFactor, isCrisis, isDilemma, population, soldiersOf, storageCap, yearMs } from '@game/shared'
+import { PROJECT_IDS, balance, booksOf, crisisDecideMs, crisisKey, fortunesBegun, goalRank, idleFactor, isCrisis, isDilemma, palaceLevel, population, projectBuilding, projectStage, projectStages, soldiersOf, yearMs } from '@game/shared'
 import type { Kingdom, Pact, Resource, SeenSnapshot, SoldierLoss } from '@game/shared'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { playOnce } from '../audio/sfx'
@@ -12,14 +12,16 @@ import type { Battle, Notice } from '../net/online'
 import { describe } from './Envoy'
 import { Icon } from './icons'
 import type { IconName } from './icons'
-import { FORTUNE_TEXTS, RESOURCE_ICONS, RESOURCE_NAMES } from './names'
+import { FORTUNE_TEXTS, RESOURCE_NAMES } from './names'
 import { EXPEDITION_TEXTS, FIND_TEXTS, GOAL_TEXTS } from './expeditionNames'
-import { expeditionLines, haulText } from './hud/expeditions'
+import { haulText } from './hud/expeditions'
+import { PROJECT_TEXTS } from './hud/projects'
 import { StoryScene, expeditionStory, villageStory } from './storyScenes'
 import type { Story } from './storyScenes'
 import type { Online } from './hud/online'
 import { kingdomName } from './hud/online'
 import { fmt } from './hud/primitives'
+import { crownKeyOf, crownTimeline } from './hud/crownHouse'
 
 // "While you were away" (CLAUDE.md §11): a ruler back after a while is told, page by page, what happened meanwhile:
 // the treasury and stores, the fighting, the tribute taken and paid, the envoys' and spies' doings, and the lobby's
@@ -765,7 +767,7 @@ interface Page {
   story?: { story: Story; id: string }
 }
 
-const MILITARY = new Set(['king_fell', 'siege_people', 'naval_battle', 'blockade_lifted', 'fleet_turned', 'battle_start', 'battle_end', 'town_siege', 'town_taken', 'town_held', 'town_siege_lifted', 'town_revolt', 'town_lost_revolt', 'tower_losses', 'army_threat', 'trade_raided', 'raid_repelled', 'war_declared', 'peace_enforced', 'order_failed', 'cargo_lost', 'cargo_home'])
+const MILITARY = new Set(['king_fell', 'siege_people', 'naval_battle', 'blockade_lifted', 'fleet_turned', 'battle_start', 'battle_end', 'town_siege', 'town_taken', 'town_held', 'town_siege_lifted', 'town_revolt', 'town_lost_revolt', 'tower_losses', 'army_threat', 'trade_raided', 'raid_repelled', 'war_declared', 'peace_enforced', 'order_failed', 'cargo_lost', 'cargo_home', 'cave_trail', 'cave_found', 'cave_empty', 'clan_destroyed'])
 const TRIBUTE = new Set(['patrol_tribute', 'patrol_taken', 'patrol_tip', 'patrol_visit', 'patrol_ignored', 'tribute_ended', 'crown_gift'])
 
 const duration = (ms: number) => {
@@ -791,6 +793,9 @@ function grouped(notices: Notice[], online: Online, tone: (n: Notice) => Line['t
     return { icon, text: text ? `${head}: ${text}` : head, tone: tone(n) }
   })
 }
+
+// The most lines a page shows, so that none needs scrolling.
+const PAGE_LINES = 7
 
 const delta = (v: number) => `${v >= 0 ? '+' : '−'}${fmt(Math.abs(v))}`
 
@@ -830,62 +835,73 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
     const books = booksOf(kingdom)
     const was = before ? { ...booksOf({ books: before.books }) } : null
     const since0 = (pick: (b: typeof books) => number) => (was ? pick(books) - pick(was) : 0)
-    // What befell the village, told as a story: the day's events that came and went, how they were met, the goals
-    // reached and the parties back (CLAUDE.md §9.8–9.9).
+    // What befell the village, told as a story in a few short lines (no scrolling): the day's events, the disasters
+    // and what they took, the parties back, the goals reached and the great works (CLAUDE.md §9.8–9.10).
     const village: Line[] = []
     const hours = away / 3_600_000
     village.push({ icon: 'time', text: hours >= 1 ? `${duration(away)} boyunca köyde hayat kendi hâlinde sürdü. Kâhyanın defterinden:` : `${duration(away)} yoktun; kâhyanın defterinden:` })
-    // The day's events told in a few lines, not one by one: how many, which kinds, how the crises and choices went.
     const fortunes = fortunesBegun(kingdom, since, now)
+    const answer = (f: (typeof fortunes)[number]) => kingdom.responses?.[crisisKey(f)]?.choice
     if (fortunes.length > 0) {
-      const titles = (list: typeof fortunes) => {
-        const names = [...new Set(list.map((f) => FORTUNE_TEXTS[f.kind]?.title ?? 'bir olay'))]
-        return names.length > 4 ? `${names.slice(0, 4).join(', ')}…` : names.join(', ')
-      }
-      const bad = fortunes.filter((f) => FORTUNE_TEXTS[f.kind]?.tone === 'bad')
-      const good = fortunes.filter((f) => FORTUNE_TEXTS[f.kind]?.tone === 'good')
-      const rest = fortunes.filter((f) => !bad.includes(f) && !good.includes(f))
-      const parts = [
-        ...(bad.length ? [`${bad.length} kötü (${titles(bad)})`] : []),
-        ...(good.length ? [`${good.length} hayırlı (${titles(good)})`] : []),
-        ...(rest.length ? [`${rest.length} başka (${titles(rest)})`] : []),
-      ]
-      village.push({ icon: 'scroll', text: `Defterde ${fortunes.length} olay var: ${parts.join(', ')}.`, tone: bad.length > good.length ? 'down' : good.length > bad.length ? 'up' : undefined })
-      const answer = (f: (typeof fortunes)[number]) => kingdom.responses?.[crisisKey(f)]?.choice
-      const crises = fortunes.filter((f) => isCrisis(f.kind))
-      if (crises.length > 0) {
-        const met = crises.filter((f) => answer(f)).length
-        const hit = crises.length - met
-        const who = kingdom.steward ? 'kâhya köylüleri seferber etti' : 'seferberlikle önlendi'
-        village.push({
-          icon: hit > 0 ? 'warn' : 'happy',
-          text: hit === 0 ? `${crises.length} afetin hepsi karşılandı (${who}); zarar olmadı.` : met === 0 ? `${crises.length} afete karar verecek kimse yoktu; hepsi zararını verdi.` : `${crises.length} afetin ${met}'i karşılandı (${who}), ${hit}'i kimse karar veremediği için zararını verdi.`,
-          tone: hit > 0 ? 'down' : 'up',
-        })
-      }
+      const bad = fortunes.filter((f) => FORTUNE_TEXTS[f.kind]?.tone === 'bad').length
+      const good = fortunes.filter((f) => FORTUNE_TEXTS[f.kind]?.tone === 'good').length
+      const names = [...new Set(fortunes.map((f) => FORTUNE_TEXTS[f.kind]?.title ?? 'bir olay'))]
       const choices = fortunes.filter((f) => isDilemma(f.kind))
-      if (choices.length > 0) {
-        const chosen = choices.filter((f) => answer(f)).length
-        village.push({ icon: 'scroll', text: chosen === choices.length ? `${choices.length} seçimin hepsinde bir yol seçildi.` : `${choices.length} seçimden ${chosen}'inde bir yol seçildi, ${choices.length - chosen}'i kendi hâlinde geçti.` })
-      }
-    } else village.push({ icon: 'happy', text: 'Ne afet geldi ne bayram; köy sakin bir dönem geçirdi.' })
+      const chosen = choices.filter((f) => answer(f)).length
+      village.push({
+        icon: 'scroll',
+        text: `${fortunes.length} olay (${bad} kötü, ${good} hayırlı): ${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''}.${choices.length > 0 ? ` Seçimlerin ${chosen}/${choices.length}'inde yol seçildi.` : ''}`,
+        tone: bad > good ? 'down' : good > bad ? 'up' : undefined,
+      })
+    }
+    // The disasters in one line: how many, who met them, and what they took in all (from the season's accounts).
+    const decided = fortunes.filter((f) => isCrisis(f.kind) && f.start + crisisDecideMs() <= now)
+    const strikes = was ? since0((b) => b.disasters ?? 0) : decided.length
+    if (strikes > 0 || decided.length > 0) {
+      const steward = was ? since0((b) => b.stewarded ?? 0) : 0
+      const met = decided.filter((f) => answer(f) === 'villagers' || answer(f) === 'army').length
+      const byYou = Math.max(0, met - steward)
+      const hit = Math.max(0, decided.length - met)
+      const spoiled = Math.max(0, strikes - decided.length)
+      const lost = (['food', 'materials', 'arms', 'gold'] as Resource[])
+        .map((r) => [r, Math.round((books.disasterLost?.[r] ?? 0) - (was?.disasterLost?.[r] ?? 0))] as const)
+        .filter(([, v]) => v > 0)
+        .map(([r, v]) => `${fmt(v)} ${r === 'gold' ? 'altın' : RESOURCE_NAMES[r].toLowerCase()}`)
+      const who = [...(steward ? [`${steward}'ini kâhya`] : []), ...(byYou ? [`${byYou}'ini sen`] : []), ...(hit ? [`${hit}'i karşılanmadı`] : [])]
+      village.push({
+        icon: 'warn',
+        text: `${decided.length} afet${who.length ? ` (${who.join(', ')})` : ''}${spoiled ? `, ${spoiled} kez fare/çürük/pas` : ''}.${lost.length ? ` Giden: ${lost.join(', ')}.` : ' Kayıp olmadı.'}`,
+        tone: lost.length ? 'down' : 'up',
+      })
+    }
+    if (fortunes.length === 0 && strikes === 0) village.push({ icon: 'happy', text: 'Ne afet geldi ne bayram; köy sakin bir dönem geçirdi.' })
     const back = (kingdom.expeditions ?? []).filter((e) => e.result && !e.result.recalled && e.result.at > since)
-    for (const e of back) {
-      const got = haulText(e.result!.gains)
-      village.push({ icon: EXPEDITION_TEXTS[e.kind]?.icon ?? 'pin', text: `${EXPEDITION_TEXTS[e.kind]?.short ?? 'Sefer'} döndü${e.result!.find ? ` (${FIND_TEXTS[e.result!.find]?.name})` : ''}${got ? `: ${got}` : ', eli boş'}.`, tone: got ? 'up' : undefined })
+    if (back.length > 0) {
+      const gains: Partial<Record<Resource, number>> = {}
+      for (const e of back) for (const [r, v] of Object.entries(e.result!.gains)) gains[r as Resource] = (gains[r as Resource] ?? 0) + (v ?? 0)
+      const got = haulText(gains)
+      village.push({ icon: 'pin', text: `${back.length} sefer döndü${got ? `: ${got}` : ', eli boş'}.`, tone: got ? 'up' : undefined })
     }
     const goals = Object.entries(kingdom.goals ?? {}).filter(([, g]) => (g?.at ?? 0) > since)
-    for (const [track, g] of goals) village.push({ icon: 'star', text: `Hedef tamamlandı: ${GOAL_TEXTS[track]?.name ?? track} · ${GOAL_TEXTS[track]?.badges[(g?.tier ?? 1) - 1] ?? ''}.`, tone: 'up' })
-    if (goals.length > 0) village.push({ icon: 'crown', text: `Unvanın: ${goalRank(kingdom).title}.` })
+    if (goals.length > 0) village.push({ icon: 'star', text: `${goals.length} hedef tamamlandı (${goals.slice(0, 2).map(([track]) => GOAL_TEXTS[track]?.name ?? track).join(', ')}${goals.length > 2 ? '…' : ''}); unvanın: ${goalRank(kingdom).title}.`, tone: 'up' })
+    // The great works in one line (CLAUDE.md §9.10).
+    const works = PROJECT_IDS.filter((id) => projectStage(kingdom, id, now) > 0 || kingdom.projects?.[id])
+    if (works.length > 0) {
+      village.push({
+        icon: 'build',
+        text: `Büyük işler: ${works.map((id) => `${PROJECT_TEXTS[id].name} ${projectStage(kingdom, id, now)}/${projectStages()}${projectBuilding(kingdom, id, now) ? ' (yapılıyor)' : ''}`).join(' · ')}.`,
+      })
+    } else if (palaceLevel(kingdom, now) >= balance.projects.works.minPalace) village.push({ icon: 'build', text: 'Dolu ambarlar için Saray → Projeler\'de büyük işler bekliyor.' })
     out.push({ title: 'Sen yokken köyde neler oldu', picture: 'house', lines: village, story: { story: villageStory(kingdom.color), id: `village:${kingdom.color}` } })
 
-    const money: Line[] = [{ icon: 'time', text: `${duration(away)} yoktun.` }]
+    // The treasury and the stores in a few lines: the stores then and now, what came in, what went out, what was lost.
+    const money: Line[] = []
     if (before && was) {
-      for (const r of ['gold', 'food', 'materials', 'arms'] as Resource[]) {
-        const d = kingdom.stock[r] - before.stock[r]
-        if (Math.abs(d) < 1) continue
-        money.push({ icon: RESOURCE_ICONS[r], text: `${RESOURCE_NAMES[r]}: ${fmt(before.stock[r])} → ${fmt(kingdom.stock[r])} (${delta(d)})`, tone: d >= 0 ? 'up' : 'down' })
-      }
+      const stores = (['gold', 'food', 'materials', 'arms'] as Resource[])
+        .map((r) => [r, kingdom.stock[r] - before.stock[r]] as const)
+        .filter(([, d]) => Math.abs(d) >= 1)
+        .map(([r, d]) => `${RESOURCE_NAMES[r]} ${fmt(kingdom.stock[r])} (${delta(d)})`)
+      money.push({ icon: 'chest', text: stores.length ? `Depo: ${stores.join(' · ')}` : 'Depo neredeyse aynı kaldı.' })
       const tax = since0((b) => b.tax)
       const wages = since0((b) => b.wages)
       const trade = since0((b) => b.trade)
@@ -896,69 +912,60 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
       const crownPaid = since0((b) => b.crownPaid)
       const crownGot = since0((b) => b.crownGot)
       const wasted = since0((b) => b.wastedGold)
-      if (tax >= 1) money.push({ icon: 'gold', text: `Vergiden ${fmt(tax)} altın toplandı.`, tone: 'up' })
-      const is = kingdom.trade.ledger
-      const sold = is ? (['food', 'materials', 'arms'] as const).map((g) => [g, (is[g] ?? 0) - (before.ledger?.[g] ?? 0)] as const).filter(([, v]) => v > 0) : []
-      if (trade >= 1) money.push({ icon: 'trade', text: `Tüccarın ${sold.map(([g, v]) => `${fmt(v)} ${RESOURCE_NAMES[g].toLowerCase()}`).join(', ')} sattı, ${fmt(trade)} altın getirdi.`, tone: 'up' })
-      // Stores that came near the top while away: production slowed there instead of overflowing (economy.ts).
-      const room = storageCap(kingdom, now)
-      const slowed = (['food', 'materials', 'arms'] as const).filter((g) => kingdom.stock[g] >= room * balance.economy.away.storesKnee).map((g) => RESOURCE_NAMES[g].toLowerCase())
-      if (slowed.length > 0) money.push({ icon: 'chest', text: `Sen yokken ambarcılar ${slowed.join(' ve ')} ambarını ağzına kadar doldurmadı: ambar dolmaya yaklaşınca üretim yavaşladı.` })
-      const slack = since0((b) => b.tradeSlack ?? 0)
-      if (slack > 0) money.push({ icon: 'trade', text: `Sen yokken tüccar biraz kaytardı: ${fmt(slack)} seferde yükün ancak %${Math.round(balance.economy.away.merchantLoad * 100)}'sini götürdü.`, tone: 'down' })
-      const held = since0((b) => b.tradeHeld)
-      if (held > 0) money.push({ icon: 'trade', text: `Hazine dolu olduğu için tüccar ${fmt(held)} sefer mal götürmeden bekledi; yer açılınca yeniden satmaya başladı.` })
-      if (other >= 1) money.push({ icon: 'gold', text: `Kasabalardan, olaylardan, hedeflerden ve balıkçıdan ${fmt(other)} altın geldi.`, tone: 'up' })
-      if (expedition >= 1) money.push({ icon: 'pin', text: `Seferlerden ${fmt(expedition)} altın geldi.`, tone: 'up' })
-      // Bandits on the road, and what was won back off bandits and pirates (CLAUDE.md §7.9).
       const robbed = since0((b) => b.outlaws ?? 0)
       const outlawLoot = since0((b) => b.outlawLoot ?? 0)
-      if (robbed >= 1) money.push({ icon: 'swords', text: `Yağmacılar yolda tüccarının kazancından ${fmt(robbed)} altın kesti.`, tone: 'down' })
-      if (outlawLoot >= 1) money.push({ icon: 'chest', text: `Yağmacılardan ve korsanlardan ${fmt(outlawLoot)} altın ganimet ve ödül alındı.`, tone: 'up' })
       const upkeep = since0((b) => b.townUpkeep ?? 0)
-      if (upkeep >= 1) money.push({ icon: 'crown', text: `Kasabaların bakımına ${fmt(upkeep)} altın gitti.`, tone: 'down' })
-      if (wages >= 1) money.push({ icon: 'swords', text: `Askerlerin maaşına ${fmt(wages)} altın gitti.`, tone: 'down' })
-      if (wasted >= 1) money.push({ icon: 'warn', text: `Hazine dolu olduğu için ${fmt(wasted)} altın (çoğu vergi) sığmadı, boşa gitti. Hazine yaparak ya da harcayarak yer aç.`, tone: 'down' })
-      const wastedGoods = since0((b) => b.wastedGoods)
-      if (wastedGoods >= 1) {
-        // Which goods stand at the cap now, and what would make room for them.
-        const cap = storageCap(kingdom, now)
-        const full = (['food', 'materials', 'arms'] as const).filter((g) => kingdom.stock[g] >= cap - 1).map((g) => RESOURCE_NAMES[g].toLowerCase())
-        const which = full.length > 0 ? ` (${full.join(' ve ')} ${fmt(cap)} sınırında)` : ''
-        money.push({ icon: 'warn', text: `Ambarlar dolu olduğu için ${fmt(wastedGoods)} birim mal boşa gitti${which}. Tüccarı dolu mala çevir, harca ya da ambar kur.`, tone: 'down' })
-      }
       // What the accounts do not cover: buildings, training, envoys and purchases (or loot and gifts coming in).
       const rest = kingdom.stock.gold - before.stock.gold - (tax + trade + other + expedition + outlawLoot + tributeIn + crownGot - wages - upkeep - tributeOut - crownPaid - wasted)
-      if (rest <= -1) money.push({ icon: 'build', text: `İnşaat, eğitim, elçiler ve alımlara ${fmt(-rest)} altın harcandı.`, tone: 'down' })
-      else if (rest >= 1) money.push({ icon: 'gold', text: `Başka yollardan (yağma, hediye, fidye…) ${fmt(rest)} altın geldi.`, tone: 'up' })
+      const part = (v: number, what: string) => (v >= 1 ? [`${what} ${fmt(v)}`] : [])
+      const income = [...part(tax, 'vergi'), ...part(trade, 'tüccar'), ...part(other, 'kasaba ve olaylar'), ...part(expedition, 'seferler'), ...part(outlawLoot, 'ganimet'), ...part(rest, 'diğer')]
+      if (income.length) money.push({ icon: 'gold', text: `Gelen altın: ${income.join(', ')}.`, tone: 'up' })
+      const spent = [...part(wages, 'maaşlar'), ...part(upkeep, 'kasaba bakımı'), ...part(robbed, 'yağmacılar'), ...part(-rest, 'inşaat ve alımlar')]
+      if (spent.length) money.push({ icon: 'build', text: `Giden altın: ${spent.join(', ')}.`, tone: 'down' })
+      // What full stores cost: gold and goods that did not fit, the merchant waiting or idling.
+      const wastedGoods = since0((b) => b.wastedGoods)
+      const held = since0((b) => b.tradeHeld)
+      const slack = since0((b) => b.tradeSlack ?? 0)
+      const waste = [...(wasted >= 1 ? [`${fmt(wasted)} altın`] : []), ...(wastedGoods >= 1 ? [`${fmt(wastedGoods)} mal`] : [])]
+      const notes = [
+        ...(waste.length ? [`dolu hazine ve ambarda ${waste.join(' ve ')} boşa gitti`] : []),
+        ...(held > 0 ? [`tüccar ${fmt(held)} sefer bekledi`] : []),
+        ...(slack > 0 ? [`${fmt(slack)} seferde yarım yük götürdü`] : []),
+      ]
+      if (notes.length) money.push({ icon: 'warn', text: `${notes.join('; ')}. Harca ya da sat (Saray → Projeler).`.replace(/^./, (c) => c.toUpperCase()), tone: 'down' })
       const p1 = population(kingdom, now)
-      if (before.villagers !== p1.villagers) money.push({ icon: 'people', text: `Köylüler: ${before.villagers} → ${p1.villagers}`, tone: p1.villagers >= before.villagers ? 'up' : 'down' })
       const h0 = Math.round(before.happiness)
       const h1 = Math.round(kingdom.happiness ?? 0)
-      if (h0 !== h1) money.push({ icon: h1 >= h0 ? 'happy' : 'unhappy', text: `Mutluluk: %${h0} → %${h1}`, tone: h1 >= h0 ? 'up' : 'down' })
+      if (before.villagers !== p1.villagers || h0 !== h1) money.push({ icon: 'people', text: `Köylüler ${before.villagers} → ${p1.villagers} · mutluluk %${h0} → %${h1}`, tone: p1.villagers >= before.villagers && h1 >= h0 ? 'up' : 'down' })
     } else {
       money.push({ icon: 'gold', text: `Hazinede ${fmt(kingdom.stock.gold)} altın var (gidişindeki hâli kayıtlı değil; bundan sonraki dönüşlerinde ayrıntılı rapor gelecek).` })
     }
     const idle = idleFactor({ ...kingdom, lastSeenAt: since }, now)
-    if (idle < 1) money.push({ icon: 'warn', text: `Uzun süre yoktun: binaların üretimi (yemek hariç), vergi ve tüccarın kazancı %${Math.round(idle * 100)} düzeyine kadar düştü (yokluk cezası). Döndüğün için yeniden tam çalışıyorlar.`, tone: 'down' })
+    if (idle < 1) money.push({ icon: 'warn', text: `Uzun yokluk: üretim (yemek hariç), vergi ve tüccar %${Math.round(idle * 100)}'e düştü; şimdi yeniden tam.`, tone: 'down' })
     out.push({ title: 'Mali rapor', picture: 'treasury', lines: money })
 
-    // The parties back while away, each journey told in full (CLAUDE.md §9.9), and those still on the road.
+    // The parties back while away, a line each (the full story is in each party's own report), and those on the road.
     const parties = (kingdom.expeditions ?? []).filter((e) => e.result && !e.result.recalled && e.result.at > since).sort((a, b) => a.result!.at - b.result!.at)
     const roads = (kingdom.expeditions ?? []).filter((e) => !e.result && e.endAt > now)
     if (parties.length > 0 || roads.length > 0) {
       const lines: Line[] = []
       for (const e of parties) {
-        lines.push({ icon: EXPEDITION_TEXTS[e.kind]?.icon ?? 'pin', text: `${EXPEDITION_TEXTS[e.kind]?.name ?? 'Sefer'}:` })
-        lines.push(...expeditionLines(e, online).slice(1))
+        const r = e.result!
+        const got = haulText(r.gains)
+        const losses = [...(r.villagersLost ? [`${r.villagersLost} köylü`] : []), ...(r.soldiersLost ? [`${r.soldiersLost} muhafız`] : [])]
+        lines.push({
+          icon: EXPEDITION_TEXTS[e.kind]?.icon ?? 'pin',
+          text: `${EXPEDITION_TEXTS[e.kind]?.short ?? 'Sefer'}${r.find ? ` (${FIND_TEXTS[r.find]?.name})` : ''}: ${got || 'eli boş'}${losses.length ? `; kayıp ${losses.join(', ')}` : ''}.`,
+          tone: losses.length ? 'down' : got ? 'up' : undefined,
+        })
       }
-      for (const e of roads) lines.push({ icon: 'time', text: `${EXPEDITION_TEXTS[e.kind]?.name ?? 'Sefer'} hâlâ yolda; ${duration(e.endAt - now)} sonra dönecek.` })
+      for (const e of roads) lines.push({ icon: 'time', text: `${EXPEDITION_TEXTS[e.kind]?.short ?? 'Sefer'} hâlâ yolda; ${duration(e.endAt - now)} sonra dönecek.` })
       const last = parties[parties.length - 1] ?? roads[0]
       out.push({ title: 'Seferler', picture: 'world', lines, story: { story: expeditionStory(last.kind, last.result?.incidents, kingdom.color, last.result?.find), id: `away:${last.id}` } })
     }
 
     // The fighting.
-    const war: Line[] = grouped(data.notices.filter((n) => MILITARY.has(n.kind)), online, (n) => (n.kind === 'town_taken' && (n.payload as { by?: string }).by === kingdom.name ? 'up' : 'down'))
+    const war: Line[] = grouped(data.notices.filter((n) => MILITARY.has(n.kind)), online, (n) => ((n.kind === 'town_taken' && (n.payload as { by?: string }).by === kingdom.name) || n.kind === 'cave_found' || n.kind === 'cave_trail' ? 'up' : 'down'))
     if (before && was) {
       const s1 = soldiersOf(kingdom)
       const lost = (Object.keys(LOSSES) as SoldierLoss[]).map((c) => [c, (books.lost[c] ?? 0) - (was.lost[c] ?? 0)] as const).filter(([, n]) => n > 0)
@@ -1053,9 +1060,17 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
       })
     }
     for (const t of data.towns) world.push({ icon: 'crown', text: `${name(t.owner_id)}, ${t.name} kasabasını fethetti.`, tone: t.owner_id === me ? 'up' : undefined })
+    // The crowns: rulers dead and crowned, wars between them begun and ended (computed from the clock; CLAUDE.md §7.8).
+    if (kingdom.lobbyKey !== undefined && online.crowns.length > 0) {
+      for (const n of crownTimeline(crownKeyOf(kingdom), online.crowns.length, since, now, me).slice(-12)) {
+        const d = describe(n, online)
+        world.push({ icon: d.icon, text: d.title, tone: n.kind === 'crown_rivalry' && n.payload.stance === 'war' ? 'down' : undefined })
+      }
+    }
     if (world.length === 0) world.push({ icon: 'banner', text: 'Lobide sakin bir dönem geçti: yeni savaş açılmadı, kasaba el değiştirmedi.' })
     out.push({ title: 'Dünyada olanlar', picture: 'world', lines: world })
-    return out
+    // Every page fits without scrolling: a long page keeps its first lines and says how many more the journal has.
+    return out.map((p) => (p.lines.length <= PAGE_LINES ? p : { ...p, lines: [...p.lines.slice(0, PAGE_LINES - 1), { icon: 'scroll', text: `… ve ${p.lines.length - PAGE_LINES + 1} haber daha (ayrıntısı günlükte).` }] }))
   }, [data, before, kingdom, online, now, since, me])
 
   const foe = useMemo(() => {
@@ -1093,7 +1108,7 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
               ))}
             </ul>
             <div className="away-nav">
-              <button className="btn" disabled={page === 0} onClick={() => setPage(page - 1)}>
+              <button className="btn" disabled={page === 0} data-why="İlk sayfadasın" onClick={() => setPage(page - 1)}>
                 Geri
               </button>
               <span className="away-dots" aria-hidden>

@@ -6,6 +6,7 @@ import { Icon } from '../icons'
 import type { IconName } from '../icons'
 import { BUILDING_NAMES, BUILDING_NOTES, PRODUCT_NAMES, RESEARCH_NAMES, RESOURCE_ICONS, RESOURCE_NAMES, WEAPON_ICONS, WEAPON_NAMES } from '../names'
 import { CostList, Missing } from '../panels'
+import { buildWhy } from '../why'
 import { FisherPanel } from './Fishing'
 import { GamePanel } from './MiniGames'
 import { HospitalPanel, TemplePanel, UniversityPanel } from './institutions'
@@ -232,6 +233,7 @@ function Products({ building: b, data, onProduct }: { building: Building; data: 
             className={id === chosen ? 'good active' : 'good'}
             disabled={!productAllowed(data.kingdom, b.kind, id, data.now)}
             title={p.research && !productAllowed(data.kingdom, b.kind, id, data.now) ? `Üniversitede ${RESEARCH_NAMES[p.research]?.name ?? p.research} araştırılmalı` : undefined}
+            data-why={p.research ? `Üniversitede ${RESEARCH_NAMES[p.research]?.name ?? p.research} araştırılmalı` : 'Bu ürün şu an seçilemez'}
             onClick={() => onProduct(b.id, id)}
           >
             <Icon name={iconOf(p.makes)} size={24} />
@@ -267,13 +269,13 @@ function Workers({ building: b, data, onWorkers }: { building: Building; data: H
   return (
     <Section title="İşçiler" icon="villager" aside={`${Math.floor(healthy)} sağlıklı / ${villagers} köylü · ${jobs} iş`}>
       <div className="stepper">
-        <button className="btn icon-only" disabled={staff === 0} onClick={() => onWorkers(b.id, staff - 1)} aria-label="Bir işçi azalt">
+        <button className="btn icon-only" disabled={staff === 0} data-why="Yapıda çalışan işçi yok" onClick={() => onWorkers(b.id, staff - 1)} aria-label="Bir işçi azalt">
           <Icon name="minus" size={16} />
         </button>
         <span className="stepper-value" aria-live="polite">
           <b>{staff}</b> / {slots}
         </span>
-        <button className="btn icon-only" disabled={staff >= slots} onClick={() => onWorkers(b.id, staff + 1)} aria-label="Bir işçi ekle">
+        <button className="btn icon-only" disabled={staff >= slots} data-why={`Kadro dolu (${staff}/${slots}); daha çok işçi için yapıyı yükselt`} onClick={() => onWorkers(b.id, staff + 1)} aria-label="Bir işçi ekle">
           <Icon name="plus" size={16} />
         </button>
         <Meter value={slots ? staff / slots : 0} tone={staff === slots ? 'up' : 'gold'} label="Kadro" segments={slots * 2} />
@@ -313,7 +315,7 @@ function Levels({ building: b, data, onUpgrade }: { building: Building; data: Hu
       {up && (
         <>
           {gains.length > 0 && <p className="hint">{gains.join(' · ')}</p>}
-          <button className="btn wide" disabled={error !== null} onClick={() => onUpgrade(b.id)}>
+          <button className="btn wide" disabled={error !== null} data-why={buildWhy(error, data.kingdom, data.now, up.cost)} onClick={() => onUpgrade(b.id)}>
             <span>
               {level + 1}. seviyeye yükselt <small>({up.buildSeconds} sn)</small>
             </span>
@@ -338,7 +340,7 @@ function Move({ building: b, data, onMove }: { building: Building; data: HudData
         <span className="chip">
           <Icon name="time" size={8} /> {moveSeconds(b)} sn
         </span>
-        <button className="btn small" disabled={!done} onClick={() => onMove(b.id)}>
+        <button className="btn small" disabled={!done} data-why="İnşaat sürüyor; bitince taşınabilir" onClick={() => onMove(b.id)}>
           {done ? 'Taşı' : 'İnşaat sürüyor'}
         </button>
       </div>

@@ -2,7 +2,8 @@ import { gameTime } from '@game/shared'
 import type { EconomyEvent, Good, Kingdom, Resource, Stock } from '@game/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { IconName } from '../icons'
-import { BUILDING_NAMES, FORTUNE_TEXTS, RESEARCH_NAMES, RESOURCE_NAMES, SCOPE_NAMES } from '../names'
+import { BUILDING_NAMES, FORTUNE_TEXTS, HOARD_TEXTS, RESEARCH_NAMES, RESOURCE_NAMES, SCOPE_NAMES } from '../names'
+import { PROJECT_TEXTS } from './projects'
 import { EXPEDITION_TEXTS, FIND_TEXTS, GOAL_TEXTS, INCIDENT_TEXTS } from '../expeditionNames'
 
 // The envoy's journal: what happened in the kingdom, told as short dispatches. Single events (a building done, the
@@ -70,6 +71,12 @@ const fresh = (): Journal => ({
 })
 
 const fmt = (v: number) => Math.round(v).toLocaleString('tr-TR')
+// Goods lost, in words: "786 yapı malzemesi ve 40 altın" (empty when nothing).
+const lostText = (lost: Partial<Stock> | undefined) =>
+  Object.entries(lost ?? {})
+    .filter(([, v]) => (v ?? 0) > 0)
+    .map(([r, v]) => `${fmt(v ?? 0)} ${r === 'gold' ? 'altın' : RESOURCE_NAMES[r as Good].toLowerCase()}`)
+    .join(' ve ')
 const signed = (v: number) => `${v >= 0 ? '+' : '−'}${fmt(Math.abs(v))}`
 
 // Entries are filed under the game day (1 day = 1 real hour, see gameTime) they were written on, counted from the
@@ -139,9 +146,33 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
         title: `${f?.title ?? 'Beklenmedik bir olay'} · ${SCOPE_NAMES[event.scope ?? 'kingdom']}`,
         text: [f?.text, ...extra, `Yaklaşık ${minutes} dk sürecek.`].filter(Boolean).join(' '),
       })
-    } else if (event.kind === 'crisis' && event.steward) {
+    } else if (event.kind === 'crisis' && (event.steward || event.choice)) {
+      // Met by the villagers or the army (or the steward): the harm warded off, but goods lost all the same.
       const f = FORTUNE_TEXTS[event.fortune]
-      j = write(j, seasonStart, at, { tone: 'info', icon: 'scroll', title: `${f?.title ?? 'Olay'}: kâhya köylüleri seferber etti`, text: 'Sen karar veremeden kâhyan köylüleri topladı; zarar önlendi, bir süre iş yavaşlayacak.' })
+      const lost = lostText(event.lost)
+      j = write(j, seasonStart, at, {
+        tone: lost ? 'bad' : 'info',
+        icon: 'scroll',
+        title: event.steward ? `${f?.title ?? 'Olay'}: kâhya köylüleri seferber etti` : `${f?.title ?? 'Olay'}: ${event.choice === 'army' ? 'ordu' : 'köylüler'} müdahale etti`,
+        text: `${event.steward ? 'Sen karar veremeden kâhyan köylüleri topladı; asıl zarar önlendi.' : 'Asıl zarar önlendi.'}${lost ? ` Yine de ${lost} gitti.` : ''}`,
+      })
+    } else if (event.kind === 'spoiled') {
+      const h = HOARD_TEXTS[event.hoard]
+      j = write(j, seasonStart, at, {
+        important: true,
+        tone: 'bad',
+        icon: 'warn',
+        title: h?.title ?? 'Ambarda bozulma',
+        text: `${h?.text ?? ''} ${fmt(event.lost)} ${RESOURCE_NAMES[event.good].toLowerCase()} gitti. Ağzına kadar dolu ambar belayı çeker: malı harca (Saray → Projeler) ya da sat.`,
+      })
+    } else if (event.kind === 'project') {
+      const p = PROJECT_TEXTS[event.id]
+      j = write(j, seasonStart, at, {
+        tone: 'good',
+        icon: p?.icon ?? 'build',
+        title: event.finished ? `${p?.name ?? 'Büyük iş'} tamamlandı!` : `${p?.name ?? 'Büyük iş'}: ${event.stage}. aşama bitti`,
+        text: event.finished ? 'Ustalar son taşı da koydu; adın bu işle anılacak. Tacın seni övüyor.' : `Şimdi: ${p?.bonus(event.stage) ?? ''}. Sonraki aşamanın teslimatı Saray → Projeler'de.`,
+      })
     } else if (event.kind === 'expedition') {
       const e = event.expedition
       const r = e.result

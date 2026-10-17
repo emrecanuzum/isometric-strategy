@@ -14,6 +14,7 @@ import type { KingdomInfo } from './online'
 import { Placeholder, Section } from './primitives'
 import { Subtabs, usePart } from './Subtabs'
 import type { HudData } from './tabs'
+import { crownKeyOf, tipPreview, waysText } from './crownHouse'
 
 // The menus of the buildings that make nothing: the prison, the entertainment hall and the spy house (the treasury's is
 // in treasury.tsx).
@@ -181,7 +182,7 @@ export function TavernPanel({ data }: { data: HudData }) {
       <Section title="Devriyeler" icon="banner">
         <p className="hint">
           {liege != null
-            ? `${cityInfo(world, liege).name} devriyesi uğradığında burada içer, eğlenir ve yaklaşık ${balance.cities.crown.patrol.tip} altın bahşiş bırakır (tacın gücüne göre).`
+            ? `${cityInfo(world, liege).name} devriyesi uğradığında burada içer, eğlenir ve şu an yaklaşık ${tipPreview(kingdom, liege, data.online ?? { kingdoms: [] }, now)} altın bahşiş bırakır (tacın gücüne, hükümdarın huyuna ve taçların rekabetine göre${waysText(crownKeyOf(kingdom), liege, now, 'tip') ? `: ${waysText(crownKeyOf(kingdom), liege, now, 'tip')}` : ''}).`
             : 'Bir taç krallığına biat edince onun devriyeleri buraya uğrar, eğlenir ve bahşiş bırakır.'}
         </p>
       </Section>

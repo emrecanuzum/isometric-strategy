@@ -6,8 +6,10 @@ import type { Fleet, Ships } from './navy'
 import type { OutlawPressure } from './outlawPressure'
 import { alongPath, fleetAt, isWaterTile, openWater, pathLength, shoreClearance, waterPath } from './seaways'
 import type { SailError } from './seaways'
-import { Feature, hash } from './worldgen'
+import { Feature, Terrain, hash } from './worldgen'
 import type { World } from './worldgen'
+import { clanBandsUntil, clanOfBand, clansOf } from './caves'
+import type { ClanRowFields } from './caves'
 
 // Bandits on the trade roads and pirates on the water (CLAUDE.md §7.9, §8.5). Each lobby has a few bands of bandits,
 // each holding a stretch of a trade road, and a few pirate boats, each roaming a loop of a lake or river. Where they
@@ -23,8 +25,9 @@ const P = () => balance.outlaws.boats
 type Ground = Pick<World, 'size' | 'terrain' | 'feature'>
 
 // What the lobby keeps of a band or a boat (absent: as it was made, at large).
-export interface OutlawRow {
-  kind: 'band' | 'boat'
+export interface OutlawRow extends ClanRowFields {
+  // 'clan': a bandit clan in its cave (idx: its slot; caves.ts).
+  kind: 'band' | 'boat' | 'clan'
   idx: number
   // Times beaten (a band comes back a little stronger each time).
   gen?: number | null
@@ -62,6 +65,15 @@ export interface BandSpot {
 }
 
 const isRoad = (world: Ground, i: number) => world.feature[i] === Feature.Road || world.feature[i] === Feature.Bridge
+// Dry ground a band can stand on (no water, no mountain).
+const dryAt = (world: Ground, i: number) => {
+  const t = world.terrain[i]
+  return t !== Terrain.Lake && t !== Terrain.River && t !== Terrain.Mountain
+}
+// A road tile a band walks: a road on dry ground. Never a bridge or a raw road tile in the water: the screens redraw
+// the roads where the world's road runs along a creek or forks in a river (chunkPainter.ts → drawnRoads), so a band
+// keeps to the land and its stretch ends at the water.
+const walkRoad = (world: Ground, i: number) => world.feature[i] === Feature.Road && dryAt(world, i)
 const cityCentres = (world: Ground) => {
   const size = balance.cities.size
   const out: Point[] = []
@@ -91,7 +103,7 @@ export function bandSpots(world: Ground, seed: number): BandSpot[] {
   const roads: number[] = []
   const cities = cityCentres(world)
   for (let i = 0; i < size * size; i++) {
-    if (!isRoad(world, i)) continue
+    if (!walkRoad(world, i)) continue
     const x = i % size
     const y = Math.floor(i / size)
     if (cities.some((c) => Math.hypot(c.x - x, c.y - y) < spec.cityClear)) continue
@@ -120,7 +132,9 @@ export function bandSpots(world: Ground, seed: number): BandSpot[] {
         const ny = y + dy
         if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue
         const n = ny * size + nx
-        if (dist.has(n) || !isRoad(world, n)) continue
+        if (dist.has(n) || !walkRoad(world, n)) continue
+        // A diagonal step only between dry tiles on both sides (no cutting a corner of the water).
+        if (dx && dy && (!dryAt(world, y * size + nx) || !dryAt(world, ny * size + x))) continue
         // The stretch keeps out of the capitals' reach (their peace, CLAUDE.md §7.7).
         if (cities.some((c) => Math.hypot(c.x - nx, c.y - ny) < spec.cityClear)) continue
         const nd = d + (dx && dy ? Math.SQRT2 : 1)
@@ -145,6 +159,9 @@ export function bandSpots(world: Ground, seed: number): BandSpot[] {
 // ---- The bands as they stand ------------------------------------------------------------------------------------
 
 export interface Band extends BandSpot {
+  // The clan it belongs to (its slot) and the clan's name (caves.ts).
+  clan: number
+  clanName: string
   gen: number
   soldiers: number
   downUntil: number | null
@@ -152,7 +169,7 @@ export interface Band extends BandSpot {
   shift: number
 }
 
-const rowOf = (rows: OutlawRow[] | null | undefined, kind: 'band' | 'boat', idx: number) => rows?.find((r) => r.kind === kind && r.idx === idx)
+const rowOf = (rows: OutlawRow[] | null | undefined, kind: OutlawRow['kind'], idx: number) => rows?.find((r) => r.kind === kind && r.idx === idx)
 
 // A band's strength: drawn from the seed, a little more each time it comes back, less what it lost since.
 export function bandStrength(seed: number, idx: number, gen: number, losses = 0) {
@@ -161,11 +178,18 @@ export function bandStrength(seed: number, idx: number, gen: number, losses = 0)
   return Math.max(1, Math.min(hi + 4, base + gen * B().growPerRespawn) - losses)
 }
 
+// A band is away while beaten, and while its clan is new to its cave (its old clan's bands scattered as the cave fell;
+// CLAUDE.md §7.9.1).
 export function bandsOf(world: Ground, seed: number, rows?: OutlawRow[] | null): Band[] {
+  const clans = clansOf(seed, rows)
   return bandSpots(world, seed).map((s) => {
     const row = rowOf(rows, 'band', s.idx)
     const gen = row?.gen ?? 0
-    return { ...s, gen, soldiers: bandStrength(seed, s.idx, gen, row?.losses ?? 0), downUntil: row?.down_until ?? null, battle: row?.battle ?? null, shift: Number(row?.shift ?? 0) }
+    const clan = clans[clanOfBand(s.idx)]
+    const scattered = clanBandsUntil(clan)
+    const beaten = row?.down_until ?? null
+    const downUntil = scattered !== null && (beaten === null || scattered > beaten) ? scattered : beaten
+    return { ...s, clan: clan.slot, clanName: clan.name, gen, soldiers: bandStrength(seed, s.idx, gen, row?.losses ?? 0), downUntil, battle: row?.battle ?? null, shift: Number(row?.shift ?? 0) }
   })
 }
 

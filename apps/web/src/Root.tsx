@@ -1,5 +1,40 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import App from './App'
+import { Component, Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+// The game (the map, Pixi, every panel and picture) is its own chunk (CLAUDE.md §12): the sign-in screen and the menu
+// load without it, and it is fetched in the background as soon as the menu is up.
+const loadApp = () => import('./App')
+const App = lazy(loadApp)
+
+// The game's chunk could not be fetched (a new version went live and the old file is gone): reload once to get the new
+// one, else offer to try again, instead of a blank page.
+class ChunkGuard extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+  componentDidCatch(error: unknown) {
+    const chunk = /dynamically imported module|Importing a module script failed|Loading chunk/i.test(String((error as Error)?.message ?? error))
+    try {
+      if (chunk && !sessionStorage.getItem('chunk-reload')) {
+        sessionStorage.setItem('chunk-reload', '1')
+        location.reload()
+      }
+    } catch {
+      // Without storage the retry button is enough.
+    }
+  }
+  render() {
+    if (!this.state.failed) return this.props.children
+    return (
+      <main className="home-screen">
+        <p>Oyun yüklenemedi; büyük ihtimalle yeni bir sürüm yayında.</p>
+        <button className="btn" onClick={() => location.reload()}>
+          Yeniden dene
+        </button>
+      </main>
+    )
+  }
+}
 import { supabase } from './lib/supabase'
 import { keepClockSynced, syncClock } from './net/clock'
 import { CommandError, createLobby, currentUser, getLobby, loadMine, lobbyRiverKeep, send, signOut } from './net/online'
@@ -49,6 +84,10 @@ const setLobbyParam = (id: string | null) => {
 
 export default function Root() {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' })
+  // Fetch the game's chunk while the player looks at the menu, so entering a lobby does not wait for it.
+  useEffect(() => {
+    if (phase.kind === 'home') void loadApp().catch(() => {})
+  }, [phase.kind])
   const phaseRef = useRef(phase)
   phaseRef.current = phase
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -146,6 +185,18 @@ export default function Root() {
 
   if (phase.kind === 'game') {
     return (
+      <ChunkGuard>
+      <Suspense
+        fallback={
+          <main className="home-screen">
+            <div className="spinner big" role="status" aria-label="Yükleniyor">
+              {Array.from({ length: 8 }, (_, i) => (
+                <i key={i} style={{ '--i': i } as React.CSSProperties} />
+              ))}
+            </div>
+          </main>
+        }
+      >
       <App
         key={phase.lobby.id}
         lobby={phase.lobby}
@@ -160,6 +211,8 @@ export default function Root() {
           setPhase({ kind: 'home' })
         }}
       />
+      </Suspense>
+      </ChunkGuard>
     )
   }
   return (

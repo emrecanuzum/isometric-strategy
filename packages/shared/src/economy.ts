@@ -15,6 +15,7 @@ import { dynastyEffects, dynastyStep, townKinBonus } from './dynasty'
 import type { Dynasty, DynastyEvent } from './dynasty'
 import type { LiegeOffer, Pretender } from './intrigue'
 import { changeCrownRelation, driftCrownRelations, fealtyOpen, settleOrderTrips, stewardFactor } from './crowns'
+import { crownRoundNudge } from './crownHouse'
 import type { OrderTrip, QuestTaken, RoyalAnswer } from './crowns'
 import { crisisDecideMs, crisisKey, crisisWarded, isCrisis, isDilemma, fortuneEffects, fortunesBegun, hasResearch, hospitalHeal, levelOf, researchEffects, sermonTaxFactor, templeHappiness } from './institutions'
 import type { FortuneKind, FortuneScope } from './institutions'
@@ -32,7 +33,12 @@ import { checkGoals } from './goals'
 import { guildOf, memorialHappiness } from './landmarks'
 import type { GoalsReached } from './goals'
 import { outlawEffects } from './outlawPressure'
+import { crisisToll, hoardStrike, hoardsBetween } from './disasters'
+import type { HoardKind } from './disasters'
+import { festivalHappiness, projectEffects, settleProjects } from './projects'
+import type { ProjectId, Projects } from './projects'
 import type { OutlawPressure } from './outlawPressure'
+import type { CaveTrails } from './caves'
 
 // A kingdom's economy: gold plus three goods, produced by buildings and sold by the merchant of its trade post.
 // Everything that takes time is stored as the moment it ends, and `advance` settles whatever has come due, so the
@@ -293,7 +299,7 @@ export interface Kingdom {
   minigameEarned?: { at: number; worth: number }[]
   // Battles and sieges won (kept by the server, for the lobby's ranking).
   // Expeditions back (not called home early) are counted here too (CLAUDE.md §9.9).
-  record?: { battlesWon?: number; siegesWon?: number; expeditions?: number }
+  record?: { battlesWon?: number; siegesWon?: number; expeditions?: number; cavesTaken?: number }
   // The towns it holds and what each sends (kept by the server as towns are taken; CLAUDE.md §8.4).
   towns?: HeldTown[]
   // Towns that broke free of the lord in a revolt, for the server to set free (CLAUDE.md §8.4; the latest few).
@@ -328,9 +334,17 @@ export interface Kingdom {
   goals?: GoalsReached
   // A steward who turns the villagers out against a crisis nobody answered in time, for a small fee (CLAUDE.md §9.8).
   steward?: boolean
+  // The realm's great works (CLAUDE.md §9.10; projects.ts), the festival under way and when it was last held, and when
+  // goods were last given to the liege.
+  projects?: Projects
+  festivalUntil?: number
+  festivalAt?: number
+  donatedAt?: number
   // How much of the road by the trade post bandits hold and how hard pirates press the water by the dock (set by the
   // server; CLAUDE.md §7.9, §8.5; outlawPressure.ts). Absent: none.
   outlaws?: OutlawPressure | null
+  // What the lord has learnt of the bandit clans' caves, clan by clan (set by the server; CLAUDE.md §7.9.1; caves.ts).
+  caveTrail?: CaveTrails
 }
 
 // The season's running accounts (CLAUDE.md §6.4): kept as things happen, so the report of a long absence says what
@@ -367,6 +381,11 @@ export interface Books {
   other: number
   wastedGold: number
   wastedGoods: number
+  // What disasters took from the stores (crises however met, rats, rot and rust; CLAUDE.md §9.8), how many struck and
+  // how many of the crises the steward met (absent in older books).
+  disasterLost?: Partial<Stock>
+  disasters?: number
+  stewarded?: number
   // Soldiers lost, by what took them.
   lost: Partial<Record<SoldierLoss, number>>
 }
@@ -386,7 +405,7 @@ const NO_BOOKS: Books = { tax: 0, wages: 0, trade: 0, tradeHeld: 0, tributeIn: 0
 export const booksOf = (kingdom: Pick<Kingdom, 'books'>): Books => ({ ...NO_BOOKS, ...kingdom.books, lost: { ...kingdom.books?.lost } })
 
 // Adds to the accounts (a new kingdom object; the state is never edited in place outside advance).
-export function book<K extends Pick<Kingdom, 'books'>>(kingdom: K, add: Partial<Omit<Books, 'lost'>>, lost?: Partial<Record<SoldierLoss, number>>): K {
+export function book<K extends Pick<Kingdom, 'books'>>(kingdom: K, add: Partial<Omit<Books, 'lost' | 'disasterLost'>>, lost?: Partial<Record<SoldierLoss, number>>): K {
   const b = booksOf(kingdom)
   // (A key older books lack starts at nothing rather than turning the sum into NaN.)
   for (const [key, v] of Object.entries(add)) (b as unknown as Record<string, number>)[key] = ((b as unknown as Record<string, number>)[key] ?? 0) + (v ?? 0)
@@ -422,7 +441,12 @@ export type EconomyEvent =
   | { kind: 'researched'; id: string }
   | { kind: 'fortune'; fortune: FortuneKind; scope: FortuneScope; start: number; until: number; lost?: Partial<Stock>; gold?: number; crisis?: boolean; dilemma?: boolean }
   // A crisis nobody answered in time: its harm done (CLAUDE.md §9.8), or the steward turned the villagers out.
-  | { kind: 'crisis'; fortune: FortuneKind; lost?: Partial<Stock>; sick?: number; steward?: boolean }
+  // Met by the villagers or the army (by the steward, too): its harm warded off, but some goods are lost all the same.
+  | { kind: 'crisis'; fortune: FortuneKind; lost?: Partial<Stock>; sick?: number; steward?: boolean; choice?: 'villagers' | 'army' }
+  // A brimming store struck by rats, rot or rust (CLAUDE.md §9.8; disasters.ts).
+  | { kind: 'spoiled'; hoard: HoardKind; good: Good; lost: number }
+  // A stage of a great work built (CLAUDE.md §9.10).
+  | { kind: 'project'; id: ProjectId; stage: number; finished: boolean }
   // A party back from its journey (CLAUDE.md §9.9), and a goal of the season reached.
   | { kind: 'expedition'; expedition: Expedition }
   | { kind: 'goal'; track: string; tier: number; gold: number }
@@ -1530,7 +1554,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
         const blocked = !!k.blockade
         const strike = blocked ? null : voyagePirates(k, f, m.departedAt, next)
         const price = priceAt(market, good, next) * stewardFactor(k, good, next) * balance.navy.trade.priceFactor
-        const perUnit = price * (1 + researchEffects(k, next).trade + fortuneEffects(k, next).trade + dynastyEffects(k).trade + guildOf(k, next).trade) * idleFactor(k, next)
+        const perUnit = price * (1 + researchEffects(k, next).trade + fortuneEffects(k, next).trade + dynastyEffects(k).trade + guildOf(k, next).trade + projectEffects(k, next).trade) * idleFactor(k, next)
         const room = Math.max(0, goldCap(k, next) - k.stock.gold)
         const full = room < 1
         const away = isAway(k, next)
@@ -1577,24 +1601,61 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
           }
           events.push({ kind: 'fortune', fortune: begun.kind, scope: begun.scope, start: begun.start, until: begun.end, ...(Object.keys(lost).length > 0 && { lost }), ...(begun.spec.gold && { gold: begun.spec.gold }), ...(crisis && { crisis }), ...(isDilemma(begun.kind) && { dilemma: true }) })
         }
-        // Crises whose time to answer ran out since the last round, unanswered or left alone: the harm is done.
+        // Crises whose time to answer ran out since the last round. Unanswered or left alone, the harm is done; met by the
+        // villagers or the army it is warded off; however met, some goods are lost (more from brimming stores).
         const wait = crisisDecideMs()
+        const tally = (lost: Partial<Stock>) => {
+          const b = k.books!
+          const sum = { ...b.disasterLost }
+          for (const [r, v] of Object.entries(lost)) sum[r as Resource] = (sum[r as Resource] ?? 0) + (v ?? 0)
+          b.disasterLost = sum
+          b.disasters = (b.disasters ?? 0) + 1
+        }
+        const toll = (kind: string, choice: 'villagers' | 'army' | 'none', at: number) => {
+          const lost = crisisToll(k, kind, choice, at)
+          for (const [r, v] of Object.entries(lost)) k.stock[r as Resource] = Math.max(0, k.stock[r as Resource] - (v ?? 0))
+          return lost
+        }
+        const merge = (a: Partial<Stock>, b: Partial<Stock>) => {
+          const out = { ...a }
+          for (const [r, v] of Object.entries(b)) out[r as Resource] = (out[r as Resource] ?? 0) + (v ?? 0)
+          return out
+        }
         for (const due of fortunesBegun(k, next - productionMs() - wait, next - wait)) {
-          if (!isCrisis(due.kind) || crisisWarded(k, due)) continue
+          if (!isCrisis(due.kind)) continue
+          const at = due.start + wait
+          const answered = k.responses?.[crisisKey(due)]?.choice
+          if (crisisWarded(k, due)) {
+            const lost = toll(due.kind, answered as 'villagers' | 'army', at)
+            tally(lost)
+            events.push({ kind: 'crisis', fortune: due.kind, choice: answered as 'villagers' | 'army', ...(Object.keys(lost).length > 0 && { lost }) })
+            continue
+          }
           // The steward turns the villagers out for the lord who did not answer, if the fee is there (and nobody
           // chose to do nothing).
           const fee = balance.institutions.events.crisis.steward.fee as Cost
-          if (k.steward && !k.responses?.[crisisKey(due)] && affordable(k.stock, fee)) {
+          if (k.steward && !answered && affordable(k.stock, fee)) {
             k.stock = pay(k.stock, fee)
-            const at = due.start + wait
             const keep = at - balance.institutions.events.crisis.keepHours * 3_600_000
             k.responses = { ...Object.fromEntries(Object.entries(k.responses ?? {}).filter(([, r]) => r.at > keep)), [crisisKey(due)]: { choice: 'villagers', at } }
-            events.push({ kind: 'crisis', fortune: due.kind, steward: true })
+            const lost = toll(due.kind, 'villagers', at)
+            tally(lost)
+            k.books!.stewarded = (k.books!.stewarded ?? 0) + 1
+            events.push({ kind: 'crisis', fortune: due.kind, steward: true, choice: 'villagers', ...(Object.keys(lost).length > 0 && { lost }) })
             continue
           }
           const before = k.sickness ?? 0
-          const lost = harm(due.spec)
+          const lost = merge(harm(due.spec), toll(due.kind, 'none', at))
+          tally(lost)
           events.push({ kind: 'crisis', fortune: due.kind, ...(Object.keys(lost).length > 0 && { lost }), ...(due.spec.sicken && { sick: (k.sickness ?? 0) - before }) })
+        }
+        // Stores left brimming draw rats, rot and rust (CLAUDE.md §9.8).
+        for (const h of hoardsBetween(k, next - productionMs(), next)) {
+          const strike = hoardStrike(k, h.roll, next)
+          if (!strike) continue
+          k.stock[strike.good] = Math.max(0, k.stock[strike.good] - strike.lost)
+          tally({ [strike.good]: strike.lost })
+          events.push({ kind: 'spoiled', hoard: strike.kind, good: strike.good, lost: strike.lost })
         }
       }
       const { delta, weapons, towns: upkept, navy: shipsKept } = roundOutcome(k, next)
@@ -1661,6 +1722,11 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       k.happiness = happinessStep(happinessOf(k), happinessFor(k, next))
       // The crowns' feelings settle back toward where they rest.
       k.crownRelations = driftCrownRelations(k).crownRelations
+      // A ruler crowned this round courts his lords; a war won makes them proud (CLAUDE.md §7.8).
+      const nudge = crownRoundNudge(k, next - productionMs(), next)
+      if (nudge !== 0) k.crownRelations = changeCrownRelation(k, k.liege!, nudge).crownRelations
+      // An offer to go over to the rival crown left unanswered lapses (CLAUDE.md §9.1.1).
+      if (k.liegeOffer && next > k.liegeOffer.until) k.liegeOffer = undefined
       // The held towns: their tally, their loyalty, revolts (CLAUDE.md §8.4).
       if (k.towns?.length) {
         const t = townsRound(k.towns, next, productionMs(), upkept.paid, { happiness: happinessOf(k), ruler: dynastyEffects(k).happiness, kin: townKinBonus(k) }, idleFactor(k, next))
@@ -1696,7 +1762,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       const city = k.trade.city
       const fortune = fortuneEffects(k, next).trade
       const price = tradePrice(k, good, market, next)
-      const perUnit = price * (1 + researchEffects(k, next).trade + fortune + dynastyEffects(k).trade + guildOf(k, next).trade) * idleFactor(k, next)
+      const perUnit = price * (1 + researchEffects(k, next).trade + fortune + dynastyEffects(k).trade + guildOf(k, next).trade + projectEffects(k, next).trade) * idleFactor(k, next)
       // A full treasury has no room for the merchant's gold: he keeps the goods at home and sells only what fills it,
       // and sets out again once tribute or spending makes room (CLAUDE.md §6.4).
       const room = Math.max(0, goldCap(k, next) - k.stock.gold)
@@ -1742,6 +1808,14 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       events.push(...step.events)
     }
   }
+  // Stages of the great works built since (CLAUDE.md §9.10).
+  if ((kingdom.projects && Object.values(kingdom.projects).some((p) => p?.until !== undefined && p.until <= now))) {
+    edit()
+    const built = settleProjects(k, now)
+    k.projects = built.kingdom.projects
+    k.crownRelations = built.kingdom.crownRelations
+    for (const d of built.done) events.push({ kind: 'project', ...d })
+  }
   // Goals of the season reached since (CLAUDE.md §9.9): a badge and a small purse.
   const reached = checkGoals(k, now)
   if (reached.reached.length > 0) {
@@ -1770,6 +1844,9 @@ export function happinessFor(k: Kingdom, at: number) {
       templeHappiness(k, at) +
       // The dynasty's memorial (CLAUDE.md §9.8).
       memorialHappiness(k, at) +
+      // The great works and a festival under way (CLAUDE.md §9.10).
+      projectEffects(k, at).happiness +
+      festivalHappiness(k, at) +
       researchEffects(k, at).happiness +
       dynastyEffects(k).happiness +
       (k.sickness ?? 0) * balance.institutions.sickness.happinessPerShare +

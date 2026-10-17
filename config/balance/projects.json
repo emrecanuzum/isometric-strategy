@@ -1,0 +1,19 @@
+{
+  "works": {
+    "minPalace": 4,
+    "stageFactors": [1, 1.5, 2, 3, 4],
+    "stageSeconds": [1200, 1800, 2700, 3600, 5400],
+    "roundTo": 50,
+    "keep": { "goods": 0.25, "gold": 0.25 },
+    "growthPerStage": 120,
+    "completeGrowth": 200,
+    "completeCrownRelation": 15,
+    "kinds": {
+      "cathedral": { "base": { "gold": 2500, "food": 1500, "materials": 6000, "arms": 600 }, "happinessPerStage": 2 },
+      "bazaar": { "base": { "gold": 3000, "food": 5000, "materials": 3000, "arms": 400 }, "tradePerStage": 0.02 },
+      "knights": { "base": { "gold": 2500, "food": 2000, "materials": 2000, "arms": 5000 }, "battlePerStage": 0.1 }
+    }
+  },
+  "festival": { "minPalace": 3, "cost": { "gold": 600, "food": 3000 }, "happiness": 10, "seconds": 1800, "cooldownSeconds": 3600 },
+  "donation": { "minPalace": 2, "units": 2000, "relation": 4, "cooldownSeconds": 900 }
+}

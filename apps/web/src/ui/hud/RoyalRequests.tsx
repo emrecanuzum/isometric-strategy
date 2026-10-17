@@ -171,7 +171,7 @@ export function QuestTracker({ world, kingdom, online, now }: { world: World; ki
                 <small>
                   {fmt(Math.min(q.have, q.need))} / {fmt(q.need)} · {fmt(q.quest.gold)} altın
                 </small>
-                <button className={q.claim ? 'btn small' : 'btn small primary'} disabled={!!q.claim} onClick={() => online.act({ type: 'quest', crown: q.crown, action: 'claim' })}>
+                <button className={q.claim ? 'btn small' : 'btn small primary'} disabled={!!q.claim} data-why={q.claim === 'notYet' ? 'Görev henüz tamamlanmadı' : q.claim === 'done' ? 'Ödülü aldın' : 'Ödül şu an alınamaz'} onClick={() => online.act({ type: 'quest', crown: q.crown, action: 'claim' })}>
                   <Icon name="chest" size={16} /> Ödülü al
                 </button>
               </div>
@@ -205,7 +205,7 @@ function RoyalRow({ world, kingdom, req, accepted, online, now, goldRoom }: { wo
           {fmt(Math.min(have, req.units))} / {fmt(req.units)} · {fmt(req.gold)} altın, ilişki +{r.relation.deliver}
         </small>
         {accepted ? (
-          <button className={can ? 'btn small primary' : 'btn small'} disabled={!can} onClick={() => online.act({ type: 'royal', action: 'deliver' })}>
+          <button className={can ? 'btn small primary' : 'btn small'} disabled={!can} data-why={have < req.units ? `Elinde ${fmt(have)} / ${fmt(req.units)} ${itemName(req.item)} var` : now >= req.endsAt ? 'Bu isteğin süresi doldu' : 'Şu an teslim edilemez'} onClick={() => online.act({ type: 'royal', action: 'deliver' })}>
             <Icon name="chest" size={16} /> Teslim et
           </button>
         ) : (

@@ -1,4 +1,4 @@
-import { Feature, MAX_HEIGHT, TILE_HEIGHT, TILE_WIDTH, Terrain, balance, hash, heightAt, valueNoise } from '@game/shared'
+import { Feature, MAX_HEIGHT, TILE_HEIGHT, TILE_WIDTH, Terrain, balance, caveSpots, hash, heightAt, valueNoise } from '@game/shared'
 import type { Point, World } from '@game/shared'
 import { structureParts } from './buildingSprites'
 import type { Structure } from './buildingSprites'
@@ -659,6 +659,8 @@ export interface Decks {
   cut(x: number, y: number, along: 'x' | 'y', length: number): { polygons: number[][]; key: string }
   // Whether a point of the water lies within `pad` tiles of a deck's footprint (no ship rests there).
   near(x: number, y: number, pad: number): boolean
+  // The deck nearest a point, within `reach` tiles of its middle line: its two ends (where it meets the banks).
+  nearest(p: Point, reach: number): { a: Point; b: Point } | null
 }
 
 // A convex polygon (x, y pairs) cut down to the side x ≤ c (side < 0) or x ≥ c (side > 0) of a vertical line.
@@ -816,12 +818,26 @@ export function worldDecks(world: World): Decks {
       }
       return false
     },
+    nearest(p, reach) {
+      let best: { a: Point; b: Point } | null = null
+      let bestD = reach
+      for (const it of items) {
+        const { t, across } = along(it, p)
+        const off = Math.max(0, -t, t - 1) * it.length
+        const d = Math.hypot(off, across)
+        if (d > bestD) continue
+        bestD = d
+        best = { a: { x: it.bridge.ax, y: it.bridge.ay }, b: { x: it.bridge.bx, y: it.bridge.by } }
+      }
+      return best
+    },
   }
   decksOf.set(world, decks)
   return decks
 }
 
-// The height of what one walks on at a point: a bridge's deck where it crosses, the ground elsewhere.
+// The height of what one walks on at a point: a bridge's deck where it crosses, the ground elsewhere. Toward the deck's
+// edges it eases down to the ground, so one walking by close beside a bridge's end does not hop onto it and off.
 export function surfaceHeight(world: World, p: Point) {
   const ground = heightAt(world, p.x, p.y)
   let best = ground
@@ -833,8 +849,10 @@ export function surfaceHeight(world: World, p: Point) {
     const t = ((p.x - bridge.ax) * dx + (p.y - bridge.ay) * dy) / lengthSq
     if (t < 0 || t > 1) continue
     const across = Math.abs((p.x - bridge.ax) * dy - (p.y - bridge.ay) * dx) / Math.sqrt(lengthSq)
-    if (across > 0.75) continue
-    best = Math.max(best, deckHeight(bridge, t))
+    const half = bridge.stone ? STONE_HALF : BRIDGE_HALF
+    if (across > half + 0.1) continue
+    const deck = deckHeight(bridge, t)
+    best = Math.max(best, ground + (deck - ground) * (1 - smoothstep(half - 0.25, half + 0.1, across)))
   }
   return best
 }
@@ -881,6 +899,21 @@ interface Placed {
 
 // Shadows cast with the sun painted last, per sprite and footprint.
 let castSun: SunShadow | null = null
+// The tiles of the lobby's caves (caves.ts, from the seed): the rock each opens into and the land before its mouth.
+const caveTilesOf = new WeakMap<World, Map<number, { rock: boolean; dx: number; dy: number }>>()
+function caveTiles(world: World) {
+  let tiles = caveTilesOf.get(world)
+  if (!tiles) {
+    tiles = new Map()
+    for (const c of caveSpots(world, world.seed)) {
+      tiles.set(c.y * world.size + c.x, { rock: true, dx: c.dx, dy: c.dy })
+      tiles.set(Math.floor(c.mouth.y) * world.size + Math.floor(c.mouth.x), { rock: false, dx: c.dx, dy: c.dy })
+    }
+    caveTilesOf.set(world, tiles)
+  }
+  return tiles
+}
+
 const casts = new Map<Sprite, Map<number, Sprite>>()
 function shadowOf(sprite: Sprite, foot: number, sun: SunShadow) {
   if (castSun?.x !== sun.x || castSun.y !== sun.y) {
@@ -1218,6 +1251,7 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
     const length = Math.hypot(dx, dy)
     return length ? [dx / length, dy / length] : [0, 0]
   }
+  const caves = caveTiles(world)
   const lifted: LiftedTree[] = []
   const xEnd = Math.min(size, x0 + S + SPRITE_MARGIN)
   const yEnd = Math.min(size, y0 + S + SPRITE_MARGIN)
@@ -1228,6 +1262,16 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       const terrain = world.terrain[i]
       const spot = (n: number) =>
         [x + 0.15 + hash(x, y, seed + 21 + n) * 0.7, y + 0.15 + hash(x, y, seed + 31 + n) * 0.7] as const
+      // The bandits' caves open at the foot of the slopes (CLAUDE.md §7.9.1): a mouth in the rock, nothing grown
+      // before it.
+      const cave = caves.get(i)
+      if (cave !== undefined) {
+        if (cave.rock) {
+          const facing = cave.dx - cave.dy > 0 ? SPRITES.caveRight : SPRITES.caveLeft
+          place(choose(facing, hash(x, y, seed + 45)), x + 0.5 + cave.dx * 0.45, y + 0.5 + cave.dy * 0.45, own)
+        }
+        continue
+      }
       if (!clear(x, y)) {
         // A lordship's ground between its buildings and along its footpaths, where no tree may stand (it would hide a
         // wall or a walker): grass tufts, wildflowers and a stone here and there, thicker along the path's verges, and

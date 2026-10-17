@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { balance, overreachOf, tributeTalk, tributeTalkReact, tributeTalkScript } from '@game/shared'
+import { DIR_NAMES, balance, overreachOf, tributeTalk, tributeTalkReact, tributeTalkScript } from '@game/shared'
 import { supabase } from '../lib/supabase'
 import type { Envoy as EnvoyRow, Operation, PeaceTerms, SpyTopic } from '@game/shared'
 import type { Notice } from '../net/online'
@@ -13,7 +13,8 @@ import { playOnce } from '../audio/sfx'
 import { EnvoyPortrait } from './advisor/EnvoyPortrait'
 import { CollectorPortrait } from './advisor/CollectorPortrait'
 import { useBabble, useTyping } from './advisor/Advisor'
-import { CROWN_COLORS } from '../game/cities'
+import { CROWN_COLORS, crownKeyNow } from '../game/cities'
+import { waysText } from './hud/crownHouse'
 import { ENVOY_NAMES, OPERATION_NAMES, TOPIC_NAMES, describeTerms } from './hud/diplomacy'
 import type { Online } from './hud/online'
 
@@ -51,11 +52,25 @@ function overreachNote(online: Online, more: number) {
   return ` ${more > 0 ? 'Alırsan' : 'Artık'} elinde ${held} kasaba ${more > 0 ? 'olur' : 'var'}: aşırı büyüme her kasabanın sadakatini ${o.loyalty}${o.loyaltyCap < 100 ? ` düşürür ve %${o.loyaltyCap}'in üstüne çıkmasına izin vermez` : ' düşürür'}, halkının mutluluğu ${o.happiness}, bakım ×${String(o.upkeepFactor).replace('.', ',')}.${last ? ' Bu kadar kasabada ayaklanmalar kesindir.' : ''}`
 }
 
+// A new ruler's first days (CLAUDE.md §7.8): what his welcome did to the lord sworn to his crown.
+function welcomeNote(p: Record<string, unknown>, online: Online) {
+  const w = Number(p.welcome ?? 0)
+  if (!w || online.kingdoms.find((k) => k.id === online.me)?.liege !== Number(p.crown)) return ''
+  return w > 0 ? ` Yeni hükümdar lordlarına yakın davranıyor: ilişkin +${w}.` : ` Yeni hükümdar lordlarına mesafeli: ilişkin ${w}.`
+}
+
 // A beaten pretender whose crown had backed him leaves the lord a choice (CLAUDE.md §9.1.1).
 function betrayalNote(offer: unknown, crown: (i: unknown) => string) {
   const o = offer as { from?: number; to?: number } | null | undefined
   if (!o || o.from === undefined) return ''
   return ` Ama unutma: ${crown(o.from)} bu isyanda kardeşinin tarafını tuttu. ${balance.cities.crown.switch.offerMinutes} dakika içinde ${crown(o.to)} tarafına geçebilirsin.`
+}
+
+// Why a crown asks more or less than its usual share: its ruler's trait and the crowns' rivalry (CLAUDE.md §7.8).
+function tilt(crown: number, at: number) {
+  const key = crownKeyNow()
+  const why = key ? waysText(key, crown, at, 'tribute') : ''
+  return why ? `; ${why}` : ''
 }
 
 export function describe(n: Notice, online: Online): { icon: IconName; title: string; text: string } {
@@ -200,6 +215,7 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         text: `Filon ${p.target} iskelesine vardı ama ${p.why === 'dock' ? 'orada iskele yok' : p.why === 'taken' ? 'başka bir donanma zaten abluka ediyor' : 'artık savaşta değilsiniz'}; eve dönüyor.`,
       }
     case 'battle_start':
+      if (p.kind === 'cave') return { icon: 'swords', title: `${p.name} mağarası kuşatılıyor`, text: `Ordun ${p.name} mağarasının ağzına dayandı. Yağmacılar kendi mağaralarında, kayaların ardından savaşıyor; kazanırsan klan yok olur ve mağaradaki ganimet senin.` }
       if (p.kind === 'outlaw') return { icon: 'swords', title: `${p.name} yakalandı!`, text: `Ordun ${p.name} yağmacılarını yolda yakaladı; çarpışma başladı. Savaş tur tur sürecek; kazanırsan çetenin ganimeti senin.` }
       if (p.kind === 'pretender') return { icon: 'swords', title: `${p.name} karargâhına saldırı`, text: `Ordun taht davacısı ${p.name}'in karargâhına saldırdı. Çiti ve asileri savunuyor; kazanırsan isyan biter.` }
       if (p.kind === 'usurp') return { icon: 'swords', title: `${p.name} sarayını kuşatıyor!`, text: `Taht davacısı ${p.name} asileriyle sarayının kapısına dayandı. Garnizonun, kulelerin ve surların savunuyor; kaybedersen tahtı o alır.` }
@@ -213,6 +229,10 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       const report = p.report as { winner: string; losses: Record<string, number>; loot?: Record<string, number> }
       const losses = Object.entries(report.losses).map(([name, n]) => `${name} ${fmt(n)}`).join(', ')
       const loot = report.loot ? ` Yağma: ${Object.entries(report.loot).map(([r, v]) => `${fmt(v)} ${RESOURCE_NAMES[r as keyof typeof RESOURCE_NAMES].toLowerCase()}`).join(', ')}.` : ''
+      if (p.kind === 'cave')
+        return p.winner === 'attackers'
+          ? { icon: 'chest', title: `${p.name} yok edildi!`, text: `Ordun mağarayı aldı, klanın son adamı da düştü (kayıplar: ${losses}).${report.loot ? ` Mağaradaki ganimet ambara girdi: ${goodsText({ ...report.loot })}.` : ''} Çeteleri yollardan dağıldı.${p.next ? ` Ama dağlarda yeni bir çete türedi: ${p.next}.` : ''}` }
+          : { icon: 'warn', title: `${p.name} mağarası direndi`, text: `Ordun mağaranın ağzında yenildi ve eve çekiliyor (kayıplar: ${losses}). Klan zayıfladı; daha büyük bir orduyla dön.` }
       if (p.kind === 'outlaw') {
         const minutes = Math.round(balance.outlaws.bands.respawnSeconds / 60)
         return p.winner === 'attackers'
@@ -256,6 +276,7 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       return { icon: 'warn', title: 'Gözcü kuleleri ateş açtı', text: `Düşman kuleleri ordundan ${p.killed} askeri vurdu.` }
     case 'order_failed':
       if (p.why === 'peace') return { icon: 'warn', title: 'Kasaba kuşatılamadı', text: 'Ordun kasabaya vardı ama kasabanın sahibiyle savaşta değilsin; kuşatma yapamaz. Ordu orada bekliyor.' }
+      if (p.why === 'cave') return { icon: 'warn', title: 'Mağara kuşatılamadı', text: 'Elçi orduya ulaştı ama o mağarada artık bildiğin klan yok (ya da mağarayı bilmiyorsun). Ordu olduğu yerde bekliyor.' }
       if (p.why === 'calm') return { icon: 'shield', title: 'Bastırılacak ayaklanma yok', text: 'Ordun kasabana vardı ama orada asi yok; ordu kapıda bekliyor.' }
       return { icon: 'warn', title: 'Emir yerine getirilemedi', text: 'Elçi orduya ulaştı ama emir uygulanamadı (yol yok ya da ordu savaşta).' }
     case 'town_siege': {
@@ -275,7 +296,7 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
     }
     case 'patrol_tribute': {
       // How much of the treasury it is (newer notices carry the treasury as it stood).
-      const share = Number(p.gold) > 0 ? ` (hazinenin %${Math.max(1, Math.round((Number(p.amount) / Number(p.gold)) * 100))} kadarı)` : ''
+      const share = Number(p.gold) > 0 ? ` (hazinenin %${Math.max(1, Math.round((Number(p.amount) / Number(p.gold)) * 100))} kadarı${tilt(Number(p.crown ?? 0), Date.parse(n.show_at))})` : ''
       return {
         icon: 'banner',
         title: `${crown(p.crown)} haraççıları kapında`,
@@ -338,6 +359,21 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       return { icon: 'warn', title: `${p.name} dayandı`, text: `${p.name} garnizonu kuşatmayı püskürttü; ordundan ${fmt(Number(p.lost))} asker düştü, kimse kalmadı.` }
     case 'outlaw_chase':
       return { icon: 'swords', title: `${p.name} peşindesin`, text: `Ordun ${p.name} yağmacılarının önünü kesmek için yola çıktı (yaklaşık ${fmt(Number(p.soldiers))} kişiler). Yağmacılar ordudan yavaş yürür; yakaladığı an savaş başlar. ${Math.round(balance.outlaws.bands.chase.maxSeconds / 60)} dakikada yakalayamazsa takibi bırakır.` }
+    case 'cave_trail': {
+      const dir = DIR_NAMES[Number(p.dir) % 8] ?? 'bilinmeyen'
+      const left = Math.max(1, Number(p.need) - Number(p.wins))
+      return {
+        icon: 'scroll',
+        title: `${p.clan} izinde`,
+        text: `Yakalanan yağmacılardan biri konuştu: ${p.clan} çetelerin başında, dağlarda bir mağarada yaşıyor. İzler ${dir} yönündeki dağlara gidiyor${p.far ? `, aşağı yukarı ${fmt(Number(p.far))} karo ötede` : ''}. Klanın çetelerinden ${left} tanesini daha yenersen mağarayı bulursun.`,
+      }
+    }
+    case 'cave_found':
+      return { icon: 'pin', title: `${p.clan} mağarası bulundu!`, text: `İzler sonunda ${p.clan} mağarasına çıktı. Mağara artık haritanda işaretli (yalnız sen biliyorsun). Mağaraya ya da çetelerinden birine tıkla, bir ordu seç ve "Mağarayı kuşat": klanı yok edersen mağaradaki ganimet senin.` }
+    case 'cave_empty':
+      return { icon: 'shield', title: 'Mağara boş', text: 'Ordun mağaraya vardı ama içeride kimse yok: klan çoktan yok edilmiş. Ordu mağaranın önünde bekliyor.' }
+    case 'clan_destroyed':
+      return { icon: 'swords', title: `${p.clan} yok edildi`, text: `${p.byName} ordusu ${p.clan} mağarasını aldı; klanın çeteleri yollardan dağıldı. Ama dağlarda yeni bir çete türedi: ${p.next}. Bir süre sonra onun çeteleri yolları tutmaya başlar; izini yeniden sürmek gerekecek.` }
     case 'outlaw_gone':
       return { icon: 'shield', title: 'Çete ortada yok', text: `${p.name} dağıtılmış; ordun takibi bıraktı ve olduğu yerde bekliyor.` }
     case 'outlaw_escaped':
@@ -435,8 +471,26 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       return {
         icon: 'crown',
         title: `${crown(p.crown)}: ${p.ruler} tahtta`,
-        text: `${crown(p.crown)} yasta: ${p.late} ${p.lateAge} yaşında öldü. Yeni hükümdar ${p.ruler} (huyu: ${String(p.trait).toLocaleLowerCase('tr-TR')}).${kin}${regent} Yeni hükümdarın huyu tacın haraççılarının istediğini ve devriyesinin bahşişini biraz değiştirebilir; Diplomasi → Krallık'ta ayrıntısı var.`,
+        text: `${crown(p.crown)} yasta: ${p.late} ${p.lateAge} yaşında öldü. Yeni hükümdar ${p.ruler} (huyu: ${String(p.trait).toLocaleLowerCase('tr-TR')}).${kin}${regent}${welcomeNote(p, online)} Yeni hükümdarın huyu tacın haraççılarının istediğini ve devriyesinin bahşişini biraz değiştirebilir; Diplomasi → Krallık'ta ayrıntısı var.`,
       }
+    }
+    case 'crown_rivalry': {
+      const names = online.crowns
+      const both = `${names[0] ?? 'Birinci taç'} ile ${names[1] ?? 'ikinci taç'}`
+      const fx = balance.cities.crown.rivalry.effects
+      if (p.stance === 'war')
+        return { icon: 'swords', title: 'Taçlar savaşta!', text: `${both} birbirine savaş açtı. Savaş sürdükçe haraççılar hazinenin ×${String(fx.war.tribute).replace('.', ',')}'i kadarını ister, taçlar kendi lordlarını kollar (devriyenin bahşişi ×${String(fx.war.tip).replace('.', ',')}).` }
+      const won = p.winner !== null && p.winner !== undefined ? Number(p.winner) : null
+      const mine = won !== null && online.kingdoms.find((k) => k.id === online.me)?.liege === won
+      if (p.prev === 'war')
+        return {
+          icon: won !== null ? 'crown' : 'flower',
+          title: won !== null ? `${crown(won)} taç savaşını kazandı` : 'Taç savaşı bitti',
+          text: `${both} arasındaki savaş bitti${p.stance === 'tension' ? ', ama gerginlik sürüyor' : ''}.${won !== null ? ` Zafer ${crown(won)} tacının.` : ''}${mine ? ` Bağlı olduğun tacın zaferi seni de gururlandırdı: onunla ilişkin +${balance.cities.crown.rivalry.victoryRelation}.` : ''}`,
+        }
+      return p.stance === 'tension'
+        ? { icon: 'warn', title: 'Taçlar arasında gerginlik', text: `${both} arasında gerginlik var: haraççılar biraz daha çok ister.` }
+        : { icon: 'flower', title: 'Taçlar barıştı', text: `${both} arasındaki gerginlik yatıştı.` }
     }
     case 'liege_switch':
       return p.accept
@@ -597,7 +651,7 @@ function TributeAnswer({
   }
   const refusal = -Math.round(balance.cities.crown.patrol.refuseRelation * (angry ? balance.cities.crown.patrol.tribute.talk.angryRefuseFactor : 1))
   const buttons = (
-    <DialogFoot label={`${fmt(amount)} altın öde`} disabled={sending} onNext={() => answer(true)}>
+    <DialogFoot label={`${fmt(amount)} altın öde`} disabled={sending} why="Cevabın haraççılara iletiliyor" onNext={() => answer(true)}>
       <button className="btn small danger" onClick={() => answer(false)}>
         Reddet
       </button>
@@ -654,7 +708,7 @@ function TributeAnswer({
           </div>
         ) : reacting ? (
           <div className="advisor-replies">
-            <button className="btn small primary" disabled={!done} onClick={() => setReacting(false)}>
+            <button className="btn small primary" disabled={!done} data-why="Haraççı sözünü bitirsin" onClick={() => setReacting(false)}>
               Devam
             </button>
           </div>
@@ -662,7 +716,7 @@ function TributeAnswer({
           // Three short replies side by side; stacked when any is long.
           <div className={`talk-replies ${choices.some((r) => r.text.length > 46) ? 'stacked' : 'choices'}`} style={{ visibility: done ? 'visible' : 'hidden' }}>
             {choices.map((r, j) => (
-              <button key={j} className="btn small talk-reply" disabled={!done} onClick={() => pick(j)}>
+              <button key={j} className="btn small talk-reply" disabled={!done} data-why="Haraççı sözünü bitirsin" onClick={() => pick(j)}>
                 {r.text}
               </button>
             ))}

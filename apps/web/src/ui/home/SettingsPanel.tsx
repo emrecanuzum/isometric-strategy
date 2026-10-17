@@ -86,7 +86,7 @@ export function DetailSettings({ settings, onChange }: { settings: Settings; onC
     <>
       <div className="row spread">
         <span>Detay animasyonları (sallanan ağaçlar)</span>
-        <button className="btn small" aria-pressed={settings.detail} disabled={saving} onClick={() => onChange({ detail: !settings.detail })}>
+        <button className="btn small" aria-pressed={settings.detail} disabled={saving} data-why="Güç tasarrufu açıkken detay animasyonları kapalıdır" onClick={() => onChange({ detail: !settings.detail })}>
           {settings.detail && !saving ? 'Açık' : 'Kapalı'}
         </button>
       </div>

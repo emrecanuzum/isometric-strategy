@@ -57,6 +57,8 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
   })
   const timers = useRef(new Map<Part, number>())
   const lastNudge = useRef(0)
+  // How many nudges in a row found the same thing still past due.
+  const nudgeStreak = useRef(0)
 
   const fetchPart = useCallback(
     async (part: Part) => {
@@ -94,12 +96,16 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
     for (const part of ['diplomacy', 'armies', 'battles', 'notices', 'towns', 'outlaws'] as Part[]) refresh(part, 0)
   }, [refresh])
 
+  // Every minute just in case, but not while the tab is hidden (CLAUDE.md §12): it is fetched afresh when it comes back.
   useEffect(() => {
     refreshAll()
-    const id = setInterval(refreshAll, 60_000)
+    const id = setInterval(() => !document.hidden && refreshAll(), 60_000)
+    const onVisible = () => !document.hidden && refreshAll()
+    document.addEventListener('visibilitychange', onVisible)
     const current = timers.current
     return () => {
       clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
       for (const t of current.values()) clearTimeout(t)
     }
   }, [refreshAll])
@@ -129,9 +135,16 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
       ...layer.towns.flatMap((t) => (t.siege ? [t.siege.endsAt] : [])),
     ]
     if (due.length === 0) return
-    // Something already past due is nudged again every few seconds until the server has settled it.
-    const next = Math.max(Math.min(...due) + 1000, lastNudge.current + 5000)
+    // Something already past due is nudged again until the server has settled it: 5 s after the last nudge, then 10,
+    // 20 and at most 30 s, since each nudge costs a server call and a refetch of every part (CLAUDE.md §12). Nothing is
+    // nudged from a hidden tab; the minute's tick settles it, and the tab looks again when it comes back.
+    const soonest = Math.min(...due)
+    if (soonest > now) nudgeStreak.current = 0
+    const wait = Math.min(30_000, 5000 * 2 ** nudgeStreak.current)
+    const next = Math.max(soonest + 1000, lastNudge.current + wait)
     const id = window.setTimeout(() => {
+      if (document.hidden) return
+      if (soonest <= lastNudge.current) nudgeStreak.current++
       lastNudge.current = serverNow()
       settle(lobby).then(() => refreshAll())
     }, Math.max(0, next - now))

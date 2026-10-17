@@ -3,6 +3,7 @@ import { balance } from './balance'
 import type { Cost, Good, Kingdom } from './economy'
 import { isNightAt, phaseEndsAt } from './society'
 import { perSpan } from './span'
+import { projectEffects } from './projects'
 import type { SpanCache } from './span'
 
 // The university, the hospital and the temple, and the fortunes that come and go (CLAUDE.md §9.8). Pure helpers on a
@@ -116,7 +117,7 @@ export const templeHappiness = (k: Kingdom, at: number) => byLevel(I.temple.happ
 // the ruler's head for war (dynasty.ts): counted in full, with his presence, for the army he leads himself (`led`).
 export const battleSpirit = (k: Kingdom, at: number, led = false) => {
   const learnt = researchEffects(k, at)
-  return byLevel(I.temple.faithByLevel, levelOf(k, 'temple', at)) * (1 + learnt.faith) + learnt.battle + (led ? leadDice(k) : dynastyEffects(k).dice)
+  return byLevel(I.temple.faithByLevel, levelOf(k, 'temple', at)) * (1 + learnt.faith) + learnt.battle + projectEffects(k, at).battle + (led ? leadDice(k) : dynastyEffects(k).dice)
 }
 
 // The other study of the same tier of a branch (taking one closes the other).

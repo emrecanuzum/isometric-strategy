@@ -1,4 +1,4 @@
-import { BUILDINGS, RESEARCH, balance, shipSpec, siegeShieldMs, unitSpec, voyageMs } from '@game/shared'
+import { BUILDINGS, PROJECT_IDS, RESEARCH, balance, projectStageMs, shipSpec, siegeShieldMs, unitSpec, voyageMs } from '@game/shared'
 import type { Building, Kingdom } from '@game/shared'
 import { useRef, useState } from 'react'
 import type React from 'react'
@@ -11,6 +11,7 @@ import { EXPEDITION_TEXTS } from '../expeditionNames'
 import type { Online } from './online'
 import { Meter } from './primitives'
 import { itemName, liveRequest } from './RoyalRequests'
+import { PROJECT_TEXTS } from './projects'
 
 // Everything that takes a while, as timers above the menu in the bottom-left corner: buildings going up, research,
 // soldiers in training, the player's envoys and armies on the road, a sermon. A finished one flashes green for a few
@@ -68,6 +69,12 @@ function timersOf(kingdom: Kingdom, online: Online | undefined, now: number): Ti
     if (e.result?.recalled) continue
     out.push({ key: `x:${e.id}`, icon: EXPEDITION_TEXTS[e.kind]?.icon ?? 'pin', label: EXPEDITION_TEXTS[e.kind]?.short ?? 'Sefer', start: e.startAt, end: e.endAt, go: { tab: 'kingdom', part: ['palace', 'expeditions'] } })
   }
+  // A stage of a great work being built (CLAUDE.md §9.10).
+  for (const id of PROJECT_IDS) {
+    const p = kingdom.projects?.[id]
+    if (p?.until === undefined) continue
+    out.push({ key: `w:${id}:${p.stage}`, icon: PROJECT_TEXTS[id].icon, label: `${PROJECT_TEXTS[id].name} · ${p.stage + 1}. aşama`, start: p.until - projectStageMs(p.stage), end: p.until, go: { tab: 'kingdom', part: ['palace', 'projects'] } })
+  }
   // Caravans taking a crown its order (CLAUDE.md §7.8).
   for (const t of kingdom.orderTrips ?? []) out.push({ key: `o:${t.crown}:${t.leftAt}`, icon: 'scroll', label: 'Taç siparişi kervanı', start: t.leftAt, end: t.arriveAt, go: { tab: 'trade', part: ['trade', 'orders'] } })
   // Ships on the slipways and fleets at sea (CLAUDE.md §8.5).
@@ -98,7 +105,7 @@ function timersOf(kingdom: Kingdom, online: Online | undefined, now: number): Ti
       out.push({ key: `e:${e.id}`, icon: 'scroll', label: `${ENVOY_NAMES[e.kind]} → ${to}`, start: Date.parse(e.sent_at), end: Date.parse(e.arrive_at), go: { tab: 'diplomacy', part: ['diplomacy', 'kingdoms'], focus: e.to_id } })
     }
     // Envoys riding to the player's armies with orders.
-    const ORDER_NAMES = { move: 'yürü', home: 'eve dön', split: 'bölün', merge: 'birleş', chase: 'yağmacıların peşine düş' } as const
+    const ORDER_NAMES = { move: 'yürü', home: 'eve dön', split: 'bölün', merge: 'birleş', chase: 'yağmacıların peşine düş', cave: 'yağmacı mağarasını kuşat' } as const
     for (const o of online.orders) {
       if (o.applied_at || !online.armies.some((a) => a.id === o.army_id && a.kingdom_id === online.me)) continue
       out.push({ key: `o:${o.id}`, icon: 'scroll', label: `Elçi orduya: ${ORDER_NAMES[o.payload.kind] ?? 'emir'}`, start: Date.parse(o.issued_at), end: Date.parse(o.effective_at), go: ARMY })

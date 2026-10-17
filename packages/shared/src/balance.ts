@@ -13,10 +13,12 @@ import military from '../../../config/balance/military.json'
 import minigames from '../../../config/balance/minigames.json'
 import navy from '../../../config/balance/navy.json'
 import outlaws from '../../../config/balance/outlaws.json'
+import projects from '../../../config/balance/projects.json'
 import society from '../../../config/balance/society.json'
 import territory from '../../../config/balance/territory.json'
 import time from '../../../config/balance/time.json'
 import towns from '../../../config/balance/towns.json'
+import weather from '../../../config/balance/weather.json'
 import world from '../../../config/balance/world.json'
 
-export const balance = { cities, dialogs, diplomacy, dynasty, economy, espionage, expeditions, goals, institutions, map, market, military, minigames, navy, outlaws, society, territory, time, towns, world } as const
+export const balance = { cities, dialogs, diplomacy, dynasty, economy, espionage, expeditions, goals, institutions, map, market, military, minigames, navy, outlaws, projects, society, territory, time, towns, weather, world } as const

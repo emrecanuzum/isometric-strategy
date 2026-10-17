@@ -82,7 +82,7 @@ import { townStructures, townTrails } from './game/towns'
 import { pretenderCampStructures } from './game/pretenderCamp'
 import { Minimap } from './game/Minimap'
 import type { MinimapFlag, MinimapPatrol, MinimapTown } from './game/Minimap'
-import { patrolBlocker, patrolRoute } from './game/patrolRoutes'
+import { haltSpots, patrolBlocker, patrolRoute } from './game/patrolRoutes'
 import type { Structure } from './game/chunkPainter'
 import type { StructureLook } from './game/buildingSprites'
 import { fleetShips } from './game/fleetShips'
@@ -102,7 +102,8 @@ import { BANDIT_COLOR, REBEL_COLOR, roughSize } from './game/armies'
 import { OutlawSheet, lobbyBands, lobbyBoats } from './ui/hud/outlaws'
 import type { OutlawPick } from './ui/hud/outlaws'
 import { SHIP_LENGTHS } from './game/fleetShips'
-import { bandAt, bandLeg, boatAt, outlawUp, roadHeld, seaHeld } from '@game/shared'
+import { bandAt, bandLeg, boatAt, caveAt, caveSpots, clansOf, outlawUp, roadHeld, seaHeld, trailOf } from '@game/shared'
+import { lobbyKeyOf } from '@game/shared'
 import type { Spot } from './ui/MinimapCorners'
 
 import { play } from './audio/sfx'
@@ -156,7 +157,15 @@ import { QuestTracker, RoyalDialog, itemName, liveRequest, royalSaying } from '.
 import { fmt } from './ui/hud/primitives'
 
 // Map ids of the bands of bandits (-(BAND_ID + idx)) and the lord number the pirate boats are drawn under.
-const BAND_ID = 200_000
+// Map ids of the NPC columns drawn with the armies, each kind in a range of its own so none can meet another: crown
+// patrols -(crown·16 + n + 1), town rebels -(REBELS_ID + town), tribute collectors -(TRIBUTE_ID + lord·8 + crown),
+// pretenders' camps -(CAMP_ID + lord), bandit bands -(BAND_ID + idx), found caves -(CAVE_ID + slot).
+const REBELS_ID = 100_000_000
+const TRIBUTE_ID = 300_000_000
+const CAMP_ID = 500_000_000
+const BAND_ID = 800_000_000
+// Map ids of the bandit clans' caves a lord has found (-(CAVE_ID + slot); CLAUDE.md §7.9.1), tested before the bands.
+const CAVE_ID = 900_000_000
 const OUTLAW_LORD = -1
 
 const TERRAIN_NAMES: Record<number, string> = {
@@ -261,6 +270,7 @@ const REFUSALS: Record<string, string> = {
   townBesieged: 'Kasaba kuşatma altında; pazarı kapalı',
   // Bandits and pirates (CLAUDE.md §7.9, §8.5).
   outlaw: 'Bu çete dağıtılmış',
+  cave: 'Bu mağarayı bilmiyorsun ya da klan artık orada değil',
   chasing: 'Zaten peşinde (ya da emri yolda)',
   boat: 'Bu korsan teknesi batırılmış',
   // The lord's house (CLAUDE.md §9.1.1).
@@ -575,6 +585,8 @@ function App({
   // Detail animations follow the setting; power saving (CLAUDE.md §12) turns them off with the rest.
   const saving = usePowerSave(settings.power)
   useEffect(() => view?.setPowerSave(saving), [view, saving])
+  // The weather over the map follows the lobby (see weather.ts).
+  useEffect(() => view?.setWeather(lobbyKeyOf(lobby.id)), [view, lobby.id])
   useEffect(() => view?.setDetail(settings.detail && !saving), [view, settings.detail, saving])
   // The sound settings, opened from the corner button or the kingdom tab.
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -1391,8 +1403,15 @@ function App({
     if (aiming === null && !tool && !placingKind) setCityOpen(city ?? null)
     // A town's houses and lanes open its sheet.
     if (aiming === null && !tool && !placingKind) setTownOpen(townsRef.current.find((t) => inTown(t, tile))?.id ?? null)
+    // Choosing where an army marches: onto a bandit clan's cave the lord has found, it lays siege to it (CLAUDE.md §7.9.1).
+    if (aiming !== null && army !== undefined && army <= -CAVE_ID) {
+      play('click')
+      act({ type: 'army', army: aiming, order: { kind: 'cave', slot: -army - CAVE_ID } })
+      setAiming(null)
+      return
+    }
     // Choosing where an army marches: onto a band of bandits, it goes after it (CLAUDE.md §7.9).
-    if (aiming !== null && army !== undefined && army <= -BAND_ID) {
+    if (aiming !== null && army !== undefined && army <= -BAND_ID && army > -CAVE_ID) {
       play('click')
       act({ type: 'army', army: aiming, order: { kind: 'chase', band: -army - BAND_ID } })
       setAiming(null)
@@ -1437,8 +1456,22 @@ function App({
       }
       if (best) army = best.id
     }
+    // A cave in the rock (one found, by its guards; or any cave mouth tapped): its sheet (CLAUDE.md §7.9.1).
+    const caveTapped = army !== undefined && army <= -CAVE_ID ? -army - CAVE_ID : null
+    const caveHere = caveTapped === null && army === undefined && building === undefined && inn === undefined && city === undefined && view ? caveAt(caveSpots(view.world, view.world.seed), tile) : undefined
+    if ((caveTapped !== null || caveHere) && !placingKind && !tool && aiming === null) {
+      setSelected(null)
+      setPanel(null)
+      setInnOpen(null)
+      setCityOpen(null)
+      setTownOpen(null)
+      play('click')
+      if (caveTapped !== null) setOutlawOpen({ kind: 'clan', idx: caveTapped })
+      else setOutlawOpen({ kind: 'cave', idx: caveHere!.idx })
+      return
+    }
     // A band of bandits: its sheet, with "Takip et" for the player's armies (CLAUDE.md §7.9).
-    if (army !== undefined && army <= -BAND_ID && !placingKind && !tool && aiming === null) {
+    if (army !== undefined && army <= -BAND_ID && army > -CAVE_ID && !placingKind && !tool && aiming === null) {
       setSelected(null)
       setPanel(null)
       setInnOpen(null)
@@ -1726,7 +1759,7 @@ function App({
     const id = window.setTimeout(() => setPatrolStep((n) => n + 1), Math.min(next - t + 50, 5000))
     return () => clearTimeout(id)
   }, [patrolStep])
-  const patrolRoutes = useRef(new Map<string, Point[] | null>())
+  const patrolRoutes = useRef(new Map<string, { route: Point[]; gather: Point[] } | null>())
   const patrols = useMemo((): MapArmy[] => {
     if (!view || view.world.cities.length === 0) return []
     const t = serverNow()
@@ -1735,28 +1768,14 @@ function App({
     const lords: Lord[] = JSON.parse(lordsKey).map(([id, liege]: [number, number | null]) => ({ id, liege }))
     const towns = new Map<number, TownBuilding[]>([[mine.id, (shown?.buildings ?? []) as TownBuilding[]], ...rivals.map((r) => [r.id, r.buildings] as [number, TownBuilding[]])])
     const out: MapArmy[] = []
-    // The road from a capital's gate to the free ground in front of a building (the squads are drawn large: the free
-    // tile nearest that spot, off every building and field), worked out once.
-    const routeTo = (key: string, city: { x: number; y: number }, stop: { x: number; y: number; size: number }) => {
+    // The road from a capital's gate to the free ground in front of a building, and where the squads behind the head
+    // gather round it there (CLAUDE.md §7.8; haltSpots), worked out once.
+    const routeTo = (key: string, city: { x: number; y: number }, stop: { x: number; y: number; size: number }, squads: number) => {
       if (!patrolRoutes.current.has(key)) {
         const blocked = patrolBlocker(view.world, [...towns.values()].map((buildings) => ({ buildings })))
-        const front = { x: stop.x + stop.size + 1.6, y: stop.y + stop.size + 1.6 }
-        let door = front
-        let best = Infinity
-        for (let dy = -6; dy <= 6; dy++) {
-          for (let dx = -6; dx <= 6; dx++) {
-            const x = Math.floor(front.x) + dx
-            const y = Math.floor(front.y) + dy
-            const d = Math.hypot(x + 0.5 - front.x, y + 0.5 - front.y)
-            if (d >= best || !walkable(view.world, x, y)) continue
-            let clear = true
-            for (let oy = -1; oy <= 1 && clear; oy++) for (let ox = -1; ox <= 1 && clear; ox++) clear = !blocked(x + ox, y + oy)
-            if (!clear) continue
-            best = d
-            door = { x: x + 0.5, y: y + 0.5 }
-          }
-        }
-        patrolRoutes.current.set(key, patrolRoute(view.world, city, capitalGate(city), door, blocked) ?? patrolRoute(view.world, city, capitalGate(city), door))
+        const { door, gather } = haltSpots(view.world, blocked, stop, squads - 1)
+        const route = patrolRoute(view.world, city, capitalGate(city), door, blocked) ?? patrolRoute(view.world, city, capitalGate(city), door)
+        patrolRoutes.current.set(key, route ? { route, gather } : null)
       }
       return patrolRoutes.current.get(key)
     }
@@ -1774,11 +1793,12 @@ function App({
         for (const s of [tributeSlot - 1, tributeSlot, tributeSlot + 1]) {
           const arrive = tributeVisitAt(view.world.seed, crown, lord.id, s, lords, view.world.cities.length)
           if (t < arrive - ride || t >= arrive + wait + ride) continue
-          const route = routeTo(`tribute:${crown}:${lord.id}:${palace.x},${palace.y}`, city, palace)
-          if (!route || route.length === 0) continue
+          const ride0 = routeTo(`tribute:${crown}:${lord.id}:${palace.x},${palace.y}`, city, palace, 2)
+          if (!ride0 || ride0.route.length === 0) continue
+          const { route, gather } = ride0
           const back = t >= arrive + wait
           const [path, departAt, arriveAt] = back ? [[...route].reverse(), arrive + wait, arrive + wait + ride] : [route, arrive - ride, arrive]
-          out.push({ id: -(100000 + lord.id * 8 + crown), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 3, catapult: false, train: 2, size: 1.3, trainAhead: back, tag: `${cityInfo(view.world, crown).capital} haraççıları`, tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
+          out.push({ id: -(TRIBUTE_ID + lord.id * 8 + crown), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 3, catapult: false, train: 2, size: 1.3, trainAhead: back, gather, tag: `${cityInfo(view.world, crown).capital} haraççıları`, tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
         }
       }
     }
@@ -1793,12 +1813,13 @@ function App({
         const stop = (visitKind(crown, liege) === 'tip' && done.find((b) => b.kind === 'tavern')) || done.find((b) => b.kind === 'palace')
         if (!stop) continue
         // The lord in the key: drawn before the other lords had loaded, the patrol may have been sent elsewhere.
-        const route = routeTo(`${crown}:${p}:${slot}:${target}:${stop.id}`, city, stop)
-        if (!route || route.length === 0) continue
-        // Through the stay the column stands halted along the road it came by, then rides back with its tail leading.
+        const ride0 = routeTo(`${crown}:${p}:${slot}:${target}:${stop.id}`, city, stop, 5)
+        if (!ride0 || ride0.route.length === 0) continue
+        const { route, gather } = ride0
+        // Through the stay the column stands gathered round the building's front, then rides back the way it came.
         const back = t >= times.leave
         const [path, departAt, arriveAt] = back ? [[...route].reverse(), times.leave, times.home] : [route, times.start, times.arrive]
-        out.push({ id: -(crown * 16 + p + 1), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 4, catapult: false, train: 5, size: 1.6, trainAhead: back, tag: `${cityInfo(view.world, crown).capital} devriyesi`, tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
+        out.push({ id: -(crown * 16 + p + 1), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 4, catapult: false, train: 5, size: 1.6, trainAhead: back, gather, tag: `${cityInfo(view.world, crown).capital} devriyesi`, tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
       }
     })
     if (patrolRoutes.current.size > 256) patrolRoutes.current.clear()
@@ -1838,7 +1859,7 @@ function App({
         .map((t) => {
           const gate = townGate(t)
           const since = t.rebels!.since
-          return { id: -(100_000 + t.id), color: REBEL_COLOR, own: false, soldiers: null, path: [{ x: gate.x + 1.4, y: gate.y + 0.4 }], departAt: since, arriveAt: since, battle: !!t.rebels!.battle, selected: false, figures: Math.min(20, Math.max(2, Math.ceil(t.rebels!.count / 2))), catapult: false, tag: `${t.name} asileri`, tagOutlaw: true }
+          return { id: -(REBELS_ID + t.id), color: REBEL_COLOR, own: false, soldiers: null, path: [{ x: gate.x + 1.4, y: gate.y + 0.4 }], departAt: since, arriveAt: since, battle: !!t.rebels!.battle, selected: false, figures: Math.min(20, Math.max(2, Math.ceil(t.rebels!.count / 2))), catapult: false, tag: `${t.name} asileri`, tagOutlaw: true }
         }),
     [layer.towns],
   )
@@ -1855,15 +1876,23 @@ function App({
       const figures = Math.min(20, Math.max(2, Math.ceil(b.soldiers / 2)))
       const fight = b.battle !== null ? layer.battles.find((x) => x.id === b.battle && !x.resolved) : undefined
       if (fight) {
-        out.push({ id: -(BAND_ID + b.idx), color: BANDIT_COLOR, own: false, soldiers: null, path: [{ x: fight.x + 0.8, y: fight.y + 0.4 }], departAt: t, arriveAt: t, battle: true, selected: false, figures, catapult: false, tag: `${b.name} · yağmacı`, tagOutlaw: true })
+        out.push({ id: -(BAND_ID + b.idx), color: BANDIT_COLOR, own: false, soldiers: null, path: [{ x: fight.x + 0.8, y: fight.y + 0.4 }], departAt: t, arriveAt: t, battle: true, selected: false, figures, catapult: false, tag: `${b.name} · ${b.clanName}`, tagOutlaw: true })
         continue
       }
       const leg = bandLeg(b, t)
-      out.push({ id: -(BAND_ID + b.idx), color: BANDIT_COLOR, own: false, soldiers: null, path: leg.path, departAt: leg.departAt, arriveAt: leg.arriveAt, battle: false, selected: false, figures, catapult: false, tag: `${b.name} · yağmacı`, tagOutlaw: true })
+      out.push({ id: -(BAND_ID + b.idx), color: BANDIT_COLOR, own: false, soldiers: null, path: leg.path, departAt: leg.departAt, arriveAt: leg.arriveAt, battle: false, selected: false, figures, catapult: false, tag: `${b.name} · ${b.clanName}`, tagOutlaw: true })
+    }
+    // The caves the player has found, each with its clan's guards before the mouth (no one else sees them there).
+    for (const clan of clansOf(view?.world.seed ?? 0, layer.outlaws)) {
+      const trail = trailOf(kingdom?.caveTrail, clan)
+      const cave = trail?.cave !== undefined && view ? caveSpots(view.world, view.world.seed)[trail.cave] : undefined
+      if (!cave) continue
+      const fight = clan.battle !== null ? layer.battles.find((x) => x.id === clan.battle && !x.resolved) : undefined
+      out.push({ id: -(CAVE_ID + clan.slot), color: BANDIT_COLOR, own: false, soldiers: null, path: [{ x: cave.mouth.x + cave.dx * 0.6, y: cave.mouth.y + cave.dy * 0.6 }], departAt: t, arriveAt: t, battle: !!fight, selected: false, figures: 4, catapult: false, tag: `${clan.name} · mağara`, tagOutlaw: true })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bands, bandStep, layer.battles])
+  }, [bands, bandStep, layer.battles, layer.outlaws, kingdom?.caveTrail, view])
   useEffect(() => {
     const t = serverNow()
     const ends = banditSquads.filter((a) => !a.battle && a.arriveAt > t).map((a) => a.arriveAt)
@@ -1892,6 +1921,12 @@ function App({
       const chasing = kingdom.navy?.fleets.some((f) => f.chase?.boat === b.idx)
       if (chasing || (dock && seaHeld([b], mid(dock), t).share > 0)) out.push({ key: `boat${b.idx}`, label: chasing ? `Filon ${b.name} peşinde` : `${b.name} sularında`, at: boatAt(b, t).at })
     }
+    // The clans' caves the player has found (CLAUDE.md §7.9.1).
+    for (const clan of clansOf(view.world.seed, layer.outlaws)) {
+      const trail = trailOf(kingdom.caveTrail, clan)
+      const cave = trail?.cave !== undefined ? caveSpots(view.world, view.world.seed)[trail.cave] : undefined
+      if (cave) out.push({ key: `cave${clan.slot}`, label: `${clan.name} mağarası`, at: cave.mouth })
+    }
     for (const a of layer.armies) {
       const goal = a.goal
       if (a.kingdom_id !== mine.id || goal.kind !== 'chase') continue
@@ -1900,13 +1935,13 @@ function App({
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, bands, bandStep, layer.outlaws, layer.armies, kingdom?.buildings, kingdom?.navy, mine.id])
+  }, [view, bands, bandStep, layer.outlaws, layer.armies, kingdom?.buildings, kingdom?.navy, kingdom?.caveTrail, mine.id])
   // A pretender's men at their camp's gate (CLAUDE.md §9.1.1), drawn like a town's rebels, more of them as it grows.
   const campSquads = useMemo(
     (): MapArmy[] =>
       camps
         .filter((c) => !c.marching)
-        .map((c) => ({ id: -(200_000 + c.lord), color: REBEL_COLOR, own: false, soldiers: null, path: [{ x: c.at.x + 0.5, y: c.at.y + 4.2 }], departAt: c.since, arriveAt: c.since, battle: !!c.battle, selected: false, figures: Math.min(20, Math.max(2, Math.ceil(campSoldiers(c, now) / 3))), catapult: false })),
+        .map((c) => ({ id: -(CAMP_ID + c.lord), color: REBEL_COLOR, own: false, soldiers: null, path: [{ x: c.at.x + 0.5, y: c.at.y + 4.2 }], departAt: c.since, arriveAt: c.since, battle: !!c.battle, selected: false, figures: Math.min(20, Math.max(2, Math.ceil(campSoldiers(c, now) / 3))), catapult: false })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [campKey],
   )
@@ -2011,10 +2046,14 @@ function App({
     null
   // Every piece of news is also written in the journal, on the envoy's paper (its sound plays as its dialog opens:
   // Envoy.tsx → soundForNotice).
+  // (Each once: this runs every render, and describing every notice each second was wasted work, CLAUDE.md §12.)
+  const journaled = useRef(new Set<number>())
   useEffect(() => {
     for (const n of layer.notices) {
+      if (journaled.current.has(n.id)) continue
       const at = Date.parse(n.show_at)
       if (at > now) continue
+      journaled.current.add(n.id)
       const { icon, title, text } = describeNotice(n, online)
       noteJournal(n.id, at, { icon, title, text: text || undefined, important: noticeHurts(n, kingdom?.name) })
     }
@@ -2056,6 +2095,13 @@ function App({
   // The dialogs in a line (CLAUDE.md §9.8): how many came since the line began, for the "2 / 5" on each, and closing
   // them all at once (those still waiting for an answer stay: a live tribute demand, a crisis or a choice still open).
   const [crownQueue, setCrownQueue] = useState<Notice[]>([])
+  // The crowns' news counts from when the lord was last seen (the server's time, as the game opened), so another device
+  // does not tell it again; what happened while away is in the away report, so it pops up only from the report's close.
+  const crownFrom = useRef<number>(initial.state?.lastSeenAt ?? serverNow())
+  const crownPopFrom = useRef<number>(away ? Infinity : crownFrom.current)
+  useEffect(() => {
+    if (!away && crownPopFrom.current === Infinity) crownPopFrom.current = serverNow()
+  }, [away])
   const [lineSeen, setLineSeen] = useState(0)
   const [closedTitles, setClosedTitles] = useState<SummaryItem[] | null>(null)
   const dueNotices = layer.notices.filter((n) => Date.parse(n.show_at) <= now)
@@ -2080,7 +2126,7 @@ function App({
   const crownTick = Math.floor(now / 5000)
   useEffect(() => {
     if (!view || !kingdom || kingdom.lobbyKey === undefined || view.world.cities.length === 0) return
-    const news = crownNews(lobby.id, mine.id, kingdom, view.world.cities.length, serverNow())
+    const news = crownNews(lobby.id, mine.id, kingdom, view.world.cities.length, crownFrom.current, crownPopFrom.current, serverNow())
     for (const n of news.journal) {
       const { icon, title, text } = describeNotice(n, online)
       noteJournal(n.id, Date.parse(n.show_at), { icon, title, text })
@@ -2288,13 +2334,11 @@ function App({
   // Where the crowns' patrols are now, for the minimap and the world map, moved on every couple of seconds.
   const [patrolDots, setPatrolDots] = useState<MinimapPatrol[]>([])
   useEffect(() => {
-    // The crowns' patrols, and the bandits and pirates (black, torn banners edged in red) so they can be found.
+    // The crowns' patrols. Bandits and pirates are not on the minimap or the world map (only on the map itself).
     const place = () => {
       const t = serverNow()
       setPatrolDots([
         ...patrols.map((p) => ({ at: pointOnPath(p.path, p.departAt, p.arriveAt, t), color: hexOf(p.color) })),
-        ...(view ? bands.filter((b) => outlawUp(b, t)).map((b) => ({ at: bandAt(b, t), color: '#1a0c0c', outlaw: true })) : []),
-        ...(view ? lobbyBoats(view.world, layer.outlaws).filter((b) => outlawUp(b, t)).map((b) => ({ at: boatAt(b, t).at, color: '#1a0c0c', outlaw: true })) : []),
       ])
     }
     place()
@@ -2302,7 +2346,7 @@ function App({
     // Not while the tab is hidden: nobody sees the minimap then.
     const id = window.setInterval(() => !document.hidden && place(), 2000)
     return () => clearInterval(id)
-  }, [patrols, bands, view, layer.outlaws])
+  }, [patrols])
 
   return (
     <>
@@ -2726,7 +2770,6 @@ function App({
           corners={cameraCorners}
           towns={townMarks}
           patrols={patrolDots}
-          onJump={view.centerOn}
           onClose={() => setFullMap(false)}
         />
       )}

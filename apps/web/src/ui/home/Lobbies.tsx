@@ -53,10 +53,10 @@ export function Lobbies({
   return (
     <div className="home-body">
       <div className="row spread">
-        <button className="btn" onClick={() => setCreating(true)} disabled={busy !== null}>
+        <button className="btn" onClick={() => setCreating(true)} disabled={busy !== null} data-why="Bir işlem sürüyor; bekle">
           <Icon name="plus" size={16} /> Lobi aç
         </button>
-        <button className="btn small" onClick={refresh} disabled={busy !== null}>
+        <button className="btn small" onClick={refresh} disabled={busy !== null} data-why="Bir işlem sürüyor; bekle">
           Yenile
         </button>
       </div>
@@ -92,19 +92,21 @@ export function Lobbies({
                     onClick={() => remove(lobby.id)}
                     onBlur={() => setDeleting(null)}
                     disabled={busy !== null}
+                    data-why="Bir işlem sürüyor; bekle"
                     title="Lobiyi ve içindeki her şeyi sil"
                   >
                     {deleting === lobby.id ? 'Emin misin?' : 'Sil'}
                   </button>
                 )}
                 {lobby.joined ? (
-                  <button className="btn small" onClick={() => onEnter(lobby, '')} disabled={busy !== null}>
+                  <button className="btn small" onClick={() => onEnter(lobby, '')} disabled={busy !== null} data-why="Bir işlem sürüyor; bekle">
                     Devam et
                   </button>
                 ) : (
                   <button
                     className="btn small"
                     disabled={full || busy !== null}
+                    data-why={full ? 'Lobi dolu' : 'Bir işlem sürüyor; bekle'}
                     onClick={() => (locked ? (setAsking(asking === lobby.id ? null : lobby.id), setPassword('')) : onEnter(lobby, ''))}
                   >
                     {full ? 'Dolu' : 'Katıl'}
@@ -128,7 +130,7 @@ export function Lobbies({
                     autoFocus
                     required
                   />
-                  <button className="btn small" disabled={busy !== null}>
+                  <button className="btn small" disabled={busy !== null} data-why="Bir işlem sürüyor; bekle">
                     {busy === lobby.id ? 'Bekle…' : 'Gir'}
                   </button>
                 </form>
@@ -189,10 +191,10 @@ function CreateLobby({
         </p>
       )}
       <div className="row spread">
-        <button type="button" className="btn small" onClick={onCancel} disabled={busy !== null}>
+        <button type="button" className="btn small" onClick={onCancel} disabled={busy !== null} data-why="Lobi açılıyor; bekle">
           Vazgeç
         </button>
-        <button className="btn" disabled={busy !== null || !name.trim()}>
+        <button className="btn" disabled={busy !== null || !name.trim()} data-why={busy !== null ? 'Lobi açılıyor; bekle' : 'Lobiye bir ad ver'}>
           {busy === 'create' ? 'Dünya oluşturuluyor…' : 'Lobiyi aç'}
         </button>
       </div>

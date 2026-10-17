@@ -28,7 +28,10 @@ export interface Shadows {
 }
 
 export function createShadows(): Shadows {
-  const layer = new Container()
+  // Its own render group (CLAUDE.md §12): the walkers' layer is sorted anew most frames (whatever walks changes its
+  // depth), which makes Pixi rebuild the draw list of the group it belongs to; the shadows (one per tree, building and
+  // walker) are then not gathered again with it, only when a shadow itself comes or goes.
+  const layer = new Container({ isRenderGroup: true })
   const filter = new AlphaFilter({ alpha: 0, resolution: 'inherit' })
   layer.filters = [filter]
   const footprints = new WeakMap<Container, number>()
@@ -38,14 +41,16 @@ export function createShadows(): Shadows {
   // The stone base each building stands on (the low part of its group), and the shade it throws onto that base.
   const baseOf = new WeakMap<object, PixiSprite>()
   const onBase = new Map<PixiSprite, { overlay: PixiSprite; key: string; cast: Sprite | null }>()
-  const shades = new Map<PixiSprite, { shade: PixiSprite; frame: number }>()
+  // Each shade remembers what it was last cast from (look, facing, sun step, place and scale), so a caster that has not
+  // changed since (most of them: trees, buildings, walls) costs a comparison a frame (CLAUDE.md §12).
+  const shades = new Map<PixiSprite, { shade: PixiSprite; frame: number; look?: Sprite; step?: number; x?: number; y?: number; sx?: number; sy?: number; size?: number; raise?: number }>()
   // Shadows that fall on buildings: per building, an overlay of its pixels in the shade of another building (its own
   // shading is drawn into it). Worked out anew for every step of the sun and whenever the buildings change.
   const shaded = new Map<PixiSprite, { overlay: PixiSprite | null; look: Sprite; cast: Sprite | null }>()
   let queue: PixiSprite[] = []
   // The building being shaded now, a few rows a frame.
   let job: { target: PixiSprite; work: ShadeJob } | null = null
-  let built = ''
+  let built: number[] = []
   let frame = 0
   let step = NaN
   let sun = sunShadow(0)
@@ -64,9 +69,12 @@ export function createShadows(): Shadows {
   // Walls do not shade walls: a run of wall is lit as one model already.
   function shadeBuildings(casters: Container, sunMoved: boolean, alpha: number) {
     const buildings = casters.children.filter((c): c is PixiSprite => c instanceof PixiSprite && c.label === 'occluder' && !!lookOf(c.texture))
-    const key = buildings.map((b) => `${b.x},${b.y}`).join(';')
-    if (sunMoved || key !== built) {
-      built = key
+    // Whether the buildings (or where they stand) changed since they were last shaded; compared in place, without
+    // building a string of every building each frame.
+    let moved = buildings.length * 2 !== built.length
+    for (let i = 0; !moved && i < buildings.length; i++) moved = built[i * 2] !== buildings[i].x || built[i * 2 + 1] !== buildings[i].y
+    if (sunMoved || moved) {
+      built = buildings.flatMap((b) => [b.x, b.y])
       queue = buildings.slice()
       job = null
       const standing = new Set(buildings)
@@ -157,8 +165,11 @@ export function createShadows(): Shadows {
         if (!look) {
           if (entry) {
             entry.frame = frame
-            entry.shade.visible = false
-            entry.shade.texture = Texture.EMPTY
+            if (entry.shade.visible) {
+              entry.shade.visible = false
+              entry.shade.texture = Texture.EMPTY
+            }
+            entry.look = undefined
           }
           continue
         }
@@ -170,7 +181,32 @@ export function createShadows(): Shadows {
         }
         entry.frame = frame
         const { shade } = entry
-        const shadow = shadowOf(look, footprints.get(child) ?? 0, child.scale.x < 0)
+        const size = footprints.get(child) ?? 0
+        const raise = raises.get(child) ?? 0
+        if (
+          child.label !== 'ship' &&
+          !shade.mask &&
+          entry.look === look &&
+          entry.step === step &&
+          entry.x === child.x &&
+          entry.y === child.y &&
+          entry.sx === child.scale.x &&
+          entry.sy === child.scale.y &&
+          entry.size === size &&
+          entry.raise === raise
+        ) {
+          if (!shade.visible) shade.visible = true
+          continue
+        }
+        entry.look = look
+        entry.step = step
+        entry.x = child.x
+        entry.y = child.y
+        entry.sx = child.scale.x
+        entry.sy = child.scale.y
+        entry.size = size
+        entry.raise = raise
+        const shadow = shadowOf(look, size, child.scale.x < 0)
         const texture = textureOf(shadow)
         if (shade.texture !== texture) {
           shade.texture = texture
@@ -178,7 +214,6 @@ export function createShadows(): Shadows {
         }
         // A building raised on a base throws its shadow from that height down onto the ground below the base: the
         // ground under it is `raise` lower on screen, and every point stands `raise` higher above it.
-        const raise = raises.get(child) ?? 0
         shade.position.set(child.x + raise * sun.x, child.y + raise + raise * sun.y)
         shade.scale.set(Math.abs(child.scale.x), Math.abs(child.scale.y))
         shade.visible = true

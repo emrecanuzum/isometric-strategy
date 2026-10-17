@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import { GOODS, balance, goldCap, crownDemand, questError, questProgress, crownOrder, crownOrderError, orderPay, palaceLevel, byPower, cityCenter, cityPrice, cityTripMs, crownGoods, crownPower, crownRelation, crownRest, crownTraitAt, doneBuildings, fealtyOpen, giftAt, lobbyTripMs, priceAt, stewardFactor, tradeCityReadyAt, tradeUnits } from '@game/shared'
+import { GOODS, balance, goldCap, crownDemand, questError, questProgress, crownOrder, crownOrderError, orderPay, palaceLevel, byPower, cityCenter, cityPrice, cityTripMs, crownAgeOf, crownGoods, crownHouseAt, crownPower, crownRelation, crownRest, crownRivalryAt, doneBuildings, fealtyOpen, giftAt, lobbyTripMs, priceAt, stewardFactor, tradeCityReadyAt, tradeUnits } from '@game/shared'
 import type { Kingdom, Market, Point, QuestKind, World } from '@game/shared'
 import { cityInfo } from '../../game/cities'
+import { serverNow } from '../../net/clock'
 import { Icon } from '../icons'
 import { RESOURCE_ICONS, RESOURCE_NAMES } from '../names'
 import { Meter, Section, Stat, fmt } from './primitives'
 import type { Online } from './online'
-import { Subtabs, usePart } from './Subtabs'
-import type { Part } from './Subtabs'
-import { BetrayalCard, CrownCourt, RoyalFamily } from './crownHouse'
+import { usePart } from './Subtabs'
+import { BetrayalCard, CrownCourt, CrownRivalryPanel, RoyalFamily, STANCE_NAMES, crownKeyOf, pctText, tipPreview, tributeShareNow, waysText } from './crownHouse'
+import { Portrait } from '../DynastyArt'
 
 // The free cities (CLAUDE.md §4.2, §7.6): what they are, and the merchant's choice between the lobby's market and a
 // free city's.
@@ -36,7 +37,7 @@ export function TradeDestination({ world, kingdom, market, now, onCity }: {
   return (
     <Section title="Tüccar nereye gitsin" icon="trade" aside={wait > 0 ? `${wait} sn sonra değişir` : undefined}>
       <div className="goods choices" role="radiogroup" aria-label="Tüccarın gideceği yer">
-        <button role="radio" aria-checked={current === null} className={current === null ? 'good active' : 'good'} disabled={wait > 0 && current !== null} onClick={() => onCity(null)}>
+        <button role="radio" aria-checked={current === null} className={current === null ? 'good active' : 'good'} disabled={wait > 0 && current !== null} data-why={`Hedef az önce değişti; ${wait} sn sonra yeniden değişir`} onClick={() => onCity(null)}>
           <Icon name="gold" size={24} />
           <b>Lobi pazarı</b>
           <small>{seconds(lobbyTripMs(kingdom.buildings))} sn sefer</small>
@@ -46,7 +47,7 @@ export function TradeDestination({ world, kingdom, market, now, onCity }: {
         {world.cities.map((city, index) => {
           const trip = cityTripMs(kingdom, city)
           return (
-            <button key={index} role="radio" aria-checked={current === index} className={current === index ? 'good active' : 'good'} disabled={!trip || (wait > 0 && current !== index)} onClick={() => onCity(index)}>
+            <button key={index} role="radio" aria-checked={current === index} className={current === index ? 'good active' : 'good'} disabled={!trip || (wait > 0 && current !== index)} data-why={!trip ? 'Ticaret noktandan oraya yol yok' : `Hedef az önce değişti; ${wait} sn sonra yeniden değişir`} onClick={() => onCity(index)}>
               <Icon name="crown" size={24} />
               <b>{cityInfo(world, index).name}</b>
               <small>{trip ? `${seconds(trip)} sn sefer` : 'yol yok'}</small>
@@ -147,14 +148,14 @@ export function CitySheet({ world, index, kingdom, online, market, now, onCity, 
             {here ? (
               <>
                 <p className="hint">Tüccar şu an bu şehre gidip geliyor ({trip ? seconds(trip) : '?'} sn sefer).</p>
-                <button className="btn small" disabled={wait > 0} onClick={() => onCity(null)}>
+                <button className="btn small" disabled={wait > 0} data-why={`Hedef az önce değişti; ${wait} sn bekle`} onClick={() => onCity(null)}>
                   {wait > 0 ? `Lobi pazarına dönmek için ${wait} sn bekle` : 'Lobi pazarına dön'}
                 </button>
               </>
             ) : trip ? (
               <>
                 <p className="hint">Ticaret noktandan sefer {seconds(trip)} sn sürer.</p>
-                <button className="btn small" disabled={wait > 0} onClick={() => onCity(index)}>
+                <button className="btn small" disabled={wait > 0} data-why={`Hedef az önce değişti; ${wait} sn bekle`} onClick={() => onCity(index)}>
                   {wait > 0 ? `Göndermek için ${wait} sn bekle` : 'Tüccarı buraya gönder'}
                 </button>
               </>
@@ -315,7 +316,7 @@ function CrownStanding({ world, index, kingdom }: { world: World; index: number;
           ? gift
             ? `Devriyesi sana her uğradığında «${gift.name}» getirir (tacın gücüyle artar ya da azalır).`
             : `İlişkin ${balance.cities.crown.gifts[0].at}'a ulaşınca devriyesi sana armağan getirmeye başlar.`
-          : `Rakip tacın haraççıları ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelip hazinenin %${Math.round(balance.cities.crown.patrol.tribute.share * 100)}'ini ister; armağan getirmezler.`}
+          : `Rakip tacın haraççıları ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelip hazinenin ${pctText(tributeShareNow(crownKeyOf(kingdom), index, serverNow()))}'ini ister${waysText(crownKeyOf(kingdom), index, serverNow(), 'tribute') ? ` (${waysText(crownKeyOf(kingdom), index, serverNow(), 'tribute')})` : ''}; armağan getirmezler.`}
       </p>
     </Section>
   )
@@ -457,7 +458,7 @@ export function CrownOrders({ world, kingdom, now, online }: { world: World; kin
                   <span>{Math.ceil((order.endsAt - now) / 60_000)} dk kaldı</span>
                 </span>
               </div>
-              <button className="btn small order-send" disabled={!!why || !trip || !online} onClick={() => online?.act({ type: 'order', crown })}>
+              <button className="btn small order-send" disabled={!!why || !trip || !online} data-why={!online ? 'Sunucuya bağlı değil' : why ? (text === 'Kervanla gönder' ? 'Şu an gönderilemez' : text) : 'Önce bir ticaret noktan olmalı'} onClick={() => online?.act({ type: 'order', crown })}>
                 {text}
               </button>
             </li>
@@ -514,42 +515,108 @@ const QUEST_WHY: Record<string, string> = {
 
 export function CrownsPanel({ world, kingdom, online, market, now }: { world: World; kingdom: Kingdom; online: Online; market?: Market | null; now: number }) {
   const crowns = world.cities.length
-  const ids = [...world.cities.map((_, i) => `c${i}`), 'power'] as string[]
-  const [part, setPart] = usePart<string>('crowns', ids, kingdom.liege !== undefined && kingdom.liege !== null ? `c${kingdom.liege}` : 'c0')
+  // The page: the two crowns side by side ('list'), or one crown's own page; and the section open there. Both are
+  // remembered.
+  const ids = ['list', ...world.cities.map((_, i) => `c${i}`)]
+  const [page, setPage] = usePart<string>('crowns', ids, 'list')
   const [inner, setInner] = usePart<CrownPart>('crown-part', CROWN_PARTS, 'house')
   if (crowns === 0) return <p className="hint">Bu lobide taç krallığı yok.</p>
   const palace = palaceLevel(kingdom, now)
   const claimable = (i: number) => !!questProgress(kingdom, i, now).taken && !questError(kingdom, i, 'claim', now, crowns, palace)
-  const parts: Part<string>[] = [
-    ...world.cities.map((_, i) => ({ id: `c${i}`, name: cityInfo(world, i).capital, icon: 'crown' as const, dot: claimable(i) })),
-    { id: 'power', name: 'Güç dengesi', icon: 'banner' as const },
+  const crown = page === 'list' ? null : Number(page.slice(1))
+  if (crown === null)
+    return (
+      <>
+        <BetrayalCard world={world} kingdom={kingdom} online={online} now={now} />
+        <CrownCards world={world} kingdom={kingdom} online={online} now={now} claimable={claimable} onOpen={(i) => setPage(`c${i}`)} />
+        <CrownRivalryPanel world={world} kingdom={kingdom} now={now} />
+        <CrownRivalry world={world} online={online} />
+        <Stewardship world={world} kingdom={kingdom} now={now} />
+      </>
+    )
+  const info = cityInfo(world, crown)
+  const sections: { id: CrownPart; name: string; dot?: boolean }[] = [
+    { id: 'house', name: 'Hanedan' },
+    { id: 'court', name: 'Saray' },
+    { id: 'policy', name: 'Politika', dot: claimable(crown) },
   ]
-  const crown = part === 'power' ? null : Number(part.slice(1))
   return (
     <>
       <BetrayalCard world={world} kingdom={kingdom} online={online} now={now} />
-      <Subtabs label="Taç krallıkları" parts={parts} part={part} onPart={setPart} />
-      {crown === null ? (
-        <>
-          <CrownRivalry world={world} online={online} />
-          <Stewardship world={world} kingdom={kingdom} now={now} />
-        </>
-      ) : (
-        <>
-          <Subtabs
-            label="Tacın bölümleri"
-            parts={[
-              { id: 'house', name: 'Hanedan', icon: 'crown' },
-              { id: 'court', name: 'Saray', icon: 'banner' },
-              { id: 'policy', name: 'Politika', icon: 'scroll', dot: claimable(crown) },
-            ]}
-            part={inner}
-            onPart={setInner}
-          />
-          {inner === 'house' && <RoyalFamily world={world} kingdom={kingdom} crown={crown} now={now} />}
-          {inner === 'court' && <CrownCourt world={world} kingdom={kingdom} crown={crown} online={online} now={now} />}
-          {inner === 'policy' && <CrownPolicy world={world} kingdom={kingdom} crown={crown} online={online} market={market} now={now} />}
-        </>
+      <header className="crown-page-head" style={{ ['--crown' as string]: info.color }}>
+        <button className="btn small crown-back" onClick={() => setPage('list')} aria-label="Krallıklara dön">
+          ← Krallıklar
+        </button>
+        <CrownBanner world={world} liege={crown} size={24} />
+        <div>
+          <b style={{ color: info.ink }}>{info.name}</b>
+          <small>
+            {info.ruler}
+            {kingdom.liege === crown ? ' · biat ettiğin taç' : ''}
+          </small>
+        </div>
+      </header>
+      <nav className="crown-pills" aria-label="Tacın bölümleri">
+        {sections.map((x) => (
+          <button key={x.id} className={inner === x.id ? 'crown-pill on' : 'crown-pill'} aria-current={inner === x.id ? 'page' : undefined} onClick={() => setInner(x.id)}>
+            {x.name}
+            {x.dot && <span className="dot" aria-label="Bekleyen bir şey var" />}
+          </button>
+        ))}
+      </nav>
+      {inner === 'house' && <RoyalFamily world={world} kingdom={kingdom} crown={crown} now={now} />}
+      {inner === 'court' && <CrownCourt world={world} kingdom={kingdom} crown={crown} online={online} now={now} />}
+      {inner === 'policy' && <CrownPolicy world={world} kingdom={kingdom} crown={crown} online={online} market={market} now={now} />}
+    </>
+  )
+}
+
+// The crowns side by side: banner, ruler, the lord's standing, what waits there; a tap opens the crown's page.
+function CrownCards({ world, kingdom, online, now, claimable, onOpen }: { world: World; kingdom: Kingdom; online: Online; now: number; claimable(i: number): boolean; onOpen(i: number): void }) {
+  const lords = online.kingdoms.map((k) => ({ liege: k.liege ?? null, score: k.score?.total ?? 0 }))
+  const { share } = crownPower(lords, world.cities.length)
+  const key = crownKeyOf(kingdom)
+  const stance = crownRivalryAt(key, now).stance
+  return (
+    <>
+      <div className="crown-cards">
+        {world.cities.map((_, i) => {
+          const info = cityInfo(world, i)
+          const h = crownHouseAt(key, i, now)
+          const relation = crownRelation(kingdom, i)
+          const sworn = kingdom.liege === i
+          return (
+            <button key={i} className={sworn ? 'crown-card sworn' : 'crown-card'} style={{ ['--crown' as string]: info.color }} onClick={() => onOpen(i)}>
+              <span className="crown-card-head">
+                <CrownBanner world={world} liege={i} size={20} />
+                <b style={{ color: info.ink }}>{info.name}</b>
+                {claimable(i) && <span className="dot" aria-label="Ödül bekliyor" />}
+              </span>
+              <Portrait seed={((key.lobbyKey ?? 0) % 100_000) * 7 + i * 104_729 + h.ruler.id * 977} sex={h.ruler.sex} age={crownAgeOf(h.ruler, now)} role={h.ruler.sex === 'm' ? 'king' : 'queen'} size={64} />
+              <span className="crown-card-ruler">
+                {h.title}
+                <small>
+                  {Math.floor(crownAgeOf(h.ruler, now))} yaşında{h.regent ? ' · naip yönetiyor' : ''}
+                </small>
+              </span>
+              <Meter value={(relation + 100) / 200} tone={relation >= 30 ? 'up' : relation <= -30 ? 'down' : 'gold'} label={`${info.name} ile ilişki`} segments={10} />
+              <small>ilişki {signedInt(Math.round(relation))}</small>
+              {sworn ? <span className="crown-badge">biat ettiğin taç</span> : kingdom.liege !== undefined && kingdom.liege !== null ? <span className="crown-badge rival">rakip taç</span> : null}
+            </button>
+          )
+        })}
+      </div>
+      {world.cities.length > 1 && (
+        <div className="crown-strip" role="img" aria-label={`Güç: ${world.cities.map((_, i) => `${cityInfo(world, i).name} %${Math.round(share[i] * 100)}`).join(', ')}`}>
+          <div className="crown-strip-bar">
+            {share.map((v, i) => (
+              <i key={i} style={{ width: `${v * 100}%`, background: cityInfo(world, i).color }} />
+            ))}
+          </div>
+          <small>
+            Güç %{Math.round(share[0] * 100)} · %{Math.round(share[1] * 100)} · taçlar {STANCE_NAMES[stance].toLocaleLowerCase('tr-TR')}
+          </small>
+        </div>
       )}
     </>
   )
@@ -568,7 +635,9 @@ function CrownPolicy({ world, kingdom, crown: i, online, market, now }: { world:
   const tribute = balance.cities.crown.patrol.tribute
   const minutes = (ms: number) => `${Math.max(1, Math.ceil(ms / 60_000))} dk`
   const goldRoom = goldCap(kingdom, now) - kingdom.stock.gold
-  const trait = crownTraitAt(kingdom, i, now)
+  const key = crownKeyOf(kingdom)
+  const tipWhy = waysText(key, i, now, 'tip')
+  const tributeWhy = waysText(key, i, now, 'tribute')
   return (
     <>
       {(() => {
@@ -607,9 +676,9 @@ function CrownPolicy({ world, kingdom, crown: i, online, market, now }: { world:
               value={sworn ? 'devriye' : kingdom.liege !== undefined && kingdom.liege !== null ? 'haraççı' : 'gelmez'}
               note={
                 sworn
-                  ? `devriyesi eğlence merkezine uğrar, bahşiş bırakır (${trait.tip === 1 ? 'hükümdarın huyu değiştirmez' : `huyu yüzünden ×${trait.tip.toFixed(2).replace('.', ',')}`})`
+                  ? `devriyesi eğlence merkezine uğrar, ~${fmt(tipPreview(kingdom, i, online, now))} altın bahşiş bırakır${tipWhy ? ` (${tipWhy})` : ''}`
                   : kingdom.liege !== undefined && kingdom.liege !== null
-                    ? `${Math.round(tribute.everySeconds / 60)} dakikada bir hazinenin %${(tribute.share * trait.tribute * 100).toFixed(1).replace('.', ',').replace(',0', '')}'ini ister (hükümdarın huyu: ${trait.name.toLocaleLowerCase('tr-TR')})`
+                    ? `${Math.round(tribute.everySeconds / 60)} dakikada bir hazinenin ${pctText(tributeShareNow(key, i, now))}'ini ister${tributeWhy ? ` (${tributeWhy})` : ''}`
                     : 'biat etmediğin için ne devriye ne haraççı gönderir'
               }
             />
@@ -623,11 +692,11 @@ function CrownPolicy({ world, kingdom, crown: i, online, market, now }: { world:
               <p className="hint down">Hazinende {fmt(Math.max(0, goldRoom))} altınlık yer var: ödülün kalanı boşa gider. Önce biraz harca.</p>
             )}
             {!taken ? (
-              <button className="btn small" disabled={!!take} title={take ? QUEST_WHY[take] : undefined} onClick={() => online.act({ type: 'quest', crown: i, action: 'take' })}>
+              <button className="btn small" disabled={!!take} data-why={take ? (QUEST_WHY[take] ?? 'Şu an alınamaz') : undefined} onClick={() => online.act({ type: 'quest', crown: i, action: 'take' })}>
                 <Icon name="scroll" size={16} /> {take ? QUEST_WHY[take] ?? 'Alınamaz' : 'Görevi al'}
               </button>
             ) : (
-              <button className={claim ? 'btn small' : 'btn small primary'} disabled={!!claim} onClick={() => online.act({ type: 'quest', crown: i, action: 'claim' })}>
+              <button className={claim ? 'btn small' : 'btn small primary'} disabled={!!claim} data-why={claim ? (QUEST_WHY[claim] ?? 'Ödül şu an alınamaz') : undefined} onClick={() => online.act({ type: 'quest', crown: i, action: 'claim' })}>
                 <Icon name="chest" size={16} /> {claim ? QUEST_WHY[claim] ?? 'Alınamaz' : 'Ödülü al'}
               </button>
             )}

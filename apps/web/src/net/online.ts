@@ -190,6 +190,10 @@ export type Command =
   | { type: 'expedition'; action: 'start'; kind: string; villagers: number; escort: Units }
   | { type: 'expedition'; action: 'recall'; id: number }
   | { type: 'steward'; on: boolean }
+  // The great works, the festival and gifts of goods to the liege (CLAUDE.md §9.10).
+  | { type: 'project'; action: 'give'; id: string }
+  | { type: 'project'; action: 'festival' }
+  | { type: 'project'; action: 'donate'; good: string }
   | { type: 'nameChild'; id: number; name: string }
   | { type: 'educate'; id: number; focus: 'finance' | 'people' | 'military' }
   | { type: 'seen' }
@@ -330,7 +334,7 @@ export function subscribe(lobby: string, feed: LobbyFeed) {
 
 // ---- The layer between kingdoms --------------------------------------------------------------------------------
 
-export type ArmyOrderPayload = { kind: 'move'; x: number; y: number; siege?: boolean } | { kind: 'home' } | { kind: 'split'; soldiers: number } | { kind: 'merge'; with: number } | { kind: 'chase'; band: number }
+export type ArmyOrderPayload = { kind: 'move'; x: number; y: number; siege?: boolean } | { kind: 'home' } | { kind: 'split'; soldiers: number } | { kind: 'merge'; with: number } | { kind: 'chase'; band: number } | { kind: 'cave'; slot: number }
 
 export interface ArmyOrder {
   id: number
@@ -343,7 +347,7 @@ export interface ArmyOrder {
 
 export interface Battle {
   id: number
-  kind: 'field' | 'siege' | 'revolt' | 'outlaw' | 'pretender' | 'usurp'
+  kind: 'field' | 'siege' | 'revolt' | 'outlaw' | 'pretender' | 'usurp' | 'cave'
   x: number
   y: number
   started_at: string
@@ -352,9 +356,9 @@ export interface Battle {
   defenders: Fighter[]
   besieged: number | null
   // A revolt's battle names the town whose rebels it is fought against.
-  plan: BattlePlan & { defense?: { towers: number; walls: number; attackerTowers?: number; keep?: number }; town?: number; outlaw?: { kind: 'band'; idx: number; name: string } }
+  plan: BattlePlan & { defense?: { towers: number; walls: number; attackerTowers?: number; keep?: number }; town?: number; outlaw?: { kind: 'band' | 'clan'; idx: number; name: string; gen?: number } }
   resolved: boolean
-  report: { winner: 'attackers' | 'defenders'; losses: Record<string, number>; loot?: Record<string, number>; outlaw?: string } | null
+  report: { winner: 'attackers' | 'defenders'; losses: Record<string, number>; loot?: Record<string, number>; outlaw?: string; next?: string } | null
 }
 
 export interface Notice {
@@ -421,8 +425,9 @@ export async function loadTowns(lobby: string): Promise<Town[]> {
 
 // What befell the lobby's bandits and pirates (CLAUDE.md §7.9): beaten and until when, in a fight, held back, losses.
 export async function loadOutlaws(lobby: string): Promise<OutlawRow[]> {
-  const { data } = await supabase.from('lobby_outlaws').select('kind, idx, gen, down_until, battle, shift, losses').eq('lobby_id', lobby)
-  return (data ?? []).map((r) => ({ kind: r.kind, idx: r.idx, gen: r.gen, down_until: r.down_until === null ? null : Number(r.down_until), battle: r.battle === null ? null : Number(r.battle), shift: Number(r.shift ?? 0), losses: r.losses }))
+  // (A clan's cave is the server's secret: not readable, CLAUDE.md §7.9.1.)
+  const { data } = await supabase.from('lobby_outlaws').select('kind, idx, gen, down_until, battle, shift, losses, born_at, fallen').eq('lobby_id', lobby)
+  return (data ?? []).map((r) => ({ kind: r.kind, idx: r.idx, gen: r.gen, down_until: r.down_until === null ? null : Number(r.down_until), battle: r.battle === null ? null : Number(r.battle), shift: Number(r.shift ?? 0), losses: r.losses, born_at: r.born_at === null || r.born_at === undefined ? null : Number(r.born_at), fallen: r.fallen ?? [] }))
 }
 
 export async function loadNotices(lobby: string): Promise<Notice[]> {

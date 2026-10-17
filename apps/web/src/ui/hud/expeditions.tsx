@@ -162,24 +162,24 @@ function KindCard({ kind, kingdom, now, online, idle }: { kind: ExpeditionKind; 
       {!locked && (
         <>
           <div className="stepper">
-            <button className="btn icon-only" disabled={n <= spec.villagers[0]} onClick={() => setN(n - 1)} aria-label="Bir köylü azalt">
+            <button className="btn icon-only" disabled={n <= spec.villagers[0]} data-why={`Bu sefere en az ${spec.villagers[0]} köylü gider`} onClick={() => setN(n - 1)} aria-label="Bir köylü azalt">
               <Icon name="minus" size={16} />
             </button>
             <span className="stepper-value">
               <b>{n}</b> köylü
             </span>
-            <button className="btn icon-only" disabled={n >= spec.villagers[1]} onClick={() => setN(n + 1)} aria-label="Bir köylü ekle">
+            <button className="btn icon-only" disabled={n >= spec.villagers[1]} data-why={`Bu sefere en fazla ${spec.villagers[1]} köylü gider`} onClick={() => setN(n + 1)} aria-label="Bir köylü ekle">
               <Icon name="plus" size={16} />
             </button>
             {spec.escort > 0 && (
               <>
-                <button className="btn icon-only" disabled={guards <= 0} onClick={() => setGuards(guards - 1)} aria-label="Bir muhafız azalt">
+                <button className="btn icon-only" disabled={guards <= 0} data-why="Muhafız seçilmedi" onClick={() => setGuards(guards - 1)} aria-label="Bir muhafız azalt">
                   <Icon name="minus" size={16} />
                 </button>
                 <span className="stepper-value">
                   <b>{Math.min(guards, soldiers)}</b> muhafız
                 </span>
-                <button className="btn icon-only" disabled={guards >= Math.min(spec.escort, soldiers)} onClick={() => setGuards(guards + 1)} aria-label="Bir muhafız ekle">
+                <button className="btn icon-only" disabled={guards >= Math.min(spec.escort, soldiers)} data-why={soldiers <= guards ? `Garnizonda ${soldiers} asker var` : `Bu sefere en fazla ${spec.escort} muhafız gider`} onClick={() => setGuards(guards + 1)} aria-label="Bir muhafız ekle">
                   <Icon name="plus" size={16} />
                 </button>
               </>
@@ -199,7 +199,7 @@ function KindCard({ kind, kingdom, now, online, idle }: { kind: ExpeditionKind; 
           </ul>
           <div className="row spread">
             <CostList cost={cost} stock={kingdom.stock} />
-            <button className="btn small primary" disabled={error !== null} onClick={() => online?.act({ type: 'expedition', action: 'start', kind, villagers: n, escort })}>
+            <button className="btn small primary" disabled={error !== null} data-why={error === 'cost' ? missingText(cost, kingdom.stock) : error ? (ERRORS[error] ?? 'Şu an çıkamaz') : undefined} onClick={() => online?.act({ type: 'expedition', action: 'start', kind, villagers: n, escort })}>
               Yola çıkar
             </button>
           </div>

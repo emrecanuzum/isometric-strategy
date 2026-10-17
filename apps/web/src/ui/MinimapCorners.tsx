@@ -1,6 +1,6 @@
 import { armyAt, calendarAt, fleetAt, townCenter, townRevolting } from '@game/shared'
 import type { Army, Kingdom, Pact, Point, Rect, Town } from '@game/shared'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { play } from '../audio/sfx'
 import type { MapArmy } from '../game/armies'
 import type { WorldView } from '../game/createWorld'
@@ -244,14 +244,32 @@ export function MinimapCorners({
         {corner('right', 'swords', spots.length ? `Sıcak noktalar (H): ${spots.map((s) => s.label).join(' · ')}` : 'Sıcak noktalar (H): şu an yok', nextSpot, spots.length, spots.length > 0)}
         {corner('left', 'banner', units.length ? 'Ordularım ve filolarım (Tab): sıradakine git' : 'Ordularım ve filolarım: sahada yok', nextUnit, units.length)}
         {corner('bottom', 'camera', 'Fotoğraf modu (P)', () => (play('click'), setPhoto(true)))}
-        {caption && (
-          <div className="mm-caption frame" key={caption.id} role="status">
-            {caption.text}
-          </div>
-        )}
       </div>
+      {caption && <Caption key={caption.id} text={caption.text} box={box.current} lift={size.thick} />}
       {photo && <PhotoMode view={view} center={center} lord={kingdom?.name ?? null} seasonStart={seasonStart} onClose={() => setPhoto(false)} />}
     </>
+  )
+}
+
+// The caption after a jump, outside the minimap's own layer (its stacking context would keep it under the rest of the
+// interface): fixed on the screen above the frame's top fitting, never over it, and kept inside the screen's edges.
+function Caption({ text, box, lift }: { text: string; box: HTMLDivElement | null; lift: number }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!box || !el) return
+    const r = box.getBoundingClientRect()
+    const w = el.offsetWidth
+    const margin = 8
+    const left = Math.max(margin, Math.min(window.innerWidth - margin - w, r.left + r.width / 2 - w / 2))
+    // The top fitting rises `lift` above the box; the caption keeps a clear gap above its point.
+    setPos({ left, bottom: window.innerHeight - r.top + lift + 10 })
+  }, [box, lift, text])
+  return (
+    <div ref={ref} className="mm-caption frame" role="status" style={pos ? { left: pos.left, bottom: pos.bottom } : { visibility: 'hidden' }}>
+      {text}
+    </div>
   )
 }
 

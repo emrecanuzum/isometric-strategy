@@ -9,6 +9,20 @@
   "speedTilesPerSecond": 1,
   "mergeTiles": 5,
   "contactTiles": 5,
+  "route": {
+    "roadOn": 0.92,
+    "roadBeside": 0.8,
+    "roadNear": 0.9,
+    "meanderLeg": 8,
+    "meanderEvery": 6,
+    "meanderAmplitude": 1.1,
+    "smoothPasses": 3,
+    "cornerCut": 0.25,
+    "cornerCutMax": 2.5,
+    "gateApproach": 0.48,
+    "gateLead": 1.4,
+    "precision": 100
+  },
   "allyTiles": 6,
   "tower": {
     "range": 6,

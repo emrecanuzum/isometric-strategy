@@ -1,4 +1,4 @@
-import { armyAt, groundToScreen, routeLength, tileToScreen } from '@game/shared'
+import { groundToScreen, tileToScreen } from '@game/shared'
 import type { Point, World } from '@game/shared'
 import { Container, Graphics, Sprite as PixiSprite, Text } from 'pixi.js'
 import { KINGDOM_COLORS } from './buildingSprites'
@@ -8,6 +8,8 @@ import type { Sprite } from './sprites'
 import { dashes } from './dashes'
 import { textureOf } from './textures'
 import { surfaceHeight, worldDecks } from './chunkPainter'
+import { marchView } from './marchView'
+import type { MarchView } from './marchView'
 
 // Armies on the map (CLAUDE.md §9.7): a squad of spearmen under the kingdom's banner, walking along the route the
 // server keeps, which is drawn ahead of the player's own armies as a dashed line; crossed swords mark battles.
@@ -34,6 +36,9 @@ export interface MapArmy {
   size?: number
   // A column riding back the way it came: the squads that halted behind its first lead the way home.
   trainAhead?: boolean
+  // Where the squads behind the first stand once the column has halted at the end of its road (the start of it when
+  // riding back): gathered round the head, by the building it called at (patrolRoutes.ts → haltSpots).
+  gather?: Point[]
   // The tag over it ("Ulupınar Beyliği · 24"): on a plate in its lord's colour (`tagColor`), or dark with a blood-red
   // edge for outlaws (bandits, rebels). Rivals' sizes come only roughly ("birkaç / orta / büyük").
   tag?: string
@@ -63,22 +68,14 @@ export function mapTag(text: string, color: number, outlaw = false) {
   return box
 }
 
-// The point `d` tiles along a path (clamped to its ends).
-function along(path: Point[], d: number): Point {
-  if (d <= 0 || path.length < 2) return path[0]
-  for (let i = 1; i < path.length; i++) {
-    const l = Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y)
-    if (d <= l) {
-      const f = l ? d / l : 0
-      return { x: path[i - 1].x + (path[i].x - path[i - 1].x) * f, y: path[i - 1].y + (path[i].y - path[i - 1].y) * f }
-    }
-    d -= l
-  }
-  return path[path.length - 1]
-}
-
-// Tiles between the squads of a column.
+// Tiles between the squads of a column, and over how many tiles before its halt the column closes up and gathers.
 const TRAIN_GAP = 1.7
+const GATHER_RUN = 8
+
+const smooth = (v: number) => {
+  const t = Math.min(1, Math.max(0, v))
+  return t * t * (3 - 2 * t)
+}
 
 export interface MapBattle {
   id: number
@@ -262,13 +259,17 @@ interface Shown {
 }
 
 export function createArmies(world: World, walkers: Container, routes: Graphics, labels: Container) {
-  // Where a marcher stands on screen: on a bridge's deck when crossing, not down at the water, and along the deck's
-  // middle (the way over the bridge's tiles zigzags).
+  // Where a marcher stands on screen: on a bridge's deck when crossing (see marchView), not down at the water.
   const decks = worldDecks(world)
-  const standAt = (q: Point) => {
-    const p = decks.snap(q)
+  const standAt = (p: Point) => {
     const s = tileToScreen(p)
     return { x: s.x, y: s.y - surfaceHeight(world, p) }
+  }
+  const views = new WeakMap<Point[], MarchView>()
+  const viewOf = (path: Point[]) => {
+    let view = views.get(path)
+    if (!view) views.set(path, (view = marchView(world, decks, path)))
+    return view
   }
   const shown = new Map<number, Shown>()
   let battles: { battle: MapBattle; sprite: PixiSprite }[] = []
@@ -347,22 +348,26 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
     standing = []
     for (const s of shown.values()) {
       const { army, body, ring, label } = s
-      const route = { path: army.path, depart_at: new Date(army.departAt).toISOString(), arrive_at: new Date(army.arriveAt).toISOString() }
-      const here = armyAt(route, time)
+      // How far along its route it is (the same share of the way as the server's armyAt), and where it is drawn.
+      const view = viewOf(army.path)
+      const total = view.total
+      const progress = army.path.length > 1 ? total * Math.min(1, Math.max(0, (time - army.departAt) / Math.max(1, army.arriveAt - army.departAt))) : 0
+      const here = army.path.length > 1 ? view.at(progress) : decks.snap(army.path[0] ?? { x: 0, y: 0 })
       standing.push(here)
       const screen = standAt(here)
       const moving = !army.battle && time < army.arriveAt && army.path.length > 1
-      // Which way it is heading: from a moment ago to now (kept when it stops).
+      // Which way it is heading: from a little way back to here (kept when it stops).
       if (moving) {
-        const before = armyAt(route, time - 600)
+        const before = view.at(progress - 0.6)
         const dx = here.x - before.x
         const dy = here.y - before.y
         const d = Math.hypot(dx, dy)
         if (d > 1e-3) s.facing = { x: dx / d, y: dy / d }
       }
       if (s.cart) {
-        // A tile and a half behind the column, facing the way it goes, wheels turning while it rolls (when close).
-        const behind = { x: here.x - s.facing.x * 1.5, y: here.y - s.facing.y * 1.5 }
+        // A tile and a half behind the column (on its road while it rolls), facing the way it goes, wheels turning
+        // while it rolls (when close).
+        const behind = moving && progress >= 1.5 ? view.at(progress - 1.5) : { x: here.x - s.facing.x * 1.5, y: here.y - s.facing.y * 1.5 }
         const at = standAt(behind)
         const frame = moving && scale >= 1 ? Math.floor(time / 120) % 4 : 0
         s.cart.texture = textureOf(CATAPULTS[frame])
@@ -384,22 +389,28 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
       const size = Math.max(1, 0.6 / scale) * (army.size ?? 1)
       body.scale.set(size)
       body.zIndex = screen.y
-      // The rest of a column ride the same road one behind another. Where the road ends the column halts along it,
-      // each squad still a gap behind the one before (none ride up onto what the road leads to); riding back, the
-      // squads that halted behind lead the way. Only where the road has not yet begun (or the column has come home)
-      // do they gather round the first.
+      // The rest of a column ride the same road one behind another. Over the last stretch before the column halts it
+      // closes up and the squads behind the first gather round it on their own places by the building (`gather`);
+      // riding back, they fall in behind it again over the first stretch. Where the road has not yet begun at the
+      // capital's end (or the column has come home) they gather round the first. Without places of their own they halt
+      // along the road, each still a gap behind the one before.
       if (s.followers.length > 0) {
-        const total = routeLength(army.path)
-        const progress = total * Math.min(1, Math.max(0, (time - army.departAt) / Math.max(1, army.arriveAt - army.departAt)))
+        const fromCapital = army.trainAhead ? total - progress : progress
+        const toHalt = army.trainAhead ? progress : total - progress
+        const closing = smooth(toHalt / GATHER_RUN)
+        const end = view.at(army.trainAhead ? 0 : total)
         s.followers.forEach((f, i) => {
           const k = i + 1
-          const d = army.trainAhead ? progress + k * TRAIN_GAP : progress - k * TRAIN_GAP
+          const place = army.gather?.[i]
+          const gap = k * TRAIN_GAP * (place ? closing : 1)
+          const d = army.trainAhead ? progress + gap : progress - gap
           const angle = (k / s.followers.length) * Math.PI * 2 + army.id
           const rest = { x: here.x + Math.cos(angle) * 1.4, y: here.y + Math.sin(angle) * 1.4 }
-          const trail = along(army.path, d)
+          const trail = view.at(d)
           // How far it is out of the bunch: all the way once a gap from the end it waits at.
-          const w = Math.min(1, (army.trainAhead ? total - progress : progress) / (k * TRAIN_GAP))
-          const at = { x: rest.x + (trail.x - rest.x) * w, y: rest.y + (trail.y - rest.y) * w }
+          const w = Math.min(1, fromCapital / (k * TRAIN_GAP))
+          let at = { x: rest.x + (trail.x - rest.x) * w, y: rest.y + (trail.y - rest.y) * w }
+          if (place) at = { x: at.x + (place.x - end.x) * (1 - closing), y: at.y + (place.y - end.y) * (1 - closing) }
           const p = standAt(at)
           f.visible = true
           f.texture = body.texture
@@ -408,6 +419,13 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
           f.scale.set(size)
           f.zIndex = p.y
         })
+      }
+      // Bandits are seen like the crowns' patrols, but not zoomed all the way out (CLAUDE.md §7.9).
+      if (army.tagOutlaw) {
+        const near = scale >= 0.2
+        body.visible = near
+        for (const f of s.followers) f.visible = near
+        if (s.cart) s.cart.visible = near
       }
       ring.clear()
       if (army.selected) {
@@ -448,14 +466,14 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
   }
 
   // Tags that would overlap give way: the player's own first (the picked one before all), then outlaws, then the
-  // crowns' columns, then the rest. Zoomed all the way out only the player's own and the outlaws keep theirs.
+  // crowns' columns, then the rest. Zoomed all the way out only the player's own keep theirs (bandits are hidden there).
   function placeTags(scale: number) {
     const rank = (a: MapArmy) => (a.selected ? 0 : a.own ? 1 : a.tagOutlaw ? 2 : a.train ? 3 : 4)
     const tagged = [...shown.values()].filter((s) => s.label).sort((a, b) => rank(a.army) - rank(b.army))
     const placed: { l: number; t: number; r: number; b: number }[] = []
     for (const s of tagged) {
       const box = s.label!.box
-      if (scale < 0.2 && rank(s.army) > 2) {
+      if (scale < 0.2 && rank(s.army) > 1) {
         box.visible = false
         continue
       }

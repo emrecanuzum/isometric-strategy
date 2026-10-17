@@ -83,6 +83,19 @@ export async function loadKingdoms(lobby: string): Promise<Row[]> {
   return (data ?? []) as Row[]
 }
 
+// The lobby's kingdoms as they are now, given `rows` read earlier: only their versions are looked at (a few bytes a
+// kingdom), and every state is read again only if one was written, founded or left since (CLAUDE.md §12). Every write of
+// a state raises its version (mutateKingdom, the command's own write), so equal versions mean equal states.
+export async function freshKingdoms(lobby: string, rows: Row[]): Promise<Row[]> {
+  const { data } = await admin.from('kingdoms').select('id, version').eq('lobby_id', lobby)
+  const now = (data ?? []) as { id: number; version: number }[]
+  if (now.length === rows.length) {
+    const versions = new Map(rows.map((r) => [r.id, r.version]))
+    if (now.every((r) => versions.get(r.id) === r.version)) return rows
+  }
+  return loadKingdoms(lobby)
+}
+
 // When the lobby's season began (ms), which the calendar and its seasons count from (CLAUDE.md §2).
 const seasonStarts = new Map<string, Promise<number>>()
 export function seasonStartOf(lobby: string): Promise<number> {

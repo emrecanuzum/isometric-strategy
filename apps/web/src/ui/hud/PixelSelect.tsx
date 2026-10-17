@@ -24,6 +24,8 @@ type Props<V extends string | number> = {
   // Shown when nothing is chosen, or when there are no options at all.
   placeholder?: string
   disabled?: boolean
+  // Why it is disabled, shown on hover or tap (CLAUDE.md §11); with no options, the placeholder says it.
+  why?: string
   className?: string
   small?: boolean
   'aria-label'?: string
@@ -32,7 +34,7 @@ type Props<V extends string | number> = {
 const GAP = 4
 const MAX_HEIGHT = 280
 
-export function PixelSelect<V extends string | number>({ value, options, onChange, placeholder, disabled, className, small, 'aria-label': ariaLabel }: Props<V>) {
+export function PixelSelect<V extends string | number>({ value, options, onChange, placeholder, disabled, why, className, small, 'aria-label': ariaLabel }: Props<V>) {
   const id = useId()
   const button = useRef<HTMLButtonElement>(null)
   const list = useRef<HTMLUListElement>(null)
@@ -180,6 +182,7 @@ export function PixelSelect<V extends string | number>({ value, options, onChang
         type="button"
         className={`btn pixel-select${small ? ' small' : ''}${open ? ' open' : ''}${className ? ` ${className}` : ''}`}
         disabled={off}
+        data-why={options.length === 0 ? (placeholder ?? 'Seçenek yok') : (why ?? 'Şu an seçilemez')}
         role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}

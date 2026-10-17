@@ -193,7 +193,7 @@ export function crownReigns(key: CrownKey, crown: number, at: number): CrownReig
 
 export function crownReignAt(key: CrownKey, crown: number, at: number): CrownReign {
   const list = crownReigns(key, crown, at)
-  return list[list.length - 1]
+  return list[list.length - 1] ?? extend(key, crown, at).reigns[0]
 }
 
 export const crownAgeOf = (p: Pick<CrownRoyal, 'bornAt'>, at: number) => Math.max(0, (at - p.bornAt) / yearMs())
@@ -210,7 +210,8 @@ export const crownRulerName = (key: CrownKey, crown: number, at: number) => crow
 // The house as it stands at `at`: the ruler and the reign, the consort (if alive), the children living and dead, the
 // line of succession (the living children, sons first, by age), the regent while one rules, and the rulers before.
 export function crownHouseAt(key: CrownKey, crown: number, at: number) {
-  const list = crownReigns(key, crown, at)
+  const all = crownReigns(key, crown, at)
+  const list = all.length > 0 ? all : [crownReignAt(key, crown, at)]
   const reign = list[list.length - 1]
   const consort = reign.consort && reign.consort.deathAt > at ? reign.consort : null
   const born = reign.children.filter((c) => c.bornAt <= at)
@@ -244,3 +245,100 @@ export function crownTraitAt(key: CrownKey, crown: number, at: number) {
 
 // The calendar year of a moment (for the reigns' dates).
 export const crownYearOf = (key: CrownKey, at: number) => calendarAt(at, key.seasonStart ?? FALLBACK_EPOCH).year
+
+// ---- The rivalry of the two crowns (CLAUDE.md §7.8) ---------------------------------------------------------------
+
+export type CrownStance = 'peace' | 'tension' | 'war'
+export const CROWN_STANCES: CrownStance[] = ['peace', 'tension', 'war']
+const RV = () => balance.cities.crown.rivalry
+
+export const rivalryWindowMs = () => RV().windowSeconds * 1000
+
+// The stance in window `w` (a chain from a few windows back, so each follows from the one before), and the rulers
+// reigning as it began (their traits shift the chance of war).
+const stances = new Map<string, CrownStance>()
+function stanceOf(key: CrownKey, w: number): CrownStance {
+  const id = `${key.lobbyKey ?? 0}|${anchorOf(key)}|${w}`
+  const hit = stances.get(id)
+  if (hit) return hit
+  const v = RV()
+  let s: CrownStance = 'peace'
+  for (let i = w - v.chain; i <= w; i++) {
+    const at = i * rivalryWindowMs()
+    const shift = [0, 1].reduce((n, c) => n + ((v.warTraits as Record<string, number>)[crownReignAt(key, c, at).ruler.trait] ?? 0), 0)
+    const t = v.transitions[s]
+    const war = Math.max(0, Math.min(1, t.war + shift))
+    const peace = Math.max(0, t.peace - (war - t.war))
+    const r = mix(key.lobbyKey ?? 0, i, 6029) / 4294967296
+    s = r < war ? 'war' : r < war + peace ? 'peace' : 'tension'
+  }
+  stances.set(id, s)
+  return s
+}
+
+// The winner of a war that ended as window `w` began (the war was in w − 1): drawn, the rulers' gift for war
+// shifting the odds.
+function warWinner(key: CrownKey, w: number): number {
+  const at = w * rivalryWindowMs()
+  const m = [0, 1].map((c) => crownReignAt(key, c, at).ruler.skills.military)
+  const p0 = Math.max(0.1, Math.min(0.9, 0.5 + (m[0] - m[1]) * RV().perMilitary))
+  return mix(key.lobbyKey ?? 0, w, 6043) / 4294967296 < p0 ? 0 : 1
+}
+
+export interface CrownRivalry {
+  stance: CrownStance
+  window: number
+  from: number
+  until: number
+  // The stance before, and the winner of the war that ended as this window began (if one did).
+  prev: CrownStance
+  winner: number | null
+}
+
+export function crownRivalryAt(key: CrownKey, at: number): CrownRivalry {
+  const ms = rivalryWindowMs()
+  const w = Math.floor(at / ms)
+  const stance = stanceOf(key, w)
+  const prev = stanceOf(key, w - 1)
+  return { stance, window: w, from: w * ms, until: (w + 1) * ms, prev, winner: prev === 'war' && stance !== 'war' ? warWinner(key, w) : null }
+}
+
+// The stances of the last few windows (newest first), for the panels.
+export const crownRivalryHistory = (key: CrownKey, at: number, n = 6) => Array.from({ length: n }, (_, i) => crownRivalryAt(key, at - i * rivalryWindowMs()))
+
+// The changes of stance after `from` up to `to` (oldest first).
+export function crownRivalryChanges(key: CrownKey, from: number, to: number): CrownRivalry[] {
+  const ms = rivalryWindowMs()
+  const out: CrownRivalry[] = []
+  for (let w = Math.floor(from / ms) + 1; w <= Math.floor(to / ms) && out.length < 64; w++) {
+    const r = crownRivalryAt(key, w * ms)
+    if (r.stance !== r.prev) out.push(r)
+  }
+  return out
+}
+
+// All that tilts a crown's ways at `at`: its ruler's trait and the rivalry of the two crowns. `tribute` multiplies the
+// share its collectors ask, `tip` its patrol's tip.
+export function crownWays(key: CrownKey, crown: number, at: number) {
+  const trait = crownTraitAt(key, crown, at)
+  const rivalry = crownRivalryAt(key, at)
+  const e = RV().effects[rivalry.stance]
+  return { trait, rivalry, tribute: trait.tribute * e.tribute, tip: trait.tip * e.tip }
+}
+
+// What a production round from `from` to `to` brings a lord's standing with the crowns: the welcome of a ruler
+// crowned in it (by trait) and the pride of a war won, for the crown the lord is sworn to (since before it happened).
+export function crownRoundNudge(k: Pick<Kingdom, 'lobbyKey' | 'seasonStart' | 'liege' | 'liegeAt'>, from: number, to: number): number {
+  if (k.lobbyKey === undefined || k.liege === undefined || k.liege === null) return 0
+  const key: CrownKey = { lobbyKey: k.lobbyKey, seasonStart: k.seasonStart }
+  const since = k.liegeAt ?? 0
+  let delta = 0
+  for (const r of crownSuccessions(key, k.liege, from, to)) if (r.from > since) delta += crownTraitSpec(r.ruler.trait).welcome
+  const ms = rivalryWindowMs()
+  const w = Math.floor(to / ms)
+  if (w * ms > from && w * ms > since) {
+    const r = crownRivalryAt(key, w * ms)
+    if (r.winner === k.liege) delta += RV().victoryRelation
+  }
+  return delta
+}

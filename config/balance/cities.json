@@ -153,12 +153,30 @@
       "comingOfAge": 16,
       "history": 8,
       "traits": {
-        "greedy": { "name": "Açgözlü", "tribute": 1.2, "tip": 0.8 },
-        "generous": { "name": "Cömert", "tribute": 0.85, "tip": 1.25 },
-        "stern": { "name": "Sert", "tribute": 1.1, "tip": 0.9 },
-        "pious": { "name": "Dindar", "tribute": 0.95, "tip": 1.1 },
-        "just": { "name": "Adil", "tribute": 1, "tip": 1 }
+        "greedy": { "name": "Açgözlü", "tribute": 1.2, "tip": 0.8, "welcome": -4 },
+        "generous": { "name": "Cömert", "tribute": 0.85, "tip": 1.25, "welcome": 8 },
+        "stern": { "name": "Sert", "tribute": 1.1, "tip": 0.9, "welcome": 0 },
+        "pious": { "name": "Dindar", "tribute": 0.95, "tip": 1.1, "welcome": 5 },
+        "just": { "name": "Adil", "tribute": 1, "tip": 1, "welcome": 5 }
       }
+    },
+    "rivalry": {
+      "note": "the two crowns are at peace, in tension or at war in each window (crownHouse.ts → crownRivalryAt), a chain drawn from the lobby number starting `chain` windows back at peace; warTraits shift the chance of war by the rulers' traits (taken from peace); effects multiply the tribute share the collectors ask and the patrol's tip; a war's winner (drawn, perMilitary per point of the rulers' military gap) warms its lords by victoryRelation",
+      "windowSeconds": 10800,
+      "chain": 8,
+      "transitions": {
+        "peace": { "peace": 0.6, "tension": 0.35, "war": 0.05 },
+        "tension": { "peace": 0.3, "tension": 0.4, "war": 0.3 },
+        "war": { "peace": 0.45, "tension": 0.35, "war": 0.2 }
+      },
+      "warTraits": { "greedy": 0.05, "generous": -0.04, "stern": 0.06, "pious": -0.03, "just": -0.02 },
+      "effects": {
+        "peace": { "tribute": 1, "tip": 1 },
+        "tension": { "tribute": 1.1, "tip": 1 },
+        "war": { "tribute": 1.25, "tip": 1.2 }
+      },
+      "perMilitary": 0.04,
+      "victoryRelation": 4
     },
     "switch": {
       "note": "a liege crown that backed the lord's pretender, once he is beaten: the lord may go over to the rival crown within offerMinutes (CLAUDE.md §9.1.1). Accepted: the old crown's relation falls to at most oldRelation, the new crown's rises to at least newRelation. Declined: the old crown makes amends (relation and gold)",

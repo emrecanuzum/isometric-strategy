@@ -103,7 +103,7 @@ export function AuthScreen() {
             <Icon name="warn" size={16} /> {error}
           </p>
         )}
-        <button className="btn wide" disabled={busy}>
+        <button className="btn wide" disabled={busy} data-why="Sunucunun cevabı bekleniyor">
           {busy ? 'Bekle…' : mode === 'in' ? 'Giriş yap' : 'Hesabı oluştur'}
         </button>
       </form>

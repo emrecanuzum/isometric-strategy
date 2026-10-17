@@ -1,4 +1,4 @@
-import { balance, findRoute, routeLength } from '@game/shared'
+import { Terrain, balance, findRoute, routeHints, routeLength } from '@game/shared'
 import type { Blocked, Point, World } from '@game/shared'
 import { ROUTE_STEP, drawnRoads, findBridges, resampleRoute, roundRoute } from './chunkPainter'
 import { cityStructures } from './cities'
@@ -123,13 +123,92 @@ export function patrolBlocker(world: World, lords: Holding[]): Blocked {
     cityBlocks.set(world, city)
   }
   const taken = new Set(city)
+  // The lords' gates it rides through by the middle, and their laid roads it keeps beside (see findRoute).
+  const gates = new Set<number>()
+  const roads = new Set<number>()
   for (const lord of lords) {
     for (const b of lord.buildings) {
+      if (b.kind === 'gate') gates.add(b.y * 65536 + b.x)
+      if (b.kind === 'road') roads.add(b.y * 65536 + b.x)
       if (b.kind === 'gate' || (b.kind === 'wall' && b.broken)) continue
       for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) taken.add(y * 65536 + x)
     }
   }
-  return (x, y) => taken.has(y * 65536 + x)
+  return routeHints((x, y) => taken.has(y * 65536 + x), { roads, gates })
+}
+
+// Where a crown's column halts at a lord's building (CLAUDE.md §7.8): its head on the free tile that best faces the
+// building's front, close by it, and the squads behind gathered on the free tiles around that one (each a little apart
+// from the others, all within a few tiles and reachable from it without crossing a wall or a building), not strung out
+// along the road. `count`: the squads behind the head.
+const HALT_REACH = 5
+const HALT_GATHER = 3.6
+const HALT_APART = 1.3
+export function haltSpots(world: World, blocked: Blocked, stop: { x: number; y: number; size: number }, count: number): { door: Point; gather: Point[] } {
+  const free = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= world.size || y >= world.size) return false
+    const t = world.terrain[y * world.size + x]
+    return t !== Terrain.Lake && t !== Terrain.River && t !== Terrain.Mountain && !blocked(x, y)
+  }
+  // How far a tile's middle lies from the building, and how good a place it is: close, in front of it (toward the
+  // viewer, so the squads are not hidden behind it) and with open ground round it (the squads are drawn large).
+  const cx = stop.x + stop.size / 2
+  const cy = stop.y + stop.size / 2
+  const score = (x: number, y: number) => {
+    const px = x + 0.5
+    const py = y + 0.5
+    const dx = Math.max(stop.x - px, 0, px - (stop.x + stop.size))
+    const dy = Math.max(stop.y - py, 0, py - (stop.y + stop.size))
+    const behind = px + py < cx + cy ? 1.2 : 0
+    let crowd = 0
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if ((ox || oy) && !free(x + ox, y + oy)) crowd++
+    return Math.hypot(dx, dy) + behind + crowd * 0.18
+  }
+  const fallback = { x: stop.x + stop.size + 1.6, y: stop.y + stop.size + 1.6 }
+  let door: { x: number; y: number } | null = null
+  let best = Infinity
+  for (let y = stop.y - HALT_REACH; y < stop.y + stop.size + HALT_REACH; y++) {
+    for (let x = stop.x - HALT_REACH; x < stop.x + stop.size + HALT_REACH; x++) {
+      if (!free(x, y)) continue
+      const v = score(x, y)
+      if (v < best) [best, door] = [v, { x, y }]
+    }
+  }
+  if (!door) return { door: fallback, gather: [] }
+  // The free tiles reachable from the head's within a few tiles (8 ways, no cutting a corner past a blocked tile).
+  const reach: { x: number; y: number; v: number }[] = []
+  const seen = new Set<number>([door.y * 65536 + door.x])
+  const queue = [door]
+  for (let q = 0; q < queue.length; q++) {
+    const t = queue[q]
+    if (q > 0) reach.push({ ...t, v: score(t.x, t.y) + Math.hypot(t.x - door.x, t.y - door.y) * 0.35 })
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = t.x + dx
+        const ny = t.y + dy
+        const key = ny * 65536 + nx
+        if ((!dx && !dy) || seen.has(key) || Math.hypot(nx - door.x, ny - door.y) > HALT_GATHER || !free(nx, ny)) continue
+        if (dx && dy && (!free(t.x + dx, t.y) || !free(t.x, t.y + dy))) continue
+        seen.add(key)
+        queue.push({ x: nx, y: ny })
+      }
+    }
+  }
+  reach.sort((a, b) => a.v - b.v)
+  const head = { x: door.x + 0.5, y: door.y + 0.5 }
+  const gather: Point[] = []
+  // Each squad a little apart from the rest; with too little room, closer.
+  for (const apart of [HALT_APART, 0.95, 0]) {
+    for (const t of reach) {
+      if (gather.length >= count) break
+      const p = { x: t.x + 0.5, y: t.y + 0.5 }
+      if ([head, ...gather].some((o) => Math.hypot(o.x - p.x, o.y - p.y) < apart || (o.x === p.x && o.y === p.y))) continue
+      gather.push(p)
+    }
+  }
+  // Nearest the head first: the first squad behind it takes the closest place.
+  gather.sort((a, b) => Math.hypot(a.x - head.x, a.y - head.y) - Math.hypot(b.x - head.x, b.y - head.y))
+  return { door: head, gather }
 }
 
 // A patrol's ride from crown capital `city` (its corner tile) to `door`: by the roads where they lead the way, or

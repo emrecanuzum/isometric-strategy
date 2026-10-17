@@ -35,6 +35,7 @@ import { cityInfo } from '../../game/cities'
 import { Icon } from '../icons'
 import type { IconName } from '../icons'
 import { RESOURCE_NAMES } from '../names'
+import { lackWhy } from '../why'
 import type { HudData } from './tabs'
 import type { Online } from './online'
 import type { IntelReport } from '../../net/online'
@@ -116,13 +117,13 @@ function ShipPicker({ from, picked, onPick }: { from: Ships; picked: Ships; onPi
           <span className="unit-label">
             <Icon name={SHIP_ICONS[x]} size={16} /> {SHIP_NAMES[x]}
           </span>
-          <button className="btn icon-only" disabled={(picked[x] ?? 0) <= 0} onClick={() => onPick({ ...picked, [x]: (picked[x] ?? 0) - 1 })} aria-label="Azalt">
+          <button className="btn icon-only" disabled={(picked[x] ?? 0) <= 0} data-why="Bu türden seçili gemi yok" onClick={() => onPick({ ...picked, [x]: (picked[x] ?? 0) - 1 })} aria-label="Azalt">
             <Icon name="minus" size={16} />
           </button>
           <span className="stepper-value">
             <b>{picked[x] ?? 0}</b> / {from[x]}
           </span>
-          <button className="btn icon-only" disabled={(picked[x] ?? 0) >= (from[x] ?? 0)} onClick={() => onPick({ ...picked, [x]: (picked[x] ?? 0) + 1 })} aria-label="Artır">
+          <button className="btn icon-only" disabled={(picked[x] ?? 0) >= (from[x] ?? 0)} data-why="Bu türün bütün gemileri seçili" onClick={() => onPick({ ...picked, [x]: (picked[x] ?? 0) + 1 })} aria-label="Artır">
             <Icon name="plus" size={16} />
           </button>
         </div>
@@ -282,16 +283,16 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
             <button className="btn small" disabled={fleet.mission.kind === 'trade'} title={fleet.mission.kind === 'trade' ? 'Ticaretteki filo yerinden oynamaz' : 'Haritada bir nehre ya da göle tıkla'} onClick={() => online.sail(fleet.id)}>
               <Icon name="ship" size={16} /> Hareket et
             </button>
-            <button className={on('port')} aria-pressed={fleet.mission.kind === 'port'} disabled={!!simple('port')} onClick={() => fleet.mission.kind !== 'port' && mission({ kind: 'port' })}>
+            <button className={on('port')} aria-pressed={fleet.mission.kind === 'port'} disabled={!!simple('port')} data-why={WHY[simple('port') as NavyError] ?? 'Şu an olmaz'} onClick={() => fleet.mission.kind !== 'port' && mission({ kind: 'port' })}>
               <Icon name="anchor" size={16} /> Limanda bekle
             </button>
             <button className={on('trade')} aria-pressed={picking === 'trade' || fleet.mission.kind === 'trade'} onClick={() => setPicking(picking === 'trade' ? null : 'trade')}>
               <Icon name="trade" size={16} /> Deniz ticareti
             </button>
-            <button className={on('fish')} aria-pressed={fleet.mission.kind === 'fish'} disabled={!!simple('fish')} title={WHY[simple('fish') as NavyError]} onClick={() => fleet.mission.kind !== 'fish' && mission({ kind: 'fish' })}>
+            <button className={on('fish')} aria-pressed={fleet.mission.kind === 'fish'} disabled={!!simple('fish')} data-why={WHY[simple('fish') as NavyError] ?? 'Şu an olmaz'} title={WHY[simple('fish') as NavyError]} onClick={() => fleet.mission.kind !== 'fish' && mission({ kind: 'fish' })}>
               <Icon name="food" size={16} /> Balık avı
             </button>
-            <button className={on('hunt')} aria-pressed={fleet.mission.kind === 'hunt'} disabled={!!simple('hunt')} title={WHY[simple('hunt') as NavyError]} onClick={() => fleet.mission.kind !== 'hunt' && mission({ kind: 'hunt' })}>
+            <button className={on('hunt')} aria-pressed={fleet.mission.kind === 'hunt'} disabled={!!simple('hunt')} data-why={WHY[simple('hunt') as NavyError] ?? 'Şu an olmaz'} title={WHY[simple('hunt') as NavyError]} onClick={() => fleet.mission.kind !== 'hunt' && mission({ kind: 'hunt' })}>
               <Icon name="eye" size={16} /> Korsan avı
             </button>
             <button className="btn small" aria-pressed={picking === 'blockade'} disabled={enemies.length === 0} title={enemies.length === 0 ? 'Savaşta olduğun, iskelesi olan bir lord yok' : undefined} onClick={() => setPicking(picking === 'blockade' ? null : 'blockade')}>
@@ -301,11 +302,11 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
               <Icon name="swords" size={16} /> Kıyı akını
             </button>
             {kingdom.blockade && (
-              <button className="btn small danger" disabled={!!simple('sortie')} title={WHY[simple('sortie') as NavyError]} onClick={() => mission({ kind: 'sortie' })}>
+              <button className="btn small danger" disabled={!!simple('sortie')} data-why={WHY[simple('sortie') as NavyError] ?? 'Şu an olmaz'} title={WHY[simple('sortie') as NavyError]} onClick={() => mission({ kind: 'sortie' })}>
                 <Icon name="swords" size={16} /> Ablukayı yar
               </button>
             )}
-            <button className="btn small" disabled={countShips(fleet.ships) < 2 || others.length + 1 >= balance.navy.maxFleets} onClick={() => setPicking(picking === 'split' ? null : 'split')} aria-pressed={picking === 'split'}>
+            <button className="btn small" disabled={countShips(fleet.ships) < 2 || others.length + 1 >= balance.navy.maxFleets} data-why={countShips(fleet.ships) < 2 ? 'Bölmek için en az 2 gemi gerekir' : `En fazla ${balance.navy.maxFleets} filon olabilir`} onClick={() => setPicking(picking === 'split' ? null : 'split')} aria-pressed={picking === 'split'}>
               <Icon name="ship" size={16} /> Böl
             </button>
             {merge && (
@@ -320,7 +321,7 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
         )}
         {!home && fleet.mission.kind !== 'return' && (
           <div className="army-actions">
-            <button className="btn small" disabled={!!recallError(kingdom, fleet.id, now)} title={recallError(kingdom, fleet.id, now) === 'engaged' ? 'Çarpışma başlamak üzere' : undefined} onClick={() => online.act({ type: 'fleet', action: 'recall', fleet: fleet.id })}>
+            <button className="btn small" disabled={!!recallError(kingdom, fleet.id, now)} data-why={recallError(kingdom, fleet.id, now) === 'engaged' ? 'Filo vardı, çarpışma başlamak üzere; şimdi geri çağrılamaz' : (WHY[recallError(kingdom, fleet.id, now) as NavyError] ?? 'Şu an geri çağrılamaz')} title={recallError(kingdom, fleet.id, now) === 'engaged' ? 'Çarpışma başlamak üzere' : undefined} onClick={() => online.act({ type: 'fleet', action: 'recall', fleet: fleet.id })}>
               <Icon name="home" size={16} /> Geri çağır
             </button>
           </div>
@@ -347,7 +348,7 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
                     <small>
                       sefer {trip ? clock(trip) : '—'} · birimi {price.toFixed(2).replace('.', ',')} · saatte yaklaşık {fmt(per)} altın
                     </small>
-                    <button className="btn small" disabled={!!why} title={why ? WHY[why] : undefined} onClick={() => mission({ kind: 'trade', good, city: i })}>
+                    <button className="btn small" disabled={!!why} data-why={why ? (WHY[why] ?? 'Şu an olmaz') : undefined} onClick={() => mission({ kind: 'trade', good, city: i })}>
                       <Icon name="ship" size={16} /> {fleet.mission.kind === 'trade' && fleet.mission.city === i && fleet.mission.good === good ? 'Bu sefer sürüyor' : 'Yelken aç'}
                     </button>
                   </li>
@@ -372,7 +373,7 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
                     {k.navy && ` · limanı ${roughShips(k.navy.harbour)}`}
                     {k.blockade && ' · zaten abluka altında'}
                   </small>
-                  <button className="btn small danger" disabled={!!why} title={why ? WHY[why] : undefined} onClick={() => mission({ kind: picking, target: k.id })}>
+                  <button className="btn small danger" disabled={!!why} data-why={why ? (WHY[why] ?? 'Şu an olmaz') : undefined} onClick={() => mission({ kind: picking, target: k.id })}>
                     {picking === 'blockade' ? 'Abluka et' : 'Akın et'}
                   </button>
                 </li>
@@ -391,6 +392,7 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
             <button
               className="btn small"
               disabled={!!splitFleetError(kingdom, fleet.id, split)}
+              data-why={WHY[splitFleetError(kingdom, fleet.id, split) as NavyError] ?? 'Yeni filoya gidecek gemileri seç (hepsi değil)'}
               onClick={() => online.act({ type: 'fleet', action: 'split', fleet: fleet.id, ships: split }).then(() => (setSplit({}), setPicking(null)))}
             >
               {countShips(split)} gemiyle yeni filo
@@ -417,7 +419,7 @@ function Harbour({ data, online }: { data: HudData; online: Online }) {
         <>
           <p className="hint">Limandaki gemiler ve limanda bekleyen filolar iskeleyi savunur.</p>
           <ShipPicker from={navy.harbour} picked={ships} onPick={setPicked} />
-          <button className="btn small" disabled={!!why} title={why ? WHY[why] : undefined} onClick={() => online.act({ type: 'fleet', action: 'form', ships }).then(() => setPicked(null))}>
+          <button className="btn small" disabled={!!why} data-why={why ? (WHY[why] ?? 'Şu an olmaz') : undefined} onClick={() => online.act({ type: 'fleet', action: 'form', ships }).then(() => setPicked(null))}>
             {countShips(ships)} gemiyle filo çıkar
           </button>
         </>
@@ -456,16 +458,16 @@ function Shipyard({ data, online }: { data: HudData; online: Online }) {
         note={`${spec.buildSeconds} sn · tur başı ${spec.upkeep.toLocaleString('tr-TR')} altın bakım`}
       />
       <div className="stepper">
-        <button className="btn icon-only" disabled={count <= 1} onClick={() => setCount(count - 1)} aria-label="Bir gemi azalt">
+        <button className="btn icon-only" disabled={count <= 1} data-why="En az 1 gemi" onClick={() => setCount(count - 1)} aria-label="Bir gemi azalt">
           <Icon name="minus" size={16} />
         </button>
         <span className="stepper-value">
           <b>{count}</b> {SHIP_NAMES[ship].toLowerCase()}
         </span>
-        <button className="btn icon-only" disabled={count >= 20} onClick={() => setCount(count + 1)} aria-label="Bir gemi ekle">
+        <button className="btn icon-only" disabled={count >= 20} data-why="Bir seferde en fazla 20 gemi" onClick={() => setCount(count + 1)} aria-label="Bir gemi ekle">
           <Icon name="plus" size={16} />
         </button>
-        <button className="btn small" disabled={!!why} title={why ? WHY[why] : undefined} onClick={() => online.act({ type: 'ships', ship, count })}>
+        <button className="btn small" disabled={!!why} data-why={why === 'cost' ? (lackWhy(kingdom.stock, Object.fromEntries(Object.entries(spec.cost).map(([r, v]) => [r, (v ?? 0) * count]))) ?? WHY.cost) : why ? WHY[why] : undefined} onClick={() => online.act({ type: 'ships', ship, count })}>
           Kızağa koy {why ? `(${WHY[why]})` : ''}
         </button>
       </div>

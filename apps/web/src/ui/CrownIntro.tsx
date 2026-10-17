@@ -196,7 +196,7 @@ export function CrownIntro({ world, kingdom, online, lobby, onSwear, onClose }: 
           </div>
         )}
         <div className="away-nav">
-          <button className="btn" disabled={page === 0} onClick={() => setPage(page - 1)}>
+          <button className="btn" disabled={page === 0} data-why="İlk sayfadasın" onClick={() => setPage(page - 1)}>
             Geri
           </button>
           <span className="away-dots" aria-hidden>

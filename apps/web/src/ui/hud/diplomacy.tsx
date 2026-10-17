@@ -35,6 +35,7 @@ import { cityInfo } from '../../game/cities'
 import type { Estimate } from '../../net/online'
 import { Icon } from '../icons'
 import { RESOURCE_NAMES, UNIT_NAMES } from '../names'
+import { waitWhy } from '../why'
 import type { HudData } from './tabs'
 import type { KingdomInfo, Online } from './online'
 import { kingdomName, lastSeen, relationTermsIn } from './online'
@@ -414,6 +415,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
             <button
               className="btn small"
               disabled={sending('improve') || cooling > 0 || kingdom.stock.gold < d.improve.cost.gold}
+              data-why={sending('improve') ? 'Elçin zaten yolda' : cooling > 0 ? waitWhy(cooling, 'Elçin yeni döndü; ') : `Yeterli altın yok (eksik: ${Math.ceil(d.improve.cost.gold - kingdom.stock.gold)})`}
               onClick={() => envoy('improve')}
               title={cooling > 0 ? `${Math.ceil(cooling / 1000)} sn sonra yeniden` : undefined}
             >
@@ -422,7 +424,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
             )}
             {!war && (
             <span className="stepper">
-              <button className="btn icon-only" disabled={gift <= d.gift.minGold} onClick={() => setGift(Math.max(d.gift.minGold, gift - 10))} aria-label="Azalt">
+              <button className="btn icon-only" disabled={gift <= d.gift.minGold} data-why={`Hediye en az ${d.gift.minGold} altın`} onClick={() => setGift(Math.max(d.gift.minGold, gift - 10))} aria-label="Azalt">
                 <Icon name="minus" size={16} />
               </button>
               <span className="stepper-value">
@@ -431,29 +433,29 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
               <button className="btn icon-only" onClick={() => setGift(gift + 10)} aria-label="Artır">
                 <Icon name="plus" size={16} />
               </button>
-              <button className="btn small" disabled={kingdom.stock.gold < gift || sending('gift')} onClick={() => envoy('gift', { gold: gift })}>
+              <button className="btn small" disabled={kingdom.stock.gold < gift || sending('gift')} data-why={sending('gift') ? 'Hediye elçin zaten yolda' : `Yeterli altın yok (eksik: ${Math.ceil(gift - kingdom.stock.gold)})`} onClick={() => envoy('gift', { gold: gift })}>
                 Hediye (+{Math.min(d.gift.maxGain, Math.round(gift * d.gift.relationPerGold))})
               </button>
             </span>
             )}
             {!war && !ally && !theyPay && (
               <span className="stepper">
-                <button className="btn icon-only" disabled={tribute <= d.tribute.minGold} onClick={() => setTribute(tribute - 1)} aria-label="Azalt">
+                <button className="btn icon-only" disabled={tribute <= d.tribute.minGold} data-why={`Haraç en az ${d.tribute.minGold} altın/tur`} onClick={() => setTribute(tribute - 1)} aria-label="Azalt">
                   <Icon name="minus" size={16} />
                 </button>
                 <span className="stepper-value">
                   <b>{tribute}</b> altın/tur
                 </span>
-                <button className="btn icon-only" disabled={tribute >= d.tribute.maxGold} onClick={() => setTribute(tribute + 1)} aria-label="Artır">
+                <button className="btn icon-only" disabled={tribute >= d.tribute.maxGold} data-why={`Haraç en fazla ${d.tribute.maxGold} altın/tur`} onClick={() => setTribute(tribute + 1)} aria-label="Artır">
                   <Icon name="plus" size={16} />
                 </button>
-                <button className="btn small" disabled={sending('tribute')} onClick={() => envoy('tribute', { gold: tribute })}>
+                <button className="btn small" disabled={sending('tribute')} data-why="Haraç elçin zaten yolda" onClick={() => envoy('tribute', { gold: tribute })}>
                   Haraç iste
                 </button>
               </span>
             )}
             {!ally && !war && (
-              <button className="btn small" disabled={relation < d.alliance.minRelation || sending('alliance')} onClick={() => envoy('alliance')}>
+              <button className="btn small" disabled={relation < d.alliance.minRelation || sending('alliance')} data-why={sending('alliance') ? 'İttifak elçin zaten yolda' : `İttifak için ilişki en az +${d.alliance.minRelation} olmalı (şu an ${Math.round(relation)})`} onClick={() => envoy('alliance')}>
                 İttifak teklif et {relation < d.alliance.minRelation ? `(+${d.alliance.minRelation} gerekir)` : ''}
               </button>
             )}
@@ -468,7 +470,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                 </div>
                 {terms !== 'white' && (
                   <span className="stepper">
-                    <button className="btn icon-only" disabled={termsGold <= (terms === 'tribute' ? 1 : 10)} onClick={() => setTermsGold(Math.max(1, termsGold - (terms === 'tribute' ? 1 : 50)))} aria-label="Azalt">
+                    <button className="btn icon-only" disabled={termsGold <= (terms === 'tribute' ? 1 : 10)} data-why="Daha az istenemez" onClick={() => setTermsGold(Math.max(1, termsGold - (terms === 'tribute' ? 1 : 50)))} aria-label="Azalt">
                       <Icon name="minus" size={16} />
                     </button>
                     <span className="stepper-value">
@@ -477,6 +479,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                     <button
                       className="btn icon-only"
                       disabled={terms === 'tribute' && termsGold >= balance.diplomacy.tribute.maxGold}
+                      data-why={`Haraç en fazla ${balance.diplomacy.tribute.maxGold} altın/tur`}
                       onClick={() => setTermsGold(termsGold + (terms === 'tribute' ? 1 : 50))}
                       aria-label="Artır"
                     >
@@ -494,7 +497,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                         : 'Kimse bir şey ödemez.'}{' '}
                   Savaş puanın {balance.diplomacy.peace.enforceScore} olursa teklifin kabul edilmek zorundadır.
                 </p>
-                <button className="btn small" disabled={sending('peace') || !!termsWhy} onClick={() => envoy('peace', { terms: peaceTerms })}>
+                <button className="btn small" disabled={sending('peace') || !!termsWhy} data-why={sending('peace') ? 'Barış elçin zaten yolda' : termsWhy === 'score' ? 'Savaş puanın bu şartlar için yetmiyor' : 'Bir miktar seç'} onClick={() => envoy('peace', { terms: peaceTerms })}>
                   Barış teklif et {termsWhy === 'score' ? '(savaş puanı yetmiyor)' : ''}
                 </button>
               </div>
@@ -540,6 +543,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
               <button
                 className={confirmWar ? 'btn small danger' : 'btn small'}
                 disabled={relation > threshold}
+                data-why={`Savaş ilanı için ilişki en fazla ${threshold} olmalı (şu an ${Math.round(relation)})`}
                 onClick={() => (confirmWar ? (setConfirmWar(false), online.act({ type: 'declareWar', to: target.id })) : setConfirmWar(true))}
               >
                 <Icon name="swords" size={16} />{' '}
@@ -655,7 +659,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                   {there > 0 ? (
                     <span className="chip up">Casusun orada</span>
                   ) : (
-                    <button className="btn small" disabled={spiesHome < 1} onClick={() => online.act({ type: 'spy', target: target.id, topic: t })}>
+                    <button className="btn small" disabled={spiesHome < 1} data-why="Evde casusun yok; casus evi zamanla yetiştirir" onClick={() => online.act({ type: 'spy', target: target.id, topic: t })}>
                       <Icon name="eye" size={16} /> Casus gönder
                     </button>
                   )}
@@ -700,6 +704,19 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                   <button
                     className="btn small"
                     disabled={blocked}
+                    data-why={
+                      !intel
+                        ? 'Önce casus raporunu getir'
+                        : best < spec.minStrength
+                          ? `Ağ en az %${spec.minStrength} olmalı (en güçlü ağın %${Math.round(best)})`
+                          : op === 'kidnap' && !target.queen
+                            ? 'Kraliçeleri yok'
+                            : noPrison
+                              ? 'Önce hapishane kur (2. seviye saray)'
+                              : noTown
+                                ? 'Elinde kasaba yok'
+                                : `Yeterli altın yok (eksik: ${Math.ceil((spec.cost.gold ?? 0) - kingdom.stock.gold)})`
+                    }
                     onClick={() =>
                       online.act<{ success: boolean }>({ type: 'operation', target: target.id, op, ...(op === 'townRevolt' && picked && { town: picked.id }) }).then((r) => {
                         if (r) setOutcome(r.success ? `${OPERATION_NAMES[op]}: başarılı.` : `${OPERATION_NAMES[op]}: başarısız, casusun yakalandı.`)
@@ -835,13 +852,21 @@ function Hostility({ data, online, target }: { data: HudData; online: Online; ta
   return (
     <Section title="Düşmanlık" icon="swords">
       <div className="actions">
-        <button className="btn small danger" disabled={insulting} onClick={() => online.act({ type: 'envoy', to: target.id, kind: 'insult' })}>
+        <button className="btn small danger" disabled={insulting} data-why="Hakaret elçin zaten yolda" onClick={() => online.act({ type: 'envoy', to: target.id, kind: 'insult' })}>
           Hakaret et ({d.insult.relation} ilişki)
         </button>
         <button
           className="btn small danger"
           disabled={ally || (kingdom.soldiers ?? 0) < r.soldiers || raidReady > now || !(target.buildings ?? []).some((b) => b.kind === 'tradePost')}
-          title={raidReady > now ? `${Math.ceil((raidReady - now) / 1000)} sn sonra` : undefined}
+          data-why={
+            ally
+              ? 'Müttefikin yağmalanamaz'
+              : (kingdom.soldiers ?? 0) < r.soldiers
+                ? `Garnizonda en az ${r.soldiers} asker olmalı (${kingdom.soldiers ?? 0} var)`
+                : raidReady > now
+                  ? waitWhy(raidReady - now)
+                  : 'Ticaret noktaları yok'
+          }
           onClick={raid}
         >
           Ticaret yolunu yağmala · {r.soldiers} asker · şans %{Math.round(chance * 100)}

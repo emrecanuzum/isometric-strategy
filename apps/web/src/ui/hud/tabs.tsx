@@ -20,6 +20,8 @@ import {
   plannedHousing,
   palaceLevel,
   buildingCount,
+  buildLimit,
+  buildCost,
   cutOff,
   imprisoned,
   isFree,
@@ -27,6 +29,8 @@ import {
   buyError,
   fortuneEffects,
   guildOf,
+  projectEffects,
+  festivalHappiness,
   memorialHappiness,
   happinessFor,
   isNightAt,
@@ -68,6 +72,7 @@ import { STRUCTURE_SPRITES, palaceIn } from '../../game/buildingSprites'
 import { Icon } from '../icons'
 import { BUILDING_NAMES, BUILDING_NOTES, RESOURCE_ICONS, RESOURCE_NAMES, SEASON_NAMES, WEAPON_ICONS, WEAPON_NAMES, dateText } from '../names'
 import { CostList, GoodChoice, Missing } from '../panels'
+import { buildWhy, lackWhy, sentence, waitWhy } from '../why'
 import type { Journal } from './journal'
 import { DynastySection, houseWaiting } from './dynasty'
 import type { Online } from './online'
@@ -75,6 +80,7 @@ import { REPORT_ROUNDS, isImportant, unreadImportant } from './journal'
 import { FortuneNote, HospitalPanel, Sickness, TemplePanel } from './institutions'
 import { PopulationPanel } from './population'
 import { ExpeditionReport, ExpeditionsPanel, GoalTitle, GoalsPanel, StewardSection } from './expeditions'
+import { ProjectsPanel } from './projects'
 import { IncomeSection, SeasonBooks } from './treasury'
 import { History, Meter, Placeholder, Section, SpriteView, Stat, fmt, signed, times } from './primitives'
 import { Subtabs, showPart, usePart } from './Subtabs'
@@ -130,7 +136,7 @@ export function flows(kingdom: Kingdom, now: number, market?: Market | null) {
   // A full treasury keeps the merchant home (economy.ts, advance).
   const full = goldCap(kingdom, now) - kingdom.stock.gold < 1
   const sold = good && !walledIn && !kingdom.trade.damaged && !full ? Math.max(0, Math.min(tradeLoad(kingdom) * trips, Math.floor(kingdom.stock[good] - tradeReserve(kingdom, good, now)) + Math.max(0, round[good] ?? 0))) : 0
-  const bonus = 1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade + guildOf(kingdom, now).trade
+  const bonus = 1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade + guildOf(kingdom, now).trade + projectEffects(kingdom, now).trade
   // At the lobby's price as it stands (or the free city's), and less for a ruler long away, as the merchant is paid.
   const tradeGold = good ? sold * tradePrice(kingdom, good, market, now) * bonus * idleFactor(kingdom, now) : 0
   const tributesOut = -l.tributes.filter((t) => t.gold < 0).reduce((a, t) => a + t.gold, 0)
@@ -233,7 +239,21 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
                     : null
             return (
               <li key={kind}>
-                <button className="card" disabled={why !== null} onClick={() => onPlace(kind)} aria-describedby={`why-${kind}`}>
+                <button
+                  className="card"
+                  disabled={why !== null}
+                  data-why={
+                    error === 'locked'
+                      ? `${spec.requiresPalace ?? 1}. seviye saray gerekir`
+                      : error === 'unique'
+                        ? (why ?? undefined)
+                        : error === 'limit'
+                          ? `Sınır dolu (${buildingCount(kingdom, kind)}/${buildLimit(kingdom, kind, now)}); daha fazlası için sarayı yükselt`
+                          : buildWhy(error, kingdom, now, buildCost(kingdom, kind))
+                  }
+                  onClick={() => onPlace(kind)}
+                  aria-describedby={`why-${kind}`}
+                >
                   <span className="card-art">
                     <SpriteView sprite={thumb(kind)} scale={spec.size > 1 ? 0.5 : 1} />
                   </span>
@@ -506,16 +526,31 @@ function MarketSection({ world, kingdom, now, online }: HudData) {
             ))}
           </div>
           <div className="stepper">
-            <button className="btn icon-only" disabled={units <= 50} onClick={() => setUnits(units - 50)} aria-label="Azalt">
+            <button className="btn icon-only" disabled={units <= 50} data-why="En az 50 birim alınır" onClick={() => setUnits(units - 50)} aria-label="Azalt">
               <Icon name="minus" size={16} />
             </button>
             <span className="stepper-value">
               <b>{units}</b> birim
             </span>
-            <button className="btn icon-only" disabled={units >= buyPerClick} onClick={() => setUnits(Math.min(buyPerClick, units + 50))} aria-label="Artır">
+            <button className="btn icon-only" disabled={units >= buyPerClick} data-why={`Bir tıkta en fazla ${buyPerClick} birim`} onClick={() => setUnits(Math.min(buyPerClick, units + 50))} aria-label="Artır">
               <Icon name="plus" size={16} />
             </button>
-            <button className="btn small" disabled={!!why} onClick={add}>
+            <button
+              className="btn small"
+              disabled={!!why}
+              data-why={
+                sending
+                  ? 'Fiyat güncelleniyor, lütfen bekle'
+                  : adding <= 0
+                    ? `Sepet dolu (en fazla ${maxBuy} birim); gönderilmesini bekle`
+                    : why === 'cost'
+                      ? `Yeterli altın yok (eksik: ${Math.ceil(cost - kingdom.stock.gold)})`
+                      : why === 'building'
+                        ? 'Pazar binası henüz bitmedi'
+                        : 'Şu an alınamaz'
+              }
+              onClick={add}
+            >
               {cost} altına al
             </button>
           </div>
@@ -548,16 +583,16 @@ function TradeAmount({ kingdom, now, onTradeAmount }: HudData) {
   return (
     <Section title="Sefer başına satış" icon="trade" aside={`${current} / ${cap} birim`}>
       <div className="stepper">
-        <button className="btn icon-only" disabled={shown <= amountStep} onClick={() => setUnits(Math.max(amountStep, shown - amountStep))} aria-label="Azalt">
+        <button className="btn icon-only" disabled={shown <= amountStep} data-why={`En az ${amountStep} birim`} onClick={() => setUnits(Math.max(amountStep, shown - amountStep))} aria-label="Azalt">
           <Icon name="minus" size={16} />
         </button>
         <span className="stepper-value">
           <b>{shown}</b> birim
         </span>
-        <button className="btn icon-only" disabled={shown >= cap} onClick={() => setUnits(Math.min(cap, shown + amountStep))} aria-label="Artır">
+        <button className="btn icon-only" disabled={shown >= cap} data-why={`Bu seviyenin sınırı ${cap} birim; ticaret noktasını geliştir`} onClick={() => setUnits(Math.min(cap, shown + amountStep))} aria-label="Artır">
           <Icon name="plus" size={16} />
         </button>
-        <button className="btn small" disabled={shown === current || wait > 0} onClick={() => onTradeAmount(shown)}>
+        <button className="btn small" disabled={shown === current || wait > 0} data-why={wait > 0 ? waitWhy(wait * 1000, 'Satış miktarı az önce değişti; ') : 'Seçili miktar zaten uygulanıyor'} onClick={() => onTradeAmount(shown)}>
           {wait > 0 ? `${wait} sn sonra` : 'Uygula'}
         </button>
       </div>
@@ -587,7 +622,7 @@ function TradePost(data: HudData) {
           </p>
           <div className="row">
             <CostList cost={tradeRepairCost()} stock={kingdom.stock} />
-            <button className="btn small" disabled={!affordable(kingdom.stock, tradeRepairCost())} onClick={() => online?.act({ type: 'repairTrade' })}>
+            <button className="btn small" disabled={!affordable(kingdom.stock, tradeRepairCost())} data-why={lackWhy(kingdom.stock, tradeRepairCost()) ?? undefined} onClick={() => online?.act({ type: 'repairTrade' })}>
               Onar
             </button>
           </div>
@@ -635,7 +670,7 @@ function TradePost(data: HudData) {
       )}
       <Section title="Geliştir" icon="plus">
         {next ? (
-          <button className="btn wide" disabled={!affordable(kingdom.stock, next)} onClick={onUpgrade}>
+          <button className="btn wide" disabled={!affordable(kingdom.stock, next)} data-why={lackWhy(kingdom.stock, next) ?? undefined} onClick={onUpgrade}>
             <span>
               Seviye {trade.level + 2}: sefer başına {nextUnits} birim
             </span>
@@ -655,8 +690,8 @@ const describe = (plot: Plot | null | undefined) =>
   !plot ? 'yok' : plot.granted ? `hudut dışında, ${plot.distance} karo` : 'hudut içinde'
 
 // The palace tab in three parts, the one last looked at remembered (in this browser).
-type PalacePart = 'level' | 'house' | 'expeditions' | 'goals' | 'buildings'
-const PALACE_PARTS: PalacePart[] = ['level', 'house', 'expeditions', 'goals', 'buildings']
+type PalacePart = 'level' | 'house' | 'expeditions' | 'goals' | 'projects' | 'buildings'
+const PALACE_PARTS: PalacePart[] = ['level', 'house', 'expeditions', 'goals', 'projects', 'buildings']
 
 // Opens the palace tab at a part next time (or now, if it is open): for whatever sends the player there.
 export const showPalacePart = (part: PalacePart) => showPart('palace', part)
@@ -676,6 +711,23 @@ export function KingdomTab(data: HudData) {
     : kingdom.dockPlot
       ? 'arsa hazır, kurulmadı'
       : describe(plots?.dock)
+  // How many buildings can go up a level (CLAUDE.md §5.5): not at the top, finished, not held back by the house limit
+  // or a missing queen/fealty; of those, how many could start right now (goods in store, a construction slot free).
+  const upgradable = (() => {
+    const byKind = new Map<BuildingKind, { total: number; now: number }>()
+    let total = 0
+    let ready = 0
+    for (const b of kingdom.buildings) {
+      const why = upgradeError(kingdom, b.id, now)
+      if (why !== null && why !== 'cost' && why !== 'queue') continue
+      const e = byKind.get(b.kind) ?? { total: 0, now: 0 }
+      e.total++
+      total++
+      if (why === null) (e.now++, ready++)
+      byKind.set(b.kind, e)
+    }
+    return { byKind, total, now: ready }
+  })()
   const counts = new Map<BuildingKind, number>()
   for (const b of kingdom.buildings) if (b.doneAt <= now) counts.set(b.kind, (counts.get(b.kind) ?? 0) + 1)
   const [part, setPart] = usePart('palace', PALACE_PARTS, 'level')
@@ -696,6 +748,7 @@ export function KingdomTab(data: HudData) {
           { id: 'house', name: 'Hanedan', icon: 'crown', dot: houseWaits },
           { id: 'expeditions', name: 'Seferler', icon: 'pin', count: away },
           { id: 'goals', name: 'Hedefler', icon: 'star' },
+          { id: 'projects', name: 'Projeler', icon: 'build' },
           { id: 'buildings', name: 'Yapılar', icon: 'build' },
         ]}
       />
@@ -734,7 +787,7 @@ export function KingdomTab(data: HudData) {
                   <p className="hint up">Saray yükseltiliyor: {Math.ceil((palace.doneAt - now) / 1000)} sn</p>
                 ) : (
                   <>
-                  <button className="btn wide" disabled={upgradeError(kingdom, palace.id, now) !== null} onClick={() => onUpgradeBuilding(palace.id)}>
+                  <button className="btn wide" disabled={upgradeError(kingdom, palace.id, now) !== null} data-why={buildWhy(upgradeError(kingdom, palace.id, now), kingdom, now, upgradeSpec(palace)?.cost)} onClick={() => onUpgradeBuilding(palace.id)}>
                     <span>Sarayı yükselt <small>({upgradeSpec(palace)?.buildSeconds} sn)</small></span>
                     <CostList cost={upgradeSpec(palace)?.cost} stock={kingdom.stock} />
                   </button>
@@ -764,14 +817,27 @@ export function KingdomTab(data: HudData) {
       {part === 'house' && <DynastySection kingdom={kingdom} now={data.now} online={data.online} onShow={onShow} />}
       {part === 'expeditions' && <ExpeditionsPanel kingdom={kingdom} now={now} online={data.online} onReport={setReport} />}
       {part === 'goals' && <GoalsPanel kingdom={kingdom} now={now} />}
+      {part === 'projects' && <ProjectsPanel kingdom={kingdom} now={now} online={data.online} />}
       {report && <ExpeditionReport expedition={report} kingdom={kingdom} online={data.online} onClose={() => setReport(null)} />}
       {part === 'buildings' && (
-        <Section title="Yapılar" icon="build" aside={`${kingdom.buildings.length} toplam`}>
+        <Section title="Yapılar" icon="build" aside={`${kingdom.buildings.length} toplam${upgradable.total > 0 ? ` · ${upgradable.total} yükseltilebilir` : ''}`}>
+          {upgradable.total > 0 && (
+            <p className="hint">
+              {upgradable.total} yapı bir üst seviyeye çıkabilir{upgradable.now > 0 ? `; ${upgradable.now} tanesi şu an hemen yükseltilebilir` : '; şu an malzeme ya da inşaat yeri bekliyorlar'}.
+            </p>
+          )}
           <ul className="tally">
             {[...counts].map(([kind, n]) => (
               <li key={kind}>
                 <SpriteView sprite={thumb(kind, kingdom.color)} scale={kind === 'house' ? 0.5 : 0.25} label={BUILDING_NAMES[kind]} />
-                <span>{BUILDING_NAMES[kind]}</span>
+                <span>
+                  {BUILDING_NAMES[kind]}
+                  {(upgradable.byKind.get(kind)?.total ?? 0) > 0 && (
+                    <small className={(upgradable.byKind.get(kind)?.now ?? 0) > 0 ? 'up' : 'muted'}>
+                      {upgradable.byKind.get(kind)!.total} yükseltilebilir{(upgradable.byKind.get(kind)?.now ?? 0) > 0 ? ` · ${upgradable.byKind.get(kind)!.now} hemen` : ''}
+                    </small>
+                  )}
+                </span>
                 <b className={capOf(kingdom, kind, now) !== null && n >= capOf(kingdom, kind, now)! ? 'down' : undefined}>
                   {n}
                   {capOf(kingdom, kind, now) !== null ? ` / ${capOf(kingdom, kind, now)}` : kind === 'house' ? ` · ${plannedHousing(kingdom)} / ${population(kingdom, now).cap} barınak` : ''}
@@ -945,6 +1011,8 @@ function Mood({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?
           ucuza asker olur.
         </p>
         {memorialHappiness(kingdom, now) > 0 && <Stat label="Hanedan anıtı" value={`+${memorialHappiness(kingdom, now)}`} note="hanedanın şanı mutluluk hedefine eklenir" />}
+        {projectEffects(kingdom, now).happiness > 0 && <Stat label="Ulu Katedral" value={`+${projectEffects(kingdom, now).happiness}`} note="büyük işin aşamaları mutluluk hedefine eklenir" />}
+        {festivalHappiness(kingdom, now) > 0 && <Stat label="Halk şenliği" value={`+${festivalHappiness(kingdom, now)}`} note="şenlik sürdükçe" />}
         <OutlawToll kingdom={kingdom} mood />
       </Section>
       <Section title="Vergi" icon="gold" aside={`köylü başına ${balance.society.tax.levels[tax].goldPerVillager.toLocaleString('tr-TR', { maximumFractionDigits: 3 })} altın / tur`}>
@@ -1025,7 +1093,7 @@ function QueenNeeded({ kingdom, now, online }: { kingdom: Kingdom; now: number; 
         {kingdom.queenHeldBy && ` Kraliçen ${kingdom.queenHeldBy.name} lordunun elinde: Halk sekmesi → Kraliçe'den fidyesini öde.`}
       </p>
       {!kingdom.queenHeldBy && (
-        <button className="btn small" disabled={!!why} onClick={() => online?.act({ type: 'queen' })}>
+        <button className="btn small" disabled={!!why} data-why={why === 'cost' ? `Yeterli altın yok (eksik: ${Math.ceil(balance.society.queen.cost.gold - kingdom.stock.gold)})` : sentence(why ? QUEEN_WHY[why] : undefined)} onClick={() => online?.act({ type: 'queen' })}>
           <Icon name="crown" size={16} /> Kraliçe bul · {queenOwed(kingdom, now) ? 'hemen, bedelsiz' : `${balance.society.queen.cost.gold} altın`} {why ? `(${QUEEN_WHY[why] ?? ''})` : ''}
         </button>
       )}
@@ -1046,7 +1114,7 @@ function Queen({ kingdom, now, online }: { kingdom: Kingdom; now: number; online
               <Icon name="warn" size={16} /> Kraliçen {kingdom.queenHeldBy.name} lordunun elinde! Halk yas tutuyor (mutluluk{' '}
               {balance.espionage.operations.kidnap.happiness}).
             </p>
-            <button className="btn small" disabled={kingdom.stock.gold < ransom} onClick={() => online?.act({ type: 'ransom' })}>
+            <button className="btn small" disabled={kingdom.stock.gold < ransom} data-why={`Yeterli altın yok (eksik: ${Math.ceil(ransom - kingdom.stock.gold)})`} onClick={() => online?.act({ type: 'ransom' })}>
               Fidye öde · {ransom} altın
             </button>
             <p className="hint">Ya da {kingdom.queenHeldBy.name} ile savaş: kaçırılan kraliçe sana savaş gerekçesi verir.</p>
@@ -1061,7 +1129,7 @@ function Queen({ kingdom, now, online }: { kingdom: Kingdom; now: number; online
               Kraliçe halkın mutluluğunu +{balance.society.happiness.queen} artırır; hanedanın çocukları onunla doğar ve sarayı {balance.dynasty.queenForPalaceLevel}. seviyeye
               yükseltmek için şarttır.
             </p>
-            <button className="btn small" disabled={!!queen} onClick={() => online?.act({ type: 'queen' })}>
+            <button className="btn small" disabled={!!queen} data-why={queen === 'cost' ? `Yeterli altın yok (eksik: ${Math.ceil(balance.society.queen.cost.gold - kingdom.stock.gold)})` : sentence(queen ? QUEEN_WHY[queen] : undefined)} onClick={() => online?.act({ type: 'queen' })}>
               <Icon name="crown" size={16} /> Kraliçe edin · {queenOwed(kingdom, now) ? 'hemen, bedelsiz' : `${balance.society.queen.cost.gold} altın`} {queen ? `(${QUEEN_WHY[queen] ?? ''})` : ''}
             </button>
           </>

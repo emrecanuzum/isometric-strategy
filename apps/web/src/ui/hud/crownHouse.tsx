@@ -1,7 +1,15 @@
 import { useEffect } from 'react'
 import {
   balance,
+  byPower,
   crownAgeOf,
+  crownPower,
+  crownRivalryAt,
+  crownRivalryChanges,
+  crownRivalryHistory,
+  crownSuccessions,
+  crownWays,
+  patrolFavour,
   crownHouseAt,
   crownReigns,
   crownRelation,
@@ -14,7 +22,7 @@ import {
   liegeSwitchError,
   relationBetween,
 } from '@game/shared'
-import type { CrownKey, CrownReign, CrownRoyal, Kingdom, World } from '@game/shared'
+import type { CrownKey, CrownReign, CrownRivalry, CrownRoyal, CrownStance, Kingdom, World } from '@game/shared'
 import { cityInfo } from '../../game/cities'
 import type { Notice } from '../../net/online'
 import { Portrait } from '../DynastyArt'
@@ -118,7 +126,7 @@ export function RoyalFamily({ world, kingdom, crown, now }: { world: World; king
         </ul>
       )}
       <h4 className="house-title">Önceki hükümdarlar</h4>
-      <ul className="ancestors">
+      <ul className="ancestors scroll3">
         {h.past.map((r) => (
           <li key={r.n}>
             <Portrait seed={seedOf(key, crown, r.ruler)} sex={r.ruler.sex} age={crownAgeOf(r.ruler, r.to)} role={r.ruler.sex === 'm' ? 'king' : 'queen'} dead size={40} />
@@ -179,7 +187,7 @@ export function CrownCourt({ world, kingdom, crown, online, now }: { world: Worl
               const rel = me ? null : relationBetween(online.relations, online.me, l.id, now, relationTermsIn(online, online.me, l.id))
               return (
                 <li key={l.id} className={me ? 'me' : undefined}>
-                  <button className="link" onClick={() => !me && online.setFocus(l.id)} disabled={me}>
+                  <button className="link" onClick={() => !me && online.setFocus(l.id)} disabled={me} data-why="Bu senin lordluğun">
                     {l.name}
                     {me ? ' (sen)' : ''}
                   </button>
@@ -196,29 +204,105 @@ export function CrownCourt({ world, kingdom, crown, online, now }: { world: Worl
           {wars.length > 0
             ? `Bu tacın lordlarıyla rakip tacın lordları arasında ${wars.length} savaş sürüyor.`
             : 'İki tacın lordları arasında şu an savaş yok.'}{' '}
-          İki taç soğuk savaştadır: birbirinin lordlarından haraç ister, lordları rakip tacın lordlarıyla ittifak kuramaz.
+          İki taç şu an: {STANCE_NAMES[crownRivalryAt(crownKeyOf(kingdom), now).stance].toLocaleLowerCase('tr-TR')} (ayrıntısı Krallıklar sayfasında). Taçlar birbirinin lordlarından haraç ister, lordları rakip tacın lordlarıyla ittifak kuramaz.
         </p>
       </Section>
     </>
   )
 }
 
+// ---- The crowns' ways and their rivalry (CLAUDE.md §7.8) --------------------------------------------------------
+
+export const STANCE_NAMES: Record<CrownStance, string> = { peace: 'Barış', tension: 'Gerginlik', war: 'Taç savaşı' }
+const STANCE_ICONS = { peace: 'flower', tension: 'warn', war: 'swords' } as const
+const times = (v: number) => `×${(Math.round(v * 100) / 100).toString().replace('.', ',')}`
+
+// Why a crown asks more or less tribute, or tips more or less ("huyu açgözlü ×1,2 · taç savaşı ×1,25"); empty when
+// nothing tilts it.
+export function waysText(key: CrownKey, crown: number, at: number, what: 'tribute' | 'tip') {
+  const w = crownWays(key, crown, at)
+  const e = balance.cities.crown.rivalry.effects[w.rivalry.stance][what]
+  const parts: string[] = []
+  if (w.trait[what] !== 1) parts.push(`hükümdarı ${w.trait.name.toLocaleLowerCase('tr-TR')} ${times(w.trait[what])}`)
+  if (e !== 1) parts.push(`${STANCE_NAMES[w.rivalry.stance].toLocaleLowerCase('tr-TR')} ${times(e)}`)
+  return parts.join(' · ')
+}
+
+// The share of the treasury a crown's collectors ask now.
+export const tributeShareNow = (key: CrownKey, crown: number, at: number) => balance.cities.crown.patrol.tribute.share * crownWays(key, crown, at).tribute
+export const pctText = (v: number) => `%${(Math.round(v * 1000) / 10).toString().replace('.', ',')}`
+
+// About what the crown's patrol tips at the house of entertainment now: the base, the crown's power, a brother at the
+// patrol's head, the ruler's ways and the rivalry (the server's sum, patrols.ts).
+export function tipPreview(kingdom: Kingdom, crown: number, online: Pick<Online, 'kingdoms'>, now: number) {
+  const { share } = crownPower(online.kingdoms.map((k) => ({ liege: k.liege ?? null, score: k.score?.total ?? 0 })), 2)
+  const favour = byPower(share[crown] ?? 0.5, balance.cities.crown.power.favour)
+  return Math.round(balance.cities.crown.patrol.tip * favour * patrolFavour(kingdom).tip * crownWays(crownKeyOf(kingdom), crown, now).tip)
+}
+
+// The two crowns' stance now, how long it lasts, what it does, and the windows before.
+export function CrownRivalryPanel({ world, kingdom, now }: { world: World; kingdom: Kingdom; now: number }) {
+  if (world.cities.length < 2) return null
+  const key = crownKeyOf(kingdom)
+  const r = crownRivalryAt(key, now)
+  const v = balance.cities.crown.rivalry
+  const e = v.effects[r.stance]
+  const names = [0, 1].map((i) => cityInfo(world, i))
+  const left = Math.max(1, Math.ceil((r.until - now) / 60_000))
+  const history = crownRivalryHistory(key, now, 6).slice(1)
+  const winnerOf = (h: CrownRivalry) => (h.winner !== null ? names[h.winner].name : null)
+  const sworn = kingdom.liege !== undefined && kingdom.liege !== null
+  return (
+    <Section title="Taçların rekabeti" icon={STANCE_ICONS[r.stance]} aside={`${STANCE_NAMES[r.stance]} · ${left} dk daha`}>
+      <p className={r.stance === 'war' ? 'hint down' : 'hint'}>
+        {r.stance === 'war'
+          ? `${names[0].name} ile ${names[1].name} savaşta. Haraççılar daha çok ister, taçlar kendi lordlarını kollar.`
+          : r.stance === 'tension'
+            ? `${names[0].name} ile ${names[1].name} arasında gerginlik var: sınırlarda kılıçlar bileniyor.`
+            : `${names[0].name} ile ${names[1].name} şimdilik barış içinde.`}
+        {r.winner !== null && ` Son taç savaşını ${names[r.winner].name} kazandı.`}
+      </p>
+      <Stat label="Haraççıların istediği" value={times(e.tribute)} note={e.tribute === 1 ? 'olağan pay' : 'iki tacın haraççıları için'} tone={e.tribute > 1 ? 'down' : undefined} />
+      <Stat label="Devriyenin bahşişi" value={times(e.tip)} note={e.tip === 1 ? 'olağan bahşiş' : 'taç kendi lordlarını kollar'} tone={e.tip > 1 ? 'up' : undefined} />
+      {sworn && (
+        <Stat label="Senden istenen haraç" value={pctText(tributeShareNow(key, kingdom.liege === 0 ? 1 : 0, now))} note={`rakip taç ${names[kingdom.liege === 0 ? 1 : 0].capital}: ${waysText(key, kingdom.liege === 0 ? 1 : 0, now, 'tribute') || 'olağan'}`} />
+      )}
+      <h4 className="house-title">Önceki dönemler</h4>
+      <ul className="ancestors">
+        {history.map((h) => (
+          <li key={h.window}>
+            <Icon name={STANCE_ICONS[h.stance]} size={16} />
+            <span>
+              {crownYearOf(key, h.from)} · {STANCE_NAMES[h.stance]}
+              {winnerOf(h) ? ` (bitişinde ${winnerOf(h)} kazandı)` : ''}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="hint">
+        İki taç {Math.round(v.windowSeconds / 3600)} saatlik dönemlerde barış, gerginlik ya da savaş hâlindedir; hâl bir öncekine bağlıdır ve hükümdarların huyu savaş olasılığını
+        kaydırır. Gerginlikte haraççılar hazinenin {times(v.effects.tension.tribute)}'i, savaşta {times(v.effects.war.tribute)}'i kadarını ister; savaşta devriyenin bahşişi{' '}
+        {times(v.effects.war.tip)}. Savaş bitince hükümdarlarının askerlik yeteneği şansı kaydırır; kazanan tacın lordlarının o taçla ilişkisi +{v.victoryRelation} artar.
+      </p>
+    </Section>
+  )
+}
+
 // ---- News of a succession ---------------------------------------------------------------------------------------------
 
-const storeKey = (lobby: string, me: number) => `crown-reign:${lobby}:${me}`
-const readTold = (lobby: string, me: number): number[] | null => {
+const storeKey = (lobby: string, me: number) => `crown-told:${lobby}:${me}`
+const readTold = (lobby: string, me: number): number => {
   try {
-    const raw = localStorage.getItem(storeKey(lobby, me))
-    return raw ? (JSON.parse(raw) as number[]) : null
+    return Number(localStorage.getItem(storeKey(lobby, me)) ?? 0) || 0
   } catch {
-    return null
+    return 0
   }
 }
-const writeTold = (lobby: string, me: number, told: number[]) => {
+const writeTold = (lobby: string, me: number, at: number) => {
   try {
-    localStorage.setItem(storeKey(lobby, me), JSON.stringify(told))
+    localStorage.setItem(storeKey(lobby, me), String(Math.floor(at)))
   } catch {
-    // Without storage the news may come again next visit.
+    // Without storage the server's last-seen time still keeps the news from coming twice.
   }
 }
 
@@ -234,6 +318,7 @@ export function successionNotice(key: CrownKey, crown: number, reign: CrownReign
       lateAge: Math.floor(crownAgeOf(late.ruler, late.to)),
       ruler: crownRulerTitle(reign),
       trait: crownTraitSpec(reign.ruler.trait).name,
+      welcome: crownTraitSpec(reign.ruler.trait).welcome,
       age: Math.floor(crownAgeOf(reign.ruler, reign.from)),
       regent: reign.regent ? reign.regent.name ?? true : null,
       kinsman: !!reign.kinsman,
@@ -244,36 +329,56 @@ export function successionNotice(key: CrownKey, crown: number, reign: CrownReign
   }
 }
 
-// The successions not told yet in this browser: the latest of each crown (older ones only go in the journal). On a
-// first visit the reigns as they stand are not news.
-export function crownNews(lobby: string, me: number, kingdom: Kingdom, crowns: number, now: number): { show: Notice[]; journal: Notice[] } {
+// A change in the crowns' rivalry as a notice.
+export function rivalryNotice(key: CrownKey, r: CrownRivalry, me: number): Notice {
+  return {
+    id: -(30_000_000 + (r.window % 1_000_000)),
+    kingdom_id: me,
+    kind: 'crown_rivalry',
+    payload: { stance: r.stance, prev: r.prev, winner: r.winner, year: crownYearOf(key, r.from) },
+    show_at: new Date(r.from).toISOString(),
+    seen: false,
+  }
+}
+
+// What befell the crowns after `from` up to `to`, oldest first: every succession and every change of their rivalry.
+export function crownTimeline(key: CrownKey, crowns: number, from: number, to: number, me: number): Notice[] {
+  const out: Notice[] = []
+  for (let i = 0; i < crowns; i++) {
+    const all = crownReigns(key, i, to)
+    for (const r of crownSuccessions(key, i, from, to)) {
+      const late = all[all.indexOf(r) - 1]
+      if (late) out.push(successionNotice(key, i, r, late, me))
+    }
+  }
+  if (crowns > 1) for (const r of crownRivalryChanges(key, from, to)) out.push(rivalryNotice(key, r, me))
+  return out.sort((a, b) => Date.parse(a.show_at) - Date.parse(b.show_at))
+}
+
+// Whether a timeline notice pops up (a war begun or ended does; tension only goes in the journal).
+const pops = (n: Notice) => n.kind === 'crown_succession' || (n.kind === 'crown_rivalry' && (n.payload.stance === 'war' || n.payload.prev === 'war'))
+
+// The crowns' news not told yet. Nothing is stored on the server, yet every device agrees: what happened before the
+// lord was last seen (the server's time, read as the game opened: `popFrom`) or before this browser last told it is
+// not news; what happened while the lord was away is told by the away report instead (the app passes the report's
+// close as `popFrom`). Of what is left only the latest succession of each crown and the latest war begun or ended pop
+// up; everything after `journalFrom` goes in the journal.
+export function crownNews(lobby: string, me: number, kingdom: Kingdom, crowns: number, journalFrom: number, popFrom: number, now: number): { show: Notice[]; journal: Notice[] } {
   const key = crownKeyOf(kingdom)
   const told = readTold(lobby, me)
-  const current = Array.from({ length: crowns }, (_, i) => {
-    const list = crownReigns(key, i, now)
-    return list[list.length - 1].n
-  })
-  if (!told) {
-    writeTold(lobby, me, current)
-    return { show: [], journal: [] }
-  }
+  const from = Math.max(journalFrom, told)
+  if (from >= now) return { show: [], journal: [] }
+  const journal = crownTimeline(key, crowns, Math.max(from, now - 48 * 3_600_000), now, me)
+  const fresh = journal.filter((n) => Date.parse(n.show_at) > Math.max(popFrom, told) && pops(n))
   const show: Notice[] = []
-  const journal: Notice[] = []
   for (let i = 0; i < crowns; i++) {
-    const was = told[i] ?? current[i]
-    if (current[i] <= was) continue
-    const list = crownReigns(key, i, now)
-    const fresh = list.filter((r) => r.n > was && r.n > 0)
-    fresh.forEach((r) => {
-      const late = list[list.indexOf(r) - 1]
-      if (!late) return
-      const n = successionNotice(key, i, r, late, me)
-      journal.push(n)
-      if (r === fresh[fresh.length - 1]) show.push(n)
-    })
+    const last = fresh.filter((n) => n.kind === 'crown_succession' && n.payload.crown === i).pop()
+    if (last) show.push(last)
   }
-  if (show.length > 0 || current.some((c, i) => c !== told[i])) writeTold(lobby, me, current)
-  return { show, journal }
+  const war = fresh.filter((n) => n.kind === 'crown_rivalry').pop()
+  if (war) show.push(war)
+  writeTold(lobby, me, now)
+  return { show: show.sort((a, b) => Date.parse(a.show_at) - Date.parse(b.show_at)), journal }
 }
 
 // ---- Going over to the rival crown (CLAUDE.md §9.1.1) ------------------------------------------------------------

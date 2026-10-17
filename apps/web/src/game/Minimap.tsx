@@ -78,8 +78,9 @@ const POLE = 11
 const CLOTH_W = 7
 const CLOTH_H = 5
 
-// Banners are drawn a little smaller than the other icons, so they do not crowd the map.
-const FLAG = ICON * 0.75
+// Banners are drawn a little smaller than the other icons, so they do not crowd the map; the crowns' castles larger.
+const FLAG = ICON * 0.9
+const CASTLE_SCALE = ICON * 1.35
 
 // The minimap is turned 45° and squashed to half height on screen (see .minimap); a banner is drawn through the inverse
 // of that, so it stands upright with its pole on the site.
@@ -101,7 +102,7 @@ function drawFlag(ctx: CanvasRenderingContext2D, x: number, y: number, color: st
 
 // A crown capital's pin: a small castle with two towers and a dark gate in the crown's colour, standing upright like
 // the banners. Rows from the top, 13 wide: '#' outline, 's' wall, 'l' lit wall, 'g' gate.
-const CASTLE = [
+export const CASTLE = [
   '#.#.#...#.#.#',
   '#l#s#...#l#s#',
   '#lsss#.#llss#',
@@ -114,7 +115,7 @@ const CASTLE = [
   '#############',
 ]
 // A colour mixed toward white by `share`.
-function lighten(hex: string, share: number) {
+export function lighten(hex: string, share: number) {
   const v = parseInt(hex.slice(1), 16)
   const mix = (c: number) => Math.round(c + (255 - c) * share)
   return `rgb(${mix(v >> 16)}, ${mix((v >> 8) & 255)}, ${mix(v & 255)})`
@@ -125,7 +126,7 @@ function drawCastle(ctx: CanvasRenderingContext2D, x: number, y: number, color: 
   ctx.save()
   ctx.translate(x, y)
   ctx.rotate(-Math.PI / 4)
-  ctx.scale(ICON, ICON * 2)
+  ctx.scale(CASTLE_SCALE, CASTLE_SCALE * 2)
   const w = CASTLE[0].length
   for (let row = 0; row < CASTLE.length; row++) {
     for (let col = 0; col < w; col++) {

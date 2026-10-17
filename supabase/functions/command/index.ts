@@ -431,6 +431,28 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       // The steward who turns the villagers out against an unanswered crisis (CLAUDE.md §9.8).
       next = changed(game.setSteward(need(), cmd.on === true))
       break
+    case 'project': {
+      // The great works, the festival and gifts of goods to the liege (CLAUDE.md §9.10).
+      const k = need()
+      if (cmd.action === 'festival') {
+        const error = game.festivalError(k, now)
+        if (error) refuse(error === 'cost' ? 'cost' : 'rejected')
+        next = changed(game.holdFestival(k, now))
+        break
+      }
+      if (cmd.action === 'donate') {
+        if (!GOODS.includes(cmd.good)) refuse('rejected')
+        const error = game.donationError(k, cmd.good, now)
+        if (error) refuse(error === 'cost' ? 'cost' : 'rejected')
+        next = changed(game.donate(k, cmd.good, now))
+        break
+      }
+      if (cmd.action !== 'give' || typeof cmd.id !== 'string' || !(game.PROJECT_IDS as string[]).includes(cmd.id)) refuse('rejected')
+      const error = game.projectError(k, cmd.id, now)
+      if (error) refuse(error === 'nothing' ? 'cost' : 'rejected')
+      next = changed(game.giveToProject(k, cmd.id, now))
+      break
+    }
     case 'repairTrade':
       next = changed(game.repairTrade(need()))
       break
@@ -1134,13 +1156,16 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
           ? { kind: 'move', x: Number(given.x), y: Number(given.y), ...(given.siege === true && { siege: true }) }
           : given?.kind === 'chase'
             ? { kind: 'chase', band: Number(given.band) }
-            : given
+            : given?.kind === 'cave'
+              ? { kind: 'cave', slot: Number(given.slot) }
+              : given
       const valid =
         (order?.kind === 'move' && Number.isFinite(order.x) && Number.isFinite(order.y)) ||
         order?.kind === 'home' ||
         (order?.kind === 'split' && Number.isInteger(order.soldiers)) ||
         (order?.kind === 'merge' && isId(order.with)) ||
-        (order?.kind === 'chase' && Number.isInteger(order.band) && order.band >= 0)
+        (order?.kind === 'chase' && Number.isInteger(order.band) && order.band >= 0) ||
+        (order?.kind === 'cave' && Number.isInteger(order.slot) && order.slot >= 0 && order.slot < game.balance.outlaws.clans.count)
       if (!valid) refuse('rejected')
       // Already after that band, or the order to go after it is still on its way: a repeat does nothing.
       if (order.kind === 'chase') {

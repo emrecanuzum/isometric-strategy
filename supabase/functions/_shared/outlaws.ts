@@ -9,6 +9,7 @@ import * as game from './game.js'
 import { armyNow, march, unitsOf } from './armies.ts'
 import type { ArmyRow } from './armies.ts'
 import { admin, iso, ms, mutateKingdom, nameOf, notify } from './server.ts'
+import { followTrail } from './caves.ts'
 import type { Kingdom, LobbyWorld, Point, Row } from './server.ts'
 
 // deno-lint-ignore no-explicit-any
@@ -127,8 +128,9 @@ async function startOutlawBattle(lobby: string, world: LobbyWorld, kingdoms: Row
 // A fight with a band is over (called as the battle is settled): won, the band is gone for a while (it comes back a
 // little stronger) and its hoard goes to the lord; lost, the band goes on from where it fought, fewer by those who fell.
 export async function settleOutlawBattle(
-  battle: { id: number; lobby_id: string; started_at: string; ends_at: string; plan: { outlaw?: { kind: string; idx: number; name: string }; winner: string; defenderLosses: number[] }; attackers: { kingdom: number; soldiers: number }[]; defenders: { soldiers: number }[] },
+  battle: { id: number; lobby_id: string; x: number; y: number; started_at: string; ends_at: string; plan: { outlaw?: { kind: string; idx: number; name: string }; winner: string; defenderLosses: number[] }; attackers: { kingdom: number; soldiers: number }[]; defenders: { soldiers: number }[] },
   at: number,
+  world?: LobbyWorld,
 ) {
   const o = battle.plan.outlaw
   if (!o) return null
@@ -175,6 +177,8 @@ export async function settleOutlawBattle(
       stock.gold += loot.gold
       return game.book({ ...k, stock }, { outlawLoot: loot.gold })
     }).catch(() => null)
+    // A step further on the trail of the band's clan, to its cave (CLAUDE.md §7.9.1).
+    if (world && mine) await followTrail(lobby, world, lord, o.idx, { x: battle.x, y: battle.y }, at).catch((e) => console.error('followTrail', e))
   }
   return { name: o.name, won: true, loot }
 }

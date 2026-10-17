@@ -4,6 +4,7 @@ import type { Kingdom } from './economy'
 import { RESEARCH } from './institutions'
 import { townScore } from './towns'
 import { allShips, shipMight } from './navy'
+import { projectEffects } from './projects'
 
 // The lobby's ranking (CLAUDE.md §10): a kingdom's score from its wealth, what it has built, its people, its army, the
 // battles it has won and what it has learnt. Worked out by the server whenever it writes a kingdom, so every member
@@ -40,13 +41,15 @@ export function scoreOf(k: Kingdom, at: number): Score {
             ? level * s.memorialPerLevel
           : level * (INSTITUTIONS.has(b.kind) ? s.institutionPerLevel : s.buildingPerLevel)
   }
+  // The great works, stage by stage (CLAUDE.md §9.10).
+  growth += projectEffects(k, at).growth
   const { villagers } = population(k, at)
   const people = (villagers + soldiersOf(k)) * s.perPerson
   const armory = armoryOf(k)
   // Ships count by their might, as soldiers do by their heads (CLAUDE.md §8.5).
   const army = soldiersOf(k) * s.perSoldier + (armory.sword + armory.shield + armory.bow) / s.weaponsPer + shipMight(allShips(k)) * s.perSoldier
   const glory =
-    (k.record?.battlesWon ?? 0) * s.battleWon + (k.record?.siegesWon ?? 0) * s.siegeWon + (k.queen ? s.queen : 0) + (k.hostages?.length ?? 0) * s.hostage +
+    (k.record?.battlesWon ?? 0) * s.battleWon + (k.record?.siegesWon ?? 0) * s.siegeWon + (k.record?.cavesTaken ?? 0) * balance.outlaws.clans.scorePerCave + (k.queen ? s.queen : 0) + (k.hostages?.length ?? 0) * s.hostage +
     // Towns held: known to all, more for the loyal ones (CLAUDE.md §8.4).
     (k.towns ?? []).reduce((sum, h) => sum + townScore(h, at), 0)
   const learning = (k.researches ?? []).filter((r) => r.doneAt <= at && RESEARCH[r.id]).reduce((sum, r) => sum + RESEARCH[r.id].tier * s.researchPerTier, 0)
