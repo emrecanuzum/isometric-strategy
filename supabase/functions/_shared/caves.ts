@@ -56,15 +56,25 @@ async function avoidOf(lobby: string, kingdoms: Row[]) {
     towns.some((t: { x: number; y: number }) => Math.hypot(t.x + size / 2 - c.x, t.y + size / 2 - c.y) < CV.townClear + size / 2)
 }
 
-// The lobby's clans settled in their caves if it has none yet (or fewer than it should).
+// The lobby's clans settled in their caves if it has none yet (or fewer than it should), and a clan whose cave is no
+// longer among the lobby's caves (their number was lowered) moved to a free one.
 async function ensureClans(lobby: string, world: LobbyWorld, kingdoms: Row[], now: number) {
-  // A cheap count first: the caves (a scan of the whole map) are only worked out when a clan is missing.
-  const { count } = await admin.from('lobby_outlaws').select('idx', { count: 'exact', head: true }).eq('lobby_id', lobby).eq('kind', 'clan')
-  if ((count ?? 0) >= K.count) return
-  const { seed, rows, caves } = await clansIn(lobby, world)
-  if (rows.length >= K.count || caves.length === 0) return
+  // A cheap look first: the caves (a scan of the whole map) are only worked out when something is to be done.
+  const { data: quick } = await admin.from('lobby_outlaws').select('idx, cave, battle').eq('lobby_id', lobby).eq('kind', 'clan')
+  const stray = (r: { cave: number | null }, n: number) => r.cave !== null && r.cave >= n
+  if ((quick?.length ?? 0) >= K.count && !(quick ?? []).some((r) => stray(r, game.balance.outlaws.caves.count))) return
+  const { rows, caves } = await clansIn(lobby, world)
+  if (caves.length === 0) return
   const avoid = await avoidOf(lobby, kingdoms)
-  const held = rows.map((r) => r.cave).filter((c): c is number => c !== null)
+  const held = rows.map((r) => r.cave).filter((c): c is number => c !== null && c < caves.length)
+  for (const r of rows) {
+    if (!stray(r, caves.length) || r.battle !== null) continue
+    const cave = game.pickCave(caves, secretRoll(), r.idx, r.gen ?? 0, held, [], avoid)
+    if (cave === null) continue
+    held.push(cave)
+    await admin.from('lobby_outlaws').update({ cave }).eq('lobby_id', lobby).eq('kind', 'clan').eq('idx', r.idx).is('battle', null)
+  }
+  if (rows.length >= K.count) return
   for (let slot = 0; slot < K.count; slot++) {
     if (rows.some((r) => r.idx === slot)) continue
     const cave = game.pickCave(caves, secretRoll(), slot, 0, held, [], avoid)

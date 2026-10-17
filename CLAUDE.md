@@ -1875,9 +1875,11 @@ Değerler `config/balance/outlaws.json` → `bands`, `road`; mantık
 (`CaveSheet`, `ClanTrail`, `CaveSiege`); çizim `sprites.ts` → `caveMouth`,
 `chunkPainter.ts` → `caveTiles`.
 
-- **Mağaralar:** Lobi başına **30 mağara** (`caves.count`), lobi tohumundan
+- **Mağaralar:** Lobi başına **18 mağara** (`caves.count`; önce 30'du, sayı düşünce listenin
+  dışında kalan mağaradaki klan sunucuda boş bir mağaraya taşınır), lobi tohumundan
   (`caveSpots`; saklanmaz, sunucu ve istemci aynı yeri bulur). Her biri bir
-  **dağ eteğinde**dir: kar sınırının altında bir dağ karosu, önünde (ağzında)
+  **dağ eteğinde**dir (yalnızca arazi ve yapıdan bulunur; sunucunun haritasında
+  yükseklik yoktur): bir dağ karosu, önünde (ağzında)
   serbest bir kara karosu ve onun ardında bir kara karosu daha; ağız orduların
   yürüdüğü geniş karaya açılır (en az 4000 karoluk kara parçası), mağaralar
   birbirinden en az 70 karo, taç başkentlerinden 60 karo, harita kenarından 60
