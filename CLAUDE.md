@@ -1908,14 +1908,31 @@ Değerler `config/balance/outlaws.json` → `bands`, `road`; mantık
   malzemesi, 120 yapı malzemesi, 100 yemekle başlar ve klan yağmaladıkça saatte
   +40 / +25 / +20 / +20 büyür (en çok 8 saat; `clanHoard`).
 - **İz sürmek:** Bir lordun ordusu bir klanın çetesini yendikçe yakalananlar
-  konuşur (`followTrail`, lordun durumunda `caveTrail`, yalnız kendisi görür):
-  ilk zaferde izlerin **yönü** (son savaş yerinden ekrana göre "kuzeydoğu
-  yönündeki dağlar"), ikinci zaferde **aşağı yukarı uzaklığı** (25 karoya
-  yuvarlı), **3. zaferde mağara bulunur** (casus evi olan lord 2 zaferde;
-  `clans.discovery`). İz klanın kuşağına bağlıdır: klan yok olursa yeni klanın
-  izi baştan sürülür. Elçi her adımda haber getirir (`cave_trail`) ve mağara
-  bulununca "X mağarası bulundu!" (`cave_found`). Çetenin penceresinde klanın
-  bölümü izleri ("3 / 3 iz") ve bulunduysa kuşatmayı gösterir.
+  konuşur (`followTrail`, lordun durumunda `caveTrail`, yalnız kendisi görür).
+  İpuçları herkesin bildiği bir **yer işaretinden** anlatılır: sunucu, gizli
+  mağaranın ağzına **en yakın** kasabayı, hanı, taç başkentini ya da lordun
+  topraklarını (ortasından ölçülür; `nearestMark`, sunucuda `landmarks`) seçer
+  ve izde yalnızca o işareti (tür, kimlik, adı, ortası; kendi toprakları
+  `own`), yönü ve uzaklığı saklar; mağaranın kendisi bulunana kadar istemciye
+  gitmez. Akış (`clans.discovery`):
+  1. **1. zafer:** işaretten mağaraya **8 yönlü** yön ("Yağmacıların izi Akova
+     kasabasının güneyindeki dağlara gidiyor"; yön ekrana göredir).
+  2. **2. zafer:** yöne **aşağı yukarı uzaklık** eklenir (25 karoya yuvarlı,
+     `farStep`): "Kavaklı Menzilhanesi'nin 50 karo kadar kuzeydoğusundaki dağ
+     eteğine".
+  3. **3. zafer:** mağara bulunur. **Casus evi** olan lord 2 zaferde bulur
+     (`spyHouseWins`): onda ilk zafer yönü ve uzaklığı birlikte verir.
+  Mağaralar birbirinden 70 karo uzak olduğu için erken ipucu birkaç mağaraya
+  uyabilir; ipucu yol gösterir, yeri söylemez. Adlar istemcide kurulur
+  (`apps/web/src/game/caveHints.ts` → `trailHint`, `markGenitive`: han ve başkent
+  adı dünyadan, kasaba ve lord adı sunucunun yazdığından). Yer işaretinden önceki
+  eski izler son savaş yerinden anlatılır ("kuzeydoğu yönündeki dağlar"). İz
+  klanın kuşağına bağlıdır: klan yok olursa yeni klanın izi baştan sürülür.
+  Elçi her adımda haber getirir (`cave_trail`, ipucu `mark`, `dir`, `far` ile)
+  ve mağara bulununca "X mağarası bulundu!" (`cave_found`). Çetenin
+  penceresinde klanın bölümü **"Bildiklerin: …"** ipucunu, izleri ("2 / 3") ve
+  bulunduysa kuşatmayı gösterir; her mağaranın penceresinde de izi sürülen
+  klanların ipuçları "Bildiklerin" bölümünde yazar.
 - **Bulunan mağara:** Yalnız bulan lordun haritasında mağaranın ağzında
   klanın birkaç nöbetçisi "Kurtpençe klanı · mağara" etiketiyle durur ve
   **Sıcak noktalar** düğmesinde "X mağarası" olarak çıkar. Mağaraya (ya da
@@ -1924,7 +1941,28 @@ Değerler `config/balance/outlaws.json` → `bands`, `road`; mantık
   seçilir, sonra gönderilir; orduyu "Hareket" ile nöbetçilerin üstüne
   göndermek de kuşatır). Bulunmamış bir mağaraya tıklamak yalnızca sıradan bir
   mağara anlatır (birkaç çeşit metin); yıkılmış bir mağara "Yağmacıların eski
-  mağarası" olarak kimin aldığını yazar.
+  mağarası" olarak kimin aldığını yazar. Bu pencerelerde **Orduyu gönder**
+  bölümü bir ordu seçip mağaranın ağzına sıradan bir yürüyüş emri (`move`)
+  verir; pencere ordunun bakabileceğini ama iz sürülmeden büyük ihtimalle bir
+  şey bulamayacağını söyler.
+- **Mağaraya bakmak** (`outlaws.json` → `caves.probe`; sunucu `probeCaves`,
+  tick'te ordular varınca): Bir lordun ordusu sıradan bir yürüyüşle (`move`)
+  bir mağaranın ağzına ya da kayasına **2 karo** yakın durunca ve lord o
+  mağaradaki klanı **bulmamışsa** (mağara boş da olabilir, bir klanın gizli
+  yuvası da), ordu içine bakamaz: elçi "Ordu mağarayı inceleyemedi" haberini
+  getirir (`cave_probe`) ve ordu ağızda bekler. Nedeni on çeşitten biridir ("Yol
+  çok bozuktu…", "Mağara buz kesiyordu…", "Ağzı bir göçükle tıkalıydı…",
+  "Meşaleler rutubetten söndü…", "Dar bir yarıktan öteye atlar ve yük
+  geçemedi…"; `caves.ts` → `PROBE_REASONS`), lobi tohumu, mağara, ordu ve varış
+  anından çekilir (`probeReason`). **Boş mağara ile klanın mağarası arasında hiçbir
+  fark yoktur:** aynı sözler, aynı an, aynı alanlar (`army`, `cave`, `at`,
+  `reason`). Aynı ordu aynı mağara için **saatte bir** haber alır
+  (`cooldownMinutes`; sunucu son haberleri `notices` tablosunda arar, ayrıca bir
+  şey saklanmaz). Lordun bulduğu mağaraya sıradan yürüyüşte haber gelmez (o
+  mağara "Mağarayı kuşat" ile kuşatılır). Böylece mağaraları tek tek gezmek bir
+  şey kazandırmaz; dolu mağarayı iz sürerek bilen lord doğrudan kuşatıp klanı
+  kökünden kurutur. Haberin çizimi yol ayrımında kafası karışık ulak, sesi düşen
+  ıslıktır.
 - **Kuşatma:** Emir `army` komutuyla `{ kind: 'cave', slot }` (öteki emirler
   gibi elçiyle ya da hemen; sunucu lordun o kuşaktaki klanın mağarasını
   bildiğini denetler, yoksa `'cave'` hatası). Ordu mağaranın ağzına yürür

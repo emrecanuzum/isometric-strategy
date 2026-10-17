@@ -21,13 +21,14 @@ import {
   territoryStage,
 } from '@game/shared'
 import type { Band, Boat, ChaseError, Clan, Kingdom, OutlawRow, Point, World } from '@game/shared'
-import { DIR_NAMES, caveSpots, clanBandsUntil, clanGarrison, clanHoard, clansOf, hash, trailOf, winsToFind } from '@game/shared'
+import { caveSpots, clanBandsUntil, clanGarrison, clanHoard, clansOf, hash, trailOf, winsToFind } from '@game/shared'
 import { useState } from 'react'
 import { Icon } from '../icons'
 import { RESOURCE_NAMES } from '../names'
 import type { Online } from './online'
 import { Section, Stat, fmt } from './primitives'
 import { ShipRow } from './navy'
+import { trailHint } from '../../game/caveHints'
 
 // Bandits on the roads and pirates on the water (CLAUDE.md §7.9, §8.5): the sheet that opens when one is clicked on
 // the map (what it is, what it holds of the player's trade, what beating it brings, and "Takip et": send an army or a
@@ -373,11 +374,12 @@ function ClanTrail({ world, slot, online, kingdom, now }: { world: World; slot: 
         </p>
         {!found && !trail && <Stat label="İzler" value="henüz yok" note="klanın bir çetesini yen" />}
         {!found && trail && (
-          <Stat
-            label="İzler"
-            value={`${DIR_NAMES[(trail.dir ?? 0) % 8]} yönündeki dağlar`}
-            note={`${trail.far ? `son savaştan aşağı yukarı ${fmt(trail.far)} karo ötede; ` : ''}${need - trail.wins} zafer daha`}
-          />
+          <>
+            <p className="hint">
+              <b>Bildiklerin:</b> yağmacıların izi {trailHint(trail).to} gidiyor.
+            </p>
+            <Stat label="İzler" value={`${trail.wins} / ${need}`} note={`${Math.max(1, need - trail.wins)} zafer daha${trail.far ? '' : '; bir sonraki zafer uzaklığı da söyletir'}`} />
+          </>
         )}
       </Section>
       {found && <CaveSiege world={world} clan={clan} cave={found} online={online} kingdom={kingdom} now={now} />}
@@ -493,7 +495,79 @@ function CaveSheet({ world, pick, online, kingdom, now, onShow, onClose }: { wor
             </p>
           )}
         </Section>
+        {!razed && <Known world={world} online={online} kingdom={kingdom} />}
+        <CaveLook cave={cave} online={online} kingdom={kingdom} now={now} />
       </div>
     </section>
+  )
+}
+
+// What the lord has learnt of the clans' caves so far (the hints, not the caves): shown on any cave's sheet.
+function Known({ world, online, kingdom }: { world: World; online: Online; kingdom: Kingdom }) {
+  const lines = clansOf(world.seed, online.outlaws)
+    .map((c) => ({ clan: c, trail: trailOf(kingdom.caveTrail, c) }))
+    .filter((x) => x.trail && x.trail.cave === undefined)
+  return (
+    <Section title="Bildiklerin" icon="scroll">
+      {lines.length === 0 ? (
+        <p className="hint">Henüz hiçbir klanın izini sürmedin.</p>
+      ) : (
+        lines.map(({ clan, trail }) => (
+          <p key={clan.slot} className="hint">
+            <b>{clan.name}:</b> izi {trailHint(trail!).to} gidiyor.
+          </p>
+        ))
+      )}
+    </Section>
+  )
+}
+
+// Send an army to a cave whose clan the lord has not found: it marches to the mouth and looks, but without the trail
+// it will most likely find nothing (the envoy says why; CLAUDE.md §7.9.1).
+function CaveLook({ cave, online, kingdom, now }: { cave: { mouth: Point }; online: Online; kingdom: Kingdom; now: number }) {
+  const armies = online.armies.filter((a) => a.kingdom_id === online.me)
+  const [picked, setPicked] = useState<number | null>(null)
+  const pick = armies.find((a) => a.id === picked)
+  const land = territoryRect(kingdom.site, territoryStage(kingdom, now))
+  const inside = (p: Point) => p.x >= land.x && p.y >= land.y && p.x < land.x + land.size && p.y < land.y + land.size
+  const delay = Math.round((balance.time.messengerDelayGameDays * balance.time.gameDayMs) / 1000)
+  const envoy = (a: (typeof armies)[number]) => !inside(armyAt(a, now)) && !(a.contact_until && Date.parse(a.contact_until) > now) && !leadsArmy(kingdom, a.led_by, now)
+  return (
+    <Section title="Orduyu gönder" icon="pin">
+      <p className="hint">
+        Bir ordu mağaranın ağzına gidip içine bakabilir; ama bir klanın izini sürmeden orada bir şey bulması pek olası değil (yollar bozuk, mağaralar derin ve karanlık). Klanın
+        mağarasını izleri sürerek bulursan doğrudan kuşatırsın.
+      </p>
+      {armies.length === 0 ? (
+        <p className="hint">Sahada ordun yok. Ordu sekmesinden garnizondan bir ordu çıkar.</p>
+      ) : (
+        <>
+          <div className="chase-picks" role="radiogroup" aria-label="Gönderilecek ordu">
+            {armies.map((a, i) => {
+              const at = armyAt(a, now)
+              const far = Math.round(Math.hypot(at.x - cave.mouth.x, at.y - cave.mouth.y))
+              return (
+                <button key={a.id} role="radio" aria-checked={picked === a.id} className={picked === a.id ? 'chase-pick active' : 'chase-pick'} disabled={a.status === 'battle'} onClick={() => setPicked(a.id)}>
+                  <b>
+                    {i + 1}. ordu · {fmt(a.soldiers ?? 0)} asker
+                  </b>
+                  <small>
+                    {far} karo uzakta · {envoy(a) ? `emir elçiyle (${delay} sn)` : 'emir hemen'}
+                    {a.status === 'battle' ? ' · savaşta' : ''}
+                  </small>
+                </button>
+              )
+            })}
+          </div>
+          <button
+            className="btn primary wide"
+            disabled={!pick || pick.status === 'battle'}
+            onClick={() => pick && online.act({ type: 'army', army: pick.id, order: { kind: 'move', x: Math.floor(cave.mouth.x), y: Math.floor(cave.mouth.y) } })}
+          >
+            <Icon name="pin" size={16} /> {pick ? `${armies.indexOf(pick) + 1}. orduyu mağaraya gönder` : 'Önce bir ordu seç'}
+          </button>
+        </>
+      )}
+    </Section>
   )
 }

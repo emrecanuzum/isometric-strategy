@@ -1285,6 +1285,7 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
       return L('envoy', BANDIT_HEX, 'good', 'lost')
     case 'cave_found':
       return L('siege', BANDIT_HEX, 'good')
+    case 'cave_probe':
     case 'cave_empty':
       return L('envoy', own, 'bad', 'lost')
     case 'clan_destroyed':
@@ -1406,6 +1407,7 @@ export function soundForNotice(n: Notice, online: Online): Cue {
       return 'threat'
     case 'cave_found':
       return 'triumph'
+    case 'cave_probe':
     case 'cave_empty':
       return 'lost'
     case 'clan_destroyed':

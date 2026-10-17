@@ -767,7 +767,7 @@ interface Page {
   story?: { story: Story; id: string }
 }
 
-const MILITARY = new Set(['king_fell', 'siege_people', 'naval_battle', 'blockade_lifted', 'fleet_turned', 'battle_start', 'battle_end', 'town_siege', 'town_taken', 'town_held', 'town_siege_lifted', 'town_revolt', 'town_lost_revolt', 'tower_losses', 'army_threat', 'trade_raided', 'raid_repelled', 'war_declared', 'peace_enforced', 'order_failed', 'cargo_lost', 'cargo_home', 'cave_trail', 'cave_found', 'cave_empty', 'clan_destroyed'])
+const MILITARY = new Set(['king_fell', 'siege_people', 'naval_battle', 'blockade_lifted', 'fleet_turned', 'battle_start', 'battle_end', 'town_siege', 'town_taken', 'town_held', 'town_siege_lifted', 'town_revolt', 'town_lost_revolt', 'tower_losses', 'army_threat', 'trade_raided', 'raid_repelled', 'war_declared', 'peace_enforced', 'order_failed', 'cargo_lost', 'cargo_home', 'cave_trail', 'cave_found', 'cave_empty', 'cave_probe', 'clan_destroyed'])
 const TRIBUTE = new Set(['patrol_tribute', 'patrol_taken', 'patrol_tip', 'patrol_visit', 'patrol_ignored', 'tribute_ended', 'crown_gift'])
 
 const duration = (ms: number) => {

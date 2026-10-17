@@ -92,6 +92,8 @@ export async function followTrail(lobby: string, world: LobbyWorld, lord: number
   if (!clan || clan.cave === null) return
   const cave = caves[clan.cave]
   if (!cave) return
+  // The landmark the hints are told from: the one nearest the cave (a town, an inn, a crown capital or a lord's lands).
+  const mark = game.nearestMark(cave, await landmarks(lobby, world, at, lord))
   // deno-lint-ignore no-explicit-any
   let trail: any = null
   let need = 0
@@ -100,12 +102,65 @@ export async function followTrail(lobby: string, world: LobbyWorld, lord: number
     const before = k.caveTrail?.[clan.slot]
     if (before && before.gen === clan.gen && before.cave !== undefined) return null
     need = game.winsToFind(k, at)
-    trail = game.followTrail(before, clan.gen, cave, from, need, at)
+    trail = game.followTrail(before, clan.gen, cave, from, need, at, mark)
     return { ...k, caveTrail: { ...(k.caveTrail ?? {}), [clan.slot]: trail } }
   }).catch(() => null)
   if (!trail) return
   if (trail.cave !== undefined) await notify(lobby, [lord], 'cave_found', { slot: clan.slot, clan: clan.name, cave: cave.idx, at: cave.mouth }, at)
-  else await notify(lobby, [lord], 'cave_trail', { slot: clan.slot, clan: clan.name, wins: trail.wins, need, dir: trail.dir, far: trail.far ?? null }, at)
+  else await notify(lobby, [lord], 'cave_trail', { slot: clan.slot, clan: clan.name, wins: trail.wins, need, dir: trail.dir, far: trail.far ?? null, mark: trail.mark ?? null }, at)
+}
+
+// The landmarks every lord knows, each by its middle: the towns, the inns, the crown capitals and the lords' lands
+// (`lord`'s own marked as such).
+async function landmarks(lobby: string, world: LobbyWorld, at: number, lord: number) {
+  const half = (game.balance.towns.size ?? 8) / 2
+  const city = game.balance.cities.size / 2
+  const [towns, { data: lords }] = await Promise.all([townsOf(lobby), admin.from('kingdoms').select('id, name, state').eq('lobby_id', lobby)])
+  const marks: { kind: 'town' | 'inn' | 'city' | 'lord'; idx: number; at: Point; name?: string; own?: boolean }[] = []
+  for (const t of towns) marks.push({ kind: 'town', idx: t.id, at: { x: t.x + half, y: t.y + half }, name: t.name })
+  // Inns are told by their tile (the server's scan has several tiles of each; any will do, the client names the inn
+  // nearest it).
+  for (const p of world.inns) marks.push({ kind: 'inn', idx: -1, at: { x: p.x + 0.5, y: p.y + 0.5 } })
+  world.cities.forEach((p, i) => marks.push({ kind: 'city', idx: i, at: { x: p.x + city, y: p.y + city } }))
+  for (const k of (lords ?? []) as Row[]) {
+    if (!k.state?.site) continue
+    const r = game.territoryRect(k.state.site, game.territoryStage(k.state, at)) as { x: number; y: number; size: number }
+    marks.push({ kind: 'lord', idx: k.id, at: { x: r.x + r.size / 2, y: r.y + r.size / 2 }, name: k.name, ...(k.id === lord && { own: true }) })
+  }
+  return marks
+}
+
+// Armies of the lords that have come (by a plain march) to a cave whose clan their lord has not found: they cannot
+// look into it, and the envoy says why, in words drawn from the lobby's seed, the cave, the army and the moment, the
+// same whether the cave is empty or a clan's hidden den (CLAUDE.md §7.9.1). Once per army and cave an hour.
+export async function probeCaves(lobby: string, world: LobbyWorld, kingdoms: Row[], arrived: { army: ArmyRow; at: number }[]) {
+  if (arrived.length === 0) return
+  const P = CV.probe
+  const seed = await lobbySeed(lobby)
+  const caves = game.caveSpots(world.world, seed) as Cave[]
+  // deno-lint-ignore no-explicit-any
+  let clans: any[] | null = null
+  for (const { army, at } of arrived) {
+    const end = army.path[army.path.length - 1]
+    if (!end) continue
+    const cave = game.caveAt(caves, { x: Math.floor(end.x), y: Math.floor(end.y) }, P.reachTiles) as Cave | undefined
+    if (!cave) continue
+    clans ??= (await clansIn(lobby, world)).clans
+    const owner = kingdoms.find((r) => r.id === army.kingdom_id)?.state
+    // A cave whose clan the lord has found is besieged with "Mağarayı kuşat", not looked into.
+    if (clans.some((c) => c.cave === cave.idx && game.trailOf(owner?.caveTrail, c)?.cave === cave.idx)) continue
+    const { data: recent } = await admin
+      .from('notices')
+      .select('id')
+      .eq('kingdom_id', army.kingdom_id)
+      .eq('kind', 'cave_probe')
+      .eq('payload->>army', String(army.id))
+      .eq('payload->>cave', String(cave.idx))
+      .gte('show_at', iso(at - P.cooldownMinutes * 60_000))
+      .limit(1)
+    if (recent?.length) continue
+    await notify(lobby, [army.kingdom_id], 'cave_probe', { army: army.id, cave: cave.idx, at: cave.mouth, reason: game.probeReason(seed, cave.idx, army.id, at) }, at)
+  }
 }
 
 // An order to lay siege to a clan's cave reaching its army: only a cave the lord has found, of the clan living there

@@ -254,8 +254,35 @@ export interface CaveTrail {
   dir?: number
   far?: number
   from?: Point
+  // The landmark the hints are told from (dir: the way from it to the cave; far: roughly how far); absent on trails
+  // from before landmarks (their hints are told from the last fight, `from`).
+  mark?: TrailMark
   cave?: number
   foundAt?: number
+}
+
+// A landmark everyone knows (CLAUDE.md §7.9.1): a town (idx: its id; name), an inn (by its tile `at`; the client
+// names it), a crown capital (idx: its index among the world's cities) or a lord's lands (idx: the lord's id; name;
+// own: the lord's own). `at`: its middle.
+export type MarkKind = 'town' | 'inn' | 'city' | 'lord'
+export interface TrailMark {
+  kind: MarkKind
+  idx: number
+  at: Point
+  name?: string
+  own?: boolean
+}
+
+// The landmark a cave's hints are told from: the one nearest its mouth (worked out by the server, which alone knows
+// the cave). Only the landmark and the rough way and distance from it reach the lord, never the cave.
+export function nearestMark(cave: Pick<CaveSpot, 'mouth'>, marks: TrailMark[]): TrailMark | null {
+  let best: TrailMark | null = null
+  let bestD = Infinity
+  for (const m of marks) {
+    const d = Math.hypot(m.at.x - cave.mouth.x, m.at.y - cave.mouth.y)
+    if (d < bestD) [best, bestD] = [m, d]
+  }
+  return best
 }
 export type CaveTrails = Record<number, CaveTrail>
 
@@ -276,15 +303,19 @@ export const DIR_NAMES = ['kuzey', 'kuzeydoğu', 'doğu', 'güneydoğu', 'güney
 
 // The trail after one more win over the clan's bands at `from`: the hint grows with each win, the cave is found at
 // the last.
-export function followTrail(trail: CaveTrail | undefined, gen: number, cave: CaveSpot, from: Point, need: number, at: number): CaveTrail {
+// With a landmark (`mark`), the hints are told from it (the way from it to the cave, then roughly how far); without
+// one, from the fight.
+export function followTrail(trail: CaveTrail | undefined, gen: number, cave: CaveSpot, from: Point, need: number, at: number, mark?: TrailMark | null): CaveTrail {
   const t: CaveTrail = trail && trail.gen === gen ? { ...trail } : { gen, wins: 0 }
   if (t.cave !== undefined) return t
   t.wins += 1
   t.from = { x: Math.round(from.x), y: Math.round(from.y) }
-  t.dir = screenDir(from, cave.mouth)
+  if (mark) t.mark = { ...mark, at: { x: Math.round(mark.at.x * 10) / 10, y: Math.round(mark.at.y * 10) / 10 } }
+  const origin = t.mark?.at ?? from
+  t.dir = screenDir(origin, cave.mouth)
   if (t.wins >= 2 || t.wins >= need - 1) {
     const step = K().discovery.farStep
-    t.far = Math.max(step, Math.round(Math.hypot(cave.mouth.x - from.x, cave.mouth.y - from.y) / step) * step)
+    t.far = Math.max(step, Math.round(Math.hypot(cave.mouth.x - origin.x, cave.mouth.y - origin.y) / step) * step)
   }
   if (t.wins >= need) {
     t.cave = cave.idx
@@ -298,3 +329,24 @@ export const trailOf = (trails: CaveTrails | null | undefined, clan: Pick<Clan, 
   const t = trails?.[clan.slot]
   return t && t.gen === clan.gen ? t : null
 }
+
+// ---- An army looking into a cave ----------------------------------------------------------------------------------
+
+// What the envoy says when a lord's army, sent there plainly, comes to a cave whose clan the lord has not found
+// (CLAUDE.md §7.9.1): the army could not look into it. The same words whether the cave is empty or a clan's hidden
+// den; which one is drawn from the lobby's seed, the cave, the army and the moment it arrived.
+export const PROBE_REASONS = [
+  'Yol çok bozuktu; taşlar ve devrik ağaçlar arasında ordu mağarayı inceleyemedi.',
+  'Mağara buz kesiyordu; askerler soğuktan derinlere inemedi.',
+  'Mağaranın ağzı bir göçükle tıkalıydı; taşları kaldırmaya ne alet ne vakit vardı.',
+  'Meşaleler rutubetten söndü; askerler karanlıkta birkaç adım ilerleyip geri döndü.',
+  'İçeriden yarasalar ve rutubet kokusundan başka bir şey çıkmadı; daha ileri gitmeye kimse gönüllü olmadı.',
+  'Dar bir yarıktan öteye atlar ve yük geçemedi; ordu ağızda beklemekle yetindi.',
+  'İçeriye su basmıştı; dizlere kadar çamura batan askerler geri döndü.',
+  'Mağaranın içi dallanıp budaklanıyordu; kılavuzsuz giren kaybolur diye kimse girmedi.',
+  'Askerler mağaranın cinli olduğunu fısıldaştı; komutan zorlamak istemedi.',
+  'Ağızdaki kayalar gevşekti; bir çığ kopmasın diye ordu uzak durdu.',
+]
+
+export const probeReason = (seed: number, cave: number, army: number, at: number) =>
+  Math.floor(hash(cave * 131 + (army % 100_000), Math.floor(at / 1000) % 1_000_000_007, seed + 6241) * PROBE_REASONS.length) % PROBE_REASONS.length

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { DIR_NAMES, balance, overreachOf, tributeTalk, tributeTalkReact, tributeTalkScript } from '@game/shared'
+import { balance, overreachOf, tributeTalk, tributeTalkReact, tributeTalkScript } from '@game/shared'
 import { supabase } from '../lib/supabase'
-import type { Envoy as EnvoyRow, Operation, PeaceTerms, SpyTopic } from '@game/shared'
+import type { Envoy as EnvoyRow, Operation, PeaceTerms, SpyTopic, TrailMark } from '@game/shared'
+import { probeText, trailHint } from '../game/caveHints'
 import type { Notice } from '../net/online'
 import { DialogFoot } from './DialogQueue'
 import { Icon } from './icons'
@@ -360,14 +361,20 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
     case 'outlaw_chase':
       return { icon: 'swords', title: `${p.name} peşindesin`, text: `Ordun ${p.name} yağmacılarının önünü kesmek için yola çıktı (yaklaşık ${fmt(Number(p.soldiers))} kişiler). Yağmacılar ordudan yavaş yürür; yakaladığı an savaş başlar. ${Math.round(balance.outlaws.bands.chase.maxSeconds / 60)} dakikada yakalayamazsa takibi bırakır.` }
     case 'cave_trail': {
-      const dir = DIR_NAMES[Number(p.dir) % 8] ?? 'bilinmeyen'
       const left = Math.max(1, Number(p.need) - Number(p.wins))
+      const hint = trailHint({ dir: p.dir as number, far: p.far as number | null, mark: p.mark as TrailMark | null })
       return {
         icon: 'scroll',
         title: `${p.clan} izinde`,
-        text: `Yakalanan yağmacılardan biri konuştu: ${p.clan} çetelerin başında, dağlarda bir mağarada yaşıyor. İzler ${dir} yönündeki dağlara gidiyor${p.far ? `, aşağı yukarı ${fmt(Number(p.far))} karo ötede` : ''}. Klanın çetelerinden ${left} tanesini daha yenersen mağarayı bulursun.`,
+        text: `Yakalanan yağmacılardan biri konuştu: ${p.clan} çetelerin başında, dağlarda bir mağarada yaşıyor. Yağmacıların izi ${hint.to} gidiyor. Klanın çetelerinden ${left} tanesini daha yenersen mağarayı bulursun.`,
       }
     }
+    case 'cave_probe':
+      return {
+        icon: 'pin',
+        title: 'Ordu mağarayı inceleyemedi',
+        text: `${probeText(Number(p.reason))} Bir klanın izini sürmeden mağaralarda bir şey bulmak zor. Ordu mağaranın önünde bekliyor.`,
+      }
     case 'cave_found':
       return { icon: 'pin', title: `${p.clan} mağarası bulundu!`, text: `İzler sonunda ${p.clan} mağarasına çıktı. Mağara artık haritanda işaretli (yalnız sen biliyorsun). Mağaraya ya da çetelerinden birine tıkla, bir ordu seç ve "Mağarayı kuşat": klanı yok edersen mağaradaki ganimet senin.` }
     case 'cave_empty':

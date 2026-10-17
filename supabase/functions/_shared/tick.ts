@@ -12,7 +12,7 @@ import { ensureTowns, settleQuell, settleTowns } from './towns.ts'
 import { settlePatrols } from './patrols.ts'
 import { settleNavy } from './navy.ts'
 import { settleOutlawBattle, settleOutlaws } from './outlaws.ts'
-import { settleCaveBattle, settleCaves } from './caves.ts'
+import { probeCaves, settleCaveBattle, settleCaves } from './caves.ts'
 import { settleHouses, settlePretender } from './house.ts'
 import type { EnvoyRow } from './diplomacy.ts'
 import { admin, changeRelation, freshKingdoms, grantClaim, iso, loadKingdoms, ms, mutateKingdom, nameOf, notify, pactsOf, settleFoodDemand, syncWarFlags, worldOf } from './server.ts'
@@ -184,6 +184,7 @@ async function moveArmies(lobby: string, world: LobbyWorld, rows: Row[], pacts: 
   const live: Live[] = (await armiesOf(lobby)).map((army) => ({ army, engaged: army.status === 'battle' }))
 
   // Home, or simply there.
+  const stopped: { army: ArmyRow; at: number }[] = []
   for (const l of live) {
     const a = l.army
     if (l.engaged || a.status !== 'moving' || ms(a.arrive_at) > now) continue
@@ -215,7 +216,14 @@ async function moveArmies(lobby: string, world: LobbyWorld, rows: Row[], pacts: 
     } else if (a.goal.kind === 'move' || a.goal.kind === 'town' || a.goal.kind === 'camp' || a.goal.kind === 'cave') {
       await admin.from('armies').update({ status: 'idle' }).eq('id', a.id)
       a.status = 'idle'
+      if (a.goal.kind === 'move') stopped.push({ army: a, at: ms(a.arrive_at) })
     }
+  }
+  // Armies come plainly to a cave the lord knows nothing of: the envoy says why they could not look into it (§7.9.1).
+  try {
+    await probeCaves(lobby, world, rows, stopped)
+  } catch (e) {
+    console.error('probeCaves', e)
   }
 
   const towers = rows.flatMap((r) =>

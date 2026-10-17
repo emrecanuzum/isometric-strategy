@@ -77,6 +77,7 @@ import { WorldMap } from './game/WorldMap'
 import { ConfirmBuild } from './ui/hud/ConfirmBuild'
 import { PlanBar } from './ui/hud/PlanBar'
 import { cityInfo, setCrownClock } from './game/cities'
+import { setHintWorld } from './game/caveHints'
 import { BetrayalDialog, crownNews, liveOffer } from './ui/hud/crownHouse'
 import { townStructures, townTrails } from './game/towns'
 import { pretenderCampStructures } from './game/pretenderCamp'
@@ -640,6 +641,7 @@ function App({
   // The crowns' royal houses follow from the lobby's number and the season's start (CLAUDE.md §7.8): every ruler named
   // anywhere is the one reigning now.
   setCrownClock(kingdom && kingdom.lobbyKey !== undefined ? { lobbyKey: kingdom.lobbyKey, seasonStart: kingdom.seasonStart } : null, serverNow)
+  setHintWorld(view?.world ?? null)
   const setKingdom = useCallback((next: Kingdom | null) => {
     kingdomRef.current = next
     setKingdomState(next)

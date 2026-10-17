@@ -81,7 +81,11 @@
     "minLand": 4000,
     "lordClear": 24,
     "townClear": 20,
-    "pickTiles": 1.6
+    "pickTiles": 1.6,
+    "probe": {
+      "reachTiles": 2,
+      "cooldownMinutes": 60
+    }
   },
   "clans": {
     "count": 3,
