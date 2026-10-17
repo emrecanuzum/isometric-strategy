@@ -11,8 +11,9 @@ import { addUnits, countOf, garrisonOf, unitSpec } from './units'
 import { perSpan } from './span'
 import type { SpanCache } from './span'
 import { cutOff, imprisoned } from './walls'
-import { dynastyEffects, dynastyStep } from './dynasty'
+import { dynastyEffects, dynastyStep, townKinBonus } from './dynasty'
 import type { Dynasty, DynastyEvent } from './dynasty'
+import type { Pretender } from './intrigue'
 import { changeCrownRelation, driftCrownRelations, fealtyOpen, settleOrderTrips, stewardFactor } from './crowns'
 import type { OrderTrip, QuestTaken, RoyalAnswer } from './crowns'
 import { crisisDecideMs, crisisKey, crisisWarded, isCrisis, isDilemma, fortuneEffects, fortunesBegun, hasResearch, hospitalHeal, levelOf, researchEffects, sermonTaxFactor, templeHappiness } from './institutions'
@@ -30,6 +31,8 @@ import type { Expedition } from './expeditions'
 import { checkGoals } from './goals'
 import { guildOf, memorialHappiness } from './landmarks'
 import type { GoalsReached } from './goals'
+import { outlawEffects } from './outlawPressure'
+import type { OutlawPressure } from './outlawPressure'
 
 // A kingdom's economy: gold plus three goods, produced by buildings and sold by the merchant of its trade post.
 // Everything that takes time is stored as the moment it ends, and `advance` settles whatever has come due, so the
@@ -258,6 +261,8 @@ export interface Kingdom {
   dynasty?: Dynasty
   // The lord's standing with each crown kingdom, −100 to 100 (by capital index; crowns.ts). Missing: at rest.
   crownRelations?: number[]
+  // A brother of the ruler risen against him, camped near the realm (CLAUDE.md §9.1.1; intrigue.ts).
+  pretender?: Pretender
   // Answers to the crises of the day (CLAUDE.md §9.8): by the fortune's key (see crisisKey), what was done and when.
   // A choice's answer is 'a' or 'b' (institutions.ts, dilemmaError).
   responses?: Record<string, { choice: 'villagers' | 'army' | 'none' | 'a' | 'b'; at: number }>
@@ -320,6 +325,9 @@ export interface Kingdom {
   goals?: GoalsReached
   // A steward who turns the villagers out against a crisis nobody answered in time, for a small fee (CLAUDE.md §9.8).
   steward?: boolean
+  // How much of the road by the trade post bandits hold and how hard pirates press the water by the dock (set by the
+  // server; CLAUDE.md §7.9, §8.5; outlawPressure.ts). Absent: none.
+  outlaws?: OutlawPressure | null
 }
 
 // The season's running accounts (CLAUDE.md §6.4): kept as things happen, so the report of a long absence says what
@@ -349,6 +357,9 @@ export interface Books {
   townSales?: number
   // Gold the expeditions brought home.
   expedition?: number
+  // What bandits took off the merchant's gold, and the loot and bounties won off bandits and pirates (CLAUDE.md §7.9).
+  outlaws?: number
+  outlawLoot?: number
   // Towns, the fisher's river finds, fortunes of the day.
   other: number
   wastedGold: number
@@ -368,13 +379,14 @@ export interface SeenSnapshot {
   happiness: number
 }
 
-const NO_BOOKS: Books = { tax: 0, wages: 0, trade: 0, tradeHeld: 0, tributeIn: 0, tributeOut: 0, crownPaid: 0, crownGot: 0, other: 0, wastedGold: 0, wastedGoods: 0, townUpkeep: 0, expedition: 0, lost: {} }
+const NO_BOOKS: Books = { tax: 0, wages: 0, trade: 0, tradeHeld: 0, tributeIn: 0, tributeOut: 0, crownPaid: 0, crownGot: 0, other: 0, wastedGold: 0, wastedGoods: 0, townUpkeep: 0, expedition: 0, outlaws: 0, outlawLoot: 0, lost: {} }
 export const booksOf = (kingdom: Pick<Kingdom, 'books'>): Books => ({ ...NO_BOOKS, ...kingdom.books, lost: { ...kingdom.books?.lost } })
 
 // Adds to the accounts (a new kingdom object; the state is never edited in place outside advance).
 export function book<K extends Pick<Kingdom, 'books'>>(kingdom: K, add: Partial<Omit<Books, 'lost'>>, lost?: Partial<Record<SoldierLoss, number>>): K {
   const b = booksOf(kingdom)
-  for (const [key, v] of Object.entries(add)) (b as unknown as Record<string, number>)[key] += v ?? 0
+  // (A key older books lack starts at nothing rather than turning the sum into NaN.)
+  for (const [key, v] of Object.entries(add)) (b as unknown as Record<string, number>)[key] = ((b as unknown as Record<string, number>)[key] ?? 0) + (v ?? 0)
   for (const [key, v] of Object.entries(lost ?? {})) b.lost[key as SoldierLoss] = (b.lost[key as SoldierLoss] ?? 0) + (v ?? 0)
   return { ...kingdom, books: b }
 }
@@ -398,7 +410,7 @@ export type FisherEntry =
 
 export type EconomyEvent =
   | DynastyEvent
-  | { kind: 'trade'; good: Good; sold: number; gold: number; walledIn?: boolean; damaged?: boolean; city?: number; full?: boolean }
+  | { kind: 'trade'; good: Good; sold: number; gold: number; walledIn?: boolean; damaged?: boolean; city?: number; full?: boolean; robbed?: number }
   | { kind: 'built'; building: Building }
   | { kind: 'produced'; delta: Partial<Stock>; weapons?: Partial<Armory> }
   | { kind: 'trained'; count: number }
@@ -525,12 +537,19 @@ export function canPlace(world: World, kingdom: Pick<Kingdom, 'site' | 'building
   const annex = kind && (BUILDINGS[kind].shoreOnly || BUILDINGS[kind].coastal) ? dockAnnex(kingdom, stage) : null
   if (!within(spot, territoryRect(kingdom.site, stage)) && !(annex && within(spot, annex))) return false
   const coastal = !!kind && !!BUILDINGS[kind].coastal
+  // Walls (and gates) may stand on the shore as well, so a wall line runs right up to the water and leaves no gap to
+  // slip round its end (CLAUDE.md §5.1.1); they keep off the dock plot while the dock is unbuilt, which must still fit.
+  const walled = !!kind && wallish(kind)
+  if (walled && kingdom.dockPlot && !kingdom.buildings.some((b) => b.kind === 'dock') && tooClose(kingdom.dockPlot, spot)) return false
   let shore = false
   for (let y = spot.y; y < spot.y + spot.size; y++) {
-    // Shore buildings stand on shore tiles, coastal ones on land with a foot on the shore, everything else on free land.
+    // Shore buildings stand on shore tiles, coastal ones on land with a foot on the shore, walls on either, everything
+    // else on free land.
     for (let x = spot.x; x < spot.x + spot.size; x++) {
       const rule = tileRule(world, x, y)
-      if (coastal) {
+      if (walled) {
+        if (rule !== TileRule.Free && rule !== TileRule.DockOnly) return false
+      } else if (coastal) {
         if (rule === TileRule.DockOnly) shore = true
         else if (rule !== TileRule.Free) return false
       } else if (rule !== (kind && BUILDINGS[kind].shoreOnly ? TileRule.DockOnly : TileRule.Free)) return false
@@ -562,7 +581,7 @@ export const gateTiles = (spot: Point, along: Along): Point[] =>
 
 const onTiles = (b: Building, tiles: Point[]) => b.size === 1 && tiles.some((t) => t.x === b.x && t.y === b.y)
 
-export function canPlaceGate(world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'>, stage: number, spot: Point, turned?: Along | null) {
+export function canPlaceGate(world: World, kingdom: Pick<Kingdom, 'site' | 'buildings'> & { dockPlot?: Rect | null }, stage: number, spot: Point, turned?: Along | null) {
   const tiles = gateTiles(spot, gateAlong(kingdom, spot, turned))
   const rest = { ...kingdom, buildings: kingdom.buildings.filter((b) => !(b.kind === 'wall' && onTiles(b, tiles))) }
   return tiles.every((t) => canPlace(world, rest, stage, { ...t, size: 1 }, 0, 'wall'))
@@ -962,9 +981,11 @@ export function buildingOutput(kingdom: Kingdom, b: Building, at: number, round?
   const land = raw ? kingdom.yields[product.makes as Good] : 1
   const fortune = raw ? Math.max(0, 1 + (r.output[product.makes as Good] ?? 0)) : 1
   const learnt = 1 + (r.learnt[b.kind] ?? 0)
+  // Pirates roaming the water by the dock scare off some of the catch (CLAUDE.md §8.5).
+  const pirates = b.kind === 'dock' ? outlawEffects(kingdom).fishFactor : 1
   return {
     makes: product.makes,
-    units: spec.amount * product.rate * land * fortune * learnt * crew * (product.makes === 'food' ? r.foodPace * r.season : r.pace * r.idle),
+    units: spec.amount * product.rate * land * fortune * learnt * crew * pirates * (product.makes === 'food' ? r.foodPace * r.season : r.pace * r.idle),
     uses: product.uses,
   }
 }
@@ -1635,7 +1656,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       k.crownRelations = driftCrownRelations(k).crownRelations
       // The held towns: their tally, their loyalty, revolts (CLAUDE.md §8.4).
       if (k.towns?.length) {
-        const t = townsRound(k.towns, next, productionMs(), upkept.paid, { happiness: happinessOf(k), ruler: dynastyEffects(k).happiness }, idleFactor(k, next))
+        const t = townsRound(k.towns, next, productionMs(), upkept.paid, { happiness: happinessOf(k), ruler: dynastyEffects(k).happiness, kin: townKinBonus(k) }, idleFactor(k, next))
         k.towns = t.towns
         if (t.lost.length > 0) k.townsLost = [...(k.townsLost ?? []), ...t.lost].slice(-8)
         events.push(...t.events)
@@ -1677,7 +1698,11 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       const away = isAway(k, next)
       const load = Math.floor(tradeLoad(k) * (away ? balance.economy.away.merchantLoad : 1))
       const sold = walledIn || damaged || full ? 0 : Math.max(0, Math.min(load, Math.floor(k.stock[good] - tradeReserve(k, good, next)), perUnit > 0 ? Math.ceil(room / perUnit) : Infinity))
-      const gold = Math.min(Math.round(sold * perUnit), Math.floor(room))
+      const earned = Math.min(Math.round(sold * perUnit), Math.floor(room))
+      // Bandits on the road by the trade post take their cut of what the merchant brings home (CLAUDE.md §7.9).
+      const robbed = Math.round(earned * outlawEffects(k).merchantCut)
+      const gold = earned - robbed
+      if (robbed > 0) k.books!.outlaws = (k.books!.outlaws ?? 0) + robbed
       // A crown city's trade moves the lobby's prices too, if less than the lobby's market (CLAUDE.md §7.7).
       if (sold > 0) soldTotal[good] = (soldTotal[good] ?? 0) + sold * (city ? balance.cities.trade.marketImpact : 1)
       k.stock[good] -= sold
@@ -1692,7 +1717,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
         const ledger = k.trade.ledger ?? { food: 0, materials: 0, arms: 0, gold: 0 }
         k.trade.ledger = { ...ledger, [good]: ledger[good] + sold, gold: ledger.gold + gold }
       }
-      events.push({ kind: 'trade', good, sold, gold, ...(walledIn && { walledIn }), ...(damaged && { damaged }), ...(city && { city: city.index }), ...(full && { full }) })
+      events.push({ kind: 'trade', good, sold, gold, ...(walledIn && { walledIn }), ...(damaged && { damaged }), ...(city && { city: city.index }), ...(full && { full }), ...(robbed > 0 && { robbed }) })
     }
   }
   for (const building of finishing) events.push({ kind: 'built', building })
@@ -1702,7 +1727,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
     const step = dynastyStep(k, now)
     // A house kept with years of another length is saved once brought to today's (dynasty.ts rescaleYears): left
     // unsaved its old dates would be read with the new years (a lord of 34 shown as 234) and its births never come.
-    const rescaled = step.kingdom.dynasty?.yearMs !== k.dynasty?.yearMs
+    const rescaled = step.kingdom.dynasty?.yearMs !== k.dynasty?.yearMs || step.kingdom.dynasty?.rev !== k.dynasty?.rev
     if (step.events.length > 0 || !k.dynasty || rescaled || step.kingdom.queen !== !!k.queen) {
       edit()
       k.dynasty = step.kingdom.dynasty
@@ -1742,6 +1767,8 @@ export function happinessFor(k: Kingdom, at: number) {
       dynastyEffects(k).happiness +
       (k.sickness ?? 0) * balance.institutions.sickness.happinessPerShare +
       (k.blockade ? balance.navy.blockade.happiness : 0) +
+      // Bandits on the trade road and pirates on the water (CLAUDE.md §7.9, §8.5).
+      outlawEffects(k).happiness +
       // What the parties back brought home (CLAUDE.md §9.9).
       expeditionHappiness(k, at) +
       // Holding too many towns at once (CLAUDE.md §8.4).

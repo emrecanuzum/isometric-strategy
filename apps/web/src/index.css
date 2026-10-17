@@ -3586,32 +3586,66 @@ small {
 }
 
 .tribute-talk {
-  max-height: 46vh;
-  overflow-y: auto;
+  display: flex;
+  gap: calc(var(--px) * 6);
 }
 
-.tribute-talk .talk-line {
+.tribute-talk .advisor-bubble {
+  min-height: 72px;
+  max-height: 34vh;
+}
+
+.tribute-talk .talk-step {
+  flex: none;
   color: var(--gold);
-  font-style: italic;
 }
 
-.tribute-talk .talk-mine {
-  color: var(--text);
-  padding-left: calc(var(--px) * 4);
+.tribute-talk .sr-only {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .tribute-talk .talk-replies {
+  gap: calc(var(--px) * 3);
+}
+
+.tribute-talk .talk-replies.stacked {
   display: grid;
-  gap: calc(var(--px) * 2);
 }
 
 .tribute-talk .talk-reply {
-  justify-content: flex-start;
-  text-align: left;
+  justify-content: center;
+  text-align: center;
   white-space: normal;
   height: auto;
   min-height: var(--control-small);
   padding-block: calc(var(--px) * 2);
+}
+
+.tribute-talk .talk-replies.stacked .talk-reply {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+@media (max-width: 719px) {
+  .tribute-talk {
+    gap: calc(var(--px) * 4);
+  }
+
+  .tribute-talk .advisor-face canvas {
+    width: 48px !important;
+    height: 60px !important;
+  }
+
+  .tribute-talk .talk-replies.choices {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .fortune-body {
@@ -4506,6 +4540,23 @@ kbd {
   gap: calc(var(--px) * 4);
 }
 
+/* An army at the gate: its line, the amount choices and the buy button stacked, each full width (side by side the
+   choices squeezed into one-letter columns). */
+.town-armies li.town-buy {
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(var(--px) * 2);
+}
+
+.town-armies li.town-buy > .segmented {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--px) * 18), 1fr));
+}
+
+.town-armies li.town-buy > .btn {
+  justify-content: center;
+}
+
 /* What moves a town's loyalty (CLAUDE.md §8.4): a waterfall on the 0–100 scale, one row per cause, the revolt and
    break-away lines running through every track. */
 .unrest-chart {
@@ -4726,6 +4777,20 @@ kbd {
 /* ---- While you were away (src/ui/AwayReport.tsx) ---- */
 .away {
   width: min(560px, calc(100vw - var(--gap) * 2));
+  /* Only the report's lines scroll: the picture, the title and the Geri / İleri buttons stay put. */
+  overflow: hidden;
+}
+
+.away > :not(.away-lines) {
+  flex-shrink: 0;
+}
+
+.away .away-lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin-inline: calc(var(--px) * 6);
+  padding-right: calc(var(--px) * 2);
 }
 
 .away-scene {
@@ -5016,6 +5081,39 @@ kbd {
 .children small.education-note.todo {
   color: var(--muted);
   font-style: italic;
+}
+
+/* A man of the house's feelings for the ruler (and the crown's for him), and the post and marriage pickers. */
+.kin-opinion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--px);
+}
+
+.children small.down,
+.kin-opinion small.down {
+  color: #e07060;
+}
+
+.kin-picker {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 3);
+  background: var(--panel-2, rgba(0, 0, 0, 0.15));
+}
+
+.kin-picker select.text,
+.house select.text {
+  flex: 1;
+  min-width: 0;
+  height: var(--control);
+  padding: 0 calc(var(--px) * 3);
+  border: 0;
+  background: var(--slot);
+  color: var(--gold);
+  font: inherit;
+  font-size: 14px;
 }
 
 /* The palace tab's parts: the level and the border, the lord's house, the buildings. */
@@ -5744,4 +5842,41 @@ input:not([type='range']):focus-visible {
   .choices > .btn.crisis-choice small {
     font-size: 12px;
   }
+}
+
+/* ---- Dialogs in a line (src/ui/DialogQueue.tsx): one footer for all, the forward button always at its right end ---- */
+.dialog-foot {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+}
+
+.dialog-foot-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 3);
+}
+
+.dialog-step {
+  color: var(--muted, #b8a888);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.dialog-foot .dialog-next {
+  justify-self: end;
+  min-width: calc(var(--px) * 30);
+  justify-content: center;
+}
+
+.closed-summary .away-lines,
+.closed-summary .hint,
+.closed-summary .dialog-foot {
+  margin-inline: calc(var(--px) * 6);
+}
+
+.closed-summary .away-lines {
+  max-height: 40vh;
+  overflow-y: auto;
 }

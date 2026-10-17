@@ -506,13 +506,19 @@ dener (ilk 16 deneme); yalnızca hiçbiri çıkmazsa böyle bir yer verir
 | Karo                                         | Kural                    |
 | -------------------------------------------- | ------------------------ |
 | Su (göl, nehir), dağın içi, yol, han         | İnşa edilemez            |
-| **Kıyı** (suya komşu kara karosu)            | Yalnızca **iskele/liman** |
+| **Kıyı** (suya komşu kara karosu)            | Yalnızca **iskele/liman** ve **sur/kapı** |
 | **Yol kenarı** (ticaret yoluna komşu karo)   | Yalnızca **ticaret noktası** |
 | **Dağ eteği** (karaya komşu dağ karosu)      | Yalnızca **tünel**       |
 | Diğer kara karoları                          | Serbest                  |
 
 - İskele **2×2 karo** kaplar; en az bir karosu kıyı olmalı, hiçbiri su/dağ
   olmamalıdır.
+- **Sur suya kadar çekilir:** sur parçaları ve sur kapısı hudut içindeki kıyı
+  karolarına da kurulur; böylece sur nehrin ya da gölün kenarına dayanır,
+  ucu ile su arasında kimsenin geçebileceği bir karo kalmaz (su yürünmez,
+  köşeden sıyrılarak da geçilmez). İskele henüz kurulmamışsa sur iskele
+  arsasına ve onun sur boşluğuna (§6.4) kurulmaz, iskele her zaman sığar
+  (`economy.ts` → `canPlace`).
 - **Kıyı** yalnızca gerçek suyun kıyısıdır: komşu su karosunun ait olduğu
   göl ya da nehir en az **20 karo** olmalıdır (`territory.json` →
   `shoreMinWater`). Ağaçların arasında kalmış birkaç karoluk su birikintisi
@@ -1452,7 +1458,8 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   hesaplanır. Ordu sancakları gölge düşürmez (yüksekten düşen uzun gölge
   bölüğü havadaymış gibi gösteriyordu; `sprites.ts` → `NO_SHADOW`).
   - **Kendi tacının devriyesi** lordun **eğlence merkezine** uğrar, içer,
-    eğlenir ve **120 altın bahşiş** bırakır. Eğlence merkezi yoksa sarayın
+    eğlenir ve **120 altın bahşiş** bırakır (lordun bir kardeşi devriyenin
+    başındaysa daha fazla; §9.1.1). Eğlence merkezi yoksa sarayın
     önüne gelip geçer, bahşiş bırakmaz; ama elçi "Taç devriyesi uğradı"
     haberini getirir (`patrol_visit`), lord kapısındaki askerleri sessizce
     izlemez.
@@ -1499,6 +1506,20 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     Sunucu konuşmayı aynı tohum ve cevaplarla yeniden kurup sonucu kendisi
     bulur (`patrolAnswer` komutu, `talk: number[]`; `patrol_visits.talk`
     sonucu ve ilk istenen miktarı tutar, `amount` yeni miktar olur).
+    **Görünüm** (`Envoy.tsx` → `TributeAnswer`, `TalkPanel`): elçinin haraç
+    haberi kısadır (istek, Reddet / Konuş / Öde). "Konuş"a basınca haberin
+    resmi ve metni çekilir, pencere elçi danışmanınki gibi küçük bir konuşma
+    paneline döner ve **her seferinde tek bir konuşma** gösterir: solda
+    haraççıbaşının kodla çizilmiş portresi (nazallı sivri tolga, tacın
+    renginde sorguç ve cübbe, zincir başlık, kara bıyık, yanağında yara izi;
+    göz kırpar, konuşurken ağzı oynar; `advisor/CollectorPortrait.tsx`),
+    üstte adı ve huyu ile "2/3" gibi adım sayacı, ortada harf harf yazılan
+    sözü (elçinin mırıltısının daha pes hâliyle; söze dokunmak hepsini
+    gösterir), altta üç cevap yan yana (biri uzunsa alt alta). Cevaptan
+    sonra haraççının karşılığı yazılır, "Devam" sıradaki soruya geçer. Son
+    cevapta karşılığı ve son sözü gelir, altında haracın yeni miktarı ve
+    Reddet / Öde düğmeleri durur. Sunucuya cevaplar eskisi gibi konuşma
+    bitince tek komutla gider.
   - Biat etmemiş lordlara ne devriye ne haraççı gelir.
 - **Eğlence merkezi** (4. seviye saray, krallıkta bir tane; 1200 altın, 700
   yapı malzemesi, 120 sn): bayraklı, fenerli, küçük sahneli iki katlı bir
@@ -1595,6 +1616,90 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   edilemez. Cevaplar `Kingdom.royal`'da bir gün tutulur; geliş, teslim ve
   yetişmeyen istek günlüğe yazılır, üstlenilen istek sayaçlarda da görünür.
 - Başka etkileri (taç savaşları) sonra eklenecek.
+
+### 7.9 Yağmacılar (şu an uygulanan)
+
+Ticaret yollarında küçük **yağmacı çeteleri** dolaşır; tüccarın kazancından
+pay keserler, halkı tedirgin ederler ve orduyla kovalanıp yenilebilirler.
+Değerler `config/balance/outlaws.json` → `bands`, `road`; mantık
+`packages/shared/src/outlaws.ts` (yerleşim, konum, takip) ve
+`outlawPressure.ts` (lordun üstündeki etkiler); sunucu
+`supabase/functions/_shared/outlaws.ts` (`lobby_outlaws` tablosu); arayüz
+`apps/web/src/ui/hud/outlaws.tsx`.
+
+- **Yer ve yürüyüş:** Lobi başına 9 çete (`count`). Her çete lobi
+  tohumundan bir ticaret yolu karosunda (yol ya da köprü; taç
+  başkentlerinin 44 karo yakınında değil, çeteler birbirinden en az 110
+  karo uzak) doğar ve yolu izleyerek en çok **70 karoluk bir kesimi**
+  tutar (`stretchTiles`; 24 karodan kısa kesim seçilmez). Çete bu kesimde
+  saniyede **0,45 karo** ile ileri geri yürür (ordular saniyede 1 karo:
+  yağmacılar ordulardan yavaştır, yakalamak zor değildir). Konumları
+  patrol gibi **saatten ve tohumdan** hesaplanır (`bandAt`, çizim için
+  `bandLeg`); sunucu ve istemci aynı yeri bulur. Saklanan tek şey başına
+  gelenlerdir: `lobby_outlaws` (`kind` `band`, `idx`): kaç kez yenildiği
+  (`gen`), dağıtıldıysa ne zamana dek (`down_until`), şu an çarpıştığı
+  muharebe (`battle`), çarpışmaların onu ne kadar bekletti (`shift`: çete
+  savaştığı yerden yoluna devam eder) ve kazandığı çarpışmalarda düşenler
+  (`losses`). Satırı olmayan çete hiç dokunulmamış, yolda demektir.
+- **Güç:** 6–14 kişi (tohumdan), her yenilip geri dönüşünde +1; %35'i
+  okçu, gerisi mızrakçı; moral 55, saha bilgisi 70 (yolları bilirler).
+- **Görünüm:** Haritada herkese görünür: yamalı kahverengi deri giysili
+  askerler, **yırtık, is karası bir sancak** altında (`armies.ts` →
+  `BANDIT_COLOR`); kişi sayısı kadar figür. Muharebedeyse muharebe
+  noktasında durur, dağıtılmışsa görünmez.
+- **Tuttukları yol:** Bir çete kesiminin 8 karo yakınındaki yol karolarını
+  tutar (`holdTiles`). Bir lordun **ticaret noktasının 70 karo çevresindeki**
+  yol karolarının ayaktaki çetelerce tutulan payı (`roadHeld`, 0–1) o lordun
+  yağmacı payıdır. Sunucu bunu her tick'te hesaplar ve değiştiğinde lordun
+  durumuna yazar (`Kingdom.outlaws` → `road`, `bands`; `pressureOf`);
+  `advance` oradan okur. Alanı olmayan eski kayıtlarda pay 0'dır.
+- **Etkileri** (`outlawEffects`): tüccarın her seferde getirdiği altının
+  **yağmacı payı × %25**'ini keserler (yolun yarısı tutuluyorsa %12,5;
+  `road.merchantCut`); kesilen altın defterde `books.outlaws` olarak yazar,
+  Ticaret → Tüccar'daki **Yağmacılar** bölümünde ve "Sen yokken" mali
+  raporunda görünür. Halkın mutluluk hedefi **yağmacı payı × 5** düşer
+  (korsanlarla birlikte en fazla −8; `happinessCap`), Halk → Mutluluk'ta
+  yazar.
+- **Tıklayınca:** Çeteye tıklayınca yanda bir pencere açılır
+  (`OutlawSheet`): adı ("Kara Yusuf çetesi"), yaklaşık büyüklüğü, ne yaptığı
+  (tuttuğu kesim, hızı), senin ticaret noktanın çevresindeki yolun ne
+  kadarını tuttuğu, yenince ganimeti ve **Takip et** bölümü: sahadaki her
+  ordun, uzaklığı ve emrin elçiyle mi gideceğiyle listelenir; ordunun
+  yanındaki **"Takip et"** onu çetenin peşine gönderir.
+- **Takip** (`army` komutu, emir `{ kind: 'chase', band }`; ordu hedefi
+  `chase`): emir öteki emirler gibi hudut içinde ya da kral ordunun
+  başındayken anında, dışarıdaysa elçiyle gider (§8.2.1). Ordu, çetenin
+  önünü keseceği noktaya yürür (`bandIntercept`: çetenin yolundaki ilk an
+  ki orduya düz çizgi × 1,35 kadar yakın). Sunucu her tick'te ordunun ve
+  çetenin geçen saniyelerdeki yerlerini karşılaştırır; **4 karoya
+  yaklaştıkları an** muharebe başlar (tür `outlaw`, olağan zar turları,
+  izlenebilir; çete bir anda tek orduyla çarpışır). Ordu varıp çeteyi
+  bulamazsa yeniden önünü keser; **20 dakikada** yakalayamazsa takibi bırakır
+  ve elçi haber getirir. Çete başkası tarafından dağıtılırsa takip biter.
+- **Sonuç:** Kazanan ordu yerinde kalır; çete **45 dakika** dağılır
+  (`respawnSeconds`), sonra aynı kesimde bir kişi kalabalık geri gelir.
+  Ganimet çetenin savaş başındaki büyüklüğüyle orantılıdır: kişi başına
+  **9 savaş malzemesi, 6 altın, 4 yapı malzemesi** (ambar ve hazine
+  sınırına kadar; altını `books.outlawLoot`). Yenilen ordu her muharebedeki
+  gibi eve çekilir; çete düşenleri kadar azalır, savaştığı yerden yoluna
+  devam eder. Yağmacılarla çarpışma sıralamada zafer sayılmaz, kahırdan ölüm
+  getirmez.
+- **Hanlar:** Han paneli **"Yollardaki yağmacılar"** bölümünde hanın 70 karo
+  çevresindeki ticaret yolunun yüzde kaçının yağmacıların elinde olduğunu ve
+  hangi çetelerin tuttuğunu yazar; söylentilerde de anlatılır (oyuncunun
+  sarayı yakınsa "senin tüccarın da bu yollardan geçiyor" diye; göllerdeki
+  korsan teknesi sayısı da).
+- **Elçi:** Yağmacıların payı en az 15 puan artınca "Yağmacılar yolu tuttu!"
+  (`outlaw_road`), sıfıra inince "Yollar temizlendi"; takip başlayınca
+  (`outlaw_chase`), çete yakalanınca ve muharebe bitince (`battle_start` /
+  `battle_end`, tür `outlaw`; kazanınca ganimetle), çete kaçınca ya da
+  ortadan kalkınca (`outlaw_escaped`, `outlaw_gone`). Çizimleri yağma
+  sahnesidir (is karası saldırganlar; kovalanınca/temizlenince püskürtülmüş
+  hâli), sesleri kılıç şakırtısı, gerilimli davul, zafer ya da hüzünlü
+  borudur. Haritanın sağındaki uyarılarda "Yağmacılar ticaret yolunun %X'ini
+  tutuyor" kartı (Ticaret sekmesini açar), küçük haritanın **Sıcak
+  noktalar** düğmesinde ticaret noktanın yolunu tutan çeteler ve peşindeki
+  orduların durur.
 
 ## 8. Askeri Sistem
 
@@ -1786,7 +1891,8 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
   yetmezse ödenmez ve o tur bakım yokmuş sayılır. Sadakat her tur bir hedefe
   doğru kayar (~30 dakikada yolun üçte ikisi): hedef bakımdan gelir (%15 / 45 /
   65 / 85), lordun halkının mutluluğu (50'den her puan ±0,2) ve hükümdarın halk
-  yeteneği ekler ya da düşürür. Kasabanın katkısı sadakatle çarpılır (%0'da ×0,5,
+  yeteneği ekler ya da düşürür; hanedandan bir vali ya da kasabaya gelin giden bir
+  prenses de ekler (§9.1.1). Kasabanın katkısı sadakatle çarpılır (%0'da ×0,5,
   %50'de ×1, %100'de ×1,5; kalabalık kasabanın köylüleri de).
   - **Ayaklanma:** Sadakat **25'in altına** inince kasaba ayaklanır: 10 dakika
     hiçbir şey göndermez (köylüleri de gider). Ayaklanma bittiğinde sadakat hâlâ
@@ -1978,7 +2084,8 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
     ablukacı filonun kalanı eve döner.
   Uzaktaki (abluka, akın, yarma) filo **geri çağrılabilir**: yol aldığı kadar
   geri döner.
-- **Deniz muharebesi** (`navalBattle`): iki taraf gücünün üstüne zar atar
+- **Deniz muharebesi** (`navalBattle`): iki taraf gücünün (gemilerinin toplam
+  gücü: kadırga 3, koka 0,6, çektiri 1,8; filo kartında "güç") üstüne zar atar
   (kadırga çektiriyi, çektiri kokayı yener: +%25); kendi iskelesindeki
   savunan +%15 güçlüdür. Kaybeden gemilerinin %15–40'ını, kazanan %5–20'sini
   (çarpışma ne kadar çetinse o kadar) kaybeder; en hafif gemiler önce gider.
@@ -1991,6 +2098,49 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
   korsanları yenerse yük güvende ve 35 altın ödül; yenemezse yük gider ve
   bir gemi batabilir (eskortsuz %20, eskortlu %15).
   Seferler, saldırılar, av ve dönüşler günlükte yazar.
+- **Korsan kayıkları** (yağmacılarla aynı düzen, §7.9; `outlaws.json` →
+  `boats`, `sea`): lobi başına 7 kara yelkenli korsan teknesi göllerde ve
+  nehirlerde dolaşır. Her biri tohumdan, en az 500 karoluk bir suyun açık
+  bir yerinde (kıyıdan en az 2 karo; taç limanlarından uzak, tekneler
+  birbirinden en az 90 karo) doğar ve 28–60 karo ötedeki açık suya gidip
+  dönen bir halkayı saniyede **1,1 karo** ile döner (filolar saniyede 2
+  karo: korsanlar daha yavaştır). Her teknede 1–3 korsan gemisi vardır
+  (savaşta **çektiri** sayılırlar: güç 1,8; kokaları yener, kadırgalara
+  yenilir). Konum saatten hesaplanır (`boatAt`), haritada herkese görünür
+  (`shipSprites.ts` → `pirate`: is karası latin yelkenli, kan kırmızısı
+  flamalı küçük çektiriler; etiketinde adı, "Kara Martı · korsan"). Batırılan
+  tekne `lobby_outlaws`'ta (`kind` `boat`) 45 dakika yok sayılır.
+  - **Etkisi** (`seaHeld`, `Kingdom.outlaws` → `sea`, `boats`): halkası bir
+    lordun **iskelesinin 45 karo yakınından** geçen her ayaktaki tekne
+    korsan etkisine %40 ekler (en fazla %100). Etki: deniz ticaretinde korsan
+    saldırısı olasılığı **× (1 + etki × 0,6)**, iskelenin ve balıkçı
+    filolarının avı **−etki × %25**, halkın mutluluk hedefi **−etki × 4**
+    (yağmacılarla birlikte en fazla −8). "Korsanların ticarete etkisi"
+    Donanma → Filolar'daki **Korsanlar** bölümünde, iskelenin ve tersanenin
+    menüsünde ve Halk → Mutluluk'ta yazar.
+  - **Takip** (`fleet` komutu, `chase` eylemi; `chaseBoat`): tekneye
+    tıklayınca açılan pencerede her filo, gücü ("güç 4,8 / 3,6") ve
+    uzaklığıyla listelenir; **"Takip et"** filoyu teknenin önünü keseceği
+    açık suya yüzdürür (elçisiz; filo evde ve ticarette olmamalı, en az bir
+    savaş gemisi olmalı, aynı suda olmalı). `Fleet.chase` (`boat`, `since`)
+    saklanır; elle "Hareket et" ya da "Takibi bırak" (`unchase`) takibi
+    bitirir. Sunucu her tick'te filonun ve teknenin yerlerini karşılaştırır;
+    **3,5 karoya** yaklaşınca **deniz savaşı** olur: `navalBattle`, iki tarafın
+    gücü **gemilerin toplam gücüdür** (kadırga 3, koka 0,6, çektiri 1,8;
+    üstün türe +%25; korsanlar kendi limanında değildir). Kazanırsa tekne
+    batar ve ödülü gelir: **60 + 25 × gemi altın**, gemi başına 20 savaş ve
+    30 yapı malzemesi (sınırlara kadar; altın `books.outlawLoot` ve donanma
+    defterinin ödüllerine); yenilirse filo gemi kaybeder, korsanlar
+    dolaşmaya devam eder. Filo yetişemezse yeniden önünü keser; 15 dakikada
+    yakalayamazsa takibi bırakır.
+  - **Elçi:** korsan etkisi en az 35 puan artınca "Korsanlar sularında!"
+    (`pirate_waters`), sıfıra inince "Sular temizlendi"; deniz savaşı
+    (`pirate_battle`: iki tarafın gücü, zarlar, kayıplar, ödül), tekne
+    kaçınca ya da batırılmış bulununca (`pirate_escaped`, `pirate_gone`).
+    Çizimleri deniz sahnesidir (abluka sırası, çarpışma, sakin gün batımı;
+    korsanlar is karası), sesleri abluka borusu, zafer ya da hüzünlü boru.
+    Haritanın sağında "Korsanlar iskelenin önünde" kartı, Sıcak noktalarda
+    iskelenin yakınındaki ve peşindeki tekneler durur.
 - **Hareket et** (`seaways.ts`; sunucuda `fleet` komutu, `sail` eylemi):
   evdeki bir filo (ticarette değilse) ordu gibi haritada bir yere
   gönderilir: "Hareket et" deyip bir nehre ya da göle tıklanır. **Karaya
@@ -2063,8 +2213,23 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   düşer. Ölüm yaşını çoktan geçmiş biri varsa `graceHours` (2 saat) daha
   yaşar; hiçbir lordluk yıl değişir değişmez hükümdarını kaybetmez. Kahırdan
   ölüm zamanını korur.
-  Saray sekmesinin **Hanedan** bölümü portreleri, yaşları, yetenekleri,
-  çocukları ve ataları gösterir.
+  Saray sekmesinin **Hanedan** bölümü hanedanı **hükümdara göre** gösterir:
+  **Ebeveynler** (ölü babası, yaşıyorsa kraliçe ana), hükümdar ve kraliçesi,
+  **Kardeşler** (babasının öbür çocukları), **Çocuklar** (hükümdarın kendi
+  çocukları), **Akrabalar** (amcalar, halalar, yeğenler), **Evlendirilenler**,
+  **Gelinler** ve **Atalar ve ölenler**; portreler, yaşlar, yetenekler, görevler
+  ve reşit erkeklerin hükümdara bakışı (§9.1.1). Başlıklar cinsiyete göredir:
+  oğullar ve kardeşler **Prens**, kızlar ve kız kardeşler **Prenses**
+  (`dynasty.tsx` → `titleOf`).
+- **Hanedanın düzeni** (`Dynasty.siblings`, `kin`, `mother`, `married`,
+  `brides`; `rev` 2): hükümdar ölüp oğlu geçince ölen hükümdarın öbür çocukları
+  yeni hükümdarın **kardeşleri** olur, ölenin kardeşleri **akraba**, kraliçesi
+  **kraliçe ana**; yeni hükümdarın çocukları ayrıca "Çocuklar"da durur. Eski
+  kayıtlarda bütün çocuklar tek listedeydi: ilk ilerletmede hükümdar reşit
+  olmadan (kendi çocuğu olamadan) doğmuş olanlar kardeşlere taşınır
+  (`normalizeHouse`). Hükümdardan başka herkes de (çocuklar, kardeşler,
+  akrabalar, kraliçe ana) doğumda çekilen yaşta ölür; "Hanedandan bir ölüm"
+  diye duyurulur (`Person.ruled` false; eski ölüler hükümdar sayılır).
 - **Saray sekmesinin bölümleri:** Saray sekmesi üç alt sekmeye ayrılır:
   **Seviye** (saray kartı, hudut ve saray yükseltme, iskele, Bağlılık),
   **Hanedan** ve **Yapılar** (kurulu / sınır listesi); hepsinin altında
@@ -2084,8 +2249,12 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   ortadan farkının yarısı hükümdarınkine eklenir.
 - **Kraliçe ve doğumlar:** Kraliçe alınınca (Halk sekmesi) hanedana katılır
   ("Kraliçe saraya geldi"). Kraliçe saraydayken (kaçırılmamışken) ilk çocuk
-  0,4–1 yıl içinde, sonrakiler 1,2–2,5 yılda bir doğar; en çok 4 çocuk,
-  kraliçe 44 yaşına kadar. %55 oğlan. Çocuğun yetenekleri %60 anne-baba
+  0,4–1 yıl içinde, sonrakiler 1,2–2,5 yılda bir doğar; bir hükümdar ile
+  kraliçesinin **en çok 2 oğlu ve 1 kızı** olur (`births.maxSons`,
+  `maxDaughters`; `Dynasty.sons`, `daughters`, yeni çiftte sıfırdan sayılır),
+  kraliçe 44 yaşına kadar. %55 oğlan; oğul kotası dolmuşsa kız, kız kotası
+  dolmuşsa oğlan doğar (`birthsLeft`). Doğan çocuğun babası ve annesi
+  (`father`, `mother`) saklanır. Çocuğun yetenekleri %60 anne-baba
   ortalaması, %40 yeni çekiliştir. **Sarayı 3. seviyeye yükseltmek için
   kraliçe şarttır** (`'queen'` hatası).
   Saray sekmesinde yükseltme bu yüzden kapalıysa düğmenin altında bunu
@@ -2097,9 +2266,13 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   tuşla, bedelsiz ve nüfus şartı aranmadan rastgele bir kraliçe getirir
   (`queenOwed`). Kraliçesi rehinken yeni kraliçe alınamaz.
 - **Ad üreteci:** Ad koyulan her yerde (doğum penceresi, çocuklar)
-  "Rastgele" düğmesi bir ad önerir: eski adlardan biri ya da iki yarıdan
-  kurulan bir ad (Alptekin, Gülbike…; `dynasty.json` → `names`,
-  `nameParts`; `randomName`).
+  "Rastgele" düğmesi kişinin cinsiyetine göre bir ad önerir: eski adlardan
+  biri ya da iki yarıdan kurulan bir ad (Alptekin, Gülbike…; `dynasty.json` →
+  `names`, `nameParts`; `randomName`); hanedanda (yaşayan, evlenen, ölen)
+  taşınan adlar atlanır (`houseNames`). Doğum pencereleri art arda gelince ad
+  kutusu bir önceki çocuğun adını taşıyordu (pencere yeniden kullanılıyordu,
+  bütün çocuklar aynı adı alıyordu); her pencere ve ad kutusu artık kendi
+  kişisinindir.
 - **Ad ve eğitim:** Doğumda bir haber penceresi açılır; çocuğa ad
   konur (koyulmazsa çekilen ad kalır; sonradan çocuğun kartındaki "Adını
   koy" ile konabilir). **Ad yalnızca bir kez konur:** lordun ad koyduğu
@@ -2108,7 +2281,7 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   ile reddeder). Hükümdar yaşarken reşit olmamış her çocuğun (yeni doğan
   bebek dahil) eğitimi seçilir (Maliye, Halk, Askerlik; seçilen düğme
   yanar, seçilmemişse kartta yazar); çocuk 16 yaşında reşit olunca o
-  yetenek +3 artar.
+  yetenek +3 artar. Reşit olmayan kardeşlerin adı ve eğitimi de böyle seçilir.
 - **Ölüm ve tahta geçiş:** Hükümdarın ölüm yaşı doğumunda 58–80 arasında
   çekilir. Ayrıca tarafının kaybettiği her muharebede %5 ihtimalle
   kahrından ölür (sunucu, muharebenin ve lordluğun tohumuyla). Kral
@@ -2116,17 +2289,116 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   ihtimalle savaşta düşer (`dynasty.json` → `command.fall`); ordu onsuz
   devam eder, tahta geçiş kuralları işler ve savaştaki bütün taraflara
   elçi haber getirir (`king_fell`). Yerine en
-  büyük oğlu geçer; oğlu yoksa ya da reşit değilse **naipler konseyi**
-  yönetir (yetenekler 4/3/4), oğul reşit olunca tahta çıkar. Hiç oğlu yoksa
-  konsey 3 yıl (`dynasty.json` → `council.kinsmanYears`) yönetir, sonra
+  büyük oğlu geçer; oğlu reşit değilse **naipler konseyi** yönetir
+  (yetenekler 4/3/4), oğul reşit olunca tahta çıkar. Hiç oğlu yoksa **en
+  büyük reşit erkek kardeşi** geçer (`succession.brotherInherits`; ölenin
+  çocukları yeğen olarak akrabalara geçer, kraliçesi saraydan ayrılır).
+  Ne oğlu ne reşit kardeşi varsa konsey 3 yıl (`dynasty.json` →
+  `council.kinsmanYears`) yönetir, sonra
   hanedandan bir **akraba** (26–38 yaşında, yeni yetenekler) tahta çağrılır
   (`Dynasty.kinsmanAt`); hanedan bitmez, yeni hükümdar kendi kraliçesini alır. Eski kraliçe
   kraliçe ana olur: yeni hükümdar kendi kraliçesini almalıdır.
-- **Haberler:** doğum, reşit olma, ölüm, tahta çıkış, naipler konseyi ve
-  kraliçenin gelişi, oyundaki olay pencereleri gibi çizimli birer pencereyle
-  duyurulur. Haberler hanedanın o anki hâlinden çıkarılır ve tarayıcıda
-  hatırlanır (sunucu olayı önce işlese de duyurulur); "Sen yokken"
-  raporunda da bir Hanedan sayfası vardır.
+- **Haberler:** doğum, reşit olma (çocuklar ve kardeşler), ölüm, hanedandan
+  birinin ölümü, tahta çıkış, naipler konseyi ve kraliçenin gelişi, oyundaki
+  olay pencereleri gibi çizimli birer pencereyle duyurulur. Haberler hanedanın
+  o anki hâlinden çıkarılır ve tarayıcıda hatırlanır (sunucu olayı önce işlese
+  de duyurulur); "Sen yokken" raporunda da bir Hanedan sayfası vardır.
+  Entrikanın haberleri (§9.1.1) elçinin pencereleriyle gelir.
+
+### 9.1.1 Entrika: görevler, evlilikler, bakışlar ve taht davacıları (şu an uygulanan)
+
+Değerler `config/balance/dynasty.json` → `intrigue`; mantık
+`packages/shared/src/intrigue.ts` (görevlerin etkileri `dynasty.ts` →
+`townKinBonus`, `houseCrownRest`, `patrolFavour`, `treasurerTax`); sunucuda
+`supabase/functions/_shared/house.ts` (tick'te `settleHouses`) ve `command` →
+`house` komutu (`action`: `role` / `gift` / `marry` / `aid`); arayüz
+`apps/web/src/ui/hud/dynasty.tsx`, karargâh çizimi
+`apps/web/src/game/pretenderCamp.ts`.
+
+- **Bakışlar** (yalnızca reşit erkekler: oğullar, kardeşler, akrabalar):
+  her birinin hükümdara bir bakışı (−100…100) ve bağlı olunan tacın ona bir
+  bakışı vardır. Bakış, durumdan anında hesaplanan bir **dinlenme değeri** ile
+  zamanla sönen bir **sapmadan** oluşur (`Person.op`: sapma ve anı; yarı ömür
+  60 dk; saklanan tek şey sapmadır, gerisi `f(zaman)`). Dinlenme değeri:
+  yakınlık (oğul +20, kardeş −5, akraba 0), hükümdarın yeteneklerinin
+  ortalaması (5'ten her puan ±3; konsey de sayılır), halkın mutluluğu (50'den
+  her puan ±0,2), kişinin **hırsı** (tohumdan ±10, askerlik 6'nın üstünde her
+  puan −2 daha), görevi varsa +15, hükümdardan büyük kardeşse −15 ("tahtta
+  gözü var"), naipler yönetiyorsa kardeşlere −10, kraliçe ana yaşıyorsa
+  kardeşlere +5. Sapmayı değiştirenler: hediye (+15), görevden alınma (−20),
+  yeni hükümdar tahta çıkınca kardeşlerine (−10). Tacın bakışı: askerlik
+  yeteneği (5'ten her puan ±2), tacın devriyesini yönetiyorsa +35, hanedandan
+  taca gelin gitmiş her prenses +5. Kartta bakış bir çubuk ve tek kelimeyle
+  (sadık ≥40, iyi ≥10, mesafeli ≥−15, hoşnutsuz ≥−35, düşman) ve bütün
+  kalemleriyle yazar; taç onu lorddan çok seviyorsa kırmızı uyarı çıkar.
+- **Hoşnutsuzluk haberi:** bir oğul ya da kardeşin bakışı −15'in altına
+  inince elçi bir kez haber getirir (`kin_unhappy`; kişi `warned`), −5'in
+  üstüne çıkınca uyarı sıfırlanır. Elçinin danışmanlığı da hoşnutsuz kardeşi,
+  evlenme çağındaki prensesi ve karargâhı hatırlatır.
+- **Hediye:** reşit bir erkeğe 100 altın; bakış +15 (sönerek), kişi başına 20
+  dakikada bir.
+- **Görevler** (en az 18 yaşında oğul, kız, kardeş ya da kız kardeşe; kişi
+  başına bir görev, her görevde bir kişi, "Görevden al" ile kaldırılır):
+  - **Vali** (elindeki bir kasabaya): kasabanın sadakat hedefi +6 + (halk
+    yeteneği − 5) × 1,5 (en az 0); kasabanın paneli bunu "Hanedan" kalemiyle
+    yazar. Kasaba elden çıkarsa görev boşa düşer (kartta yazar).
+  - **Devriye komutanı** (bir prens; biat etmiş olmalı): tacın devriyesinin
+    bahşişi ×(1,2 + (askerlik − 5) × 0,04), her uğrayışta taçla ilişki +1
+    fazla, taçla ilişkinin dinlenme değeri +5. Bedeli: taç onu da çok sever
+    (+35), isyan ederse onu destekleyebilir.
+  - **Hazinedar:** vergi +(maliye − 4) × %1.
+  Görev verilen sevinir (+15 dinlenme), görevden alınan gücenir.
+- **Prensesleri evlendirmek** (reşit kız ya da kız kardeş; "Evlendir"):
+  - **Taca:** bağlı olunan tacın hükümdar ailesine; 200 altın çeyiz, taçla
+    ilişki hemen +25, dinlenme değeri kalıcı +5.
+  - **Kasabaya:** kasabanın ileri gelen ailesine; 150 altın çeyiz. Elindeki
+    kasabanın sadakat hedefi kalıcı +12; **kimsenin olmayan** (kuşatılmamış,
+    asisiz) bir kasaba ise kılıç çekilmeden lorda bağlanır (sadakat %60 ile
+    başlar, +12 de sürer; aşırı büyüme kuralları geçerlidir). Başka bir lordun
+    kasabasına gelin verilmez.
+  - **Bir lordun hanedanına:** elçiyle teklif (`envoys.kind` `'marriage'`,
+    `terms`: gelin, adı, yetenekleri, yaşı); savaştayken olmaz. Karşı taraf
+    kabul ederse prenses onun hanedanının **Gelinler** listesine geçer, ilişki
+    +30 artar; ikisine de elçi haber getirir.
+  Evlenen prenses saraydan ayrılır ve **Evlendirilenler** listesinde kalır.
+- **Taht davacısı:** 2. seviye ve üstü sarayda, her 15 dakikalık yoklamada
+  bakışı **−35**'in altındaki her reşit erkek kardeş için isyan çekilir
+  (olasılık %15 + eşiğin altındaki her puan %1, en çok %50; kardeşin ve yoklamanın
+  tohumundan; sunucu yoklamayı `Dynasty.revoltSlot`'ta bir kez yazar).
+  Bir davacı dışarıdayken ve bastırılınca 2 saat boyunca yeni isyan olmaz
+  (`quietUntil`). İsyan eden kardeş hanedandan çıkar, garnizonun %15'i (en
+  çok 15) onunla gider, 8–14 asi + saray seviyesi × 2 toplar ve hududun
+  10–18 karo dışında açık, kuru bir araziye (başka hudutlardan, kasabalardan ve
+  taç şehirlerinden uzak) **karargâh** kurar (`Kingdom.pretender`).
+  Karargâh çitli bir kamptır (kömür grisi çadırlar ve davacının köşkü;
+  büyüdükçe çadır eklenir), kapısında siyah-gri asiler bekler, üstünde adı ve
+  saraya yürüyüşe kalan süreyi gösteren bir çubuk durur; **herkes görür**
+  (`lobby_kingdoms.pretender`). Karargâh dakikada 0,4 asi büyür (en çok 70) ve
+  **60 dakika** sonra davacı saraya yürür. Tacın bakışı davacıya lordun taçla
+  ilişkisinden yüksekse **taç onu destekler**: karargâh 1,5 kat hızlı büyür ve
+  10 taç askeri ona katılır. Elçi isyanı (`pretender_rise`), sürenin yarısında
+  ve %85'inde büyümeyi (`pretender_grow`) haber verir; harita uyarılarında en
+  üstte bir kart durur.
+  - **Karargâha saldırmak:** lordun ordusu karargâhın 5 karo yakınına
+    gönderilince (Hanedan bölümündeki "orduyu gönder" ya da haritadan)
+    `camp` hedefiyle yürür, varınca muharebe olur (`battles.kind`
+    `'pretender'`; asiler mızrakçı ve okçudur, moral 65, saha bilgisi 70,
+    çit 2 sur sayılır). Kazanırsa davacı ölür, isyan biter (`pretender_crushed`);
+    yenilirse ordu eve çekilir, karargâh düşen asiler kadar küçülür.
+  - **Taçtan yardım:** biat edilen taçtan bir kez asker, bir kez altın istenir.
+    Taç davacıyı destekliyorsa ya da lordla ilişkisi 25'in altındaysa geri
+    çevirir. Kabul ederse ilişki 6 düşer ve asker yardımı karargâhtan
+    12 × (0,5 + ilişki/100) asi düşürür, altın yardımı 250 × (0,5 +
+    ilişki/100) altın verir (`pretender_aid`).
+  - **Saray kuşatması:** süre dolunca davacı sarayı kuşatır (`battles.kind`
+    `'usurp'`, `besieged` lord): garnizon, sarayın yanında bekleyen ordular,
+    kuleler, surlar ve hisar savunur (`pretender_siege`). Savunanlar kazanırsa
+    davacı ölür (`throne_held`). Davacı kazanırsa **tahtı alır**
+    (`throne_lost`): eski hükümdar tahttan indirilerek ölür, kraliçesi
+    saraydan gider, çocukları yeni hükümdarın yeğenleri olur; hanedan
+    davacıyla sürer, hayatta kalan asiler garnizona katılır, saray 15 dakika
+    kalkan alır ve halk yağma gibi üzülür. Davacıyla muharebeler sıralamada
+    zafer sayılmaz, kahırdan ölüm çekilmez.
 
 ### 9.2 Diplomatik durumlar
 
@@ -2658,6 +2930,35 @@ krallıkta birer tane olur ve 3 seviyelidir.
   cevap verilmezse olay yalnızca kendi etkisiyle sürer. Cevap `responses`
   içinde `'a'`/`'b'` olarak saklanır; sunucu `choose` komutuyla
   (`dilemmaError`, `answerDilemma`) doğrular ve uygular.
+- **Art arda gelen pencereler** (`apps/web/src/ui/DialogQueue.tsx`):
+  elçi haberleri, hanedan haberleri ve günün olayları bir sıra gibidir.
+  Her pencerenin altında aynı alt çubuk durur: solda pencerenin kendi
+  düğmeleri ve (arkada başka pencere varsa) **"Tümünü kapat"**, ortada
+  sıradaki yeri ("2 / 5"; sıra boşalınca sayaç sıfırlanır), sağ uçta hep
+  aynı yerde ileri düğmesi (arkada pencere varsa **"İleri"**, sonuncuda
+  "Tamam"). "Tümünü kapat" yalnızca bir şey bildiren pencereleri kapatır
+  (süresi işleyen haraç isteği, kriz ve seçim kalır) ve kapattıklarını
+  kısa bir pencerede başlık başlık (tekrarlananlar "×N") özetler.
+  - **Pencerelerin raf ömrü** (`config/balance/dialogs.json`; `App.tsx` →
+    `folded`): bir şey bildiren pencere geldiği andan (hanedan haberinde
+    doğum/ölüm anı ya da tarayıcının duyduğu an, olayda başlangıcı) **3
+    dakika** içinde gösterilmezse (savaş haberleri, zarar veren haberler,
+    kötü olaylar, ölüm/taç/naipler için **10 dakika**; `shelfSeconds`)
+    artık tek başına açılmaz: okundu sayılır (günlükte zaten yazar) ve
+    sıra boşalınca tek bir **"Sen bakmazken N haber geldi"** penceresinde
+    başlık başlık (tekrarlananlar "N kez") özetlenir; oradan **"Günlüğü
+    aç"** ile günlüğe gidilir. Sekme arka plandayken gelip bayatlayanlar da
+    sekmeye dönülünce böyle toplanır. Aynı anda 5'ten fazla (`maxWaiting`)
+    bildiren pencere bekliyorsa önemliler ve en yeniler olmak üzere 3'ü
+    (`keepWhenFlooded`) kalır, gerisi özete katılır. Hiçbir zaman
+    düşmeyenler: cevap süresi işleyen haraç isteği, cevap bekleyen elçi
+    teklifi, karar süresi açık kriz ve seçim; sekme görünürken ekranda
+    açılmış pencere de okunurken kaybolmaz. Oyuncu sırayı ilerletirken
+    arkada bekleyenlerin yaşı son "İleri"den sayılır (okuyan oyuncunun
+    haberleri bayatlamaz). Doğumda ad konmasa da olur (sonra kartından
+    konur). "Sen yokken" raporu açılacaksa haberleri o anlatır: rapor
+    açıkken hiçbir şey toplanmaz, rapordan önceki haberler rapor
+    kapanınca özetsiz düşer.
 - **Olay penceresi:** Üstte pencerenin tam genişliğinde bir başlık şeridi
   (hayırlı haberde yeşil, kötü haberde kırmızı), altında pencerenin üst
   yarısını kenardan kenara dolduran olay çizimi, en altta haber, seçenekler
@@ -2693,9 +2994,11 @@ krallıkta birer tane olur ve 3 seviyelidir.
   kale ya da köy, kuşlar; savaşta duman, entrikada gece; bulutlar ve kuşlar
   hafifçe hareket eder)
   vardır (`apps/web/src/ui/AwayReport.tsx`):
-  **Sen yokken köyde neler oldu** (ilk sayfa, hikâye gibi: yokluk boyunca
-  başlayan günün olayları (`fortunesBegun`, en yeni 8'i) ve nasıl
-  karşılandıkları (kâhya, köylüler, kimse), dönen seferler, tamamlanan
+  **Sen yokken köyde neler oldu** (ilk sayfa, kısa özet: yokluk boyunca
+  başlayan günün olaylarının (`fortunesBegun`) sayısı, kaçının kötü /
+  hayırlı olduğu ve adları tek satırda; afetlerin kaçının karşılandığı
+  (kâhya, köylüler) ve kaçının zararını verdiği, seçimlerin kaçında yol
+  seçildiği; olaylar tek tek yazılmaz; dönen seferler, tamamlanan
   hedefler ve unvan), **Mali rapor** (yokluk süresi, hazine ve depoların öncesi/sonrası;
   defterden gerçek vergi, tüccar geliri, maaş, boşa giden altın, hazine
   dolu diye bekleyen seferler ve geri kalan harcama; nüfus, mutluluk,
@@ -2703,10 +3006,16 @@ krallıkta birer tane olur ve 3 seviyelidir.
   her seferin yolda başına gelenler, ganimeti, kayıpları; hâlâ yolda olanlar;
   sayfanın resmi son seferin sahnesidir), **Askeri rapor** (muharebeler, kuşatmalar, kasabalar,
   kuleler, sınırdaki ordular, asker sayısı ve kayıpların nedeni),
-  **Haraçlar** (haraççıların aldığı, devriyenin bıraktığı, lordlar arası
-  ödenen/alınan haraç), **Elçiler ve
+  **Haraçlar** (toplamlar: rakip tacın haraççıları kaç kez geldi ve
+  toplam ne kadar ödendi, kaçı kendiliğinden / fazlasıyla, kaçı cevapsız
+  kaldı; kendi tacının devriyesi kaç kez uğradı ve toplam bahşiş; armağanlar
+  kaç kez geldi ve toplam altın ve mallar; lordlar arası ödenen/alınan
+  haraç), **Elçiler ve
   casuslar** ve **Dünyada olanlar** (kim kime savaş açtı, hangi savaş
   bitti, kim kiminle çarpıştı ve kim kazandı, kim hangi kasabayı fethetti).
+  Askeri rapor ve Elçiler sayfalarında aynı başlıklı haberler birleşir
+  ("… (5 kez; sonuncusu)"). Raporda yalnızca maddelerin listesi kayar;
+  resim, başlık ve Geri / İleri düğmeleri hep yerinde durur.
   Öncesi/sonrası sunucudaki `seen` özetinden okunur (her cihazda aynı). Rapor açıkken elçi pencereleri beklemez; kapatınca rapordaki
   haberler okunmuş sayılır (günlükte yine durur).
 - **Elçinin haber çizimleri:** Elçinin getirdiği her haberin penceresi olay
@@ -2734,6 +3043,14 @@ krallıkta birer tane olur ve 3 seviyelidir.
   açılan gemi), **kuşatma** (tepede surlu kasaba, taş fırlatan mancınık;
   alındı: sancak çekilir; dayandı: kuşatanlar çekilir; halk kaçıyor) ve
   **muharebe** (karşılaşan iki saf; gözcü kulesinden ok yağmuru).
+  Yağmacı haberleri yağma sahnesini, korsan haberleri deniz sahnesini
+  saldırganlar is karası olarak kullanır (§7.9, §8.5).
+  Hanedanın haberleri (§9.1.1) bu ailelerden çizilir: evlilik teklifleri ve
+  düğünler ittifak sahnesiyle, hoşnutsuz kardeş taht salonundaki hakaret
+  sahnesiyle, görevler elçi sahnesiyle, taht davacısının isyanı ve büyüyen
+  karargâhı gece tepelerdeki düşman çadırlarıyla, bastırılan isyan
+  ayaklanmanın bitişiyle, saray kuşatması, korunan ve kaybedilen taht kuşatma
+  sahnesiyle.
 - **Elçi (danışman ve öğretici)** (`apps/web/src/ui/advisor/`): Elçinin kodla
   çizilmiş bir portresi vardır (tüylü şapka, fırfırlı yaka, sivri ak sakal,
   bir kaşı kalkık, elinde mühürlü parşömen; göz kırpar, konuşurken ağzı
@@ -2840,7 +3157,8 @@ içerik. Değerler `config/balance/expeditions.json`, `goals.json` ve
   rapor sahneleriyle çizilir (`fortuneStory`).
 - **Hanedan hedefleri** (Saray → **Hedefler**): 13 iz, her biri üç
   basamak (bronz, gümüş, altın): yapı (10/25/50), ev, saray seviyesi,
-  köylü, çocuk, kazanılan muharebe, elde tutulan kasaba, araştırma, dönen
+  köylü, çocuk (hükümdarın çocukları, kardeşleri ve evlendirilen prensesler),
+  kazanılan muharebe, elde tutulan kasaba, araştırma, dönen
   sefer, tüccar geliri, hazine, tapınak, gemi. Basamaklar durumdan okunur
   ve `advance` içinde kaydedilir (`Kingdom.goals`: basamak ve an; geri
   alınmaz). Her basamak bir yıldız, bir rozet ("Usta Kurucu"…) ve küçük bir
@@ -2970,9 +3288,15 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
     şakırtı (abluka dalga ve pes boru), kuşatma mancınık gümlemesi, kasaba
     alınınca zafer fanfarı ve tezahürat, muharebe başı davullar, sonu
     kazanana zafer borusu, kaybedene hüzünlü boru; kral ordunun başında
-    görkemli boru, kral düşünce ağır çan, kasaba satışı kasa zili ve altın,
+    görkemli boru, kral düşünce ağır çan, kasaba satışı kasa zili ve altın, hanedanın
+    düğünleri ve evlilik teklifleri düğün çanları, hoşnutsuz kardeş tehdit
+    davulları, taht davacısının isyanı savaş borusu, bastırılması zafer
+    fanfarı, korunan taht zafer borusu, kaybedilen taht ağır çan,
     kervan dönüşü araba ve altın, ulaşmayan emir düşen ıslık, kuleler ok
-    vızıltısı. Hanedan haberleri (doğumda müzik kutusu ninnisi, ölümde cenaze
+    vızıltısı; yağmacılar yolu tutunca kılıç şakırtısı, takip başlayınca
+    gerilimli pes davul, yollar ya da sular temizlenince sakin ton, korsanlar
+    sulara gelince abluka borusu, korsan teknesi batınca zafer borusu (§7.9,
+    §8.5). Hanedan haberleri (doğumda müzik kutusu ninnisi, ölümde cenaze
     çanı, taç giyme, naipler, reşit olma, kraliçenin gelişi çanları), taç
     elçisinin isteği (saray fanfarı), sefer dönüşü (nal sesi ve boru), taçların
     tanıtımı (fanfar) ve "Sen yokken" raporu (sayfa çevirme) da kendi
@@ -3042,6 +3366,7 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
 
 | Tablo | İçerik |
 | --- | --- |
+| `kingdoms.state.pretender` | taht davacısının karargâhı (§9.1.1); `lobby_kingdoms.pretender` herkese açar |
 | `lobbies` | tohum, `world_rev` (dünya üretim sürümü), `river_keep` (genişleyen nehrin kuru bıraktığı alanlar), `season_start`, ayarlar |
 | `kingdoms` | `state jsonb`, `version`, `updated_at`, ad, renk |
 | `armies` | sahibi, birlikler, `path`, `depart_at`, `arrive_at` |
@@ -3051,6 +3376,7 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
 | `kingdom_daily` | günlük istatistik |
 | `chat_messages` | lobi, gönderen krallık, ad, renk, metin, zaman |
 | `minigame_scores` | mini oyun puanları: lobi, lord, oyuncu, oyun, puan, zaman, ad/renk/lobi adı (yalnız sunucu yazar) |
+| `lobby_outlaws` | yağmacı çeteleri ve korsan tekneleri (§7.9, §8.5): tür, sıra, kaç kez yenildiği, `down_until`, süren muharebe, `shift`, kayıplar (yalnız sunucu yazar; satırı olmayan dokunulmamıştır) |
 
 ---
 

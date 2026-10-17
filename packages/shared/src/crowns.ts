@@ -3,6 +3,7 @@ import { BUILDINGS, WEAPONS, armoryCap, armoryOf, book, palaceLevel, storageCap 
 import { priceAt } from './market'
 import type { Market } from './market'
 import type { Good, Kingdom, Weapon } from './economy'
+import { houseCrownRest } from './dynasty'
 
 // The politics of the two crown kingdoms (CLAUDE.md §7.8): every lord stands somewhere with each crown (a relation from
 // −100 to 100), each crown watches over the trade in one good at a time, and a crown is as strong as the lords sworn to
@@ -12,10 +13,11 @@ const spec = () => balance.cities.crown
 const GOODS_ORDER: Good[] = ['food', 'materials', 'arms']
 
 // Where a lord's standing with a crown drifts back to: warm with its own crown, cool with the rival one.
-export function crownRest(kingdom: Pick<Kingdom, 'liege'>, crown: number) {
+export function crownRest(kingdom: Pick<Kingdom, 'liege'> & { dynasty?: Kingdom['dynasty'] }, crown: number) {
   const r = spec().relation
   if (kingdom.liege === undefined || kingdom.liege === null) return 0
-  return kingdom.liege === crown ? r.restSworn : r.restRival
+  // A brother leading the crown's patrol, a sister wed into its house: the crown rests a little warmer (CLAUDE.md §9.1.1).
+  return (kingdom.liege === crown ? r.restSworn : r.restRival) + houseCrownRest(kingdom.dynasty, crown, kingdom.liege)
 }
 
 export const crownRelation = (kingdom: Pick<Kingdom, 'liege' | 'crownRelations'>, crown: number) => kingdom.crownRelations?.[crown] ?? crownRest(kingdom, crown)

@@ -1079,6 +1079,8 @@ const FACTORIES: Record<Family, (look: Look) => Scene> = {
 // ---- Which scene a notice gets ------------------------------------------------------------------------------------
 
 const hexOf = (color: string | null | undefined) => KINGDOM_COLORS[color as KingdomColor]?.swatch ?? null
+// The bandits' and pirates' soot black.
+const BANDIT_HEX = '#2a2226'
 
 export interface NoticeLook {
   family: Family
@@ -1101,11 +1103,12 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
   const L = (family: Family, other: string | null | undefined, tone: 'good' | 'bad', variant?: string): NoticeLook => ({ family, other, own, tone, variant })
   switch (n.kind) {
     case 'envoy_proposal':
+      if (p.kind === 'marriage') return L('alliance', byName(p.from), 'good')
       return p.kind === 'tribute' ? L('tribute', byName(p.from), 'bad') : p.kind === 'alliance' ? L('alliance', byName(p.from), 'good') : L('peace', byName(p.from), 'good')
     case 'envoy_courtesy':
       return p.kind === 'gift' ? L('gift', byName(p.from), 'good') : L('envoy', byName(p.from), 'good')
     case 'envoy_answer':
-      if (p.kind === 'alliance') return L('alliance', byName(p.by), p.accepted ? 'good' : 'bad', p.accepted ? '' : 'broken')
+      if (p.kind === 'alliance' || p.kind === 'marriage') return L('alliance', byName(p.by), p.accepted ? 'good' : 'bad', p.accepted ? '' : 'broken')
       if (p.kind === 'peace') return p.accepted ? L('peace', byName(p.by), 'good') : L('war', byName(p.by), 'bad')
       if (p.kind === 'tribute') return L('tribute', byName(p.by), p.accepted ? 'good' : 'bad', p.accepted ? 'paid' : 'refused')
       return L('envoy', byName(p.by), p.accepted ? 'good' : 'bad')
@@ -1149,11 +1152,14 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
     case 'fleet_turned':
       return L('naval', own, 'bad', 'calm')
     case 'battle_start':
-      if (p.kind === 'revolt') return L('revolt', null, 'bad')
+      if (p.kind === 'outlaw') return L('raid', BANDIT_HEX, 'bad', 'repelled')
+      if (p.kind === 'revolt' || p.kind === 'pretender') return L('revolt', null, 'bad')
       return p.kind === 'siege' ? L('siege', null, 'bad') : L('battle', null, 'bad')
     case 'battle_end': {
       const won = p.winner === 'attackers'
-      if (p.kind === 'revolt') return L('revolt', null, won ? 'good' : 'bad', won ? 'free' : undefined)
+      if (p.kind === 'revolt' || p.kind === 'pretender') return L('revolt', null, won ? 'good' : 'bad', won ? 'free' : undefined)
+      if (p.kind === 'usurp') return L('siege', null, won ? 'bad' : 'good', won ? 'taken' : 'held')
+      if (p.kind === 'outlaw') return L('raid', BANDIT_HEX, won ? 'good' : 'bad', won ? 'repelled' : undefined)
       return p.kind === 'siege' ? L('siege', null, 'bad', won ? 'taken' : 'held') : L('battle', null, 'bad')
     }
     case 'siege_people':
@@ -1196,6 +1202,45 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
       return L('gift', own, 'good')
     case 'cargo_lost':
       return L('battle', null, 'bad')
+    // Bandits on the roads and pirates on the water (CLAUDE.md §7.9, §8.5): the caravan raid and the sea fight, in black.
+    case 'outlaw_chase':
+      return L('raid', BANDIT_HEX, 'good', 'repelled')
+    case 'outlaw_road':
+      return L('raid', BANDIT_HEX, 'bad')
+    case 'outlaw_road_clear':
+    case 'outlaw_gone':
+      return L('raid', BANDIT_HEX, 'good', 'repelled')
+    case 'outlaw_escaped':
+      return L('envoy', own, 'bad', 'lost')
+    case 'pirate_waters':
+      return L('naval', BANDIT_HEX, 'bad', 'blockade')
+    case 'pirate_waters_clear':
+    case 'pirate_gone':
+      return L('naval', BANDIT_HEX, 'good', 'calm')
+    case 'pirate_escaped':
+      return L('naval', own, 'bad', 'calm')
+    case 'pirate_battle':
+      return L('naval', BANDIT_HEX, p.won ? 'good' : 'bad')
+    // The lord's house (CLAUDE.md §9.1.1).
+    case 'kin_unhappy':
+      return L('insult', own, 'bad')
+    case 'kin_role':
+      return L('envoy', own, p.role === null ? 'bad' : 'good')
+    case 'house_marriage':
+      return L('alliance', p.kind === 'crown' ? crown : p.kind === 'bride' ? byName(p.from) : own, 'good')
+    case 'pretender_rise':
+    case 'pretender_grow':
+      return L('war', null, 'bad', 'camp')
+    case 'pretender_aid':
+      return !p.granted ? L('envoy', crown, 'bad') : p.kind === 'gold' ? L('gift', crown, 'good') : L('war', crown, 'good')
+    case 'pretender_crushed':
+      return L('revolt', null, 'good', 'free')
+    case 'pretender_siege':
+      return L('siege', null, 'bad')
+    case 'throne_held':
+      return L('siege', null, 'good', 'held')
+    case 'throne_lost':
+      return L('siege', null, 'bad', 'taken')
     default:
       return L('envoy', null, 'good')
   }
@@ -1210,7 +1255,7 @@ export function soundForNotice(n: Notice, online: Online): Cue {
   const good = look.tone === 'good'
   switch (n.kind) {
     case 'battle_start':
-      return p.kind === 'revolt' ? 'revolt' : p.kind === 'siege' ? 'siege' : 'battle'
+      return p.kind === 'revolt' || p.kind === 'pretender' ? 'revolt' : p.kind === 'siege' || p.kind === 'usurp' ? 'siege' : 'battle'
     case 'battle_end': {
       // Won or lost by the player's side: the battle's sides if known, else whether it cost him soldiers.
       const report = p.report as { winner?: string; losses?: Record<string, number> } | undefined
@@ -1255,6 +1300,45 @@ export function soundForNotice(n: Notice, online: Online): Cue {
       return good ? 'triumph' : 'sorrow'
     case 'fleet_turned':
       return 'lost'
+    case 'outlaw_chase':
+      return 'threat'
+    case 'outlaw_road':
+      return 'raid'
+    case 'outlaw_road_clear':
+    case 'pirate_waters_clear':
+      return 'calm'
+    case 'outlaw_gone':
+    case 'outlaw_escaped':
+    case 'pirate_gone':
+    case 'pirate_escaped':
+      return 'lost'
+    case 'pirate_waters':
+      return 'blockade'
+    case 'pirate_battle':
+      return p.won ? 'victory' : 'sorrow'
+    // The lord's house (CLAUDE.md §9.1.1).
+    case 'envoy_proposal':
+    case 'envoy_answer':
+      if (p.kind === 'marriage') return p.accepted === false ? 'refused' : 'wedding'
+      break
+    case 'house_marriage':
+      return 'wedding'
+    case 'kin_unhappy':
+      return 'threat'
+    case 'kin_role':
+      return p.role === null ? 'refused' : 'courtesy'
+    case 'pretender_rise':
+      return 'warHorn'
+    case 'pretender_aid':
+      return !p.granted ? 'refused' : p.kind === 'gold' ? 'gift' : 'king'
+    case 'pretender_crushed':
+      return 'triumph'
+    case 'pretender_siege':
+      return 'siege'
+    case 'throne_held':
+      return 'victory'
+    case 'throne_lost':
+      return 'kingFell'
   }
   switch (look.family) {
     case 'tribute':

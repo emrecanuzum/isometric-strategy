@@ -2,6 +2,7 @@ import { balance, crisisDecideMs, crisisKey, dilemmaDecideMs, dilemmaOptions } f
 import type { ChoiceOption, CrisisChoice, DilemmaChoice, EconomyEvent, Good, Kingdom } from '@game/shared'
 import { EventArt } from './EventArt'
 import { StoryScene, fortuneStory } from './storyScenes'
+import { DialogFoot } from './DialogQueue'
 import { Icon } from './icons'
 import { CRISIS_TEXTS, DILEMMA_TEXTS, FORTUNE_TEXTS, RESOURCE_NAMES, SCOPE_NAMES } from './names'
 
@@ -153,12 +154,7 @@ export function FortuneDialog({
               )}
             </div>
           )}
-          <div className="row spread">
-            <span />
-            <button className="btn small" onClick={onClose}>
-              {(crisis || options) && open ? 'Sonra' : 'Tamam'}
-            </button>
-          </div>
+          <DialogFoot onNext={onClose} label={(crisis || options) && open ? 'Sonra' : undefined} />
         </div>
       </section>
     </div>

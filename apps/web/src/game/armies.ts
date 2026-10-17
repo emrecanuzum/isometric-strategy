@@ -70,12 +70,16 @@ const GAP = 7
 // A town's rebels (CLAUDE.md §8.4) march in black and ash grey, no kingdom's colours.
 export const REBEL_COLOR = 'rebel'
 const REBEL = ramp(0x0e0e10, 0x18181c, 0x24242a, 0x34343a, 0x4a4a50, 0x8a8a90)
-const roofsOf = (color: string | null) => (color === REBEL_COLOR ? REBEL : (KINGDOM_COLORS[color as KingdomColor] ?? KINGDOM_COLORS.royal).roofs)
+// Bandits off the trade roads (CLAUDE.md §7.9) wear patched brown leather under a torn, soot-black banner.
+export const BANDIT_COLOR = 'bandit'
+const BANDIT = ramp(0x1a120c, 0x2a1c12, 0x3c2a1a, 0x4e3824, 0x6a4c30, 0x8a2a20)
+const roofsOf = (color: string | null) => (color === REBEL_COLOR ? REBEL : color === BANDIT_COLOR ? BANDIT : (KINGDOM_COLORS[color as KingdomColor] ?? KINGDOM_COLORS.royal).roofs)
 
 // Spearmen in tunics of the kingdom's colour behind a banner, more of them for a bigger army (in ranks of three), and
 // a catapult on wheels at the back when the army has one; two frames of the march.
 export function squad(color: string | null, frame: number, figures = 3, royal = false): Sprite {
   const tunic = roofsOf(color)
+  const tattered = color === BANDIT_COLOR
   const canvas = new Canvas(52, 58)
   const base = 56
   const ox = 22
@@ -124,6 +128,8 @@ export function squad(color: string | null, frame: number, figures = 3, royal = 
       for (let x = 1; x <= 9; x++) {
         const wave = Math.round(Math.sin(x * 0.7 + frame * 1.5) * 0.8)
         if (x > 7 && (y === 0 || y === 6)) continue
+        // A bandits' banner is torn: ragged notches out of its fly and holes in the cloth.
+        if (tattered && ((x >= 6 && (x + y * 3) % 4 === 0) || (x === 4 && y === 3) || (x > 8 && y % 2 === 1))) continue
         // The royal banner: gold, edged in the kingdom's colour, a small crown on it.
         const crown = royal && y >= 2 && y <= 4 && x >= 3 && x <= 6 && (y > 2 || x === 3 || x === 6 || x === 4)
         const color = royal ? (crown ? tunic[5] : y === 0 || y === 6 ? tunic[3] : GOLD[y < 3 ? 2 : 1]) : y === 0 ? tunic[5] : tunic[y < 3 ? 3 : 2]

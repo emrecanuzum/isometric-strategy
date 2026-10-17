@@ -1,0 +1,8 @@
+{
+  "shelfSeconds": {
+    "news": 180,
+    "important": 600
+  },
+  "maxWaiting": 5,
+  "keepWhenFlooded": 3
+}

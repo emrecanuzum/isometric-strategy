@@ -13,7 +13,7 @@ import { MONTH_NAMES } from './names'
 // The four shortcuts in the empty corners around the diamond minimap (CLAUDE.md §11): the world map, the player's own
 // armies and fleets one after another, the places that matter right now, and the photo mode.
 
-interface Spot {
+export interface Spot {
   key: string
   label: string
   at: Point
@@ -42,14 +42,16 @@ function hotSpots(o: {
   patrols: MapArmy[]
   nameOf: (id: number) => string
   now: number
+  // Bandits and pirates near the player's trade and the chases under way (CLAUDE.md §7.9).
+  extra?: Spot[]
 }): Spot[] {
   const { me, now } = o
   const out: Spot[] = []
   for (const b of o.battles) {
     if ((b.resolved && Date.parse(b.ends_at) <= now) || ![...b.attackers, ...b.defenders].some((f) => f.kingdom === me)) continue
     const foe = [...b.attackers, ...b.defenders].find((f) => f.kingdom !== me)
-    const what = b.kind === 'siege' ? 'Kuşatma' : b.kind === 'revolt' ? 'Asilerle muharebe' : 'Muharebe'
-    out.push({ key: `b${b.id}`, label: foe && b.kind !== 'revolt' ? `${what}: ${o.nameOf(foe.kingdom)}` : what, at: { x: b.x, y: b.y } })
+    const what = b.kind === 'siege' || b.kind === 'usurp' ? 'Kuşatma' : b.kind === 'revolt' || b.kind === 'pretender' ? 'Asilerle muharebe' : b.kind === 'outlaw' ? 'Yağmacılarla çarpışma' : 'Muharebe'
+    out.push({ key: `b${b.id}`, label: foe && b.kind !== 'revolt' && b.kind !== 'outlaw' && b.kind !== 'pretender' && b.kind !== 'usurp' ? `${what}: ${o.nameOf(foe.kingdom)}` : what, at: { x: b.x, y: b.y } })
   }
   for (const t of o.towns) {
     if (t.siege && t.siege.endsAt > now && (t.siege.kingdom === me || t.owner === me)) {
@@ -77,6 +79,7 @@ function hotSpots(o: {
       out.push({ key: `p${p.id}`, label: collector ? 'Haraççılar kapına geliyor' : 'Taç devriyesi sana uğruyor', at: at(p, now) })
     }
   }
+  out.push(...(o.extra ?? []))
   return out
 }
 
@@ -91,6 +94,7 @@ export function MinimapCorners({
   towns,
   pacts,
   patrols,
+  outlaws,
   nameOf,
   seasonStart,
   onWorldMap,
@@ -108,6 +112,8 @@ export function MinimapCorners({
   towns: Town[]
   pacts: Pact[]
   patrols: MapArmy[]
+  // Bandits and pirates that matter to the player (see hotSpots).
+  outlaws?: Spot[]
   nameOf: (id: number) => string
   seasonStart: number
   onWorldMap: () => void
@@ -140,7 +146,7 @@ export function MinimapCorners({
         }),
       ]
     : []
-  const spots = kingdom ? hotSpots({ me, kingdom, rect, armies, battles, towns, pacts, patrols, nameOf, now }) : []
+  const spots = kingdom ? hotSpots({ me, kingdom, rect, armies, battles, towns, pacts, patrols, nameOf, now, extra: outlaws }) : []
 
   // Each press goes on to the next one in the list (kept by key, so a list that changes does not start over).
   const lastUnit = useRef<string | null>(null)

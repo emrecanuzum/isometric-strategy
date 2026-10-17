@@ -228,8 +228,8 @@ function arch(p: Paint) {
   for (const [x, y] of [[c + 2, 21], [c + 3, 20], [c + 4, 20], [c + 5, 21]] as const) p.set(x, y, BEARD[1])
 }
 
-// The gilt frame (as the dynasty's portraits have).
-function frame(p: Paint) {
+// The gilt frame (as the dynasty's portraits have), round a 48 × 60 picture (the tribute captain's uses it too).
+export function frame(p: Paint) {
   for (let y = 0; y < PH; y++) {
     for (let x = 0; x < PW; x++) {
       const d = Math.min(x, y, PW - 1 - x, PH - 1 - y)

@@ -31,7 +31,8 @@ export function goalMeasure(k: Kingdom, track: string, at: number): number {
     case 'villagers':
       return population(k, at).villagers
     case 'children':
-      return k.dynasty?.children.length ?? 0
+      // The house's young: the ruler's children, his brothers and sisters, the princesses married off (CLAUDE.md §9.1).
+      return k.dynasty ? k.dynasty.children.length + (k.dynasty.siblings?.length ?? 0) + (k.dynasty.married?.length ?? 0) : 0
     case 'battlesWon':
       return k.record?.battlesWon ?? 0
     case 'towns':

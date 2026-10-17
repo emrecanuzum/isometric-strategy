@@ -1,4 +1,5 @@
-import { balance, clogsOf, cutOff, imprisoned, navyOf, overreachFor, palaceLevel, townLoyalty, townRevolting } from '@game/shared'
+import { balance, campSoldiers, clogsOf, cutOff, imprisoned, navyOf, outlawEffects, overreachFor, palaceLevel, townLoyalty, townRevolting } from '@game/shared'
+import { showPart } from './Subtabs'
 import { useState } from 'react'
 import { showArmyPart } from './war'
 import type { Kingdom } from '@game/shared'
@@ -42,7 +43,20 @@ export function MapAlerts({
     }
   }
   // The fighting first: war is what matters most (see warNotes).
-  const alerts: { key: string; tab: TabId; text: string; sea?: boolean; town?: number; mild?: boolean }[] = war.map((n) => ({ key: n.key, tab: 'army', text: n.text }))
+  const alerts: { key: string; tab: TabId; text: string; sea?: boolean; town?: number; mild?: boolean; house?: boolean }[] = war.map((n) => ({ key: n.key, tab: 'army', text: n.text }))
+  // A brother risen against the ruler (CLAUDE.md §9.1.1): first of all, until his camp is put down.
+  const pretender = kingdom.pretender
+  if (pretender) {
+    const left = Math.max(0, Math.ceil((pretender.marchAt - now) / 60_000))
+    alerts.unshift({
+      key: 'pretender',
+      tab: 'kingdom',
+      house: true,
+      text: pretender.marching
+        ? `Taht davacısı ${pretender.person.name} sarayını kuşatıyor!`
+        : `Taht davacısı ${pretender.person.name} karargâh kurdu: ${campSoldiers(pretender, now)} asi · ${left} dk sonra sarayına yürür.`,
+    })
+  }
   if (imprisoned(kingdom.buildings, kingdom.site, now)) {
     alerts.push({
       key: 'prison',
@@ -62,6 +76,12 @@ export function MapAlerts({
     if (m.kind === 'blockade') alerts.push({ key: `fleet${f.id}`, tab: 'army', sea: true, text: m.arriveAt > now ? `Filon ${m.name} iskelesine yol alıyor.` : `Filon ${m.name} iskelesini abluka ediyor.` })
     if (m.kind === 'raid') alerts.push({ key: `fleet${f.id}`, tab: 'army', sea: true, text: `Filon ${m.name} kıyısına akına gidiyor.` })
   }
+  // Bandits on the road by the trade post, pirates by the dock (CLAUDE.md §7.9, §8.5): a nuisance, so a mild card.
+  const outlaws = outlawEffects(kingdom)
+  if (outlaws.road > 0)
+    alerts.push({ key: 'bandits', tab: 'trade', mild: outlaws.road < 0.4, text: `Yağmacılar ticaret yolunun %${Math.round(outlaws.road * 100)}'ini tutuyor: tüccarın %${Math.round(outlaws.merchantCut * 100)} az kazanıyor. Çeteye tıkla, bir orduyla takip et.` })
+  if (outlaws.sea > 0)
+    alerts.push({ key: 'pirates', tab: 'army', sea: true, mild: outlaws.sea < 0.6, text: `Korsanlar iskelenin önünde (etki %${Math.round(outlaws.sea * 100)}): deniz ticareti tehlikede, balık azaldı. Tekneye tıkla, bir filoyla takip et.` })
   // Production going nowhere (CLAUDE.md §6.4, "üretim ağı tıkandı"): one card per good or weapon with no room.
   const clogs = clogsOf(kingdom, now)
   for (const makes of [...new Set(clogs.map((c) => c.makes))]) {
@@ -120,7 +140,7 @@ export function MapAlerts({
           <button
             key={a.key}
             className={`map-alert frame${a.mild ? ' mild' : ''}`}
-            onClick={() => (a.town !== undefined && onTown ? onTown(a.town) : (a.sea && showArmyPart('sea'), onOpen(a.tab)))}
+            onClick={() => (a.town !== undefined && onTown ? onTown(a.town) : (a.sea && showArmyPart('sea'), a.house && showPart('palace', 'house'), onOpen(a.tab)))}
           >
             <Icon name="warn" size={16} />
             <span>{a.text}</span>

@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { balance, overreachOf, tributeTalk, tributeTalkReact, tributeTalkScript } from '@game/shared'
 import { supabase } from '../lib/supabase'
 import type { Envoy as EnvoyRow, Operation, PeaceTerms, SpyTopic } from '@game/shared'
 import type { Notice } from '../net/online'
+import { DialogFoot } from './DialogQueue'
 import { Icon } from './icons'
 import type { IconName } from './icons'
 import { RESOURCE_NAMES } from './names'
 import { NoticeArt, noticeLook, soundForNotice } from './NoticeArt'
 import { playOnce } from '../audio/sfx'
 import { EnvoyPortrait } from './advisor/EnvoyPortrait'
+import { CollectorPortrait } from './advisor/CollectorPortrait'
+import { useBabble, useTyping } from './advisor/Advisor'
+import { CROWN_COLORS } from '../game/cities'
 import { ENVOY_NAMES, OPERATION_NAMES, TOPIC_NAMES, describeTerms } from './hud/diplomacy'
 import type { Online } from './hud/online'
 
@@ -61,7 +66,9 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
             ? `${p.from} her üretim turunda ${p.gold} altın haraç istiyor. Kabul edersen ilişkiniz ${balance.diplomacy.tribute.accept} düşer; reddedersen ${balance.diplomacy.tribute.reject} düşer.`
             : p.kind === 'alliance'
               ? `${p.from} seninle ittifak kurmak istiyor. Müttefik orduları birbirini korur.`
-              : `${p.from} savaşı bitirmek için barış teklif ediyor: ${describeTerms(p.terms as PeaceTerms | null)}.`,
+              : p.kind === 'marriage'
+                ? `${p.from}, ${(p.terms as { name?: string } | null)?.name ?? 'bir'} adlı prensesini (${(p.terms as { age?: number } | null)?.age ?? '?'} yaşında) senin hanedanına gelin vermek istiyor. Kabul edersen prenses sarayına gelir ve ilişkiniz +${balance.dynasty.intrigue.marriage.lord.relation} artar.`
+                : `${p.from} savaşı bitirmek için barış teklif ediyor: ${describeTerms(p.terms as PeaceTerms | null)}.`,
       }
     case 'envoy_courtesy':
       return p.kind === 'gift'
@@ -76,7 +83,9 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
             ? `${p.by} artık her turda ${p.gold} altın ödeyecek.`
             : p.kind === 'alliance'
               ? `${p.by} artık müttefikin.`
-              : 'Savaş bitti.'
+              : p.kind === 'marriage'
+                ? `Prenses ${p.bride} ${p.by} hanedanına gelin gitti. İlişkiniz +${balance.dynasty.intrigue.marriage.lord.relation} arttı.`
+                : 'Savaş bitti.'
           : p.kind === 'tribute'
             ? `İlişkiniz ${-balance.diplomacy.tribute.reject} düştü.`
             : '',
@@ -184,6 +193,9 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         text: `Filon ${p.target} iskelesine vardı ama ${p.why === 'dock' ? 'orada iskele yok' : p.why === 'taken' ? 'başka bir donanma zaten abluka ediyor' : 'artık savaşta değilsiniz'}; eve dönüyor.`,
       }
     case 'battle_start':
+      if (p.kind === 'outlaw') return { icon: 'swords', title: `${p.name} yakalandı!`, text: `Ordun ${p.name} yağmacılarını yolda yakaladı; çarpışma başladı. Savaş tur tur sürecek; kazanırsan çetenin ganimeti senin.` }
+      if (p.kind === 'pretender') return { icon: 'swords', title: `${p.name} karargâhına saldırı`, text: `Ordun taht davacısı ${p.name}'in karargâhına saldırdı. Çiti ve asileri savunuyor; kazanırsan isyan biter.` }
+      if (p.kind === 'usurp') return { icon: 'swords', title: `${p.name} sarayını kuşatıyor!`, text: `Taht davacısı ${p.name} asileriyle sarayının kapısına dayandı. Garnizonun, kulelerin ve surların savunuyor; kaybedersen tahtı o alır.` }
       if (p.kind === 'revolt') return { icon: 'swords', title: `${p.name} asileriyle çarpışma başladı`, text: `Ordun ${p.name} kapısındaki asilerin üstüne yürüdü. Savaş tur tur sürecek; kazanırsan ayaklanma biter.` }
       return {
         icon: 'swords',
@@ -194,6 +206,20 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       const report = p.report as { winner: string; losses: Record<string, number>; loot?: Record<string, number> }
       const losses = Object.entries(report.losses).map(([name, n]) => `${name} ${fmt(n)}`).join(', ')
       const loot = report.loot ? ` Yağma: ${Object.entries(report.loot).map(([r, v]) => `${fmt(v)} ${RESOURCE_NAMES[r as keyof typeof RESOURCE_NAMES].toLowerCase()}`).join(', ')}.` : ''
+      if (p.kind === 'outlaw') {
+        const minutes = Math.round(balance.outlaws.bands.respawnSeconds / 60)
+        return p.winner === 'attackers'
+          ? { icon: 'chest', title: `${p.name} dağıtıldı!`, text: `Ordun yağmacıları yendi (kayıplar: ${losses}).${report.loot ? ` Çetenin ganimeti ambara girdi: ${goodsText({ ...report.loot })}.` : ''} Yollar bir süre temiz; çete ${minutes} dakika sonra yeniden toplanır.` }
+          : { icon: 'warn', title: `${p.name} yağmacıları direndi`, text: `Ordun yağmacılara yenildi ve eve çekiliyor (kayıplar: ${losses}). Çete yolu tutmaya devam ediyor; daha büyük bir orduyla yeniden dene.` }
+      }
+      if (p.kind === 'pretender')
+        return p.winner === 'attackers'
+          ? { icon: 'crown', title: `${p.name} isyanı bastırıldı`, text: `Ordun karargâhı dağıttı (kayıplar: ${losses}). Taht davacısı ${p.name} savaşta öldü; hanedan bir süre sakin kalır.` }
+          : { icon: 'warn', title: `${p.name} karargâhı direndi`, text: `Ordun yenildi ve eve çekiliyor (kayıplar: ${losses}). Karargâh ayakta; zamanı dolmadan daha büyük bir orduyla dön ya da taçtan yardım iste.` }
+      if (p.kind === 'usurp')
+        return p.winner === 'defenders'
+          ? { icon: 'crown', title: 'Taht korundu!', text: `Sarayın ${p.name} asilerini püskürttü (kayıplar: ${losses}). Taht davacısı düştü.` }
+          : { icon: 'unhappy', title: 'Saray düştü', text: `${p.name} asileri sarayı aldı (kayıplar: ${losses}).` }
       if (p.kind === 'revolt') {
         const r = balance.towns.rebels
         return p.winner === 'attackers'
@@ -303,6 +329,98 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       return { icon: 'warn', title: 'Yük kaybedildi', text: `Ordun yenildi; kasabadan taşıdığı mallar (${goodsText(p.goods)}) savaş alanında kaldı.` }
     case 'town_held':
       return { icon: 'warn', title: `${p.name} dayandı`, text: `${p.name} garnizonu kuşatmayı püskürttü; ordundan ${fmt(Number(p.lost))} asker düştü, kimse kalmadı.` }
+    case 'outlaw_chase':
+      return { icon: 'swords', title: `${p.name} peşindesin`, text: `Ordun ${p.name} yağmacılarının önünü kesmek için yola çıktı (yaklaşık ${fmt(Number(p.soldiers))} kişiler). Yağmacılar ordudan yavaş yürür; yakaladığı an savaş başlar. ${Math.round(balance.outlaws.bands.chase.maxSeconds / 60)} dakikada yakalayamazsa takibi bırakır.` }
+    case 'outlaw_gone':
+      return { icon: 'shield', title: 'Çete ortada yok', text: `${p.name} dağıtılmış; ordun takibi bıraktı ve olduğu yerde bekliyor.` }
+    case 'outlaw_escaped':
+      return { icon: 'warn', title: `${p.name} izini kaybettirdi`, text: `Ordun ${p.name} yağmacılarına yetişemedi ve takibi bıraktı; olduğu yerde bekliyor. Daha yakındaki bir orduyla yeniden dene.` }
+    case 'outlaw_road':
+      return {
+        icon: 'warn',
+        title: 'Yağmacılar yolu tuttu!',
+        text: `Ticaret noktanın çevresindeki ticaret yolunun %${Math.round(Number(p.share) * 100)}'i yağmacıların elinde (${p.bands} çete). Tüccarının altınının %${Math.round(Number(p.cut) * 100)}'ini kesiyorlar ve halk tedirgin. Haritada çeteye tıkla, bir ordu seç ve "Takip et".`,
+      }
+    case 'outlaw_road_clear':
+      return { icon: 'shield', title: 'Yollar temizlendi', text: 'Ticaret noktanın çevresindeki yollarda yağmacı kalmadı; tüccarın yine tam kazanıyor.' }
+    case 'pirate_waters':
+      return {
+        icon: 'ship',
+        title: 'Korsanlar sularında!',
+        text: `İskelenin yakınında ${p.boats} korsan teknesi dolaşıyor (korsanların etkisi %${Math.round(Number(p.share) * 100)}): deniz ticaretine saldırı olasılığı arttı, balık azaldı, halk tedirgin. Haritada kara yelkenli tekneye tıkla, savaş gemili bir filo seç ve "Takip et".`,
+      }
+    case 'pirate_waters_clear':
+      return { icon: 'anchor', title: 'Sular temizlendi', text: 'İskelenin önündeki sularda korsan kalmadı.' }
+    case 'pirate_battle': {
+      const lostShips = Object.values((p.loss ?? {}) as Record<string, number>).reduce((a, b) => a + b, 0)
+      const might = `filonun gücü ${String(Math.round(Number(p.fleetMight) * 10) / 10).replace('.', ',')}, korsanlarınki ${String(Math.round(Number(p.might) * 10) / 10).replace('.', ',')}`
+      return p.won
+        ? { icon: 'chest', title: `${p.name} batırıldı!`, text: `Filon korsanları yakaladı ve yendi (${might}; zarlar ${(p.rolls as number[])?.join('–')}).${lostShips ? ` ${lostShips} gemi kaybettin.` : ' Kayıp yok.'}${p.loot ? ` Ödül ve ganimet: ${goodsText(p.loot)}.` : ''}` }
+        : { icon: 'warn', title: `${p.name} korsanları kazandı`, text: `Filon korsanlara yenildi (${might}; zarlar ${(p.rolls as number[])?.join('–')})${lostShips ? ` ve ${lostShips} gemi kaybetti` : ''}. Korsanlar dolaşmaya devam ediyor; daha güçlü bir filoyla (kadırgalar korsanları yener) yeniden dene.` }
+    }
+    case 'pirate_gone':
+      return { icon: 'anchor', title: 'Korsanlar ortada yok', text: `${p.name} batırılmış; filon takibi bıraktı.` }
+    case 'pirate_escaped':
+      return { icon: 'warn', title: `${p.name} kaçtı`, text: `Filon ${p.name} korsanlarına yetişemedi ve takibi bıraktı.` }
+    // ---- The lord's house (CLAUDE.md §9.1.1) ----
+    case 'kin_unhappy': {
+      const brother = p.kinship === 'sibling'
+      return {
+        icon: 'unhappy',
+        title: `${brother ? 'Kardeşin' : 'Oğlun'} ${p.name} hoşnutsuz`,
+        text: `Saray kulağı fısıldıyor: ${brother ? 'kardeşin' : 'oğlun'} ${p.name} senden pek hoşnut değil (${p.opinion}). ${
+          brother
+            ? `Daha da soğursa (${balance.dynasty.intrigue.revolt.below} altı) asker toplayıp sana isyan edebilir ve tahtını isteyebilir. Ona bir görev ver, hediye gönder ya da halkını mutlu et.`
+            : 'Ona bir görev ver ya da hediye gönder; Saray → Hanedan.'
+        }`,
+      }
+    }
+    case 'kin_role': {
+      const role = p.role as string | null
+      const name = p.name as string
+      const s = (p.skills ?? {}) as Record<string, number>
+      const I = balance.dynasty.intrigue.roles
+      if (role === null) return { icon: 'scroll', title: `${name} görevden alındı`, text: `${name} artık ${p.was === 'governor' ? 'vali' : p.was === 'commander' ? 'devriye komutanı' : 'hazinedar'} değil. Böyle bir şey kolay unutulmaz; sana gücendi.` }
+      if (role === 'governor')
+        return { icon: 'crown', title: `${name} ${p.town} valisi`, text: `${name} ${p.town} kasabasına vali olarak gitti. Kasabanın sadakat hedefi +${Math.round(Math.max(0, I.governor.loyalty + ((s.people ?? 5) - 5) * I.governor.perPeople))} arttı; görev verdiğin için sana da ısındı.` }
+      if (role === 'commander')
+        return { icon: 'banner', title: `${name} tacın devriyesinin başında`, text: `${name} bağlı olduğun tacın devriyesinin komutasını aldı: devriyenin bahşişi artar, her uğrayışta taç seni biraz daha sever. Taç onu da sever; aklında olsun.` }
+      return { icon: 'gold', title: `${name} hazinedar`, text: `${name} hazinenin başına geçti: vergi +%${Math.round(Math.max(0, (s.finance ?? 5) - I.treasurer.from) * I.treasurer.taxPerFinance * 100)}.` }
+    }
+    case 'house_marriage':
+      if (p.kind === 'bride') return { icon: 'flower', title: `${p.from} hanedanından gelin geldi`, text: `${p.from} hanedanının prensesi ${p.name} sarayına geldi. İki hanedan artık akraba; ilişkiniz +${balance.dynasty.intrigue.marriage.lord.relation} arttı.` }
+      if (p.kind === 'crown') return { icon: 'flower', title: `Prenses ${p.name} ${crown(p.crown)} sarayında`, text: `Prenses ${p.name} ${crown(p.crown)} hükümdar ailesine gelin gitti. Taçla ilişkin +${balance.dynasty.intrigue.marriage.crown.relation} arttı; bundan sonra taç seni hep biraz daha yakın tutar.` }
+      return p.free
+        ? { icon: 'crown', title: `${p.town} artık senin!`, text: `Prenses ${p.name} ${p.town} kasabasının ileri gelen ailesine gelin gitti; kasaba kılıç çekilmeden sana bağlandı. Sadakati %${balance.dynasty.intrigue.marriage.town.freeLoyalty} ile başlıyor, prenses orada kaldıkça +${balance.dynasty.intrigue.marriage.town.loyalty}.${overreachNote(online, 0)}` }
+        : { icon: 'flower', title: `Prenses ${p.name} ${p.town} kasabasında`, text: `Prenses ${p.name} ${p.town} kasabasının ileri gelen ailesine gelin gitti. Kasabanın sadakat hedefi kalıcı olarak +${balance.dynasty.intrigue.marriage.town.loyalty}.` }
+    case 'pretender_rise':
+      return {
+        icon: 'swords',
+        title: `Kardeşin ${p.name} isyan etti!`,
+        text: `${p.name} tahtı istiyor. ${Number(p.deserters) > 0 ? `Garnizonundan ${p.deserters} asker ona katıldı; ` : ''}${p.soldiers} asiyle sınırının yakınında bir karargâh kurdu. ${p.minutes} dakika içinde karargâhı kuşatıp dağıtmazsan büyüyüp sarayını kuşatacak; kuşatmayı kaybedersen tahtı o alır.${
+          p.backed ? ` Kötü haber: ${crown(p.crown)} onu senden çok seviyor ve onu destekliyor; karargâh daha hızlı büyüyecek.` : p.crown !== null && p.crown !== undefined ? ` ${crown(p.crown)} şimdilik senin yanında; ondan asker ya da altın isteyebilirsin.` : ''
+        } Saray → Hanedan'dan ordu gönderebilirsin.`,
+      }
+    case 'pretender_grow':
+      return p.soon
+        ? { icon: 'warn', title: `${p.name} yürümeye hazırlanıyor`, text: `Taht davacısının karargâhında ${p.soldiers} asi var. ${p.minutes} dakika sonra sarayını kuşatacak; ya karargâhı şimdi dağıt ya da garnizonunu, kulelerini ve surlarını hazırla.` }
+        : { icon: 'warn', title: `${p.name} karargâhı büyüyor`, text: `Karargâha her gün yeni asiler katılıyor: ${p.soldiers} asi${p.backed ? ', tacın desteğiyle' : ''}. ${p.minutes} dakika sonra sarayına yürüyecek.` }
+    case 'pretender_aid':
+      if (!p.granted)
+        return p.why === 'backed'
+          ? { icon: 'unhappy', title: `${crown(p.crown)} yardım etmedi`, text: `${crown(p.crown)} hükümdarı kardeşin ${p.name}'i senden çok seviyor; yardım istemeni geri çevirdi ve davacıyı destekliyor.` }
+          : { icon: 'unhappy', title: `${crown(p.crown)} yardım etmedi`, text: `${crown(p.crown)} seninle ilişkisini yardım edecek kadar iyi görmüyor (en az ${balance.dynasty.intrigue.aid.minRelation} gerekir). Siparişler ve görevlerle tacın gözüne gir.` }
+      return p.kind === 'troops'
+        ? { icon: 'shield', title: `${crown(p.crown)} asker gönderdi`, text: `Tacın askerleri ${p.name}'in karargâhına baskın yaptı: ${p.troops} asi düştü. Taçla ilişkin ${balance.dynasty.intrigue.aid.relationCost} azaldı.` }
+        : { icon: 'gold', title: `${crown(p.crown)} altın gönderdi`, text: `Taç isyana karşı hazinene ${p.gold} altın gönderdi. Taçla ilişkin ${balance.dynasty.intrigue.aid.relationCost} azaldı.` }
+    case 'pretender_crushed':
+      return { icon: 'crown', title: 'İsyan bastırıldı', text: `Taht davacısı ${p.name}'in karargâhı dağıtıldı; ${p.name} savaşta öldü. Hanedan bir süre sakin kalacak.` }
+    case 'pretender_siege':
+      return { icon: 'swords', title: `${p.name} sarayını kuşatıyor!`, text: `Karargâh zamanında dağıtılamadı: ${p.name} ${p.soldiers} asiyle sarayına yürüdü. Karşısında ${p.garrison} asker, kuleler ve surlar var. Kuşatmayı kaybedersen tahtı o alır.` }
+    case 'throne_held':
+      return { icon: 'crown', title: 'Taht korundu', text: `Sarayın taht davacısı ${p.name}'in kuşatmasına dayandı; ${p.name} düştü, asileri dağıldı.` }
+    case 'throne_lost':
+      return { icon: 'unhappy', title: `Tahtı ${p.name} aldı`, text: `${p.name} sarayı ele geçirdi. Hükümdar ${p.old || '?'} tahttan indirildi ve öldü; kraliçesi saraydan gitti, çocukları artık yeni hükümdarın yeğenleri. Hanedan ${p.name} ile sürüyor: yeni bir kraliçe alman gerekecek.` }
     default:
       // A kind this page does not know yet: the game was updated while it was open.
       return { icon: 'scroll', title: 'Elçiden haber', text: 'Oyun güncellendi; bu haberi okumak için sayfayı yenile.' }
@@ -315,8 +433,12 @@ export function EnvoyDialog({ notice, online, onClose }: { notice: Notice; onlin
   const pending = notice.kind === 'envoy_proposal' && online.envoys.some((e) => e.id === p.envoy && e.status === 'pending')
   // A rival crown's demand, answerable until it runs out.
   const demand = notice.kind === 'patrol_tribute' && Number(p.expiresAt) > Date.now()
-  const battle = notice.kind.startsWith('battle') ? (p.battle as number) : null
+  const battle = notice.kind.startsWith('battle') || notice.kind === 'pretender_siege' ? (p.battle as number) : null
   const look = noticeLook(notice, online)
+  // Talking with the tribute collectors' captain (for this notice): the picture and the demand step aside so the
+  // dialog stays short while the talk goes one exchange at a time.
+  const [talkFor, setTalkFor] = useState<number | null>(null)
+  const talking = demand && talkFor === notice.id
   // Each notice's own sound, once, as its dialog opens.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => playOnce(`notice:${notice.id}`, soundForNotice(notice, online)), [notice.id])
@@ -334,39 +456,40 @@ export function EnvoyDialog({ notice, online, onClose }: { notice: Notice; onlin
             <h2 id="envoy-title">{title}</h2>
           </div>
         </header>
-        <div className="fortune-art">
-          <NoticeArt look={look} />
-        </div>
+        {!talking && (
+          <div className="fortune-art">
+            <NoticeArt look={look} />
+          </div>
+        )}
         <div className="fortune-body">
-          {text && <p>{text}</p>}
+          {text && !talking && <p>{text}</p>}
           {demand ? (
-            <TributeAnswer online={online} visit={p.visit as number} asked={Number(p.amount)} onClose={onClose} />
+            <TributeAnswer
+              key={notice.id}
+              online={online}
+              visit={p.visit as number}
+              asked={Number(p.amount)}
+              color={CROWN_COLORS[Number(p.crown ?? 0) % CROWN_COLORS.length]}
+              talking={talking}
+              onTalk={() => setTalkFor(notice.id)}
+              onClose={onClose}
+            />
           ) : (
-            <div className="row spread">
-              {pending ? (
-                <>
-                  <button className="btn small danger" onClick={() => (online.act({ type: 'respond', envoy: p.envoy as number, accept: false }), onClose())}>
-                    Reddet
+            pending ? (
+              <DialogFoot label="Kabul et" onNext={() => (online.act({ type: 'respond', envoy: p.envoy as number, accept: true }), onClose())}>
+                <button className="btn small danger" onClick={() => (online.act({ type: 'respond', envoy: p.envoy as number, accept: false }), onClose())}>
+                  Reddet
+                </button>
+              </DialogFoot>
+            ) : (
+              <DialogFoot onNext={onClose}>
+                {battle !== null && (
+                  <button className="btn small" onClick={() => (online.watch(battle), onClose())}>
+                    <Icon name="swords" size={16} /> İzle
                   </button>
-                  <button className="btn small" onClick={() => (online.act({ type: 'respond', envoy: p.envoy as number, accept: true }), onClose())}>
-                    Kabul et
-                  </button>
-                </>
-              ) : (
-                <>
-                  {battle !== null ? (
-                    <button className="btn small" onClick={() => (online.watch(battle), onClose())}>
-                      <Icon name="swords" size={16} /> İzle
-                    </button>
-                  ) : (
-                    <span />
-                  )}
-                  <button className="btn small" onClick={onClose}>
-                    Tamam
-                  </button>
-                </>
-              )}
-            </div>
+                )}
+              </DialogFoot>
+            )
           )}
         </div>
       </section>
@@ -376,15 +499,34 @@ export function EnvoyDialog({ notice, online, onClose }: { notice: Notice; onlin
 
 // A rival crown's demand at the gate (CLAUDE.md §7.8): refuse, pay, or first have a word with the collectors' captain.
 // The talk is drawn from the lobby seed and the visit, so it is the same here as on the server, which works out again
-// what the replies did to the demand. Once a visit.
-function TributeAnswer({ online, visit, asked, onClose }: { online: Online; visit: number; asked: number; onClose: () => void }) {
+// what the replies did to the demand. Once a visit. While talking, the dialog shows one exchange at a time, as the
+// envoy advisor does: the captain's portrait, his line typed out with his voice, and the three replies.
+function TributeAnswer({
+  online,
+  visit,
+  asked,
+  color,
+  talking,
+  onTalk,
+  onClose,
+}: {
+  online: Online
+  visit: number
+  asked: number
+  // The crown's colour (interface hex), for the captain's crest and tabard.
+  color: string
+  talking: boolean
+  onTalk: () => void
+  onClose: () => void
+}) {
   const seed = online.lobby.seed
   const [amount, setAmount] = useState(asked)
   // Null until known whether the captain has been talked to already (the dialog may have been closed and opened again).
   const [talked, setTalked] = useState<boolean | null>(null)
   const [angry, setAngry] = useState(false)
-  const [talking, setTalking] = useState(false)
   const [replies, setReplies] = useState<number[]>([])
+  // His answer to the last reply is on screen (with "Devam"), not yet the next thing he says.
+  const [reacting, setReacting] = useState(false)
   const [sending, setSending] = useState(false)
   useEffect(() => {
     let live = true
@@ -411,6 +553,7 @@ function TributeAnswer({ online, visit, asked, onClose }: { online: Online; visi
   const pick = (r: number) => {
     const next = [...replies, r]
     setReplies(next)
+    setReacting(true)
     const done = tributeTalk(seed, visit, next)
     if (!done) return
     setSending(true)
@@ -431,19 +574,16 @@ function TributeAnswer({ online, visit, asked, onClose }: { online: Online; visi
   }
   const refusal = -Math.round(balance.cities.crown.patrol.refuseRelation * (angry ? balance.cities.crown.patrol.tribute.talk.angryRefuseFactor : 1))
   const buttons = (
-    <div className="row spread">
+    <DialogFoot label={`${fmt(amount)} altın öde`} disabled={sending} onNext={() => answer(true)}>
       <button className="btn small danger" onClick={() => answer(false)}>
         Reddet
       </button>
       {talked === false && !talking && (
-        <button className="btn small" onClick={() => setTalking(true)}>
+        <button className="btn small" onClick={onTalk}>
           <Icon name="scroll" size={16} /> Konuş
         </button>
       )}
-      <button className="btn small" disabled={sending} onClick={() => answer(true)}>
-        <Icon name="gold" size={16} /> {fmt(amount)} altın öde
-      </button>
-    </div>
+    </DialogFoot>
   )
   if (!talking) {
     return (
@@ -458,56 +598,84 @@ function TributeAnswer({ online, visit, asked, onClose }: { online: Online; visi
       </div>
     )
   }
+  // One exchange at a time: the greeting with his first question, then each question; after a reply, his answer
+  // (and, at the end, his last word).
+  const total = script.exchanges.length
   const at = replies.length
+  const index = reacting ? at - 1 : at
+  const reaction = reacting && at > 0 ? tributeTalkReact(seed, visit, at - 1, script.exchanges[at - 1].replies[replies[at - 1]].points) : ''
+  const line = outcome
+    ? `“${reaction}”\n\n“${outcome.line}”`
+    : reacting
+      ? `“${reaction}”`
+      : at === 0
+        ? `“${script.greet}”\n\n“${script.exchanges[0].say}”`
+        : `“${script.exchanges[at].say}”`
+  const choices = !outcome && !reacting ? script.exchanges[at].replies : []
   return (
-    <div className="tribute-answer tribute-talk">
-      <p className="muted">
-        <b>{script.name}</b> ({script.label}) ile konuşuyorsun. Huyuna göre konuşursan haracı düşürebilir; ters konuşursan artırır.
-      </p>
-      <p className="talk-line">“{script.greet}”</p>
-      {script.exchanges.slice(0, outcome ? at : at + 1).map((ex, i) => {
-        if (i > at) return null
-        const chose = replies[i]
-        return (
-          <div key={i} className="talk-step">
-            <p className="talk-line">“{ex.say}”</p>
-            {chose === undefined ? (
-              outcome ? null : (
-                <div className="talk-replies">
-                  {ex.replies.map((r, j) => (
-                    <button key={j} className="btn small talk-reply" onClick={() => pick(j)}>
-                      {r.text}
-                    </button>
-                  ))}
-                </div>
-              )
-            ) : (
-              <>
-                <p className="talk-mine">— {ex.replies[chose].text}</p>
-                <p className="talk-line">“{tributeTalkReact(seed, visit, i, ex.replies[chose].points)}”</p>
-              </>
-            )}
+    <TalkPanel color={color} name={script.name} label={script.label} step={`${Math.min(index, total - 1) + 1}/${total}`} line={line}>
+      {(done) =>
+        outcome ? (
+          <div className="tribute-answer" style={{ visibility: done ? 'visible' : 'hidden' }}>
+            <p className="muted">
+              {sending
+                ? 'Haraççı defterine bir şeyler karalıyor…'
+                : amount < asked
+                  ? `Haraç ${fmt(asked)} altından ${fmt(amount)} altına indi.`
+                  : amount > asked
+                    ? `Haraç ${fmt(asked)} altından ${fmt(amount)} altına çıktı.${angry ? ` Kızgın: reddedersen o tacın lordlarıyla ilişkin ${refusal} düşer.` : ''}`
+                    : `Haraç aynı kaldı: ${fmt(amount)} altın.`}
+              {!sending && ` Cevapsız bırakırsan oyundayken ${fmt(Math.round(amount * balance.cities.crown.patrol.tribute.afkFactor))} altın olarak kendiliğinden ödenir.`}
+            </p>
+            {buttons}
+          </div>
+        ) : reacting ? (
+          <div className="advisor-replies">
+            <button className="btn small primary" disabled={!done} onClick={() => setReacting(false)}>
+              Devam
+            </button>
+          </div>
+        ) : (
+          // Three short replies side by side; stacked when any is long.
+          <div className={`talk-replies ${choices.some((r) => r.text.length > 46) ? 'stacked' : 'choices'}`} style={{ visibility: done ? 'visible' : 'hidden' }}>
+            {choices.map((r, j) => (
+              <button key={j} className="btn small talk-reply" disabled={!done} onClick={() => pick(j)}>
+                {r.text}
+              </button>
+            ))}
           </div>
         )
-      })}
-      {outcome && (
-        <>
-          <p className="talk-line">
-            <b>“{outcome.line}”</b>
-          </p>
-          <p className="muted">
-            {sending
-              ? 'Haraççı defterine bir şeyler karalıyor…'
-              : amount < asked
-                ? `Haraç ${fmt(asked)} altından ${fmt(amount)} altına indi.`
-                : amount > asked
-                  ? `Haraç ${fmt(asked)} altından ${fmt(amount)} altına çıktı.${angry ? ` Kızgın: reddedersen o tacın lordlarıyla ilişkin ${refusal} düşer.` : ''}`
-                  : `Haraç aynı kaldı: ${fmt(amount)} altın.`}
-            {!sending && ` Cevapsız bırakırsan oyundayken ${fmt(Math.round(amount * balance.cities.crown.patrol.tribute.afkFactor))} altın olarak kendiliğinden ödenir.`}
-          </p>
-          {buttons}
-        </>
-      )}
+      }
+    </TalkPanel>
+  )
+}
+
+// The captain speaking: his portrait, his name and temper, the step of the talk, and his line typed out letter by letter
+// with a gruff mumble under it (the envoy advisor's typing and voice). A tap on the line shows it whole.
+function TalkPanel({ color, name, label, step, line, children }: { color: string; name: string; label: string; step: string; line: string; children: (done: boolean) => ReactNode }) {
+  const { shown, done, finish } = useTyping(line)
+  useBabble(line, shown, 0.8)
+  const paragraphs = [...line].slice(0, shown).join('').split('\n\n')
+  return (
+    <div className="tribute-talk">
+      <div className="advisor-face">
+        <CollectorPortrait color={color} size={72} talking={!done} />
+      </div>
+      <div className="advisor-talk">
+        <header>
+          <small>
+            <b>{name}</b> · {label}
+          </small>
+          <small className="talk-step">{step}</small>
+        </header>
+        <div className="advisor-bubble" onClick={finish}>
+          {paragraphs.map((p, i) => (
+            <p key={i}>{p}</p>
+          ))}
+          <span className="sr-only">{line}</span>
+        </div>
+        {children(done)}
+      </div>
     </div>
   )
 }

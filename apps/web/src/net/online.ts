@@ -1,4 +1,4 @@
-import type { PlanStep, Good, TradeLedger, Town, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, RiverKeep, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units, Ship, Ships, MissionOrder, NavyLook, Blockade, ArcadeGame } from '@game/shared'
+import type { AidKind, KinRoleKind, OutlawRow, PlanStep, Good, TradeLedger, Town, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, RiverKeep, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units, Ship, Ships, MissionOrder, NavyLook, Blockade, ArcadeGame } from '@game/shared'
 import { supabase } from '../lib/supabase'
 
 // The lobby as the client sees it: the player's own kingdom in full, the others only as they show on the map, and the
@@ -54,6 +54,20 @@ export interface Rival {
   // Its fleets as the map shows them, and another lord's fleet blockading its dock (CLAUDE.md §8.5).
   navy?: NavyLook | null
   blockade?: Blockade | null
+  // A brother of its ruler risen against him, camped near its lands (CLAUDE.md §9.1.1): everyone sees the camp.
+  pretender?: RivalPretender | null
+}
+
+export interface RivalPretender {
+  name: string
+  at: Point
+  since: number
+  start: number
+  lost: number
+  marchAt: number
+  backed: boolean
+  battle?: number | null
+  marching?: boolean
 }
 
 export interface ChatMessage {
@@ -218,10 +232,18 @@ export type Command =
   | { type: 'fleet'; action: 'merge'; fleet: number; other: number }
   | { type: 'fleet'; action: 'dock' | 'recall'; fleet: number }
   | { type: 'fleet'; action: 'sail'; fleet: number; x: number; y: number }
+  // After a pirate boat, or giving it up (CLAUDE.md §8.5).
+  | { type: 'fleet'; action: 'chase'; fleet: number; boat: number }
+  | { type: 'fleet'; action: 'unchase'; fleet: number }
   | { type: 'quest'; crown: number; action: 'take' | 'claim' }
   // The liege's royal envoy answered (CLAUDE.md §7.8).
   | { type: 'royal'; action: 'accept' | 'decline' | 'deliver' }
   | { type: 'fleet'; action: 'mission'; fleet: number; order: MissionOrder }
+  // The lord's say over his kin (CLAUDE.md §9.1.1).
+  | { type: 'house'; action: 'role'; id: number; role: KinRoleKind | null; town?: number }
+  | { type: 'house'; action: 'gift'; id: number }
+  | { type: 'house'; action: 'marry'; id: number; to: { kind: 'crown' } | { kind: 'town'; town: number } | { kind: 'lord'; id: number } }
+  | { type: 'house'; action: 'aid'; kind: AidKind }
 
 export class CommandError extends Error {}
 
@@ -287,7 +309,7 @@ export function subscribe(lobby: string, feed: LobbyFeed) {
 
 // ---- The layer between kingdoms --------------------------------------------------------------------------------
 
-export type ArmyOrderPayload = { kind: 'move'; x: number; y: number; siege?: boolean } | { kind: 'home' } | { kind: 'split'; soldiers: number } | { kind: 'merge'; with: number }
+export type ArmyOrderPayload = { kind: 'move'; x: number; y: number; siege?: boolean } | { kind: 'home' } | { kind: 'split'; soldiers: number } | { kind: 'merge'; with: number } | { kind: 'chase'; band: number }
 
 export interface ArmyOrder {
   id: number
@@ -300,7 +322,7 @@ export interface ArmyOrder {
 
 export interface Battle {
   id: number
-  kind: 'field' | 'siege' | 'revolt'
+  kind: 'field' | 'siege' | 'revolt' | 'outlaw' | 'pretender' | 'usurp'
   x: number
   y: number
   started_at: string
@@ -309,9 +331,9 @@ export interface Battle {
   defenders: Fighter[]
   besieged: number | null
   // A revolt's battle names the town whose rebels it is fought against.
-  plan: BattlePlan & { defense?: { towers: number; walls: number; attackerTowers?: number; keep?: number }; town?: number }
+  plan: BattlePlan & { defense?: { towers: number; walls: number; attackerTowers?: number; keep?: number }; town?: number; outlaw?: { kind: 'band'; idx: number; name: string } }
   resolved: boolean
-  report: { winner: 'attackers' | 'defenders'; losses: Record<string, number>; loot?: Record<string, number> } | null
+  report: { winner: 'attackers' | 'defenders'; losses: Record<string, number>; loot?: Record<string, number>; outlaw?: string } | null
 }
 
 export interface Notice {
@@ -374,6 +396,12 @@ export async function loadBattles(lobby: string): Promise<Battle[]> {
 export async function loadTowns(lobby: string): Promise<Town[]> {
   const { data } = await supabase.from('lobby_towns').select('id, idx, x, y, kind, name, owner_id, garrison, siege, rebels, market_stock, market_at').eq('lobby_id', lobby).order('idx')
   return (data ?? []).map((t) => ({ id: t.id, idx: t.idx, x: t.x, y: t.y, kind: t.kind, name: t.name, owner: t.owner_id, garrison: t.garrison, siege: t.siege, rebels: t.rebels ?? null, marketStock: t.market_stock ?? null, marketAt: t.market_at === null || t.market_at === undefined ? null : Number(t.market_at) }))
+}
+
+// What befell the lobby's bandits and pirates (CLAUDE.md §7.9): beaten and until when, in a fight, held back, losses.
+export async function loadOutlaws(lobby: string): Promise<OutlawRow[]> {
+  const { data } = await supabase.from('lobby_outlaws').select('kind, idx, gen, down_until, battle, shift, losses').eq('lobby_id', lobby)
+  return (data ?? []).map((r) => ({ kind: r.kind, idx: r.idx, gen: r.gen, down_until: r.down_until === null ? null : Number(r.down_until), battle: r.battle === null ? null : Number(r.battle), shift: Number(r.shift ?? 0), losses: r.losses }))
 }
 
 export async function loadNotices(lobby: string): Promise<Notice[]> {

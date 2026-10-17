@@ -237,6 +237,9 @@ export interface TownMood {
   // The ruler's people skill as mood points (dynastyEffects().happiness).
   ruler: number
   towns?: number
+  // What the lord's kin add to a town's loyalty, by town id: its governor, a princess married into its first family
+  // (dynasty.ts townKinBonus).
+  kin?: Record<number, number>
 }
 
 // What makes up where a town's loyalty is heading, part by part (the town sheet draws them).
@@ -245,6 +248,8 @@ export interface LoyaltyParts {
   upkeep: number
   happiness: number
   ruler: number
+  // The lord's kin: a governor, a princess married there.
+  kin: number
   // Over-expansion: what holding many towns takes off, and the most the target may then be.
   overreach: number
   cap: number
@@ -257,8 +262,9 @@ export function townLoyaltyParts(h: HeldTown, mood: TownMood, paid = !h.unpaid):
   const upkeep = l.upkeepTargets[paid ? townUpkeepLevel(h) : 0]
   const happiness = (mood.happiness - 50) * l.happinessWeight
   const ruler = mood.ruler * l.rulerWeight
-  const target = Math.max(0, Math.min(100, over.loyaltyCap, upkeep + happiness + ruler + over.loyalty))
-  return { upkeep, happiness, ruler, overreach: over.loyalty, cap: over.loyaltyCap, target }
+  const kin = mood.kin?.[h.id] ?? 0
+  const target = Math.max(0, Math.min(100, over.loyaltyCap, upkeep + happiness + ruler + kin + over.loyalty))
+  return { upkeep, happiness, ruler, kin, overreach: over.loyalty, cap: over.loyaltyCap, target }
 }
 
 // Where a town's loyalty is heading: set by the upkeep paid (none when it was not), moved by the realm's mood, pulled

@@ -1,0 +1,46 @@
+{
+  "bands": {
+    "count": 9,
+    "stretchTiles": 70,
+    "minStretchTiles": 24,
+    "minSpacing": 110,
+    "cityClear": 44,
+    "speedTilesPerSecond": 0.45,
+    "soldiers": [6, 14],
+    "growPerRespawn": 1,
+    "respawnSeconds": 2700,
+    "holdTiles": 8,
+    "morale": 55,
+    "familiarity": 70,
+    "archerShare": 0.35,
+    "loot": { "armsPerSoldier": 9, "goldPerSoldier": 6, "materialsPerSoldier": 4 },
+    "chase": { "maxSeconds": 1200, "contactTiles": 4, "lookAheadSeconds": 900, "stepSeconds": 2, "detour": 1.35 }
+  },
+  "boats": {
+    "count": 7,
+    "minSpacing": 90,
+    "minWater": 500,
+    "cityClear": 30,
+    "loopTiles": [28, 60],
+    "speedTilesPerSecond": 1.1,
+    "ships": [1, 3],
+    "respawnSeconds": 2700,
+    "reachTiles": 45,
+    "loot": { "bounty": 60, "perShip": 25, "arms": 20, "materials": 30 },
+    "chase": { "maxSeconds": 900, "contactTiles": 3.5, "lookAheadSeconds": 600, "stepSeconds": 2, "detour": 1.25 }
+  },
+  "road": {
+    "radiusTiles": 70,
+    "merchantCut": 0.25,
+    "happiness": 5,
+    "noticeStep": 0.15
+  },
+  "sea": {
+    "perBoat": 0.4,
+    "pirateChance": 0.6,
+    "fishCut": 0.25,
+    "happiness": 4,
+    "noticeStep": 0.35
+  },
+  "happinessCap": 8
+}

@@ -40,7 +40,7 @@ export function armyStatus(army: Army, now: number, rest: ReturnType<typeof rest
   // At the gates of a palace still shielded from the last siege: the siege begins when the shield ends.
   if (army.goal.kind === 'siege' && now >= arrive && shieldOf(army.goal.kingdom) > now) return `Kapıda bekliyor · kuşatmaya ${clock(shieldOf(army.goal.kingdom) - now)}`
   if (now < arrive && army.path.length > 1) {
-    const where = army.goal.kind === 'home' ? ('retreat' in army.goal && army.goal.retreat ? 'Geri çekiliyor' : 'Eve dönüyor') : army.goal.kind === 'siege' ? 'Kuşatmaya gidiyor' : 'Yürüyor'
+    const where = army.goal.kind === 'home' ? ('retreat' in army.goal && army.goal.retreat ? 'Geri çekiliyor' : 'Eve dönüyor') : army.goal.kind === 'siege' ? 'Kuşatmaya gidiyor' : army.goal.kind === 'chase' ? 'Yağmacıların peşinde' : 'Yürüyor'
     return `${where} · varış ${clock(arrive - now)}`
   }
   return `Bekliyor · ${REST_NAMES[rest(army.path[army.path.length - 1])]}`
@@ -92,6 +92,8 @@ export function warNotes(online: Online, now: number): WarNote[] {
     const goal = a.goal
     const where = goal.kind === 'town' ? online.towns.find((t) => t.id === goal.town)?.name : goal.kind === 'siege' ? `${kingdomName(online, goal.kingdom)} sarayı` : null
     if (where) notes.push({ key: `march${a.id}`, text: `Ordun ${where} kuşatmasına gidiyor · varış ${clock(arrive - now)}`, from: Date.parse(a.depart_at), until: arrive })
+    // After a band of bandits (CLAUDE.md §7.9).
+    if (goal.kind === 'chase') notes.push({ key: `chase${a.id}`, text: `Ordun yağmacıların peşinde · önlerini kesmesine ${clock(arrive - now)}`, from: Date.parse(a.depart_at), until: arrive })
   }
   return notes
 }
@@ -99,11 +101,16 @@ export function warNotes(online: Online, now: number): WarNote[] {
 // A battle by name: a palace's siege, a town's rebels put down, or a battle in the field.
 export function battleTitle(b: Battle, online: Online) {
   if (b.kind === 'revolt') return `${online.towns.find((t) => t.id === b.plan.town)?.name ?? 'Kasaba'} ayaklanması`
+  if (b.kind === 'outlaw') return `${b.plan.outlaw?.name ?? 'Yağmacılar'} ile çarpışma`
+  // A pretender's camp attacked, or his men at the palace (CLAUDE.md §9.1.1).
+  const claimant = [...b.attackers, ...b.defenders].find((f) => f.pretender)?.pretender
+  if (b.kind === 'pretender') return `${claimant ?? 'Taht davacısı'} karargâhı`
+  if (b.kind === 'usurp') return `${claimant ?? 'Taht davacısı'} sarayı kuşatıyor`
   return b.kind === 'siege' && b.besieged !== null ? `${kingdomName(online, b.besieged)} kuşatması` : 'Meydan muharebesi'
 }
 
 // A side's fighter by name: a kingdom, its garrison, or a town's rebels.
-const fighterName = (online: Online, f: Battle['attackers'][number]) => (f.rebels ? 'Asiler' : f.army === null ? `${kingdomName(online, f.kingdom)} garnizonu` : kingdomName(online, f.kingdom))
+const fighterName = (online: Online, f: Battle['attackers'][number]) => (f.rebels ? (f.pretender ? `${f.pretender} asileri` : 'Asiler') : f.outlaws ? 'Yağmacılar' : f.army === null ? `${kingdomName(online, f.kingdom)} garnizonu` : kingdomName(online, f.kingdom))
 
 // What is going on: the war notes with how far each has run.
 function WarNow({ online, now }: { online: Online; now: number }) {

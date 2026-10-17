@@ -12,13 +12,14 @@ export interface EnvoyRow {
   lobby_id: string
   from_id: number
   to_id: number
-  kind: 'improve' | 'gift' | 'tribute' | 'alliance' | 'peace' | 'insult'
+  kind: 'improve' | 'gift' | 'tribute' | 'alliance' | 'peace' | 'insult' | 'marriage'
   gold: number | null
   sent_at: string
   arrive_at: string
   expires_at: string | null
   status: string
-  terms: { kind: 'white' | 'gold' | 'tribute' | 'offer'; gold?: number } | null
+  // A peace's terms, or a marriage's bride (CLAUDE.md §9.1.1).
+  terms: { kind: 'white' | 'gold' | 'tribute' | 'offer' | 'marriage'; gold?: number; bride?: number; name?: string } | null
 }
 
 // An envoy reaching the other palace: courtesies take effect, proposals wait for an answer.
@@ -123,6 +124,22 @@ export async function answer(envoy: EnvoyRow, accept: boolean, at: number, expir
         .in('kingdom_id', [envoy.from_id, envoy.to_id])
         .eq('goal->>kind', 'siege')
     }
+  } else if (accept && envoy.kind === 'marriage') {
+    // The bride leaves her father's (or brother's) house for the other lord's, if she is still at court and unwed.
+    const bride = envoy.terms?.bride ?? -1
+    let wed = false
+    await mutateKingdom(envoy.from_id, at, (k) => {
+      wed = false
+      if (game.brideError(k, bride, at)) return null
+      wed = true
+      return game.marry(k, bride, { kind: 'lord', id: envoy.to_id, name: nameOf(rows, envoy.to_id) }, at)
+    })
+    if (!wed) accepted = false
+    else {
+      await mutateKingdom(envoy.to_id, at, (k) => game.receiveBride(k, { name: envoy.terms?.name ?? '?', from: nameOf(rows, envoy.from_id), fromId: envoy.from_id, at }))
+      await changeRelation(lobby, envoy.from_id, envoy.to_id, game.balance.dynasty.intrigue.marriage.lord.relation, at)
+      await notify(lobby, [envoy.to_id], 'house_marriage', { kind: 'bride', name: envoy.terms?.name ?? '?', from: nameOf(rows, envoy.from_id) }, at)
+    }
   } else if (!accept && envoy.kind === 'tribute') {
     await changeRelation(lobby, envoy.from_id, envoy.to_id, d.tribute.reject, at)
     // Refusing tribute gives the one who asked a claim.
@@ -132,7 +149,7 @@ export async function answer(envoy: EnvoyRow, accept: boolean, at: number, expir
     .from('envoys')
     .update({ status: expired ? 'expired' : accepted ? 'accepted' : 'rejected', resolved_at: iso(at) })
     .eq('id', envoy.id)
-  await notify(lobby, [envoy.from_id], 'envoy_answer', { kind: envoy.kind, by: nameOf(rows, envoy.to_id), accepted, expired, gold: envoy.gold }, at)
+  await notify(lobby, [envoy.from_id], 'envoy_answer', { kind: envoy.kind, by: nameOf(rows, envoy.to_id), accepted, expired, gold: envoy.gold, ...(envoy.kind === 'marriage' && { bride: envoy.terms?.name ?? '' }) }, at)
   return accepted
 }
 

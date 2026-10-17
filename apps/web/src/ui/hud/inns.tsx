@@ -1,4 +1,4 @@
-import { basePrice, hash, priceAt } from '@game/shared'
+import { balance, bandsOf, basePrice, boatsOf, hash, outlawUp, priceAt, roadHeld } from '@game/shared'
 import type { Good, Market, Point, World } from '@game/shared'
 import { useState } from 'react'
 import { KINGDOM_COLORS } from '../../game/buildingSprites'
@@ -35,6 +35,15 @@ export interface Rumour {
 }
 
 const TELLERS = ['Bir deveci', 'Yorgun bir tüccar', 'Hancı', 'Bir ulak', 'Kervanbaşı', 'Bir hacı', 'Gezgin bir çalgıcı', 'Muhafızlardan biri', 'Bir kumaşçı', 'Yaşlı bir yolcu']
+
+// How much of the trade road round an inn the bandits hold (CLAUDE.md §7.9), and by which bands.
+export function innBandits(world: World, index: number, online: Online, now: number) {
+  const inn = world.inns[index]
+  const bands = bandsOf(world, world.seed, online.outlaws)
+  const held = roadHeld(world, world.seed, bands, { x: inn.x + 1, y: inn.y + 1 }, now)
+  const near = bands.filter((b) => outlawUp(b, now) && b.path.some((p) => Math.hypot(p.x - inn.x, p.y - inn.y) <= balance.outlaws.road.radiusTiles))
+  return { share: held.share, names: near.map((b) => b.name), roads: held.roadTiles }
+}
 
 // The talk at an inn now: a few things true of the lobby, chosen by the inn's trade and changing with the game hour.
 export function rumoursAt(world: World, index: number, kind: InnKind, online: Online, now: number): Rumour[] {
@@ -74,12 +83,26 @@ export function rumoursAt(world: World, index: number, kind: InnKind, online: On
     .map((k) => ({ k, d: Math.round(Math.hypot(k.site.x - inn.x, k.site.y - inn.y)) }))
     .sort((a, b) => a.d - b.d)[0]
   const local = near ? [`Buraya en yakın saray ${near.k.name} sarayı, ${near.d} karo ötede; ${near.k.palace}. seviye.`] : []
+  // The bandits on the roads round the inn, and on the player's own road; the pirates on the water.
+  const robbers = innBandits(world, index, online, now)
+  const mine = kingdoms.find((k) => k.id === online.me)
+  const myRoad = online.kingdoms.length && mine ? Math.hypot(mine.site.x - inn.x, mine.site.y - inn.y) : Infinity
+  const pirates = boatsOf(world, world.seed, online.outlaws).filter((b) => outlawUp(b, now)).length
+  const bandits = [
+    robbers.share > 0
+      ? `Bu handan çıkan yolların %${Math.round(robbers.share * 100)}'i yağmacıların elinde; ${robbers.names.join(', ')} kervanları soyuyor.`
+      : robbers.roads > 0
+        ? 'Buralarda yağmacı duyulmadı; yollar temiz, kervanlar rahat.'
+        : '',
+    ...(myRoad < 160 && robbers.share > 0 ? [`${mine!.name} tüccarı da bu yollardan geçiyor; yağmacılar onun kazancından da pay alıyor.`] : []),
+    ...(pirates > 0 ? [`Göllerde ve nehirlerde ${pirates} korsan teknesi dolaşıyor; kara yelkeni gören iskeleye kaçıyor.`] : []),
+  ].filter(Boolean)
   // Each inn hears most about its own trade.
   const pools: Record<InnKind, string[][]> = {
-    market: [prices, sellers, carrying, local],
-    toll: [carrying, idle, sellers, local],
-    post: [roads, trouble, carrying, local],
-    inn: [local, trouble, sellers, prices, roads],
+    market: [bandits, prices, sellers, carrying, local],
+    toll: [bandits, carrying, idle, sellers, local],
+    post: [bandits, roads, trouble, carrying, local],
+    inn: [bandits, local, trouble, sellers, prices, roads],
   }
   // A game hour is two and a half real minutes (a game day is a real hour).
   const hour = Math.floor(now / 150_000)
@@ -210,8 +233,28 @@ export function InnSheet({ world, index, online, now, home, onShow, onClose }: {
             </ul>
           )}
         </Section>
+        <InnBandits world={world} index={index} online={online} now={now} />
         <TradeShares online={online} />
       </div>
     </section>
+  )
+}
+
+// What the innkeeper knows of the bandits on the roads round the inn (CLAUDE.md §7.9).
+function InnBandits({ world, index, online, now }: { world: World; index: number; online: Online; now: number }) {
+  const robbers = innBandits(world, index, online, now)
+  if (robbers.roads === 0) return null
+  return (
+    <Section title="Yollardaki yağmacılar" icon="swords" aside={`${balance.outlaws.road.radiusTiles} karo çevre`}>
+      <div className="sign">
+        <span>Yağmacıların tuttuğu yol</span>
+        <b>%{Math.round(robbers.share * 100)}</b>
+      </div>
+      <p className="hint">
+        {robbers.share > 0
+          ? `Hancı anlatıyor: buradan geçen ticaret yollarının %${Math.round(robbers.share * 100)}'ini ${robbers.names.join(', ')} tutuyor. Bu yollardan geçen tüccarlar kazancının bir kısmını kaptırıyor. Çeteye tıkla, bir orduyla takip et.`
+          : 'Hancı anlatıyor: bu yollarda şimdilik yağmacı yok.'}
+      </p>
+    </Section>
   )
 }

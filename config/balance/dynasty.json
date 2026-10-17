@@ -32,7 +32,8 @@
       1.2,
       2.5
     ],
-    "max": 4,
+    "maxSons": 2,
+    "maxDaughters": 1,
     "son": 0.55,
     "queenMaxAge": 44
   },
@@ -61,8 +62,11 @@
     "people": 3,
     "military": 4
   },
+  "succession": {
+    "brotherInherits": true
+  },
   "queenForPalaceLevel": 3,
-  "keepDead": 8,
+  "keepDead": 12,
   "names": {
     "m": [
       "Alp",
@@ -188,5 +192,110 @@
     "presence": 0.3,
     "dicePerPoint": 0.3,
     "fall": 0.15
+  },
+  "intrigue": {
+    "opinion": {
+      "halfLifeMinutes": 60,
+      "base": {
+        "sibling": -5,
+        "child": 20,
+        "kin": 0
+      },
+      "rulerSkillWeight": 3,
+      "happinessWeight": 0.2,
+      "role": 15,
+      "elder": -15,
+      "council": -10,
+      "mother": 5,
+      "ambition": 10,
+      "ambitionPerMilitary": 2,
+      "succession": -10,
+      "roleRemoved": -20,
+      "warn": -15,
+      "calm": -5
+    },
+    "crownBond": {
+      "commander": 35,
+      "militaryWeight": 2,
+      "marriage": 5
+    },
+    "gift": {
+      "gold": 100,
+      "opinion": 15,
+      "cooldownSeconds": 1200
+    },
+    "roles": {
+      "minAge": 18,
+      "governor": {
+        "loyalty": 6,
+        "perPeople": 1.5
+      },
+      "commander": {
+        "crownRest": 5,
+        "tip": 0.2,
+        "tipPerMilitary": 0.04,
+        "visitRelation": 1
+      },
+      "treasurer": {
+        "from": 4,
+        "taxPerFinance": 0.01
+      }
+    },
+    "marriage": {
+      "crown": {
+        "dowry": 200,
+        "relation": 25,
+        "crownRest": 5
+      },
+      "town": {
+        "dowry": 150,
+        "loyalty": 12,
+        "freeLoyalty": 60
+      },
+      "lord": {
+        "relation": 30,
+        "minRelation": 0
+      }
+    },
+    "revolt": {
+      "minPalaceLevel": 2,
+      "checkMinutes": 15,
+      "below": -35,
+      "baseChance": 0.15,
+      "chancePerPoint": 0.01,
+      "maxChance": 0.5,
+      "quietMinutes": 120,
+      "deserterShare": 0.15,
+      "maxDeserters": 15,
+      "rebels": [
+        8,
+        14
+      ],
+      "perPalaceLevel": 2,
+      "growthPerMinute": 0.4,
+      "growMinutes": 60,
+      "max": 70,
+      "morale": 65,
+      "familiarity": 70,
+      "palisade": 2,
+      "campTiles": [
+        10,
+        18
+      ],
+      "attackTiles": 5,
+      "backMargin": 0,
+      "backedGrowth": 1.5,
+      "backedTroops": 10,
+      "warnShares": [
+        0.5,
+        0.85
+      ]
+    },
+    "aid": {
+      "minRelation": 25,
+      "troops": 12,
+      "gold": 250,
+      "relationCost": 6
+    }
   }
 }

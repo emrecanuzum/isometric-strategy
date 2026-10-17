@@ -15,6 +15,7 @@ import { TreasuryPanel } from './treasury'
 import { CitadelPanel, GuildHallPanel, MemorialPanel } from './landmarks'
 import { KingdomTab, TradeTab } from './tabs'
 import type { HudData } from './tabs'
+import { PirateSection } from './outlaws'
 
 // The menu of one building, opened by clicking it on the map: what it makes, who works there and its level.
 
@@ -107,6 +108,7 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
             {!building && b.kind === 'lumberCamp' && <GamePanel game="woodsplit" data={data} />}
             {!building && b.kind === 'farm' && <GamePanel game="harvest" data={data} />}
             {!building && b.kind === 'dock' && <GamePanel game="net" data={data} />}
+            {!building && b.kind === 'dock' && <PirateSection kingdom={data.kingdom} />}
             {!building && b.kind === 'shipyard' && <NavyTab {...data} />}
             {BUILDINGS[b.kind].products && <Products building={b} data={data} onProduct={commands.onProduct} />}
             {workerSlots(b) > 0 && <Workers building={b} data={data} onWorkers={commands.onWorkers} />}

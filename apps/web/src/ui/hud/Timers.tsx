@@ -98,7 +98,7 @@ function timersOf(kingdom: Kingdom, online: Online | undefined, now: number): Ti
       out.push({ key: `e:${e.id}`, icon: 'scroll', label: `${ENVOY_NAMES[e.kind]} → ${to}`, start: Date.parse(e.sent_at), end: Date.parse(e.arrive_at), go: { tab: 'diplomacy', part: ['diplomacy', 'kingdoms'], focus: e.to_id } })
     }
     // Envoys riding to the player's armies with orders.
-    const ORDER_NAMES = { move: 'yürü', home: 'eve dön', split: 'bölün', merge: 'birleş' } as const
+    const ORDER_NAMES = { move: 'yürü', home: 'eve dön', split: 'bölün', merge: 'birleş', chase: 'yağmacıların peşine düş' } as const
     for (const o of online.orders) {
       if (o.applied_at || !online.armies.some((a) => a.id === o.army_id && a.kingdom_id === online.me)) continue
       out.push({ key: `o:${o.id}`, icon: 'scroll', label: `Elçi orduya: ${ORDER_NAMES[o.payload.kind] ?? 'emir'}`, start: Date.parse(o.issued_at), end: Date.parse(o.effective_at), go: ARMY })

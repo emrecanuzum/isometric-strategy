@@ -554,7 +554,8 @@ const VOWELS: Record<string, [number, number]> = {
   a: [730, 1100], e: [520, 1750], i: [320, 2200], ı: [380, 1450], o: [470, 820], ö: [430, 1550], u: [350, 760], ü: [320, 1650],
 }
 const BABBLE_HZ = 98
-export function babble(syllable: string, question = false) {
+// `pitch` scales the voice (the tribute collectors' gruff captain speaks lower than the envoy).
+export function babble(syllable: string, question = false, pitch = 1) {
   if (!enabled || volume <= 0 || !ctx || ctx.state !== 'running') return
   const c = ctx
   const lower = syllable.toLocaleLowerCase('tr-TR')
@@ -563,7 +564,7 @@ export function babble(syllable: string, question = false) {
   for (const ch of lower) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
   const at = c.currentTime + 0.005
   const length = 0.06 + (hash % 4) * 0.009
-  const hz = BABBLE_HZ * 2 ** ((((hash % 9) - 4) / 12) * 0.8) * (question ? 1.18 : 1)
+  const hz = BABBLE_HZ * pitch * 2 ** ((((hash % 9) - 4) / 12) * 0.8) * (question ? 1.18 : 1)
   const osc = c.createOscillator()
   osc.type = 'sawtooth'
   osc.frequency.setValueAtTime(hz, at)

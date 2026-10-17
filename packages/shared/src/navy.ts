@@ -4,6 +4,7 @@ import { levelOf, fortunesAt } from './institutions'
 import type { Point } from './iso'
 import type { Rect } from './territory'
 import { cityCenter } from './worldgen'
+import { outlawEffects } from './outlawPressure'
 
 // The lord's ships (CLAUDE.md §8.5): built at the shipyard, kept in the harbour, sent out in fleets (at most two, like
 // armies) that sail on missions: carrying goods by sea to a crown's harbour, escorting that trade against pirates,
@@ -56,6 +57,8 @@ export interface Fleet {
   mission: FleetMission
   // Where it was last sent over the water (see seaways.ts); without one it lies off the dock.
   sail?: Sail
+  // Chasing a pirate boat (CLAUDE.md §8.5; outlaws.ts): which, and since when (the server ends a long chase).
+  chase?: { boat: number; since: number }
 }
 
 // A fleet's way over the water: the points it passes (tiles), when it set out and when it arrives.
@@ -428,6 +431,8 @@ export function pirateChance(k: Kingdom, fleet: Fleet, at: number) {
     if (f.kind === 'fog') chance *= N.seaWeather.fog
   }
   if (pirateSeason(k.lobbyKey, at)) chance *= PIRATE_SEASON_FACTOR
+  // Pirate boats roaming the water by the dock (CLAUDE.md §8.5; outlawPressure.ts).
+  chance *= outlawEffects(k).pirateFactor
   return Math.min(0.9, chance)
 }
 
@@ -590,7 +595,7 @@ export function navyUpkeep(k: Kingdom) {
 
 export function fishCatch(k: Kingdom) {
   if (k.blockade) return 0
-  return navyOf(k).fleets.filter((f) => f.mission.kind === 'fish').reduce((n, f) => n + sumBy(f.ships, 'fish'), 0) * k.yields.food
+  return navyOf(k).fleets.filter((f) => f.mission.kind === 'fish').reduce((n, f) => n + sumBy(f.ships, 'fish'), 0) * k.yields.food * outlawEffects(k).fishFactor
 }
 
 // The next sea-trade voyage to end (and the fleet), or null.

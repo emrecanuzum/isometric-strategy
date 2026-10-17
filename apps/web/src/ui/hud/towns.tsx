@@ -7,6 +7,7 @@ import {
   atWar,
   balance,
   dynastyEffects,
+  townKinBonus,
   happinessOf,
   heldTown,
   overreachOf,
@@ -245,7 +246,7 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, par
   // How many towns the lord holds (this one among them): over-expansion weighs on all of them.
   const count = Math.max(1, kingdom.towns?.length ?? 1)
   const over = overreachOf(count)
-  const mood = { happiness: happinessOf(kingdom), ruler: dynastyEffects(kingdom).happiness, towns: count }
+  const mood = { happiness: happinessOf(kingdom), ruler: dynastyEffects(kingdom).happiness, towns: count, kin: townKinBonus(kingdom) }
   const parts = townLoyaltyParts(held, mood)
   const target = parts.target
   const trend = target - loyalty
@@ -539,6 +540,8 @@ function Unrest({ held, parts, level, loyalty, now }: { held: HeldTown; parts: L
   step(`Bakım (${upkeepName(held.unpaid ? 0 : level).toLocaleLowerCase('tr-TR')})`, parts.upkeep, held.unpaid ? 'ödenmedi' : undefined)
   step('Halkının mutluluğu', parts.happiness)
   step('Hükümdarın halk yeteneği', parts.ruler)
+  // Its governor of the lord's house, a princess married into its first family (CLAUDE.md §9.1.1).
+  if (parts.kin) step('Hanedan: vali ya da gelin', parts.kin)
   if (parts.overreach !== 0) step('Aşırı büyüme', parts.overreach)
   if (sum > parts.cap) {
     rows.push({ label: 'Aşırı büyüme tavanı', from: Math.min(100, sum), to: parts.cap, note: `en fazla %${parts.cap}` })

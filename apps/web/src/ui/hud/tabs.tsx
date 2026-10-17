@@ -19,7 +19,6 @@ import {
   idleFactor,
   plannedHousing,
   palaceLevel,
-  ofAge,
   buildingCount,
   cutOff,
   imprisoned,
@@ -70,7 +69,7 @@ import { Icon } from '../icons'
 import { BUILDING_NAMES, BUILDING_NOTES, RESOURCE_ICONS, RESOURCE_NAMES, SEASON_NAMES, WEAPON_ICONS, WEAPON_NAMES, dateText } from '../names'
 import { CostList, GoodChoice, Missing } from '../panels'
 import type { Journal } from './journal'
-import { DynastySection } from './dynasty'
+import { DynastySection, houseWaiting } from './dynasty'
 import type { Online } from './online'
 import { REPORT_ROUNDS, isImportant, unreadImportant } from './journal'
 import { FortuneNote, HospitalPanel, Sickness, TemplePanel } from './institutions'
@@ -79,6 +78,7 @@ import { ExpeditionReport, ExpeditionsPanel, GoalTitle, GoalsPanel, StewardSecti
 import { IncomeSection, SeasonBooks } from './treasury'
 import { History, Meter, Placeholder, Section, SpriteView, Stat, fmt, signed, times } from './primitives'
 import { Subtabs, showPart, usePart } from './Subtabs'
+import { BanditSection, OutlawToll } from './outlaws'
 
 export const RESOURCES: Resource[] = ['gold', 'food', 'materials', 'arms']
 
@@ -416,6 +416,7 @@ export function TradeTab(data: HudData & { part?: TradePart }) {
         ]}
       />
       {part === 'merchant' && <TradePost {...data} />}
+      {part === 'merchant' && <BanditSection kingdom={kingdom} />}
       {part === 'market' && <MarketSection {...data} />}
       {part === 'orders' && <CrownOrders world={world} kingdom={kingdom} now={now} online={online} />}
       {part === 'shares' && (online ? <TradeShares online={online} /> : <Placeholder icon="trade" title="Lobi yükleniyor" />)}
@@ -680,7 +681,7 @@ export function KingdomTab(data: HudData) {
   const [part, setPart] = usePart('palace', PALACE_PARTS, 'level')
   const d = kingdom.dynasty
   // The house waits on the lord: a young child still to be named, or one with no upbringing chosen.
-  const houseWaits = !!d && d.children.some((c) => !ofAge(c, now) && (!c.named || (!d.council && !c.education)))
+  const houseWaits = houseWaiting(d, now, !!kingdom.pretender)
   // A party's report opened from the expeditions part (CLAUDE.md §9.9).
   const [report, setReport] = useState<Expedition | null>(null)
   const away = expeditionsOut(kingdom, now).length
@@ -760,7 +761,7 @@ export function KingdomTab(data: HudData) {
           <Fealty world={data.world} kingdom={kingdom} now={data.now} onSwear={(city) => data.online?.act({ type: 'swear', city })} onOpen={(city) => data.online?.openCrown(city)} />
         </>
       )}
-      {part === 'house' && <DynastySection kingdom={kingdom} now={data.now} online={data.online} />}
+      {part === 'house' && <DynastySection kingdom={kingdom} now={data.now} online={data.online} onShow={onShow} />}
       {part === 'expeditions' && <ExpeditionsPanel kingdom={kingdom} now={now} online={data.online} onReport={setReport} />}
       {part === 'goals' && <GoalsPanel kingdom={kingdom} now={now} />}
       {report && <ExpeditionReport expedition={report} kingdom={kingdom} online={data.online} onClose={() => setReport(null)} />}
@@ -944,6 +945,7 @@ function Mood({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?
           ucuza asker olur.
         </p>
         {memorialHappiness(kingdom, now) > 0 && <Stat label="Hanedan anıtı" value={`+${memorialHappiness(kingdom, now)}`} note="hanedanın şanı mutluluk hedefine eklenir" />}
+        <OutlawToll kingdom={kingdom} mood />
       </Section>
       <Section title="Vergi" icon="gold" aside={`köylü başına ${balance.society.tax.levels[tax].goldPerVillager.toLocaleString('tr-TR', { maximumFractionDigits: 3 })} altın / tur`}>
         <div className="segmented choices" role="radiogroup" aria-label="Vergi oranı">

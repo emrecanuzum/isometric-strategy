@@ -26,10 +26,18 @@ export interface Pact {
   ended_at: string | null
 }
 
-export type EnvoyKind = 'improve' | 'gift' | 'tribute' | 'alliance' | 'peace' | 'insult'
+export type EnvoyKind = 'improve' | 'gift' | 'tribute' | 'alliance' | 'peace' | 'insult' | 'marriage'
 
 // What a peace offer asks: nothing, gold from the other side, a tribute from it, or gold given to it.
 export type PeaceTerms = { kind: 'white' } | { kind: 'gold'; gold: number } | { kind: 'tribute'; gold: number } | { kind: 'offer'; gold: number }
+// A daughter or sister of the sender offered in marriage (CLAUDE.md §9.1.1): who, her gifts and age as sent.
+export interface MarriageTerms {
+  kind: 'marriage'
+  bride: number
+  name: string
+  skills?: Record<'finance' | 'people' | 'military', number> | null
+  age?: number | null
+}
 
 export interface Envoy {
   id: number
@@ -37,7 +45,7 @@ export interface Envoy {
   to_id: number
   kind: EnvoyKind
   gold: number | null
-  terms?: PeaceTerms | null
+  terms?: PeaceTerms | MarriageTerms | null
   sent_at: string
   arrive_at: string
   expires_at: string | null

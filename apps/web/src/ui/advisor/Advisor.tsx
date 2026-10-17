@@ -118,7 +118,7 @@ function typingTimes(text: string) {
   return times
 }
 
-function useTyping(text: string) {
+export function useTyping(text: string) {
   const length = [...text].length
   const [shown, setShown] = useState(0)
   useEffect(() => {
@@ -142,7 +142,7 @@ function useTyping(text: string) {
 // His mumbling voice under the typing (CLAUDE.md §11): a syllable every two or three letters, at most one every
 // 70 ms, silent at punctuation and spaces, and nothing at all when the lord skips to the end.
 const LETTER = /\p{L}/u
-function useBabble(text: string, shown: number) {
+export function useBabble(text: string, shown: number, pitch = 1) {
   const last = useRef({ text: '', shown: 0, letters: 0, at: 0, every: 3 })
   useEffect(() => {
     const m = last.current
@@ -163,13 +163,13 @@ function useBabble(text: string, shown: number) {
       if (m.letters >= m.every && now - m.at >= 70) {
         const rest = chars.slice(i, i + 12).join('')
         const question = /^[^.!?]*\?/.test(rest) && /\?/.test(rest.slice(0, 6))
-        babble(chars.slice(Math.max(0, i - 2), i + 1).join(''), question)
+        babble(chars.slice(Math.max(0, i - 2), i + 1).join(''), question, pitch)
         m.letters = 0
         m.at = now
         m.every = 2 + ((i * 7) % 2)
       }
     }
-  }, [text, shown])
+  }, [text, shown, pitch])
 }
 
 // ---- What he says -----------------------------------------------------------------------------------------------------

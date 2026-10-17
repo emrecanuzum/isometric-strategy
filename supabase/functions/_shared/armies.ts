@@ -5,6 +5,7 @@
 import * as game from './game.js'
 import { admin, iso, refuse } from './server.ts'
 import { townAt, townsOf } from './towns.ts'
+import { orderChase } from './outlaws.ts'
 import type { Kingdom, LobbyWorld, Point, Row } from './server.ts'
 
 export interface ArmyRow {
@@ -22,7 +23,9 @@ export interface ArmyRow {
   status: 'idle' | 'moving' | 'battle'
   // A beaten army falling back home (`retreat`) cannot be caught again before it gets there. `town`: sent to lay
   // siege to that town (CLAUDE.md §8.4).
-  goal: { kind: 'move' | 'home' | 'siege' | 'town'; kingdom?: number; town?: number; retreat?: boolean }
+  // `chase`: after a band of bandits (CLAUDE.md §7.9), since `since` (ms). `camp`: sent against its own lord's
+  // pretender's camp (CLAUDE.md §9.1.1).
+  goal: { kind: 'move' | 'home' | 'siege' | 'town' | 'chase' | 'camp'; kingdom?: number; town?: number; retreat?: boolean; band?: number; since?: number }
   morale: number
   familiarity: number
   camp: Point
@@ -38,6 +41,8 @@ export type Order =
   | { kind: 'home' }
   | { kind: 'split'; soldiers: number }
   | { kind: 'merge'; with: number }
+  // After a band of bandits (CLAUDE.md §7.9): to where it can meet it, and on until it does.
+  | { kind: 'chase'; band: number }
 
 // Where a kingdom's soldiers gather: just outside the palace's front corner.
 export const doorOf = (state: Kingdom): Point | null => game.palaceDoor(state?.buildings) as Point | null
@@ -124,6 +129,16 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
   const now = armyNow(army, world, owner, at)
   if (order.kind === 'move') {
     const target = { x: Math.floor(order.x), y: Math.floor(order.y) }
+    // Onto its own lord's pretender's camp: it marches there and attacks it (see house.ts).
+    const pretender = owner.pretender
+    if (pretender && !pretender.marching && game.atCamp(pretender, target)) {
+      const holdings = kingdoms.map((k) => ({ id: k.id, buildings: k.state?.buildings ?? [] }))
+      const gate = { x: pretender.at.x, y: pretender.at.y + 3 }
+      const update = march(world, army, owner, at, gate, { kind: 'camp' }, game.buildingBlocker(holdings, army.kingdom_id), undefined, game.buildingBlocker(holdings))
+      if (!update) return 'route'
+      await admin.from('armies').update(update).eq('id', army.id)
+      return null
+    }
     // Into the lands of a kingdom it is at war with: lay siege to its palace.
     const enemy = kingdoms.find(
       (k) => k.id !== army.kingdom_id && k.state && inTerritory(k.state, target, at) && game.atWar(pacts, army.kingdom_id, k.id),
@@ -154,6 +169,7 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
     await admin.from('armies').update(update).eq('id', army.id)
     return null
   }
+  if (order.kind === 'chase') return await orderChase(world, army, owner, kingdoms, order.band, at)
   if (order.kind === 'home') {
     const door = doorOf(owner)
     if (!door) return 'route'

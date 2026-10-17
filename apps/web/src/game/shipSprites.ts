@@ -17,6 +17,9 @@ const OAR = ramp(0x3a2614, 0x5a3e22, 0x7a5a34)
 const BRONZE = ramp(0x4a2e14, 0x7a5222, 0xa8782e, 0xd2a446)
 const SHIELD = [ramp(0x6a1a14, 0xa02a1e, 0xd04a30), ramp(0x1a2e52, 0x2a4a7a, 0x4a70b0), ramp(0x6a5214, 0xa07e22, 0xd0aa38)]
 const FLAG = ramp(0x8a1c18, 0xd0402a)
+const PIRATE_SAIL = ramp(0x121014, 0x1e1a20, 0x2c262e, 0x3e363e)
+const PIRATE_STRIPE = ramp(0x1a1214, 0x2a1a1c, 0x4a1a18)
+const PIRATE_FLAG = ramp(0x5a0e0c, 0xa01a14)
 const FOAM = 0xffeaf8fa >>> 0
 const LANTERN = 0xff5ad0ff >>> 0
 
@@ -26,7 +29,8 @@ export const SHIP_LENGTH = 6.6
 // The lords' ship types (CLAUDE.md §8.5): the war galley as above; the cog, a broad round-bellied merchantman with a
 // high castle at each end, no oars and one big plain square sail; the corsair, a slim raider with a few oars and a
 // triangular lateen sail on a long slanting yard.
-export type ShipKind = 'galley' | 'cog' | 'corsair'
+// The pirates' boats (CLAUDE.md §8.5) are corsairs under a soot-black lateen sail, a blood-red pennant at the mast.
+export type ShipKind = 'galley' | 'cog' | 'corsair' | 'pirate'
 
 // A ship `length` tiles long lying along `along` (its bow toward +along, or -along when `reverse`). Under way
 // (`sailing`) its oars are out in the water and its sail is set; moored, the oars are shipped upright and the sail is
@@ -35,7 +39,10 @@ export function ship(along: 'x' | 'y', sailing: boolean, seed: number, reverse =
   // A shorter ship is scaled down whole (beam, freeboard, mast, oars), not just cut shorter.
   const k = Math.sqrt(Math.min(1, length / SHIP_LENGTH))
   const cog = kind === 'cog'
-  const corsair = kind === 'corsair'
+  const pirate = kind === 'pirate'
+  const corsair = kind === 'corsair' || pirate
+  const sails = pirate ? PIRATE_SAIL : SAIL
+  const flag = pirate ? PIRATE_FLAG : FLAG
   const galley = kind === 'galley'
   const beam = 1.15 * k * (cog ? 1.5 : corsair ? 0.8 : 1)
   const deck = Math.round((cog ? 14 : corsair ? 9 : 11) * k)
@@ -64,7 +71,7 @@ export function ship(along: 'x' | 'y', sailing: boolean, seed: number, reverse =
     depth[o] = d
     canvas.pixels[o] = color
   }
-  const stripe = STRIPE[Math.floor(hash(seed, 1, 41) * STRIPE.length)]
+  const stripe = pirate ? PIRATE_STRIPE : STRIPE[Math.floor(hash(seed, 1, 41) * STRIPE.length)]
   const shields = SHIELD[Math.floor(hash(seed, 2, 41) * SHIELD.length)]
   // Half the beam along the keel: a rounded stern, long straight sides, a fine bow.
   // (The cog is round at both ends.)
@@ -188,10 +195,10 @@ export function ship(along: 'x' | 'y', sailing: boolean, seed: number, reverse =
           const a = ya + (foot.a - ya) * g * f
           const z = yz + (foot.z - yz) * g * f
           const belly = 0.22 * k * Math.sin(g * Math.PI) * Math.sin(f * Math.PI)
-          put(a, belly, z, SAIL[Math.max(0, Math.min(3, Math.round(1.6 + belly * 6 - g * 0.6 + (Math.floor(f * 6) % 2 ? 0 : 0.6))))])
+          put(a, belly, z, sails[Math.max(0, Math.min(3, Math.round(1.6 + belly * 6 - g * 0.6 + (Math.floor(f * 6) % 2 ? 0 : 0.6))))])
         }
       }
-    } else for (let f = 0.05; f <= 0.95; f += step / 2) for (let dz = -2; dz <= 0; dz += 0.5) put(fore.a + (aftTop.a - fore.a) * f, 0.03, fore.z + (aftTop.z - fore.z) * f + dz, SAIL[dz < -1 ? 1 : 2])
+    } else for (let f = 0.05; f <= 0.95; f += step / 2) for (let dz = -2; dz <= 0; dz += 0.5) put(fore.a + (aftTop.a - fore.a) * f, 0.03, fore.z + (aftTop.z - fore.z) * f + dz, sails[dz < -1 ? 1 : 2])
   } else for (let c = -span; c <= span; c += step) put(ma + 0.02, c, yard, MAST[0])
   if (corsair) {
     // (Drawn above.)
@@ -205,15 +212,15 @@ export function ship(along: 'x' | 'y', sailing: boolean, seed: number, reverse =
         const shade = (c / w) * (along === 'x' ? 1 : -1) * 1.1 + belly * 3
         // Broad vertical stripes in the ship's colour.
         const band = cog ? Math.floor(((c + w) / (2 * w)) * 5) === 2 : Math.floor(((c + w) / (2 * w)) * 5) % 2 === 1
-        const colors = band ? stripe : SAIL
+        const colors = band ? stripe : sails
         put(ma + belly, c, z, colors[Math.max(0, Math.min(colors.length - 1, Math.round((band ? 1 : 1.6) + shade)))])
       }
     }
   } else {
-    for (let c = -span * 0.92; c <= span * 0.92; c += step) for (let dz = -3; dz <= 0; dz += 0.5) put(ma + 0.04, c, yard + dz, SAIL[dz < -2 ? 1 : 2])
+    for (let c = -span * 0.92; c <= span * 0.92; c += step) for (let dz = -3; dz <= 0; dz += 0.5) put(ma + 0.04, c, yard + dz, sails[dz < -2 ? 1 : 2])
   }
   // A long pennant at the masthead, streaming aft.
-  for (let f = 0; f < Math.round(14 * k); f++) for (let dz = 0; dz <= (f < 9 * k ? 1.5 : 0.5); dz += 0.5) put(ma - f * 0.07, 0, base + mastHeight - 1 - dz + f * 0.12, FLAG[f % 3 === 0 ? 0 : 1])
+  for (let f = 0; f < Math.round(14 * k); f++) for (let dz = 0; dz <= (f < 9 * k ? 1.5 : 0.5); dz += 0.5) put(ma - f * 0.07, 0, base + mastHeight - 1 - dz + f * 0.12, flag[f % 3 === 0 ? 0 : 1])
   // Foam where the hull meets the water, at the ram, and round the oar blades under way.
   const foam = (u: number, v: number, chance: number, key: number) => {
     const x = Math.round(ax + (u - v) * (TILE_WIDTH / 2))

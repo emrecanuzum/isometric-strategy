@@ -1,7 +1,7 @@
-import type { Army, Claim, Envoy, Market, Pact, Relation, SpyMission, Town } from '@game/shared'
+import type { Army, Claim, Envoy, Market, OutlawRow, Pact, Relation, SpyMission, Town } from '@game/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { serverNow } from './clock'
-import { loadArmies, loadBattles, loadDiplomacy, loadNotices, loadTowns, settle } from './online'
+import { loadArmies, loadBattles, loadDiplomacy, loadNotices, loadOutlaws, loadTowns, settle } from './online'
 import type { ArmyOrder, Battle, Notice } from './online'
 
 // The layer between kingdoms as the client holds it: relations, pacts, envoys and spies, armies, battles, the
@@ -19,10 +19,12 @@ export interface Layer {
   battles: Battle[]
   notices: Notice[]
   towns: Town[]
+  // What befell the lobby's bandits and pirates (CLAUDE.md §7.9; absent rows: at large).
+  outlaws: OutlawRow[]
   market: Market | null
 }
 
-type Part = 'diplomacy' | 'armies' | 'battles' | 'notices' | 'towns'
+type Part = 'diplomacy' | 'armies' | 'battles' | 'notices' | 'towns' | 'outlaws'
 
 const PART_OF: Record<string, Part> = {
   relations: 'diplomacy',
@@ -35,6 +37,7 @@ const PART_OF: Record<string, Part> = {
   battles: 'battles',
   notices: 'notices',
   lobby_towns: 'towns',
+  lobby_outlaws: 'outlaws',
 }
 
 export function useLayer(lobby: string, initialMarket: Market | null) {
@@ -49,6 +52,7 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
     battles: [],
     notices: [],
     towns: [],
+    outlaws: [],
     market: initialMarket,
   })
   const timers = useRef(new Map<Part, number>())
@@ -65,6 +69,9 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
       } else if (part === 'battles') {
         const battles = await loadBattles(lobby)
         setLayer((l) => ({ ...l, battles }))
+      } else if (part === 'outlaws') {
+        const outlaws = await loadOutlaws(lobby)
+        setLayer((l) => ({ ...l, outlaws }))
       } else if (part === 'towns') {
         const towns = await loadTowns(lobby)
         setLayer((l) => ({ ...l, towns }))
@@ -84,7 +91,7 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
     [fetchPart],
   )
   const refreshAll = useCallback(() => {
-    for (const part of ['diplomacy', 'armies', 'battles', 'notices', 'towns'] as Part[]) refresh(part, 0)
+    for (const part of ['diplomacy', 'armies', 'battles', 'notices', 'towns', 'outlaws'] as Part[]) refresh(part, 0)
   }, [refresh])
 
   useEffect(() => {

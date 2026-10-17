@@ -41,6 +41,7 @@ import type { IntelReport } from '../../net/online'
 import { Meter, Placeholder, Section, Stat, fmt, percentOf } from './primitives'
 import { Subtabs, usePart } from './Subtabs'
 import type { Part } from './Subtabs'
+import { PirateSection } from './outlaws'
 
 // The navy (CLAUDE.md §8.5): the shipyard's slipways, the ships in the harbour, and up to two fleets with their
 // missions — sea trade to a crown's harbour, fishing, pirate hunting, and at war blockades, raids and sorties.
@@ -169,8 +170,14 @@ export function NavyTab(data: HudData) {
           <Icon name="warn" size={16} /> Korsan mevsimi: denizler korsan kaynıyor ({clock(season.end - now)} daha). Korsan saldırısı olasılığı ×{PIRATE_SEASON_FACTOR}.
         </p>
       )}
+      {kingdom.outlaws && kingdom.outlaws.sea > 0 && (
+        <p className="hint down alert-line">
+          <Icon name="warn" size={16} /> Korsanlar iskelenin önünde: korsanların ticarete etkisi %{Math.round(kingdom.outlaws.sea * 100)} (ayrıntısı Filolar bölümünde).
+        </p>
+      )}
       <Subtabs label="Donanma" parts={parts} part={part} onPart={setPart} />
       {part === 'fleets' && <Fleets data={data} online={online} />}
+      {part === 'fleets' && <PirateSection kingdom={kingdom} />}
       {part === 'harbour' && <Harbour data={data} online={online} />}
       {part === 'yard' && <Shipyard data={data} online={online} />}
       {part === 'ledger' && <SeaLedger data={data} />}
@@ -214,7 +221,7 @@ function missionStatus(data: HudData, f: Fleet) {
     case 'fish':
       return `${f.sail ? 'Durduğu yerin çevresinde' : 'İskele önünde'} balık tutuyor · tur başına +${(balance.navy.ships.cog.fish * (f.ships.cog ?? 0) + balance.navy.ships.galley.fish * (f.ships.galley ?? 0) + balance.navy.ships.corsair.fish * (f.ships.corsair ?? 0)).toFixed(1).replace('.', ',')} yemek (arazi çarpanından önce)`
     case 'hunt':
-      return 'Korsanların peşinde · yakalanan her korsan için ödül'
+      return 'Korsanların peşinde · yakalanan her korsan için ödül (haritadaki korsan teknelerini "Takip et" ile kovalayabilirsin)'
     default:
       return f.sail ? 'gönderildiği yerde demirli' : 'iskeleyi savunur; iskelenin açığında demirli'
   }
@@ -259,6 +266,14 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
           <b>{MISSION_NAMES[fleet.mission.kind]}</b> · {missionStatus(data, fleet)}
         </p>
         {fleet.sail && fleet.sail.arriveAt > now && <p className="hint">Suda yol alıyor · varış {clock(fleet.sail.arriveAt - now)}</p>}
+        {fleet.chase && (
+          <p className="hint">
+            <Icon name="swords" size={16} /> Korsan teknesinin peşinde: yakaladığı an deniz savaşı olur; filonun gücü {shipMight(fleet.ships).toFixed(1).replace('.', ',')}.{' '}
+            <button className="btn small" onClick={() => online.act({ type: 'fleet', action: 'unchase', fleet: fleet.id })}>
+              Takibi bırak
+            </button>
+          </p>
+        )}
         {fleet.mission.kind === 'trade' && (
           <p className="hint">Korsan saldırısı olasılığı her seferde {pct(pirateChance(kingdom, fleet, now))}. Savaş gemileri eskort eder; başka bir filo korsan avındaysa olasılık yarıya iner.</p>
         )}
@@ -430,7 +445,9 @@ function Shipyard({ data, online }: { data: HudData; online: Online }) {
         ))}
       </div>
       <p className="hint">{SHIP_NOTES[ship]}.</p>
-      <Stat label="Güç · eskort · yük" value={`${dec(spec.might)} · ${dec(spec.escort)} · ${spec.cargo}`} note={`${spec.crew} denizci`} />
+      <Stat label="Savaş gücü" value={dec(spec.might)} note={`${spec.crew} denizci`} />
+      <Stat label="Eskort gücü" value={spec.escort > 0 ? dec(spec.escort) : 'yok'} note="ticaret seferini korsanlardan korur" />
+      <Stat label="Yük" value={`${spec.cargo} birim`} />
       <Stat
         label="Gemi başı"
         value={Object.entries(spec.cost)

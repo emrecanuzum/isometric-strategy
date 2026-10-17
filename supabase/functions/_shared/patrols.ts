@@ -69,7 +69,9 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
         const settled = game.advance(row.state, arrive).kingdom
         const tip = hasTavern(settled, arrive)
         const favour = game.byPower(share[crown] ?? 0.5, game.balance.cities.crown.power.favour)
-        const amount = tip ? Math.round(spec.tip * favour) : 0
+        // A brother of the lord at the patrol's head: a bigger tip, a warmer crown (CLAUDE.md §9.1.1).
+        const kin = game.patrolFavour(settled)
+        const amount = tip ? Math.round(spec.tip * favour * kin.tip) : 0
         const written = await claim({ crown, patrol, slot, kingdom_id: target, kind: tip ? 'tip' : 'visit', amount, status: 'done', visit_at: iso(arrive), expires_at: null })
         if (!written) continue
         const gift = game.giftAt(game.crownRelation(settled, crown))
@@ -79,12 +81,12 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
         await mutateKingdom(target, arrive, (k) => {
           const stock = { ...k.stock, gold: k.stock.gold + amount + giftGold }
           for (const [g, v] of Object.entries(goods)) stock[g] = (stock[g] ?? 0) + v
-          return game.book(game.changeCrownRelation({ ...k, stock }, crown, game.balance.cities.crown.relation.visit), { crownGot: amount + giftGold })
+          return game.book(game.changeCrownRelation({ ...k, stock }, crown, game.balance.cities.crown.relation.visit + kin.relation), { crownGot: amount + giftGold })
         })
         if (tip) await notify(lobby, [target], 'patrol_tip', { crown, amount }, arrive)
         if (gift) await notify(lobby, [target], 'crown_gift', { crown, name: gift.name, gold: giftGold, goods }, arrive)
         // With neither a tip nor a gift, the patrol still says it came (no lord sees soldiers at his gate in silence).
-        if (!tip && !gift) await notify(lobby, [target], 'patrol_visit', { crown, relation: game.balance.cities.crown.relation.visit }, arrive)
+        if (!tip && !gift) await notify(lobby, [target], 'patrol_visit', { crown, relation: game.balance.cities.crown.relation.visit + kin.relation }, arrive)
       }
     }
   }

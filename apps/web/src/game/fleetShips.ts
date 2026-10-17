@@ -25,7 +25,7 @@ export interface NavyOnMap {
 }
 
 // How long each type is drawn, in tiles.
-export const SHIP_LENGTHS: Record<ShipKind, number> = { galley: 2.4, cog: 2, corsair: 2 }
+export const SHIP_LENGTHS: Record<ShipKind, number> = { galley: 2.4, cog: 2, corsair: 2, pirate: 1.8 }
 const BEAM = 0.45
 
 const water = (world: World, x: number, y: number) => {

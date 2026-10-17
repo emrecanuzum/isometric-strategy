@@ -56,6 +56,7 @@ export const ENVOY_NAMES: Record<Envoy['kind'], string> = {
   alliance: 'İttifak teklifi',
   peace: 'Barış teklifi',
   insult: 'Hakaret',
+  marriage: 'Evlilik teklifi',
 }
 export const TOPIC_NAMES: Record<SpyTopic, string> = { stores: 'Hammadde', army: 'Ordu', diplomacy: 'Diplomasi' }
 export const OPERATION_NAMES: Record<Operation, string> = {
@@ -246,7 +247,9 @@ export function Proposals({ online, envoys }: { online: Online; envoys: Envoy[] 
                   ? `Her turda ${e.gold} altın istiyor. Reddetmek ilişkiyi ${-d.tribute.reject} düşürür ve onlara savaş gerekçesi verir.`
                   : e.kind === 'alliance'
                     ? 'Müttefik olmak istiyor.'
-                    : `Barış: ${describeTerms(e.terms)}.`}
+                    : e.terms?.kind === 'marriage'
+                      ? `${e.terms.name} adlı prensesini hanedanına gelin vermek istiyor. Kabul edersen ilişkiniz +${balance.dynasty.intrigue.marriage.lord.relation} artar.`
+                      : `Barış: ${describeTerms(e.terms as PeaceTerms | null)}.`}
               </small>
             </span>
             <button className="btn small" onClick={() => online.act({ type: 'respond', envoy: e.id, accept: true })}>

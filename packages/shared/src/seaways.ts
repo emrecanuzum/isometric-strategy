@@ -273,5 +273,6 @@ export function sailFleet(world: World, k: Kingdom, id: number, to: Point, at: n
   const path = p.path.map((q) => ({ x: Math.round(q.x * 100) / 100, y: Math.round(q.y * 100) / 100 }))
   const sail: Sail = { path, departAt: at, arriveAt: at + Math.round(pathLength(path) * S.secondsPerTile * 1000) }
   const n = navyOf(k)
-  return { ...k, navy: { ...n, fleets: n.fleets.map((f) => (f.id === id ? { ...f, sail } : f)) } }
+  // Sent somewhere by hand, a fleet gives up any chase it was on (CLAUDE.md §8.5).
+  return { ...k, navy: { ...n, fleets: n.fleets.map((f) => (f.id === id ? { ...f, sail, chase: undefined } : f)) } }
 }

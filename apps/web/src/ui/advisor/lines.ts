@@ -1,6 +1,7 @@
 import {
   ARCADE_GAMES, BUILDINGS, allShips, balance, countShips, buildingCount, clogsOf, crownQuest, fealtyOpen, fishError, gameError, goldCap, hasPalace,
   hasTradePost, palaceLevel, popCapFor, population, queenError, questProgress, storageCap, upgradeError,
+  campSoldiers, hasOpinion, ofAge, opinionOf, siblingsOf,
 } from '@game/shared'
 import type { BuildingKind, Kingdom } from '@game/shared'
 import type { IconName } from '../icons'
@@ -380,6 +381,48 @@ export const TIPS: Tip[] = [
       ['Önce âşık olmalıyım', 'Aşk sonradan gelir, lordum; kırk yıllık evli bir elçi olarak söylüyorum. Gelmese de kraliçe mutluluk verir.'],
       ['Kraliçe pahalı', 'Pahalı, lordum; ama bir savaştan ucuz. Yalnız casuslara karşı iyi koruyalım; kaçırmayı severler.'],
     ],
+  },
+  // The lord's house (CLAUDE.md §9.1.1): a pretender out, a brother turning sour, a princess of age at court.
+  {
+    id: 'pretender',
+    when: ({ kingdom: k }) => !!k.pretender && !k.pretender.marching,
+    say: ({ kingdom: k, now }) => {
+      const p = k.pretender!
+      const m = Math.max(0, Math.ceil((p.marchAt - now) / 60_000))
+      const s = campSoldiers(p, now)
+      return [
+        `Lordum, kardeşiniz ${p.person.name} karargâhında ${s} asiyle tahtınızı bekliyor. ${m} dakika sonra sarayınıza yürür; karargâhı şimdi dağıtmak sonradan surlarda dövüşmekten iyidir.`,
+        `${p.person.name} karargâhına her gün yeni asiler katılıyor, lordum: ${s} oldular. ${m} dakika var; bir ordu gönderin ya da tacınızdan yardım isteyin.`,
+      ]
+    },
+    go: { label: 'Hanedana bak', act: tab('kingdom', 'palace', 'house') },
+    jokes: [['Kardeşim beni sever', 'Severdi, lordum. Şimdi çadırında sizin portrenize ok atıyor.']],
+  },
+  {
+    id: 'kinSour',
+    when: ({ kingdom: k, now }) => !k.pretender && !!k.dynasty && siblingsOf(k.dynasty).some((p) => hasOpinion(p, now) && opinionOf(k, p, now).ruler < balance.dynasty.intrigue.opinion.warn),
+    say: ({ kingdom: k, now }) => {
+      const p = siblingsOf(k.dynasty!).filter((x) => hasOpinion(x, now)).sort((a, b) => opinionOf(k, a, now).ruler - opinionOf(k, b, now).ruler)[0]
+      return [
+        `Kardeşiniz ${p.name} sofrada size hiç bakmıyor, lordum. Bir görev ya da küçük bir hediye gönlünü alır; yoksa bir gün asker toplayıp tahtınızı ister.`,
+        `Lordum, ${p.name} saray kapısında fısıldaşıyor. Hoşnutsuz bir kardeş en tehlikeli düşmandır: ona bir kasabanın valiliğini verin ya da hazineden bir kese yollayın.`,
+      ]
+    },
+    go: { label: 'Hanedana bak', act: tab('kingdom', 'palace', 'house') },
+    jokes: [['Kardeşimden korkmam', 'Korkmayın, lordum; ama yatağınızın altına bakmayı da ihmal etmeyin.']],
+  },
+  {
+    id: 'princess',
+    when: ({ kingdom: k, now }) => !!k.dynasty && palaceLevel(k, now) >= 2 && [...k.dynasty.children, ...siblingsOf(k.dynasty)].some((p) => p.sex === 'f' && ofAge(p, now)),
+    say: () => {
+      const m = balance.dynasty.intrigue.marriage
+      return [
+        `Saraydaki prensesimiz evlenme çağında, lordum. Taca gelin verirsek taçla ilişkimiz +${m.crown.relation} artar; bir kasabaya verirsek kasaba sadık kalır, kimsenin olmayan bir kasaba ise kılıçsız bizim olur.`,
+        `Lordum, prensese talipler kapıda kuyruk oldu. Bir lorda gelin verirseniz ilişkiniz +${m.lord.relation} artar; taca ya da bir kasabaya vermek de akıllıca olur.`,
+      ]
+    },
+    go: { label: 'Hanedana bak', act: tab('kingdom', 'palace', 'house') },
+    jokes: [['Kızım kimseyle evlenmez', 'O da öyle diyor, lordum; ama şövalye turnuvasında gözü birine takıldı.']],
   },
   {
     id: 'barracks',

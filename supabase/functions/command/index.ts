@@ -40,6 +40,7 @@ import { ensureTowns, townOf, townsOf } from '../_shared/towns.ts'
 import type { TownRow } from '../_shared/towns.ts'
 import { refuseDemand } from '../_shared/patrols.ts'
 import type { VisitRow } from '../_shared/patrols.ts'
+import { outlawsIn } from '../_shared/outlaws.ts'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -506,6 +507,20 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
           const sailed = game.sailFleet(lobbyWorld.world, k, id, to, now)
           if (sailed === k) refuse(game.sailError(lobbyWorld.world, k, id, to, now) ?? 'rejected')
           next = changed(sailed)
+          break
+        }
+        case 'chase': {
+          // After a pirate boat (CLAUDE.md §8.5): to where it can meet it; the tick looks for the meeting.
+          const { boats } = await outlawsIn(lobby, lobbyWorld)
+          const boat = boats.find((b: { idx: number }) => b.idx === Number(cmd.boat))
+          const chased = game.chaseBoat(lobbyWorld.world, k, id, boat, now)
+          if (chased === k) refuse(game.chaseBoatError(lobbyWorld.world, k, id, boat, now) ?? 'rejected')
+          next = changed(chased)
+          break
+        }
+        case 'unchase': {
+          if (!game.fleetOf(k, id)?.chase) refuse('rejected')
+          next = changed(game.dropChase(k, id))
           break
         }
         case 'dock': {
@@ -1113,12 +1128,18 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       const given = cmd.order as Order
       // A move lays siege to the town it reaches only when the siege is asked for (the town's panel); else the army
       // just stands at its gate.
-      const order: Order = given?.kind === 'move' ? { kind: 'move', x: Number(given.x), y: Number(given.y), ...(given.siege === true && { siege: true }) } : given
+      const order: Order =
+        given?.kind === 'move'
+          ? { kind: 'move', x: Number(given.x), y: Number(given.y), ...(given.siege === true && { siege: true }) }
+          : given?.kind === 'chase'
+            ? { kind: 'chase', band: Number(given.band) }
+            : given
       const valid =
         (order?.kind === 'move' && Number.isFinite(order.x) && Number.isFinite(order.y)) ||
         order?.kind === 'home' ||
         (order?.kind === 'split' && Number.isInteger(order.soldiers)) ||
-        (order?.kind === 'merge' && isId(order.with))
+        (order?.kind === 'merge' && isId(order.with)) ||
+        (order?.kind === 'chase' && Number.isInteger(order.band) && order.band >= 0)
       if (!valid) refuse('rejected')
       // Inside its own lands the army hears the order at once, and so it does while an envoy that has just reached it
       // is still at its side; elsewhere the envoy has to ride to it (§8.2.1).
@@ -1224,6 +1245,128 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         await notify(lobby, [owner], 'town_sale', { town: row.id, name: row.name, by: me.name ?? '?', good, units, gold: got, wasted: cost - got }, now)
       }
       return { cost, good, units }
+    }
+    case 'house': {
+      // The lord's say over his kin (CLAUDE.md §9.1.1): posts, gifts, marriages, and the crown's help against a pretender.
+      const id = Number(cmd.id)
+      const action = String(cmd.action)
+      if (action === 'role') {
+        const role = cmd.role === null || cmd.role === undefined ? null : String(cmd.role)
+        const town = cmd.town === undefined || cmd.town === null ? undefined : Number(cmd.town)
+        let name = ''
+        let was: string | null = null
+        let townName: string | null = null
+        let skills: Record<string, number> | null = null
+        await mutateKingdom(me.id, now, (k) => {
+          const why = game.roleError(k, id, role, now, town)
+          if (why) refuse(`role_${why}`)
+          const p = game.memberOf(k.dynasty, id)
+          name = p?.name ?? ''
+          was = p?.role?.kind ?? null
+          skills = p?.skills ?? null
+          townName = town === undefined ? null : ((k.towns ?? []).find((t: { id: number; name?: string }) => t.id === town)?.name ?? null)
+          return game.assignRole(k, id, role, now, town)
+        })
+        await notify(lobby, [me.id], 'kin_role', { id, name, role, was, town: townName, skills }, now)
+        return null
+      }
+      if (action === 'gift') {
+        await mutateKingdom(me.id, now, (k) => {
+          const why = game.giftError(k, id, now)
+          if (why) refuse(why === 'none' ? 'rejected' : why)
+          return game.giftKin(k, id, now)
+        })
+        return null
+      }
+      if (action === 'marry') {
+        const kind = String(cmd.to?.kind)
+        if (kind === 'crown') {
+          let name = ''
+          let crown: number | null = null
+          await mutateKingdom(me.id, now, (k) => {
+            const why = game.marryError(k, id, { kind: 'crown' }, now)
+            if (why) refuse(`marry_${why}`)
+            name = game.memberOf(k.dynasty, id)?.name ?? ''
+            crown = k.liege
+            return game.marry(k, id, { kind: 'crown' }, now)
+          })
+          await notify(lobby, [me.id], 'house_marriage', { kind: 'crown', name, crown }, now)
+          return null
+        }
+        if (kind === 'town') {
+          const { data: townData } = await admin.from('lobby_towns').select('*').eq('lobby_id', lobby).eq('id', Number(cmd.to.town)).maybeSingle()
+          const town = townData as TownRow | null
+          if (!town) return refuse('town')
+          const free = town.owner_id === null
+          if (!free && town.owner_id !== me.id) refuse('marry_town')
+          if (free && (town.siege || town.rebels)) refuse('townBesieged')
+          const target = { kind: 'town' as const, town: town.id, name: town.name, free }
+          const why = game.marryError(game.advance(me.state, now).kingdom, id, target, now)
+          if (why) refuse(`marry_${why}`)
+          // A free town comes over to the lord: claimed in the lobby first (only while still free and at peace).
+          if (free) {
+            const { data: claimed } = await admin.from('lobby_towns').update({ owner_id: me.id, garrison: 0, taken_at: iso(now), rebels: null }).eq('id', town.id).is('owner_id', null).is('siege', null).select('id').maybeSingle()
+            if (!claimed) refuse('townBesieged')
+          }
+          let name = ''
+          try {
+            await mutateKingdom(me.id, now, (k) => {
+              const again = game.marryError(k, id, target, now)
+              if (again) refuse(`marry_${again}`)
+              name = game.memberOf(k.dynasty, id)?.name ?? ''
+              return game.marry(k, id, target, now, free ? game.heldTown(townOf(town), now) : undefined)
+            })
+          } catch (e) {
+            if (free) await admin.from('lobby_towns').update({ owner_id: null, garrison: town.garrison, taken_at: town.taken_at ?? null }).eq('id', town.id).eq('owner_id', me.id)
+            throw e
+          }
+          await notify(lobby, [me.id], 'house_marriage', { kind: 'town', name, town: town.name, free }, now)
+          return null
+        }
+        if (kind === 'lord') {
+          // A proposal to another lord's house: an envoy carries it; the bride leaves only once he says yes.
+          const to = other(cmd.to.id)
+          const state = game.advance(me.state, now).kingdom
+          const why = game.brideError(state, id, now)
+          if (why) refuse(`marry_${why}`)
+          if (game.atWar(pacts, me.id, to.id)) refuse('war')
+          const relation = await relationOf(lobby, me.id, to.id, now)
+          if (relation.value < game.balance.dynasty.intrigue.marriage.lord.minRelation) refuse('relation')
+          const { data: open } = await admin.from('envoys').select('id, terms').eq('from_id', me.id).eq('kind', 'marriage').in('status', ['traveling', 'pending'])
+          if ((open ?? []).some((e: { terms: { bride?: number } | null }) => e.terms?.bride === id)) refuse('already')
+          const bride = game.memberOf(state.dynasty, id)
+          await admin.from('envoys').insert({
+            lobby_id: lobby,
+            from_id: me.id,
+            to_id: to.id,
+            kind: 'marriage',
+            gold: null,
+            terms: { kind: 'marriage', bride: id, name: bride?.name ?? '', skills: bride?.skills ?? null, age: bride ? Math.floor(game.ageOf(bride, now)) : null },
+            sent_at: iso(now),
+            arrive_at: iso(now + dip.envoySeconds * 1000),
+          })
+          return null
+        }
+        return refuse('rejected')
+      }
+      if (action === 'aid') {
+        const kind = cmd.kind === 'gold' ? 'gold' : 'troops'
+        let out: { granted: boolean; why?: string; troops?: number; gold?: number } = { granted: false }
+        let name = ''
+        let crown: number | null = null
+        await mutateKingdom(me.id, now, (k) => {
+          const why = game.aidError(k, kind)
+          if (why) refuse(`aid_${why}`)
+          const r = game.askAid(k, kind, now)
+          out = { granted: r.granted, why: r.why, troops: r.troops, gold: r.gold }
+          name = k.pretender?.person?.name ?? ''
+          crown = k.liege
+          return r.kingdom
+        })
+        await notify(lobby, [me.id], 'pretender_aid', { ...out, kind, name, crown }, now)
+        return out
+      }
+      return refuse('rejected')
     }
     default:
       return refuse('unknown')

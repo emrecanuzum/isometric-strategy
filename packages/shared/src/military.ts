@@ -19,7 +19,7 @@ export interface Army {
   arrive_at: string
   status: 'moving' | 'idle' | 'battle'
   // Where it is heading: a place, home (to rejoin the garrison) or an enemy palace (to lay siege).
-  goal: { kind: 'move' } | { kind: 'home'; retreat?: boolean } | { kind: 'siege'; kingdom: number } | { kind: 'town'; town: number }
+  goal: { kind: 'move' } | { kind: 'home'; retreat?: boolean } | { kind: 'siege'; kingdom: number } | { kind: 'town'; town: number } | { kind: 'chase'; band: number; since?: number }
   // Its morale and its knowledge of the ground as they were when it set off on this route, and where it had camped.
   morale: number
   familiarity: number
@@ -504,8 +504,11 @@ export interface Fighter {
   faith?: number
   // The lord himself leads it (dynasty.ts leadsArmy).
   king?: boolean
-  // A town's rebels (kingdom 0, no army; CLAUDE.md §8.4).
+  // A town's rebels (kingdom 0, no army; CLAUDE.md §8.4), or a pretender's men (his name; CLAUDE.md §9.1.1).
   rebels?: boolean
+  // A band of bandits off the roads (kingdom 0, no army; CLAUDE.md §7.9).
+  outlaws?: boolean
+  pretender?: string
 }
 
 // What stands with each side besides its soldiers: its watchtowers within reach of the battle (attackers' too in a
