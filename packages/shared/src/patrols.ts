@@ -48,9 +48,56 @@ export const visitKind = (crown: number, liege: number | null | undefined) => (l
 // same point of the slot for that lord (drawn from the seed), so the demands come at a steady pace.
 export const tributeSlotMs = () => patrolSpec().tribute.everySeconds * 1000
 export const tributeSlotAt = (at: number) => Math.floor(at / tributeSlotMs())
-export function tributeVisitAt(seed: number, crown: number, lord: number, slot: number) {
-  // Within the first two thirds of the slot, so the time to answer ends well before the next demand.
-  return slot * tributeSlotMs() + Math.floor(hash(lord, crown, seed + 4013) * (2 / 3) * tributeSlotMs())
+// A lord's own crown's patrol near his palace: from shortly before it pulls up until shortly after it rides off, in
+// every patrol slot from `from` to `to` that it calls on him (CLAUDE.md §7.8).
+function patrolStays(seed: number, liege: number, lord: number, from: number, to: number, lords: Lord[]) {
+  const near = patrolSpec().tribute.clearSeconds * 1000
+  const out: [number, number][] = []
+  for (let slot = patrolSlotAt(from) - 1; slot <= patrolSlotAt(to) + 1; slot++) {
+    for (let p = 0; p < patrolSpec().perCrown; p++) {
+      if (patrolTarget(seed, liege, p, slot, lords) !== lord) continue
+      const { arrive, leave } = patrolTimes(slot)
+      out.push([arrive - near, leave + near])
+    }
+  }
+  return out
+}
+
+// When crown `crown`'s collectors reach lord `lord` in tribute slot `slot`: a point of the slot drawn from the seed,
+// within its first two thirds (so the time to answer ends well before the next demand), moved on in small steps until
+// their stay at the gate (with the end of the ride in and the start of the ride home) keeps clear of the lord's own
+// crown's patrol and of the other rival crowns' collectors, so two crowns' soldiers never stand at one palace together.
+// Needs the lords (with their liege) and the number of crowns, as patrolTarget does, so server and screens agree.
+export function tributeVisitAt(seed: number, crown: number, lord: number, slot: number, lords: Lord[], crowns: number): number {
+  const ms = tributeSlotMs()
+  const span = Math.floor((2 / 3) * ms)
+  const start = slot * ms
+  const base = Math.floor(hash(lord, crown, seed + 4013) * span)
+  const spec = patrolSpec()
+  const near = spec.tribute.clearSeconds * 1000
+  const margin = spec.tribute.marginSeconds * 1000
+  const step = Math.max(1000, spec.tribute.stepSeconds * 1000)
+  const wait = spec.answerSeconds * 1000
+  const liege = lords.find((l) => l.id === lord)?.liege
+  const busy = liege === undefined || liege === null ? [] : patrolStays(seed, liege, lord, start - wait - near - margin, start + span + wait + near + margin, lords)
+  // The rival crowns before this one have their places already.
+  for (const other of tributeCrowns(crowns, liege)) {
+    if (other >= crown) continue
+    const at = tributeVisitAt(seed, other, lord, slot, lords, crowns)
+    busy.push([at - near, at + wait + near])
+  }
+  if (busy.length === 0) return start + base
+  const clash = (at: number) => busy.reduce((sum, [lo, hi]) => sum + Math.max(0, Math.min(hi, at + wait + near + margin) - Math.max(lo, at - near - margin)), 0)
+  // The first clear point on from the drawn one (round the slot's span); with none clear, the least crowded.
+  let best = base
+  let least = Infinity
+  for (let i = 0; i * step < span; i++) {
+    const offset = (base + i * step) % span
+    const c = clash(start + offset)
+    if (c === 0) return start + offset
+    if (c < least) [least, best] = [c, offset]
+  }
+  return start + best
 }
 // The crowns a lord pays tribute to: every crown but its own (none before fealty).
 export const tributeCrowns = (crowns: number, liege: number | null | undefined) =>
@@ -58,9 +105,12 @@ export const tributeCrowns = (crowns: number, liege: number | null | undefined) 
 
 // A demand left unanswered is paid all the same. A lord who had the game open (seen within onlineMinutes of the
 // demand running out) but let it pass pays it with a surcharge; one who was away pays the plain tribute, no harm done.
+// Seen only well after the demand ran out (the server settled it late), the lord is not taken to have let it pass
+// while playing: what he did at that moment is not known, so no surcharge.
 export function unansweredTribute(amount: number, lastSeenAt: number | undefined, at: number) {
   const t = patrolSpec().tribute
-  const afk = (lastSeenAt ?? 0) >= at - t.onlineMinutes * 60_000
+  const seen = lastSeenAt ?? 0
+  const afk = seen >= at - t.onlineMinutes * 60_000 && seen <= at + t.lateSeenSeconds * 1000
   return { afk, amount: afk ? Math.round(amount * t.afkFactor) : amount }
 }
 

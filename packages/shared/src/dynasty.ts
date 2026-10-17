@@ -43,6 +43,9 @@ export interface Dynasty {
   // A council of regents rules: no heir, or the heir is not of age yet (`regentFor`: the young ruler's id).
   council?: boolean
   regentFor?: number
+  // A council ruling for no heir at all: a kinsman of the house is called to the throne then (absent in older saves:
+  // counted from the last lord's death).
+  kinsmanAt?: number
   nextBirthAt?: number | null
   // Children the lord and his lady have had (the births stop at a few).
   born?: number
@@ -127,7 +130,7 @@ function bear(k: Pick<Kingdom, 'site' | 'foundedAt'>, d: Dynasty, at: number): P
 // What the realm's ruler brings: the lord's gifts (with half the lady's above or below the middle), or the council's.
 export function rulerSkills(k: Pick<Kingdom, 'dynasty'>): Skills & { council: boolean } {
   const d = k.dynasty
-  if (!d || d.council || !d.king) return { ...(D().council as Skills), council: true }
+  if (!d || d.council || !d.king) return { finance: D().council.finance, people: D().council.people, military: D().council.military, council: true }
   const c = D().skills.center
   const w = D().skills.queenWeight
   const out = { ...d.king.skills }
@@ -169,7 +172,9 @@ export function dynastyStep(k: Kingdom, to: number): { kingdom: Kingdom; events:
     const comingOfAge = Math.min(...growing.map((c) => c.bornAt + D().comingOfAge * yearMs()), Infinity)
     const young = d.council && d.regentFor !== undefined && d.king?.id === d.regentFor ? d.king : null
     const regentEnds = young ? young.bornAt + D().comingOfAge * yearMs() : Infinity
-    const next = Math.min(births, death, regentEnds, comingOfAge)
+    // With no heir at all, the council rules for a few years and then crowns a kinsman (the house does not end).
+    const kinsman = d.council && !d.king ? (d.kinsmanAt ?? (d.dead[0]?.diedAt ?? to) + D().council.kinsmanYears * yearMs()) : Infinity
+    const next = Math.min(births, death, regentEnds, comingOfAge, kinsman)
     if (next > to) break
     if (next === death && d.king) {
       // The lord dies: the eldest son follows (a council rules until he is of age); with no son, a council rules on.
@@ -184,6 +189,7 @@ export function dynastyStep(k: Kingdom, to: number): { kingdom: Kingdom; events:
         dead: [dead, ...d.dead].slice(0, D().keepDead),
         council,
         regentFor: heir && council ? heir.id : undefined,
+        kinsmanAt: heir ? undefined : next + D().council.kinsmanYears * yearMs(),
         nextBirthAt: null,
         generation: d.generation + (heir ? 1 : 0),
       }
@@ -196,6 +202,14 @@ export function dynastyStep(k: Kingdom, to: number): { kingdom: Kingdom; events:
       // The young lord comes of age: the regents step down.
       d = { ...d, council: false, regentFor: undefined, king: grow(young) }
       events.push({ kind: 'dynasty', what: 'coronation', person: d.king! })
+      continue
+    }
+    if (next === kinsman) {
+      // A cousin of the dead lord, in his prime, takes the throne; he will take a lady of his own.
+      const family = [...d.children, ...d.dead].map((p) => p.name)
+      const lord = person(k, d.seq, 'm', next - between(roll(k, d.seq, 1), D().king.age) * yearMs(), drawnSkills(k, d.seq), family)
+      d = { ...d, seq: d.seq + 1, king: lord, council: false, regentFor: undefined, kinsmanAt: undefined, generation: d.generation + 1 }
+      events.push({ kind: 'dynasty', what: 'coronation', person: lord })
       continue
     }
     if (next === comingOfAge) {

@@ -263,7 +263,8 @@ export function Proposals({ online, envoys }: { online: Online; envoys: Envoy[] 
 }
 
 function Range({ label, value, unit }: { label: string; value: Estimate | null | undefined; unit?: string }) {
-  return <Stat label={label} value={value ? `${fmt(value.lo)}–${fmt(value.hi)}${unit ?? ''}` : '?'} />
+  // Turkish puts the percent sign first: %90–95.
+  return <Stat label={label} value={value ? (unit === '%' ? `%${fmt(value.lo)}–${fmt(value.hi)}` : `${fmt(value.lo)}–${fmt(value.hi)}${unit ?? ''}`) : '?'} />
 }
 
 type LordPart = 'relation' | 'envoy' | 'pacts' | 'hostile' | 'spies'
@@ -272,7 +273,8 @@ const LORD_PARTS: LordPart[] = ['relation', 'envoy', 'pacts', 'hostile', 'spies'
 function KingdomDetail({ data, online, target }: { data: HudData; online: Online; target: KingdomInfo }) {
   const { now, kingdom } = data
   const [gift, setGift] = useState(50)
-  const [tribute, setTribute] = useState(5)
+  // A tribute may ask at most tribute.maxGold a round: start there or below, or the envoy is refused.
+  const [tribute, setTribute] = useState(() => Math.min(5, balance.diplomacy.tribute.maxGold))
   const [confirmWar, setConfirmWar] = useState(false)
   const [terms, setTerms] = useState<PeaceTerms['kind']>('white')
   const [termsGold, setTermsGold] = useState(100)
@@ -453,9 +455,9 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
             )}
             {war && (
               <div className="peace">
-                <div className="segmented" role="radiogroup" aria-label="Barış şartları">
+                <div className="segmented choices" role="radiogroup" aria-label="Barış şartları">
                   {(Object.keys(TERMS_NAMES) as PeaceTerms['kind'][]).map((k) => (
-                    <button key={k} className="btn small" role="radio" aria-checked={terms === k} onClick={() => setTerms(k)}>
+                    <button key={k} className="btn small" role="radio" aria-checked={terms === k} onClick={() => (setTerms(k), k === 'tribute' && setTermsGold((g) => Math.min(g, balance.diplomacy.tribute.maxGold)))}>
                       {TERMS_NAMES[k]}
                     </button>
                   ))}
@@ -468,7 +470,12 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                     <span className="stepper-value">
                       <b>{termsGold}</b> {terms === 'tribute' ? 'altın/tur' : 'altın'}
                     </span>
-                    <button className="btn icon-only" onClick={() => setTermsGold(termsGold + (terms === 'tribute' ? 1 : 50))} aria-label="Artır">
+                    <button
+                      className="btn icon-only"
+                      disabled={terms === 'tribute' && termsGold >= balance.diplomacy.tribute.maxGold}
+                      onClick={() => setTermsGold(termsGold + (terms === 'tribute' ? 1 : 50))}
+                      aria-label="Artır"
+                    >
                       <Icon name="plus" size={16} />
                     </button>
                   </span>
@@ -477,7 +484,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                   {terms === 'gold'
                     ? `Her ${balance.diplomacy.peace.goldPerScore} altın 1 savaş puanı ister.`
                     : terms === 'tribute'
-                      ? `Haraç için en az ${balance.diplomacy.peace.tributeMinScore} savaş puanı gerekir.`
+                      ? `Haraç için en az ${balance.diplomacy.peace.tributeMinScore} savaş puanı gerekir; tur başına en fazla ${balance.diplomacy.tribute.maxGold} altın istenebilir.`
                       : terms === 'offer'
                         ? 'Altını sen ödersin; kabul etmeleri kolaylaşır.'
                         : 'Kimse bir şey ödemez.'}{' '}
@@ -544,6 +551,12 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
             {!theyPay && !wePay && !alliance && (war || ally) ? null : null}
           </div>
           {!theyPay && !wePay && !alliance && !war && <p className="hint">Aranızda anlaşma yok.</p>}
+          {war && (
+            <p className="hint">
+              Savaştasınız (savaş puanı {score > 0 ? '+' : ''}
+              {Math.round(score)}). Barışı Elçi bölümünden teklif edebilirsin.
+            </p>
+          )}
         </Section>
         </>
       )}
@@ -815,7 +828,9 @@ function Hostility({ data, online, target }: { data: HudData; online: Online; ta
     if (!res) return
     setOutcome(
       res.success
-        ? `Yağma başarılı: ${res.loot?.units ?? 0} ${RESOURCE_NAMES[res.loot?.good as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? ''} getirildi, ${res.lost} asker kaybedildi. Ticaret noktaları harap.`
+        ? (res.loot?.units ?? 0) > 0
+          ? `Yağma başarılı: ${res.loot!.units} ${RESOURCE_NAMES[res.loot!.good as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? ''} getirildi, ${res.lost} asker kaybedildi. Ticaret noktaları harap.`
+          : `Yağma başarılı ama tüccarın taşıyacak malı yoktu (depoları boştu); ${res.lost} asker kaybedildi. Ticaret noktaları yine de harap.`
         : `Yağmacılar püskürtüldü: ${res.lost} asker kaybedildi.`,
     )
   }

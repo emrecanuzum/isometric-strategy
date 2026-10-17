@@ -188,7 +188,7 @@ async function startQuell(lobby: string, world: LobbyWorld, rows: Row[], town: T
     .update({ rebels: { ...rebels, battle: battle.id } })
     .eq('id', town.id)
     .eq('rebels->>since', String(rebels.since))
-    .is('rebels->battle', null)
+    .is('rebels->>battle', null)
     .select('id')
     .maybeSingle()
   if (!claimed) {

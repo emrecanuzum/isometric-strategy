@@ -10,6 +10,7 @@ import { fishingScene } from './minigames/fishing'
 import { Stage } from './minigames/Stage'
 import { Section } from './primitives'
 import type { HudData } from './tabs'
+import { usePlayingFlag } from './minigames/playing'
 
 // The mysterious fisher's hut (CLAUDE.md §6.4): a cast of the line is a hard little game (keep the green catch zone on
 // a darting fish until the bar fills), and what it brings up goes into the fisher's log.
@@ -39,6 +40,7 @@ export function FisherPanel({ data, hall = false }: { data: HudData; hall?: bool
   const [board, setBoard] = useState(false)
   // The dialog opens at once on a cast; it waits there for the server's seed, and again for its verdict.
   const [open, setOpen] = useState(false)
+  usePlayingFlag(open)
   const [reeling, setReeling] = useState(false)
   const why = fishError(kingdom, now)
   const log = kingdom.fisherLog ?? []

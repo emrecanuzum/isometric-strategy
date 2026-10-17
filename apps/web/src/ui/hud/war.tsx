@@ -224,6 +224,13 @@ function Training({ data, has }: { data: HudData; has: boolean }) {
   const { willing, cost, weapons, cap, pool } = recruitment(kingdom, now, unit)
   const n = Math.max(1, Math.min(count, Math.max(1, willing)))
   const why = trainError(kingdom, n, now, unit)
+  // The most that can be trained at once: as many as are willing and the stores pay for (one click instead of many).
+  let most = 0
+  for (let lo = 1, hi = willing; lo <= hi; ) {
+    const mid = (lo + hi) >> 1
+    if (trainError(kingdom, mid, now, unit)) hi = mid - 1
+    else (most = mid), (lo = mid + 1)
+  }
   const queue = (kingdom.training ?? []).filter((t) => t.doneAt > now)
   const armory = armoryOf(kingdom)
   return (
@@ -231,7 +238,7 @@ function Training({ data, has }: { data: HudData; has: boolean }) {
       <p className="hint">
         Asker havuzu her tur dolar; halk mutlu oldukça (%{Math.round(kingdom.happiness ?? 60)}) daha büyük olur ve askerlik ucuzlar.
       </p>
-      <div className="unit-pick" role="radiogroup" aria-label="Birlik türü">
+      <div className="unit-pick choices" role="radiogroup" aria-label="Birlik türü">
         {UNITS.map((u) => (
           <button key={u} className="btn small" role="radio" aria-checked={unit === u} onClick={() => setUnit(u)} title={UNIT_NOTES[u]}>
             <Icon name={UNIT_ICONS[u]} size={16} /> {UNIT_NAMES[u]}
@@ -256,6 +263,9 @@ function Training({ data, has }: { data: HudData; has: boolean }) {
         </span>
         <button className="btn icon-only" disabled={n >= willing} onClick={() => setCount(n + 1)} aria-label="Bir asker ekle">
           <Icon name="plus" size={16} />
+        </button>
+        <button className="btn small" disabled={most <= 1 || n === most} onClick={() => setCount(most)} title="Gönüllülerin ve depoların yettiği kadar">
+          En çok{most > 1 ? ` (${most})` : ''}
         </button>
         <button className="btn small" disabled={!!why} onClick={() => online?.act({ type: 'train', count: n, unit })} title={why ? WHY[why] : undefined}>
           Eğit {why ? `(${WHY[why]})` : ''}
@@ -460,7 +470,7 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
               onClick={() => online.act({ type: 'king', army: army.id, action: 'lead' })}
               title={kingWhy ? KING_REASONS[kingWhy] : 'Emirler elçi beklemeden uygulanır; kralın savaş yeteneği zarlara tam sayılır, ama ordu yenilirse kral düşebilir'}
             >
-              <Icon name="crown" size={16} /> Kral ordunun başına geçsin
+              <Icon name="crown" size={16} /> Kral komutayı alsın
             </button>
           )}
           {near && (
@@ -478,6 +488,7 @@ function Battles({ online, now }: { online: Online; now: number }) {
   const going = online.battles.filter((b) => !b.resolved || Date.parse(b.ends_at) > now)
   const done = online.battles.filter((b) => b.resolved && Date.parse(b.ends_at) <= now).slice(0, 5)
   const involved = (b: Battle) => [...b.attackers, ...b.defenders].some((f) => f.kingdom === online.me)
+  const sideOf = (b: Battle) => (b.attackers.some((f) => f.kingdom === online.me) ? 'attackers' : b.defenders.some((f) => f.kingdom === online.me) ? 'defenders' : null)
   const title = (b: Battle) => (b.kind === 'field' ? `${kingdomName(online, b.attackers[0]?.kingdom)} — ${kingdomName(online, b.defenders[0]?.kingdom)}` : battleTitle(b, online))
   return (
     <Section title="Savaşlar" icon="swords" aside={going.length ? `${going.length} sürüyor` : undefined}>
@@ -493,8 +504,8 @@ function Battles({ online, now }: { online: Online; now: number }) {
                   ? `${clock(Date.parse(b.started_at) - now)} sonra başlıyor`
                   : Date.parse(b.ends_at) > now
                     ? `Sürüyor · ${clock(Date.parse(b.ends_at) - now)} kaldı`
-                    : `Bitti · ${b.plan.winner === 'attackers' ? 'saldıranlar' : 'savunanlar'} kazandı`}
-                {involved(b) ? ' · sen de varsın' : ''}
+                    : `Bitti · ${sideOf(b) ? (sideOf(b) === b.plan.winner ? 'kazandın' : 'yenildin') : `${b.plan.winner === 'attackers' ? 'saldıranlar' : 'savunanlar'} kazandı`}`}
+                {involved(b) && Date.parse(b.ends_at) > now ? ' · sen de varsın' : ''}
               </small>
             </span>
             <button className="btn small" onClick={() => online.watch(b.id)}>

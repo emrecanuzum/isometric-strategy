@@ -189,7 +189,7 @@ export type Command =
   | { type: 'played'; game: ArcadeGame; toggles: number[] }
   | { type: 'repairTrade' }
   | { type: 'ransom' }
-  | { type: 'patrolAnswer'; visit: number; pay: boolean }
+  | { type: 'patrolAnswer'; visit: number; pay?: boolean; talk?: number[] }
   | { type: 'release'; target: number }
   | { type: 'buy'; good: string; units: number }
   | { type: 'plan'; steps: PlanStep[] }

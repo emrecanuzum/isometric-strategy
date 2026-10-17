@@ -38,7 +38,7 @@ import { RESOURCE_NAMES } from '../names'
 import type { HudData } from './tabs'
 import type { Online } from './online'
 import type { IntelReport } from '../../net/online'
-import { Meter, Placeholder, Section, Stat, fmt } from './primitives'
+import { Meter, Placeholder, Section, Stat, fmt, percentOf } from './primitives'
 import { Subtabs, usePart } from './Subtabs'
 import type { Part } from './Subtabs'
 
@@ -212,7 +212,7 @@ function missionStatus(data: HudData, f: Fleet) {
       return `Eve dönüyor · ${clock(m.arriveAt - now)}${cargo.length ? ` · ganimet: ${cargo.map(([g, v]) => `${fmt(v ?? 0)} ${RESOURCE_NAMES[g as Good].toLowerCase()}`).join(', ')}` : ''}`
     }
     case 'fish':
-      return `${f.sail ? 'Durduğu yerin çevresinde' : 'İskele önünde'} balık tutuyor · tur başına +${(balance.navy.ships.cog.fish * (f.ships.cog ?? 0) + balance.navy.ships.galley.fish * (f.ships.galley ?? 0) + balance.navy.ships.corsair.fish * (f.ships.corsair ?? 0)).toFixed(1)} yemek (arazi çarpanından önce)`
+      return `${f.sail ? 'Durduğu yerin çevresinde' : 'İskele önünde'} balık tutuyor · tur başına +${(balance.navy.ships.cog.fish * (f.ships.cog ?? 0) + balance.navy.ships.galley.fish * (f.ships.galley ?? 0) + balance.navy.ships.corsair.fish * (f.ships.corsair ?? 0)).toFixed(1).replace('.', ',')} yemek (arazi çarpanından önce)`
     case 'hunt':
       return 'Korsanların peşinde · yakalanan her korsan için ödül'
     default:
@@ -251,7 +251,7 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
             <Icon name="pin" size={16} /> Göster
           </button>
           <small>
-            {countShips(fleet.ships)} gemi · güç {shipMight(fleet.ships).toFixed(1)} · yük {cargoOf(fleet.ships)} · eskort {escortOf(fleet.ships).toFixed(1)}
+            {countShips(fleet.ships)} gemi · güç {shipMight(fleet.ships).toFixed(1).replace('.', ',')} · yük {cargoOf(fleet.ships)} · eskort {escortOf(fleet.ships).toFixed(1).replace('.', ',')}
           </small>
         </div>
         <ShipRow ships={fleet.ships} />
@@ -312,7 +312,7 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
         )}
         {picking === 'trade' && (
           <div className="fleet-pick">
-            <div className="unit-pick" role="radiogroup" aria-label="Taşınacak mal">
+            <div className="unit-pick choices" role="radiogroup" aria-label="Taşınacak mal">
               {(['food', 'materials', 'arms'] as Good[]).map((g) => (
                 <button key={g} className="btn small" role="radio" aria-checked={good === g} onClick={() => setGood(g)}>
                   <Icon name={g} size={16} /> {RESOURCE_NAMES[g]}
@@ -330,7 +330,7 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
                   <li key={i} className="port-item">
                     <b style={{ color: info.color }}>{info.capital} limanı</b>
                     <small>
-                      sefer {trip ? clock(trip) : '—'} · birimi {price.toFixed(2)} · saatte yaklaşık {fmt(per)} altın
+                      sefer {trip ? clock(trip) : '—'} · birimi {price.toFixed(2).replace('.', ',')} · saatte yaklaşık {fmt(per)} altın
                     </small>
                     <button className="btn small" disabled={!!why} title={why ? WHY[why] : undefined} onClick={() => mission({ kind: 'trade', good, city: i })}>
                       <Icon name="ship" size={16} /> {fleet.mission.kind === 'trade' && fleet.mission.city === i && fleet.mission.good === good ? 'Bu sefer sürüyor' : 'Yelken aç'}
@@ -340,7 +340,7 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
               })}
             </ul>
             <p className="hint">
-              Deniz ticareti lobi pazarından tüccarına göre az etkilenir (fiyatı yarı oranda düşürür); limandaki aracılar fiyatın {pct(1 - balance.navy.trade.priceFactor)}'ini alır. Satış yaptığın tacın gözünde değerin artar.
+              Deniz ticareti lobi pazarından tüccarına göre az etkilenir (fiyatı yarı oranda düşürür); limandaki aracılar fiyatın {percentOf((1 - balance.navy.trade.priceFactor) * 100)} alır. Satış yaptığın tacın gözünde değerin artar.
             </p>
           </div>
         )}
@@ -366,7 +366,7 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
             <li className="hint">
               {picking === 'blockade'
                 ? 'Filo iskeleye varınca oradaki gemilerle çarpışır; kazanırsa iskeleyi abluka altına alır: hedefin balığı, deniz ticareti ve balık avı durur, halkı huzursuzlanır. Savaş bitince ya da geri çağırınca abluka kalkar.'
-                : `Filo kıyıya varınca oradaki gemilerle çarpışır; kazanırsa depolardan her malın %${Math.round(balance.navy.raid.stealShare * 100)}'ini gemilerin taşıyabildiği kadar alıp döner. Yük gemileri (koka) daha çok taşır.`}
+                : `Filo kıyıya varınca oradaki gemilerle çarpışır; kazanırsa depolardan her malın ${percentOf(balance.navy.raid.stealShare * 100)} gemilerin taşıyabildiği kadar alıp döner. Yük gemileri (koka) daha çok taşır.`}
             </li>
           </ul>
         )}
@@ -422,7 +422,7 @@ function Shipyard({ data, online }: { data: HudData; online: Online }) {
   const { willing } = recruitment(kingdom, now)
   return (
     <Section title="Tersane" icon="build" aside={yard ? `Sv. ${yard} · kızak ${queue.length} / ${yardSlots(kingdom, now)}` : 'yok'}>
-      <div className="unit-pick" role="radiogroup" aria-label="Gemi türü">
+      <div className="unit-pick choices" role="radiogroup" aria-label="Gemi türü">
         {SHIPS.map((x) => (
           <button key={x} className="btn small" role="radio" aria-checked={ship === x} onClick={() => setShip(x)} title={SHIP_NOTES[x]}>
             <Icon name={SHIP_ICONS[x]} size={16} /> {SHIP_NAMES[x]}
@@ -436,7 +436,7 @@ function Shipyard({ data, online }: { data: HudData; online: Online }) {
         value={Object.entries(spec.cost)
           .map(([r, v]) => `${v} ${RESOURCE_NAMES[r as keyof typeof RESOURCE_NAMES].toLowerCase()}`)
           .join(' · ')}
-        note={`${spec.buildSeconds} sn · tur başı ${spec.upkeep} altın bakım`}
+        note={`${spec.buildSeconds} sn · tur başı ${spec.upkeep.toLocaleString('tr-TR')} altın bakım`}
       />
       <div className="stepper">
         <button className="btn icon-only" disabled={count <= 1} onClick={() => setCount(count - 1)} aria-label="Bir gemi azalt">

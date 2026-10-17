@@ -93,7 +93,7 @@ function floodAt(buildings: Building[], site: Point, at: number): Flood {
   }
   // A building is reached when the flood touches its footprint or a tile beside it.
   for (const b of buildings) {
-    if (b.kind === 'wall' || b.kind === 'palace') continue
+    if (b.kind === 'wall' || b.kind === 'palace' || b.kind === 'road') continue
     let reached = false
     for (let y = b.y - 1; y <= b.y + b.size && !reached; y++) {
       for (let x = b.x - 1; x <= b.x + b.size && !reached; x++) {

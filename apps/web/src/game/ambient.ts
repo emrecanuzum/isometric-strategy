@@ -283,6 +283,8 @@ export interface FleetShip {
   route?: { path: Point[]; departAt: number; arriveAt: number }
   loop?: { path: Point[]; start: number; period: number }
   behind?: number
+  // How far along `route` this ship comes to rest (tiles; short of a bridge, see fleetShips.ts), if not at its end.
+  rest?: number
   along: 'x' | 'y'
   reverse: boolean
   seed: number
@@ -305,6 +307,8 @@ export interface DrawnShip {
   look: Sprite
   ship: FleetShip
   ahead: { x: number; y: number }[] | null
+  // What of the bridges' decks hides it (an inverse mask: it sails under them), for its outline too.
+  mask: Container | null
 }
 
 export function createAmbient(world: World, actors: Container): Ambient {
@@ -349,22 +353,41 @@ export function createAmbient(world: World, actors: Container): Ambient {
   const inView = (view: View, sx: number, sy: number, margin: number) =>
     sx > view.left - margin && sx < view.right + margin && sy > view.top - margin && sy < view.bottom + margin
 
-  // The bridges' decks: the water's glints, ducks and swans are not drawn where a deck covers them, and ships sailing
-  // under or behind one are cut by it (an inverse mask of the decks), so they pass under the bridge.
+  // The bridges' decks: the water's glints, ducks and swans are not drawn where a deck covers them, and every ship
+  // sailing under or behind one is cut by what of the decks stands in front of it (an inverse mask per ship), so it
+  // passes under the bridge: a hull coming out in front of a deck is cut only on its stern's side.
   const decks = worldDecks(world)
-  const deckMask = new Graphics()
-  for (const poly of decks.polygons) deckMask.poly(poly).fill(0xffffff)
-  // Only ever a mask: kept out of the layer's drawing (as a mask in use is), never drawn itself.
-  deckMask.includeInBuild = false
-  deckMask.measurable = false
-  actors.addChild(deckMask)
-  const underDecks = (sprite: PixiSprite, x: number, y: number) => {
-    const cut = decks.behind(x, y)
-    if (cut && sprite.mask !== deckMask) sprite.setMask({ mask: deckMask, inverse: true })
-    else if (!cut && sprite.mask) sprite.mask = null
-    // Taking a mask off a sprite puts the mask back among what is drawn: keep it out (it would paint the decks white).
-    deckMask.includeInBuild = false
-    deckMask.measurable = false
+  const shipMasks = new Map<PixiSprite, { mask: Graphics; key: string }>()
+  // A mask is only ever a mask: kept out of the layer's drawing (as a mask in use is), never drawn itself. Taking a
+  // mask off (or swapping it) puts it back among what is drawn, so this is done after every change.
+  const hideMask = (mask: Container) => {
+    mask.includeInBuild = false
+    mask.measurable = false
+  }
+  const underDecks = (sprite: PixiSprite, x: number, y: number, along: 'x' | 'y', length: number): Graphics | null => {
+    const cut = decks.cut(x, y, along, length)
+    let entry = shipMasks.get(sprite)
+    if (!cut.polygons.length) {
+      if (sprite.mask) sprite.mask = null
+      if (entry) {
+        entry.key = ''
+        hideMask(entry.mask)
+      }
+      return null
+    }
+    if (!entry) {
+      const mask = new Graphics()
+      actors.addChild(mask)
+      shipMasks.set(sprite, (entry = { mask, key: '' }))
+    }
+    if (entry.key !== cut.key) {
+      entry.mask.clear()
+      for (const poly of cut.polygons) entry.mask.poly(poly).fill(0xffffff)
+      entry.key = cut.key
+    }
+    if (sprite.mask !== entry.mask) sprite.setMask({ mask: entry.mask, inverse: true })
+    hideMask(entry.mask)
+    return entry.mask
   }
 
   // --- River current ---
@@ -708,7 +731,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
       const bob = Math.round(Math.sin(seconds * 1.1 + s.seed) * 1)
       sprite.position.set(Math.round(screen.x), Math.round(screen.y) + bob)
       sprite.zIndex = screen.y
-      underDecks(sprite, x, y)
+      underDecks(sprite, x, y, s.along, SHIP_LENGTH)
     }
     // The lords' ships: moored ones rock at their docks, ships under way sail out of sight and come back.
     const ms = seconds * 1000
@@ -733,8 +756,10 @@ export function createAmbient(world: World, actors: Container): Ambient {
       if (route && (ms < route.arriveAt || !s.loop)) {
         const total = pathLength(route.path)
         const f = route.arriveAt > route.departAt ? Math.min(1, Math.max(0, (ms - route.departAt) / (route.arriveAt - route.departAt))) : 1
-        head(alongPath(route.path, f * total - behind))
-        sailing = f < 1
+        const want = f * total - behind
+        const rest = s.rest ?? total
+        head(alongPath(route.path, Math.min(want, rest)))
+        sailing = f < 1 && want < rest
         // The way still ahead of the first ship: from where it is, through the corners it has not passed yet.
         if (sailing && behind === 0) {
           let walked = 0
@@ -760,8 +785,8 @@ export function createAmbient(world: World, actors: Container): Ambient {
       const bob = Math.round(Math.sin(seconds * 1.3 + s.seed) * 1)
       sprite.position.set(Math.round(screen.x), Math.round(screen.y) + bob)
       sprite.zIndex = screen.y
-      underDecks(sprite, x, y)
-      drawnShips.push({ x: sprite.position.x, y: sprite.position.y, z: screen.y, look: look.sprite, ship: s, ahead: ahead && ahead.map((p) => toScreen(p.x, p.y, 0)) })
+      const mask = underDecks(sprite, x, y, along, s.length)
+      drawnShips.push({ x: sprite.position.x, y: sprite.position.y, z: screen.y, look: look.sprite, ship: s, ahead: ahead && ahead.map((p) => toScreen(p.x, p.y, 0)), mask })
     }
     shipPool.finish()
   }

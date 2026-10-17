@@ -50,7 +50,7 @@ const CELL = 4
 
 type Ground = Pick<World, 'size' | 'terrain' | 'feature'>
 
-// Tiles armies cannot walk over: buildings (fields excepted), standing walls, and the gates of every kingdom but the
+// Tiles armies cannot walk over: buildings (fields and roads excepted), standing walls, and the gates of every kingdom but the
 // army's own (`mover`). `breach`: a kingdom whose walls and gates are left open, for an army sent to besiege it to find
 // the way up to them (see wallsOf).
 export type Blocked = (x: number, y: number) => boolean
@@ -59,7 +59,7 @@ export function buildingBlocker(kingdoms: Holding[], mover?: number, breach?: nu
   const taken = new Set<number>()
   for (const k of kingdoms) {
     for (const b of k.buildings ?? []) {
-      if (b.kind === 'farm') continue
+      if (b.kind === 'farm' || b.kind === 'road') continue
       if ((b.kind === 'wall' || b.kind === 'gate') && k.id !== undefined && k.id === breach) continue
       if (b.kind === 'wall' && b.broken) continue
       if (b.kind === 'gate' && k.id !== undefined && k.id === mover) continue

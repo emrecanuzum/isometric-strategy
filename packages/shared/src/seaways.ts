@@ -38,16 +38,59 @@ export function dockWater(world: World, dock: Rect): Point | null {
   return null
 }
 
-// Whether the straight run from a to b stays on water, with a little room on either side for the hull.
-function clear(world: World, a: Point, b: Point) {
+// How far each water tile lies from the nearest land, in tiles (8-way; 1 = beside land), counted up to just past the
+// shore penalty's reach (land 0). Worked out once per world.
+const CLEAR_CAP = S.shorePenalty.length + 1
+const clearances = new WeakMap<World, Uint8Array>()
+export function shoreClearance(world: World): Uint8Array {
+  let field = clearances.get(world)
+  if (field) return field
+  const size = world.size
+  field = new Uint8Array(size * size)
+  for (let i = 0; i < size * size; i++) {
+    const t = world.terrain[i]
+    field[i] = t === Terrain.Lake || t === Terrain.River ? CLEAR_CAP : 0
+  }
+  // Two sweeps of a chessboard distance; off the map counts as land.
+  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= size || y >= size ? 0 : field![y * size + x])
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x
+      if (!field[i]) continue
+      field[i] = Math.min(field[i], at(x - 1, y) + 1, at(x, y - 1) + 1, at(x - 1, y - 1) + 1, at(x + 1, y - 1) + 1)
+    }
+  }
+  for (let y = size - 1; y >= 0; y--) {
+    for (let x = size - 1; x >= 0; x--) {
+      const i = y * size + x
+      if (!field[i]) continue
+      field[i] = Math.min(field[i], at(x + 1, y) + 1, at(x, y + 1) + 1, at(x + 1, y + 1) + 1, at(x - 1, y + 1) + 1)
+    }
+  }
+  clearances.set(world, field)
+  return field
+}
+
+// What a step onto a water tile costs on top of its length: the nearer the bank, the dearer, so fleets keep to the
+// middle of a river or lake where there is room (a narrow river costs the same all across, and still takes them).
+const shoreCost = (clearance: number) => S.shorePenalty[clearance - 1] ?? 0
+
+// Whether the straight run from a to b stays on water, with a little room on either side for the hull, and never
+// comes nearer the bank than `room` tiles of clearance
+// (but within a tile and a half of either end).
+function clear(world: World, a: Point, b: Point, room = 0) {
   const len = Math.hypot(b.x - a.x, b.y - a.y)
   if (len === 0) return true
+  const field = room > 0 ? shoreClearance(world) : null
   const n = Math.ceil(len * 12)
   const side = { x: (-(b.y - a.y) / len) * 0.2, y: ((b.x - a.x) / len) * 0.2 }
   for (let i = 1; i < n; i++) {
     const x = a.x + ((b.x - a.x) * i) / n
     const y = a.y + ((b.y - a.y) * i) / n
     if (!isWaterTile(world, x, y) || !isWaterTile(world, x + side.x, y + side.y) || !isWaterTile(world, x - side.x, y - side.y)) return false
+    // (Near its ends the run may be as near the bank as the ends themselves are.)
+    const end = (len * Math.min(i, n - i)) / n
+    if (field && end > 1.5 && field[Math.floor(y) * world.size + Math.floor(x)] < room) return false
   }
   return true
 }
@@ -63,6 +106,7 @@ export function waterPath(world: World, from: Point, to: Point, maxNodes = S.max
   if (!isWaterTile(world, sx, sy) || !isWaterTile(world, tx, ty)) return null
   const start = sy * size + sx
   const goal = ty * size + tx
+  const field = shoreClearance(world)
   const came = new Map<number, number>([[start, -1]])
   const cost = new Map<number, number>([[start, 0]])
   // A binary heap of [priority, node].
@@ -116,7 +160,7 @@ export function waterPath(world: World, from: Point, to: Point, maxNodes = S.max
       // Diagonally only between two water tiles, never across a corner of land.
       if (dx && dy && (!isWaterTile(world, x + dx, y) || !isWaterTile(world, x, y + dy))) continue
       const m = ny * size + nx
-      const c = base + (dx && dy ? Math.SQRT2 : 1)
+      const c = base + (dx && dy ? Math.SQRT2 : 1) * (1 + shoreCost(field[m]))
       if (c >= (cost.get(m) ?? Infinity)) continue
       cost.set(m, c)
       came.set(m, n)
@@ -129,12 +173,20 @@ export function waterPath(world: World, from: Point, to: Point, maxNodes = S.max
   tiles.reverse()
   tiles[0] = { x: from.x, y: from.y }
   tiles[tiles.length - 1] = { x: to.x, y: to.y }
-  // Straighten: from each kept point, on to the furthest one the water lets it reach directly.
+  // Straighten: from each kept point, on to the furthest one the water lets it reach directly without coming nearer
+  // the bank than the tiles it cuts out did (so a fleet keeps to the middle, and a narrow river still lets it by).
+  const room = tiles.map((p) => Math.min(CLEAR_CAP - 1, field[Math.floor(p.y) * size + Math.floor(p.x)]))
   const path = [tiles[0]]
   let i = 0
   while (i < tiles.length - 1) {
+    // The least clearance of the tiles a run from i to each j would cut out.
+    const least: number[] = []
+    for (let k = i + 1, m = CLEAR_CAP; k < tiles.length; k++) {
+      least[k] = m
+      m = Math.min(m, room[k])
+    }
     let j = tiles.length - 1
-    while (j > i + 1 && !clear(world, tiles[i], tiles[j])) j--
+    while (j > i + 1 && !clear(world, tiles[i], tiles[j], least[j])) j--
     path.push(tiles[j])
     i = j
   }

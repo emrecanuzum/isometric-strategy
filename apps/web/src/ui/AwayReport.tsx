@@ -819,7 +819,7 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
     // reached and the parties back (CLAUDE.md §9.8–9.9).
     const village: Line[] = []
     const hours = away / 3_600_000
-    village.push({ icon: 'time', text: hours >= 1 ? `${duration(away)} boyunca köyde hayat kendi hâlinde sürdü. Kâhyanın defterinden:` : `Kısa bir süre yoktun; kâhyanın defterinden:` })
+    village.push({ icon: 'time', text: hours >= 1 ? `${duration(away)} boyunca köyde hayat kendi hâlinde sürdü. Kâhyanın defterinden:` : `${duration(away)} yoktun; kâhyanın defterinden:` })
     const fortunes = fortunesBegun(kingdom, since, now)
     const told = fortunes.slice(-8)
     if (fortunes.length > told.length) village.push({ icon: 'scroll', text: `Defterde ${fortunes.length - told.length} olay daha yazılı; en yenileri:` })

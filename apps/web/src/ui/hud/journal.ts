@@ -54,6 +54,8 @@ export interface Journal {
   overflowing?: string[]
   // When the granary was last said to be running low (said again only after a while).
   hungerToldAt?: number
+  // The merchant's empty trips have been told: again only after he has sold something (or another good is chosen).
+  emptyTold?: string
 }
 
 export const unreadImportant = (j: Journal) => j.entries.filter((e) => isImportant(e) && e.id > (j.importantSeen ?? 0)).length
@@ -85,6 +87,8 @@ function write(j: Journal, seasonStart: number, at: number, entry: Omit<Entry, '
 // Folds the events of one clock tick into the journal.
 export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at: number, seasonStart: number): Journal {
   for (const event of events) {
+    // Road tiles are laid by the dozen: they need no word each.
+    if (event.kind === 'built' && event.building.kind === 'road') continue
     if (event.kind === 'built') {
       const level = event.building.level ?? 1
       j = write(j, seasonStart, at, {
@@ -95,10 +99,13 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
       })
     } else if (event.kind === 'trade') {
       const tally = { ...j.tally, tradeGold: j.tally.tradeGold + event.gold, trips: j.tally.trips + 1 }
-      // An empty trip is told once a day, not every time the merchant comes back.
-      // A merchant waiting on a full treasury is not an empty trip: the treasury card says so.
-      if (event.sold === 0 && !event.full && !j.tally.emptyTrip) {
-        j = write({ ...j, tally: { ...tally, emptyTrip: true } }, seasonStart, at, {
+      // An empty trip is told once, not every time the merchant comes back: again only after a trip that sold something,
+      // or for another good or another cause. A merchant waiting on a full treasury is not an empty trip: the treasury
+      // card says so.
+      const why = `${event.damaged ? 'damaged' : event.walledIn ? 'walled' : 'empty'}:${event.good}`
+      if (event.sold > 0 && j.emptyTold) j = { ...j, emptyTold: undefined }
+      if (event.sold === 0 && !event.full && !j.tally.emptyTrip && j.emptyTold !== why) {
+        j = write({ ...j, emptyTold: why, tally: { ...tally, emptyTrip: true } }, seasonStart, at, {
           tone: 'bad',
           icon: 'warn',
           title: event.damaged ? 'Ticaret noktası harap' : event.walledIn ? 'Tüccar surların içinde kaldı' : 'Tüccar eli boş döndü',
@@ -224,6 +231,8 @@ function closeDay(j: Journal, kingdom: Kingdom, at: number, seasonStart: number)
   const hungry = (produced.food ?? 0) < 0
   j = write(j, seasonStart, at, {
     tone: hungry ? 'bad' : 'info',
+    // Every report of a hungry spell would fill "Önemli"; the throttled "Ambar azalıyor" below stands for it there.
+    important: false,
     icon: 'scroll',
     title: 'Elçi raporu',
     text: lines.length > 0 ? lines.join(' · ') : 'Sakin bir gün; ne üretim ne ticaret.',

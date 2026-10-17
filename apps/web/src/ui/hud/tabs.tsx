@@ -165,7 +165,7 @@ const BLOCKED: Record<string, string> = {
 }
 
 export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
-  const list = constructing(kingdom, now)
+  const list = constructing(kingdom, now).filter((b) => b.kind !== 'road')
   const slots = maxConstructions(kingdom, now)
   // Buildings by the palace level that opens them; the tab of the palace's own level first.
   const level = Math.max(1, palaceLevel(kingdom, now))
@@ -221,7 +221,16 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
                 : spec.workers
                   ? `${spec.workers} işçi çalıştırır`
                   : null
-            const why = error === 'locked' ? `${spec.requiresPalace ?? 1}. seviye saray` : error ? (BLOCKED[error] ?? 'Şu an olmaz') : null
+            const why =
+              error === 'locked'
+                ? `${spec.requiresPalace ?? 1}. seviye saray`
+                : error === 'unique'
+                  ? kingdom.buildings.some((b) => b.kind === kind)
+                    ? 'Zaten kurulu (bir tane olur)'
+                    : 'Arsası yok'
+                  : error
+                    ? (BLOCKED[error] ?? 'Şu an olmaz')
+                    : null
             return (
               <li key={kind}>
                 <button className="card" disabled={why !== null} onClick={() => onPlace(kind)} aria-describedby={`why-${kind}`}>
@@ -250,7 +259,8 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
                         <Icon name="time" size={8} /> {spec.buildSeconds} sn
                       </span>
                       <span className="chip">
-                        {spec.size}×{spec.size}
+                        {/* A gate stands on three tiles in a row: tower, gate, tower. */}
+                        {kind === 'gate' ? '3×1' : `${spec.size}×${spec.size}`}
                       </span>
                     </span>
                     {why && (
@@ -370,7 +380,7 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
             {series.length > 1 && <History values={series} label={`${RESOURCE_NAMES[r]} son ${series.length} tur`} />}
             {runsOut !== null && (
               <p className="alert">
-                <Icon name="warn" size={16} /> Bu gidişle yaklaşık {runsOut} tur sonra tükenir.
+                <Icon name="warn" size={16} /> {runsOut < 1 ? 'Tükendi: depoda hiç kalmadı.' : `Bu gidişle yaklaşık ${runsOut} tur sonra tükenir.`}
               </p>
             )}
           </article>
@@ -487,7 +497,7 @@ function MarketSection({ world, kingdom, now, online }: HudData) {
       <CrownBuyers world={world} market={market} now={now} />
       {has ? (
         <>
-          <div className="segmented three" role="radiogroup" aria-label="Alınacak mal">
+          <div className="segmented choices" role="radiogroup" aria-label="Alınacak mal">
             {MARKET_GOODS.map((g) => (
               <button key={g} className="btn small" role="radio" aria-checked={good === g} onClick={() => setGood(g)}>
                 <Icon name={RESOURCE_ICONS[g]} size={16} /> {RESOURCE_NAMES[g].split(' ')[0]}
@@ -592,7 +602,7 @@ function TradePost(data: HudData) {
           <b>Ticaret noktası · Seviye {trade.level + 1}</b>
           <p className="hint">
             Tüccar her {Math.round(tripMs / 1000)} saniyede {tradeLoad(kingdom)} birim mal götürüp{' '}
-            {trade.city ? 'serbest şehirde lobi fiyatının biraz üstünden' : 'lobinin o anki fiyatından'} altına çevirir
+            {trade.city ? 'taç başkentinde lobinin o anki fiyatından' : 'lobinin o anki fiyatından'} altına çevirir
             {kingdom.trade.good ? ` (şu an birimi ${tradePrice(kingdom, kingdom.trade.good, online?.market, now).toFixed(2).replace('.', ',')} altın)` : ''}.
           </p>
           <button className="btn small" onClick={() => onShow(center(post))}>
@@ -608,6 +618,12 @@ function TradePost(data: HudData) {
       {trade.good && goldCap(kingdom, now) - kingdom.stock.gold < 1 && (
         <p className="alert">
           <Icon name="gold" size={16} /> Hazine dolu: tüccar mal götürmüyor, bekliyor. Haraç, harcama ya da yeni bir hazine yer açınca yeniden satmaya başlar.
+        </p>
+      )}
+      {trade.good && kingdom.stock[trade.good] - tradeReserve(kingdom, trade.good, now) < 1 && (roundOutcome(kingdom, now).delta[trade.good] ?? 0) <= 0 && (
+        <p className="alert">
+          <Icon name="warn" size={16} /> Ambarda satılacak {RESOURCE_NAMES[trade.good].toLocaleLowerCase('tr-TR')} kalmadı: tüccar eli boş bekliyor.
+          Başka bir mal seç ya da bu malın üretimini artır.
         </p>
       )}
       {trade.good && <TradeAmount {...data} />}
@@ -645,10 +661,11 @@ const PALACE_PARTS: PalacePart[] = ['level', 'house', 'expeditions', 'goals', 'b
 export const showPalacePart = (part: PalacePart) => showPart('palace', part)
 
 export function KingdomTab(data: HudData) {
-  const { kingdom, now, stage, plots, confirmReset, onUpgradeBuilding, onMute, onReset, onExit, onShow } = data
+  const { kingdom, now, stage, plots, confirmReset, onUpgradeBuilding, onReset, onShow } = data
   const palace = kingdom.buildings.find((b) => b.kind === 'palace')
   const size = balance.territory.stageParcels[stage]
-  const nextSize = palace && upgradeSpec(palace) ? balance.territory.stageParcels[stage + 1] : undefined
+  // While the palace is being raised its level already reads the new one, but the border grows only when the work is done.
+  const nextSize = palace && (upgradeSpec(palace) || palace.doneAt > now) ? balance.territory.stageParcels[stage + 1] : undefined
   // Before founding the plot comes from the site; afterwards the kingdom keeps it, until a dock stands on it.
   const dock = kingdom.buildings.find((b) => b.kind === 'dock')
   const dockState = dock
@@ -710,7 +727,7 @@ export function KingdomTab(data: HudData) {
             {palace && nextSize ? (
               <>
                 <p className="hint">
-                  Hudut sarayla büyür. Sarayı {(palace.level ?? 1) + 1}. seviyeye yükseltince hudut {nextSize}×{nextSize} parsel olur.
+                  Hudut sarayla büyür. Sarayı {stage + 2}. seviyeye yükseltince hudut {nextSize}×{nextSize} parsel olur.
                 </p>
                 {palace.doneAt > now ? (
                   <p className="hint up">Saray yükseltiliyor: {Math.ceil((palace.doneAt - now) / 1000)} sn</p>
@@ -739,7 +756,6 @@ export function KingdomTab(data: HudData) {
                 <Icon name="pin" size={16} /> Arsayı göster
               </button>
             ) : null}
-            <p className="hint">Hudut başarımlarla büyüyecek; şimdilik yalnızca görünüm için seçilebilir.</p>
           </Section>
           <Fealty world={data.world} kingdom={kingdom} now={data.now} onSwear={(city) => data.online?.act({ type: 'swear', city })} onOpen={(city) => data.online?.openCrown(city)} />
         </>
@@ -764,18 +780,14 @@ export function KingdomTab(data: HudData) {
           </ul>
         </Section>
       )}
-      <Section title="Ayarlar" icon="music">
-        <div className="row">
-          <button className="btn small" onClick={onMute}>
-            <Icon name="gear" size={16} /> Ses ayarları
-          </button>
-          <button className={confirmReset ? 'btn small danger' : 'btn small'} onClick={onReset}>
-            {confirmReset ? 'Emin misin? Tekrar bas' : 'Lordluğu sıfırla'}
-          </button>
-          <button className="btn small" onClick={onExit}>
-            <Icon name="home" size={16} /> Ana menü
-          </button>
-        </div>
+      <Section title="Lordluğu sıfırla" icon="warn">
+        <p className="hint">
+          Her şey en baştan başlar: saray, yapılar, hazine ve depolar, ordular ve gemiler, hanedan ve kasabalar silinir; lobide yeni bir yer seçip
+          lordluğunu yeniden kurarsın. Geri alınamaz.
+        </p>
+        <button className={confirmReset ? 'btn small danger' : 'btn small'} onClick={onReset}>
+          {confirmReset ? 'Emin misin? Her şey silinecek' : 'Lordluğu sıfırla'}
+        </button>
       </Section>
     </>
   )
@@ -874,10 +886,10 @@ export function PeopleTab(data: HudData) {
 
 const TAX_NAMES: Record<TaxLevel, string> = { low: 'Düşük', normal: 'Normal', high: 'Yüksek', heavy: 'Ağır' }
 const QUEEN_WHY: Record<string, string> = {
-  locked: 'Sarayı 2. seviyeye yükselt',
-  people: `En az ${balance.society.queen.minPopulation} nüfus gerekir`,
-  cost: 'Altın yetmiyor',
-  busy: 'Kraliçen rehin',
+  locked: 'sarayı 2. seviyeye yükselt',
+  people: `en az ${balance.society.queen.minPopulation} nüfus gerekir`,
+  cost: 'altın yetmiyor',
+  busy: 'kraliçen rehin',
 }
 
 // What is wrong with the people now, over whichever part is shown: an enemy at the border, walls with no gate, a revolt
@@ -890,12 +902,12 @@ function PeopleAlerts({ kingdom, now, online }: { kingdom: Kingdom; now: number;
       <FortuneNote kingdom={kingdom} now={now} />
       {(kingdom.fearUntil ?? 0) > now && (
         <p className="alert">
-          <Icon name="warn" size={16} /> Sınırında düşman ordusu bekliyor: halk korkuyor (mutluluk {balance.military.fear.happiness}).
+          <Icon name="warn" size={16} /> Sınırında düşman ordusu bekliyor: halk korkuyor (mutluluk −{Math.abs(balance.military.fear.happiness)}).
         </p>
       )}
       {imprisoned(kingdom.buildings, kingdom.site, now) && (
         <p className="alert">
-          <Icon name="warn" size={16} /> Surlarında kapı yok, halk dışarı çıkamıyor: lordluğun bir hapishane (mutluluk {balance.society.happiness.imprisoned}).
+          <Icon name="warn" size={16} /> Surlarında kapı yok, halk dışarı çıkamıyor: lordluğun bir hapishane (mutluluk −{Math.abs(balance.society.happiness.imprisoned)}).
           Sura bir kapı koy.
         </p>
       )}
@@ -933,8 +945,8 @@ function Mood({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?
         </p>
         {memorialHappiness(kingdom, now) > 0 && <Stat label="Hanedan anıtı" value={`+${memorialHappiness(kingdom, now)}`} note="hanedanın şanı mutluluk hedefine eklenir" />}
       </Section>
-      <Section title="Vergi" icon="gold" aside={`köylü başına ${balance.society.tax.levels[tax].goldPerVillager} altın`}>
-        <div className="segmented" role="radiogroup" aria-label="Vergi oranı">
+      <Section title="Vergi" icon="gold" aside={`köylü başına ${balance.society.tax.levels[tax].goldPerVillager.toLocaleString('tr-TR', { maximumFractionDigits: 3 })} altın / tur`}>
+        <div className="segmented choices" role="radiogroup" aria-label="Vergi oranı">
           {TAX_LEVELS.map((t) => (
             <button key={t} className="btn small" role="radio" aria-checked={tax === t} onClick={() => online?.act({ type: 'tax', tax: t })}>
               {TAX_NAMES[t]}
@@ -949,10 +961,10 @@ function Mood({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?
       </Section>
       <Section title="Gece mesaisi" icon={night ? 'moon' : 'sun'} aside={`şu an ${night ? 'gece' : 'gündüz'} · iş %${Math.round(rate * 100)}`}>
         <p className="hint">
-          Geceleri halk dinlenir ve yalnızca %{Math.round(n.workRate * 100)} çalışır. Gece mesaisinde tam çalışır ama mutluluk {n.shiftHappiness} düşer ve
+          Geceleri halk dinlenir ve yalnızca %{Math.round(n.workRate * 100)} çalışır. Gece mesaisinde tam çalışır ama mutluluk {Math.abs(n.shiftHappiness)} puan düşer ve
           biriken yorgunluk gündüz verimini de azaltır.
         </p>
-        <div className="segmented" role="radiogroup" aria-label="Gece mesaisi">
+        <div className="segmented choices" role="radiogroup" aria-label="Gece mesaisi">
           <button className="btn small" role="radio" aria-checked={!kingdom.nightShift} onClick={() => online?.act({ type: 'nightShift', on: false })}>
             <Icon name="moon" size={16} /> Geceleri dinlensinler
           </button>

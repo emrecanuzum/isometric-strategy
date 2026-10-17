@@ -103,24 +103,26 @@ export function FortuneDialog({
                     Ne yapalım? {left} içinde karar verilmezse{' '}
                     {kingdom?.steward ? `kâhyan köylüleri seferber eder (${balance.institutions.events.crisis.steward.fee.gold} altın).` : 'hiçbir şey yapılmaz.'}
                   </p>
-                  <button className="btn crisis-choice" onClick={() => onAnswer('villagers')}>
-                    <b>{crisis.villagers}</b>
-                    <small>
-                      Zarar önlenir; {Math.round(c.villagers.seconds / 60)} dakika iş gücü %{Math.round(-c.villagers.work * 100)} düşer.
-                    </small>
-                  </button>
-                  <button className="btn crisis-choice" disabled={soldiers < c.army.minSoldiers} onClick={() => onAnswer('army')}>
-                    <b>{crisis.army}</b>
-                    <small>
-                      {soldiers < c.army.minSoldiers
-                        ? `Sarayda en az ${c.army.minSoldiers} asker olmalı.`
-                        : `Zarar önlenir; ${c.army.loss}, nadiren ${c.army.loss + 1} asker kaybedilir ve ordu ${Math.round(c.army.lockSeconds / 60)} dakika sefere çıkamaz.`}
-                    </small>
-                  </button>
-                  <button className="btn crisis-choice" onClick={() => onAnswer('none')}>
-                    <b>{crisis.none}</b>
-                    <small>Kimse yorulmaz; ama olayın kötü etkisi tam olarak yaşanır.</small>
-                  </button>
+                  <div className="choices">
+                    <button className="btn crisis-choice" onClick={() => onAnswer('villagers')}>
+                      <b>{crisis.villagers}</b>
+                      <small>
+                        Zarar önlenir; {Math.round(c.villagers.seconds / 60)} dakika iş gücü %{Math.round(-c.villagers.work * 100)} düşer.
+                      </small>
+                    </button>
+                    <button className="btn crisis-choice" disabled={soldiers < c.army.minSoldiers} onClick={() => onAnswer('army')}>
+                      <b>{crisis.army}</b>
+                      <small>
+                        {soldiers < c.army.minSoldiers
+                          ? `Sarayda en az ${c.army.minSoldiers} asker olmalı.`
+                          : `Zarar önlenir; ${c.army.loss}, nadiren ${c.army.loss + 1} asker kaybedilir ve ordu ${Math.round(c.army.lockSeconds / 60)} dakika sefere çıkamaz.`}
+                      </small>
+                    </button>
+                    <button className="btn crisis-choice" onClick={() => onAnswer('none')}>
+                      <b>{crisis.none}</b>
+                      <small>Kimse yorulmaz; ama olayın kötü etkisi tam olarak yaşanır.</small>
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -136,15 +138,17 @@ export function FortuneDialog({
               ) : (
                 <>
                   <p className="hint">Ne yapalım? {left} içinde karar verilmezse hiçbir şey yapılmaz.</p>
-                  {(['a', 'b'] as const).map((way) => {
-                    const lack = short(options[way], kingdom?.stock)
-                    return (
-                      <button key={way} className="btn crisis-choice" disabled={lack} onClick={() => onChoose(way)}>
-                        <b>{dilemma[way]}</b>
-                        <small>{lack ? `Yetersiz kaynak: ${optionNote({ cost: options[way].cost })}` : optionNote(options[way]) || 'Bir bedeli yok.'}</small>
-                      </button>
-                    )
-                  })}
+                  <div className="choices">
+                    {(['a', 'b'] as const).map((way) => {
+                      const lack = short(options[way], kingdom?.stock)
+                      return (
+                        <button key={way} className="btn crisis-choice" disabled={lack} onClick={() => onChoose(way)}>
+                          <b>{dilemma[way]}</b>
+                          <small>{lack ? `Yetersiz kaynak: ${optionNote({ cost: options[way].cost })}` : optionNote(options[way]) || 'Bir bedeli yok.'}</small>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </>
               )}
             </div>

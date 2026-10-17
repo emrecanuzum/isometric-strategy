@@ -38,7 +38,7 @@ export function Missing({ cost, stock }: { cost?: Cost; stock: Kingdom['stock'] 
 
 // Running constructions under the top bar, so progress shows with every tab closed.
 export function Constructions({ kingdom, now }: { kingdom: Kingdom; now: number }) {
-  const list = constructing(kingdom, now)
+  const list = constructing(kingdom, now).filter((b) => b.kind !== 'road')
   if (list.length === 0) return null
   return (
     <div className="queue frame" aria-label="İnşaatlar">
@@ -77,7 +77,7 @@ export function GoodChoice({
   const bonus = (1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade + guildOf(kingdom, now).trade) * idleFactor(kingdom, now)
   const idle = selected === null && !!kingdom.trade.idle
   return (
-    <div className="goods" role="radiogroup" aria-label="Satılacak mal">
+    <div className="goods choices" role="radiogroup" aria-label="Satılacak mal">
       {GOODS.map((good) => {
         const price = tradePrice(kingdom, good, market, now)
         const base = basePrice(good, market)
@@ -120,6 +120,10 @@ export function GoodPicker({ kingdom, onGood, market, now }: { kingdom: Kingdom;
         <p className="hint">
           Tüccarın hangi malı satsın? Her {Math.round(lobbyTripMs(kingdom.buildings) / 1000)} saniyede bir seçtiğin maldan götürüp altın
           getirir. Sonradan Ticaret sekmesinden değiştirebilirsin.
+        </p>
+        <p className="hint">
+          Dikkat: yapı malzemesi her inşaatta harcanır; onu satarsan tüccar birkaç seferde stoğu bitirir ve ilk binaların için malzeme
+          kalmaz. Başlangıçta savaş malzemesi satmak en güvenlisidir.
         </p>
         <GoodChoice kingdom={kingdom} selected={null} onGood={onGood} market={market} now={now} />
       </div>

@@ -204,7 +204,7 @@ function ResourceCard({ resource: r, kingdom, now, history, market }: { resource
       <p className="pop-foot">
         {runsOut !== null ? (
           <span className="down">
-            <Icon name="warn" size={8} /> ~{runsOut} tur sonra tükenir
+            <Icon name="warn" size={8} /> {runsOut < 1 ? 'Tükendi: ambar boş' : `~${runsOut} tur sonra tükenir`}
           </span>
         ) : wasted > 0.05 ? (
           <span className="down">
@@ -227,7 +227,7 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
   const most = Math.max(villagers, jobs, 1)
   // The builders: one per building site that may run at once (CLAUDE.md §5.3).
   const slots = maxConstructions(kingdom, now)
-  const busy = constructing(kingdom, now).length
+  const busy = constructing(kingdom, now).filter((b) => b.kind !== 'road').length
   return (
     <>
       <header className="pop-head">
@@ -360,7 +360,7 @@ function Clock({ now, seasonStart, nextRound, open, onTap }: { now: number; seas
               <Icon name={SEASON_ICONS[c.season]} size={8} /> Mevsim
             </span>
             <b>
-              {SEASON_NAMES[c.season]} · {Math.max(1, Math.ceil((c.seasonEndsAt - now) / 60000))} dk sonra {SEASON_NAMES[c.nextSeason].toLowerCase()}
+              {SEASON_NAMES[c.season]} · {Math.max(1, Math.ceil((c.seasonEndsAt - now) / 60000))} dk sonra {SEASON_NAMES[c.nextSeason].toLocaleLowerCase('tr')}
             </b>
           </li>
           <li>

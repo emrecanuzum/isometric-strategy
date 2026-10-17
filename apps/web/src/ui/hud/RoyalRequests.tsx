@@ -81,8 +81,11 @@ export function RoyalDialog({ world, kingdom, req, online, onClose }: { world: W
             <EnvoyPortrait size={44} />
           </span>
           <div>
-            <small style={{ color: info.color }}>
-              <Icon name="crown" size={16} /> {info.name} · kraliyet elçisi
+            {/* The crown's colour as a swatch: its red or blue text was unreadable on the green banner. */}
+            <small>
+              <Icon name="crown" size={16} />
+              <i style={{ width: 10, height: 10, background: info.color, boxShadow: '0 0 0 2px rgb(0 0 0 / 45%)', display: 'inline-block' }} />
+              {info.name} · kraliyet elçisi
             </small>
             <h2 id="royal-title">Hükümdarın isteği</h2>
           </div>
@@ -94,7 +97,7 @@ export function RoyalDialog({ world, kingdom, req, online, onClose }: { world: W
         <p>{royalSaying(world, req)}</p>
         <p className="hint">
           <Icon name={itemIcon(req.item)} size={16} /> Elinde {fmt(have)} / {fmt(req.units)} {itemName(req.item)} var. {Math.round(r.durationSeconds / 60)} dakika içinde teslim edersen {fmt(req.gold)} altın ve taçla ilişki +{r.relation.deliver}. Geri çevirirsen
-          ilişki {r.relation.decline}.
+          ilişki −{Math.abs(r.relation.decline)}.
         </p>
         <div className="row spread">
           <button className="btn small danger" onClick={() => (online.act({ type: 'royal', action: 'decline' }), onClose())}>
@@ -158,7 +161,7 @@ export function QuestTracker({ world, kingdom, online, now }: { world: World; ki
               <div className="quest-top">
                 <Icon name="crown" size={16} />
                 <span>
-                  <b style={{ color: cityInfo(world, q.crown).color }}>{QUEST_TITLES[q.quest.kind]}</b>
+                  <b style={{ color: cityInfo(world, q.crown).ink }}>{QUEST_TITLES[q.quest.kind]}</b>
                   <small>{cityInfo(world, q.crown).name}</small>
                 </span>
                 <small>{left(q.quest.endsAt - now)}</small>
@@ -189,7 +192,7 @@ function RoyalRow({ world, kingdom, req, accepted, online, now, goldRoom }: { wo
       <div className="quest-top">
         <Icon name={itemIcon(req.item)} size={16} />
         <span>
-          <b style={{ color: cityInfo(world, req.crown).color }}>Kraliyet isteği</b>
+          <b style={{ color: cityInfo(world, req.crown).ink }}>Kraliyet isteği</b>
           <small>
             {fmt(req.units)} {itemName(req.item)}
           </small>

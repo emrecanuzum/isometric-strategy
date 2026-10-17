@@ -44,7 +44,7 @@
   "yardSlotsByLevel": [1, 2, 3],
   "harbourCapByLevel": [6, 10, 16],
   "speedSecondsPerTile": 0.15,
-  "sail": { "secondsPerTile": 0.5, "maxNodes": 200000 },
+  "sail": { "secondsPerTile": 0.5, "maxNodes": 200000, "shorePenalty": [1.5, 0.6, 0.2] },
   "minVoyageSeconds": 45,
   "trade": {
     "baseSeconds": 90,

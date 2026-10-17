@@ -14,6 +14,7 @@ import {
   townFactor,
   townLoyalty,
   townLoyaltyParts,
+  townLosses,
   townRevoltIn,
   townRevolting,
   townScore,
@@ -54,6 +55,9 @@ const clock = (ms: number) => {
   const s = Math.max(0, Math.ceil(ms / 1000))
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
+
+// Armies named as on the army tab: "1. Ordu", "2. Ordu" (the lord's armies in the order they were raised).
+const armyLabel = (a: Army, all: Army[]) => `${all.filter((b) => b.kingdom_id === a.kingdom_id).sort((x, y) => x.id - y.id).findIndex((b) => b.id === a.id) + 1}. Ordu`
 
 export function TownSheet({ world, town, walled, kingdom, me, names, armies, pacts, now, market, relation, onSend, onMove, onBuy, onWatchBattle, onShow, onWatch, onUpkeep, onRelease, onClose }: {
   world: World
@@ -155,7 +159,7 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
             <b>{mine ? 'Bu kasaba senin' : holder ? `${holder} elinde` : 'Kimseye bağlı değil'}</b>
             <small className="hint">
               Sahibine {townGift(town.kind)} gönderir.
-              {town.owner === null && ` Kendi garnizonu var: ${town.garrison} asker; kuşatma bitince ordun onlar kadar kayıp verir.`}
+              {town.owner === null && ` Kendi garnizonu var: ${town.garrison} asker; kuşatma boyunca ordun yaklaşık ${townLosses(town.garrison, walled)} asker kaybeder.`}
               {town.owner !== null && !mine && ' Sahibiyle savaştaysan kuşatıp alabilirsin.'}
               {mine && ' Savaşta olduğun biri kuşatırsa ordunla gelip kuşatmayı kırabilirsin.'}
               {walled &&
@@ -200,11 +204,23 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
                   {own.map((a) => (
                     <li key={a.id}>
                       <span>
-                        Ordu #{a.id} · {a.soldiers ?? '?'} asker
+                        {armyLabel(a, armies)} · {a.soldiers ?? '?'} asker
                       </span>
-                      <button className="btn small" disabled={!!siege} onClick={() => onSend(a.id, middle)}>
-                        {siege && siege.army === a.id ? 'Kuşatıyor' : atGate(a) ? 'Kuşatmayı başlat' : 'Gönder ve kuşat'}
-                      </button>
+                      {(() => {
+                        // Already on its way here to lay siege: say so rather than offer to send it again.
+                        const going = !siege && a.goal.kind === 'town' && a.goal.town === town.id && Date.parse(a.arrive_at) > now
+                        return (
+                          <button className="btn small" disabled={!!siege || going} onClick={() => onSend(a.id, middle)}>
+                            {siege && siege.army === a.id
+                              ? 'Kuşatıyor'
+                              : going
+                                ? `Yolda · ${Math.ceil((Date.parse(a.arrive_at) - now) / 60_000)} dk`
+                                : atGate(a)
+                                  ? 'Kuşatmayı başlat'
+                                  : 'Gönder ve kuşat'}
+                          </button>
+                        )
+                      })()}
                     </li>
                   ))}
                 </ul>
@@ -261,7 +277,7 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, par
             ) : null}
             <Stat label="Gittiği yer" value={`%${Math.round(target)}`} tone={trend >= 0 ? 'up' : 'down'} note={`yaklaşık ${Math.round(t.loyalty.tauSeconds / 60)} dakikada yolun üçte ikisini alır`} />
             <p className="hint">
-              Sadakat ne kadar yüksekse kasaba o kadar çok gönderir (%0'da ×{t.loyalty.yieldMin}, %100'de ×{t.loyalty.yieldMax}
+              Sadakat ne kadar yüksekse kasaba o kadar çok gönderir (%0'da ×{t.loyalty.yieldMin.toLocaleString('tr-TR')}, %100'de ×{t.loyalty.yieldMax.toLocaleString('tr-TR')}
               {over.yieldFactor < 1 && `, aşırı büyüme ×${String(over.yieldFactor).replace('.', ',')}`}; şu an ×{factor.toFixed(2).replace('.', ',')}).
             </p>
           </Section>
@@ -273,7 +289,7 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, par
           {count > 1 && <Overreach held={count} />}
           <Section title="Bakım" icon="gold" aside={cost > 0 ? `tur başına ${amount(cost)} altın` : 'ödeme yok'}>
             <p className="hint">Kasabayı elinde tutmak için her üretim turunda hazineden ödenir. Hazine yetmezse ödenmez ve sadakat bakımsızmış gibi düşer.</p>
-            <div className="segmented" role="radiogroup" aria-label="Bakım">
+            <div className="segmented choices" role="radiogroup" aria-label="Bakım">
               {t.upkeep.goldPerRound.map((gold, i) => (
                 <button key={i} className="btn small" role="radio" aria-checked={level === i} onClick={() => level !== i && onUpkeep(i)}>
                   {upkeepName(i)}
@@ -291,7 +307,7 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, par
       )}
       {part === 'yield' && (
         <>
-          <Section title="Sana getirdikleri" icon="chest" aside={held.takenAt ? `alınalı ${span(now - held.takenAt)}` : undefined}>
+          <Section title="Sana getirdikleri" icon="chest" aside={held.takenAt ? `${span(now - held.takenAt)} önce alındı` : undefined}>
             {goods.length === 0 && <p className="hint">Henüz bir şey göndermedi.</p>}
             {goods.map((g) => (
               <Stat
@@ -335,7 +351,7 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, par
               onClick={() => (sure ? (setSure(false), onRelease()) : setSure(true))}
               onBlur={() => setSure(false)}
             >
-              {besieged ? 'Kuşatma sürerken bırakılamaz' : sure ? `Emin misin? ${held.name ?? 'Kasabayı'} serbest bırak` : 'Serbest bırak'}
+              {besieged ? 'Kuşatma sürerken bırakılamaz' : sure ? 'Emin misin? Kasabayı serbest bırak' : 'Serbest bırak'}
             </button>
           </Section>
         </>
@@ -372,7 +388,7 @@ function Rebels({ town, armies, atGate, now, onSend, onWatchBattle }: { town: To
             {armies.map((a) => (
               <li key={a.id}>
                 <span>
-                  Ordu #{a.id} · {a.soldiers ?? '?'} asker
+                  {armyLabel(a, armies)} · {a.soldiers ?? '?'} asker
                 </span>
                 <button className="btn small" onClick={() => onSend(a.id)}>
                   {atGate(a) ? 'Ayaklanmayı bastır' : 'Gönder ve bastır'}
@@ -418,7 +434,7 @@ function TownMarket({ town, kingdom, mine, holder, armies, atGate, market, relat
   return (
     <Section title="Kasaba pazarı" icon="trade" aside={`${fmt(stock)} / ${fmt(m.stock)} ${name}`}>
       <p className="hint">
-        Kasaba kendi ürettiği {name} satar: stoğu sınırlıdır, saatte yaklaşık {fmt(perHour)} birim yenilenir. Almak için bir ordun kasabanın kapısında olmalı; altın hemen ödenir,
+        Kasabanın pazarı {name} satar: stoğu sınırlıdır, saatte yaklaşık {fmt(perHour)} birim yenilenir. Almak için bir ordun kasabanın kapısında olmalı; altın hemen ödenir,
         mallar orduyla gider ve ordu saraya dönünce ambara girer (asker başına {m.carryPerSoldier} birim taşır; yenilen ordu yükünü kaybeder).
       </p>
       <Meter value={stock / m.stock} tone="gold" label="Kasabanın stoğu" segments={12} />
@@ -447,7 +463,7 @@ function TownMarket({ town, kingdom, mine, holder, armies, atGate, market, relat
               return (
                 <li key={a.id}>
                   <span>
-                    Ordu #{a.id} · {soldiers} asker · {fmt(room)} birim taşıyabilir
+                    {armyLabel(a, armies)} · {soldiers} asker · {fmt(room)} birim taşıyabilir
                   </span>
                   <button className="btn small" onClick={() => onMove(a.id)}>
                     Kapıya gönder
@@ -458,11 +474,11 @@ function TownMarket({ town, kingdom, mine, holder, armies, atGate, market, relat
             return (
               <li key={a.id} className="town-buy">
                 <span>
-                  Ordu #{a.id} kapıda · {fmt(room)} birim daha taşıyabilir
+                  {armyLabel(a, armies)} kapıda · {fmt(room)} birim daha taşıyabilir
                 </span>
                 {most > 0 ? (
                   <>
-                    <div className="segmented" role="radiogroup" aria-label="Miktar">
+                    <div className="segmented choices" role="radiogroup" aria-label="Miktar">
                       {steps.map((n) => (
                         <button key={n} className="btn small" role="radio" aria-checked={picked === n} onClick={() => setAmount({ ...amount, [a.id]: n })}>
                           {n === most ? `Hepsi (${fmt(n)})` : fmt(n)}

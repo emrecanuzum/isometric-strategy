@@ -1424,6 +1424,35 @@ export function linkWalls(structures: Structure[]): Structure[] {
 // A wall piece on its own runs along x; a gate along its own run.
 const lonePiece = (look: WallKind) => (look === 'gateY' ? 12 : 3)
 
+// A laid road's tile: packed earth with two cart ruts, gravel and grass at its corners. The map paints roads into the
+// ground (chunkPainter.ts → setLanes); this flat tile only answers to the pointer there (its outline is the hover
+// ring) and pictures the road in the build menu.
+const ROAD_EARTH = ramp(0x4e4034, 0x6a5946, 0x87745c, 0xa38f72, 0xbba887, 0xd2c3a2)
+const ROAD_GRASS = ramp(0x3d7c40, 0x4f9142, 0x66a546)
+const ROAD_STONE = ramp(0x726d78, 0xa6a19f, 0xd8d3c5)
+function roadTile(): Sprite {
+  const { canvas, cx, base, h } = footprint(1, 0)
+  const w = h * 2
+  for (let y = base - h * 2; y <= base; y++) {
+    for (let x = cx - w; x <= cx + w; x++) {
+      const a = (x - cx) / w
+      const b = (y - (base - h)) / h
+      const d = Math.abs(a) + Math.abs(b)
+      if (d > 1) continue
+      // The road runs along the tile's x axis (upper left to lower right on screen).
+      const across = Math.abs(a + b) / 2
+      const n = hash(x, y, 71)
+      let color = pick(ROAD_EARTH, 3 + (n - 0.5) * 1.4 - (b - a) * 0.4)
+      if (across > 0.36 + (n - 0.5) * 0.08) color = pick(ROAD_GRASS, 1 + n * 1.5)
+      else if (across > 0.3) color = pick(ROAD_EARTH, 1.4)
+      else if (Math.abs(across - 0.15) < 0.03) color = pick(ROAD_EARTH, 2)
+      else if (hash(x >> 1, y >> 1, 73) > 0.95) color = pick(ROAD_STONE, 1 + n * 1.2)
+      canvas.set(x, y, color)
+    }
+  }
+  return canvas.sprite(cx, base, 0)
+}
+
 // Variants for each look; a building picks one by its id. Building sites come in one size per footprint tile count.
 // Looks for levels 2 and 3 of the buildings that can be raised; level 1 is STRUCTURE_SPRITES.
 export const LEVEL_SPRITES: Partial<Record<BuildingKind, Sprite[][]>> = lazy({
@@ -1481,6 +1510,7 @@ export const STRUCTURE_SPRITES: Record<StructureLook, Sprite[]> = lazy({
   spyHouse: () => variants(2, (v) => spyHouse(v)),
   watchtower: () => variants(2, (v) => watchtower(v)),
   wall: () => [wallLook('wall', 3, 0)],
+  road: () => [roadTile()],
   gate: () => [wallLook('gate', 3, 0)],
   gateY: () => [wallLook('gateY', 12, 0)],
   towerWall: () => [wallLook('towerWall', 3, 0)],
@@ -1539,6 +1569,8 @@ const once = (key: string, make: () => Sprite) => made.get(key) ?? (made.set(key
 export function structureParts(world: World, s: Structure): Part[] {
   const at = (x: number, y: number) => Math.round(heightAt(world, x, y))
   if (s.look === 'jetty') return s.pier ? [pierPart(s, s.pier, at)] : []
+  // A road lies flat on the ground (painted into it); its tile is only for the pointer.
+  if (s.look === 'road') return [{ sprite: STRUCTURE_SPRITES.road[0], fx: s.x + 1, fy: s.y + 1, z: at(s.x + 0.5, s.y + 0.5), solid: false }]
   // A sprite of its own (a camp's tent or squad) stands on its lowest corner, without a base.
   if (s.sprite) {
     const z = Math.min(at(s.x, s.y), at(s.x, s.y + s.size), at(s.x + s.size, s.y + s.size), at(s.x + s.size, s.y)) + 1

@@ -14,6 +14,8 @@ const NAMES = ['Altınkapı', 'Sedefhisar', 'Gümüşsu', 'Kervankale', 'Yıldı
 const RULERS = ['Kral Alparslan', 'Kraliçe Nilüfer', 'Kral Orhan', 'Kraliçe Selcan', 'Kral Tuğrul', 'Kraliçe Gevherhan', 'Kral Kılıç Arslan', 'Kraliçe Mahperi']
 // The crowns' banners: the first capital's red, the second's blue.
 export const CROWN_COLORS = ['#b23a26', '#2f5d9e']
+// The same crowns' colours lifted for text on the dark panels, where the banner colours are too dark to read.
+export const CROWN_INKS = ['#e8735a', '#7fa8e8']
 // The same colours as roof colours (see KINGDOM_COLORS).
 export const CROWN_ROOFS = ['crimson', 'royal']
 
@@ -24,6 +26,8 @@ export interface CityInfo {
   capital: string
   ruler: string
   color: string
+  // The colour for its name written on a dark panel.
+  ink: string
 }
 
 // Each crown's ruler, drawn from its capital; never the same one for both.
@@ -42,6 +46,7 @@ export function cityInfo(world: World, index: number): CityInfo {
     capital,
     ruler: RULERS[rulerOf(world, index)],
     color: CROWN_COLORS[index % CROWN_COLORS.length],
+    ink: CROWN_INKS[index % CROWN_INKS.length],
   }
 }
 

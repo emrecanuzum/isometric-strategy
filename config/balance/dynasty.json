@@ -56,6 +56,7 @@
     }
   },
   "council": {
+    "kinsmanYears": 3,
     "finance": 4,
     "people": 3,
     "military": 4

@@ -46,8 +46,6 @@ export function createShadows(): Shadows {
   // The building being shaded now, a few rows a frame.
   let job: { target: PixiSprite; work: ShadeJob } | null = null
   let built = ''
-  // The decks' mask the ships' shadows are cut by (see ambient.ts).
-  let cutMask: Container | null = null
   let frame = 0
   let step = NaN
   let sun = sunShadow(0)
@@ -186,13 +184,14 @@ export function createShadows(): Shadows {
         shade.visible = true
         // A ship cut by a bridge's deck (it sails under it) has its shadow cut alike, so none falls on the deck.
         const cut = child.label === 'ship' ? (child.mask as Container | null) : null
-        if (cut) cutMask = cut
-        if (cut && shade.mask !== cut) shade.setMask({ mask: cut, inverse: true })
-        else if (!cut && shade.mask) shade.mask = null
-        // Taking a mask off puts it back among what is drawn: keep it out.
-        if (cutMask) {
-          cutMask.includeInBuild = false
-          cutMask.measurable = false
+        const was = shade.mask as Container | null
+        if (cut && was !== cut) shade.setMask({ mask: cut, inverse: true })
+        else if (!cut && was) shade.mask = null
+        // Taking a mask off (or swapping it) puts it back among what is drawn: keep both out.
+        for (const m of [was, cut]) {
+          if (!m) continue
+          m.includeInBuild = false
+          m.measurable = false
         }
       }
       // A building on a stone base throws its shadow onto the base's top too: its shadow cast at the base's height, kept

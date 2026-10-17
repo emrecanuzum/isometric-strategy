@@ -20,6 +20,7 @@ import { woodsplitScene } from './minigames/woodsplit'
 import { Section } from './primitives'
 import type { HudData } from './tabs'
 import './minigames.css'
+import { usePlayingFlag } from './minigames/playing'
 
 // The mini-games (CLAUDE.md §6.5): the archery butts at the barracks, the anvil at the forge, the caravan road at the
 // trade post, the chopping block at the lumber camp, the harvest at the farm, the net at the dock (and the fisher's
@@ -138,7 +139,7 @@ function Medal({ stars }: { stars: number }) {
     box(ctx, '#ffffff', 10, 21, 2, 1)
     box(ctx, '#ffffff', 10, 22, 1, 2)
   }, [stars])
-  return <canvas ref={ref} width={32} height={40} className="minigame-medal" />
+  return <canvas ref={ref} width={32} height={40} className={stars > 0 ? 'minigame-medal' : 'minigame-medal none'} />
 }
 
 export function RunResult({ game, score, best, children }: { game: MiniGame; score: number; best?: number; children?: ReactNode }) {
@@ -184,6 +185,7 @@ export function GamePanel({ game, data }: { game: ArcadeGame; data: HudData }) {
   const [seed, setSeed] = useState<number | null>(null)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   const [open, setOpen] = useState(false)
+  usePlayingFlag(open)
   const [scoring, setScoring] = useState(false)
   const [board, setBoard] = useState(false)
   const why = gameError(kingdom, game, now)

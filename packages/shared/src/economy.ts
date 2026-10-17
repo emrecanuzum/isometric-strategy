@@ -41,7 +41,7 @@ export type Resource = 'gold' | Good
 export type Stock = Record<Resource, number>
 export type Cost = Partial<Stock>
 
-export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'university', 'hospital', 'temple', 'warehouse', 'treasury', 'fisherHut', 'prison', 'tavern', 'shipyard', 'citadel', 'memorial', 'guildHall'] as const
+export const BUILDABLE = ['house', 'farm', 'lumberCamp', 'forge', 'dock', 'market', 'barracks', 'spyHouse', 'watchtower', 'wall', 'gate', 'road', 'university', 'hospital', 'temple', 'warehouse', 'treasury', 'fisherHut', 'prison', 'tavern', 'shipyard', 'citadel', 'memorial', 'guildHall'] as const
 export type BuildingKind = 'palace' | 'tradePost' | (typeof BUILDABLE)[number]
 
 // Weapons are worked from raw goods in the forge and kept in the armory, apart from the tradeable stores.
@@ -252,6 +252,8 @@ export interface Kingdom {
   // The crown kingdom this lord has sworn fealty to (its capital's index in world.cities; CLAUDE.md §7.8), for the
   // whole season.
   liege?: number
+  // When fealty was sworn: no patrol or collectors call for a visit that came before it (absent in older saves).
+  liegeAt?: number
   // The lord's house: ruler, lady and children (CLAUDE.md §9.1; dynasty.ts).
   dynasty?: Dynasty
   // The lord's standing with each crown kingdom, −100 to 100 (by capital index; crowns.ts). Missing: at rest.
@@ -499,8 +501,9 @@ function tooClose(building: Rect, wall: Rect) {
   )
 }
 
+// Roads lie flat on the ground: they only take their own tile, and keep no clearance from walls (nor walls from them).
 const clash = (b: Building, spot: Rect, gap: number, kind?: BuildingKind) => {
-  if (!kind || wallish(kind) === wallish(b.kind)) return overlaps(b, spot, gap)
+  if (!kind || kind === 'road' || b.kind === 'road' || wallish(kind) === wallish(b.kind)) return overlaps(b, spot, gap)
   return wallish(kind) ? tooClose(b, spot) : tooClose(spot, b)
 }
 
@@ -1087,11 +1090,11 @@ export function demolishRefund(b: Building): Cost {
 
 // ---- Moving -------------------------------------------------------------------------------------------------------
 
-// Everything but the palace, the trade post and the dock (each on its own spot) and walls and gates may be moved. The
+// Everything but the palace, the trade post and the dock (each on its own spot), walls, gates and roads may be moved. The
 // building keeps its level, hands and product; it stands as a building site (making nothing) until it is up again.
 // Moving costs a share of all that was spent on it, a little less than tearing it down and building it again
 // (balance.economy.move), and takes longer than building it to its level anew.
-const FIXED: BuildingKind[] = ['palace', 'tradePost', 'dock', 'wall', 'gate', 'shipyard']
+const FIXED: BuildingKind[] = ['palace', 'tradePost', 'dock', 'wall', 'gate', 'shipyard', 'road']
 export const movable = (b: Building) => !FIXED.includes(b.kind)
 
 export function moveCost(b: Building): Cost {
@@ -1222,9 +1225,9 @@ export function build(world: World, kingdom: Kingdom, stage: number, kind: Build
   }
 }
 
-// A row of buildings laid by dragging (walls, houses): each one that fits and can be paid for is placed. They wait
+// A row of buildings laid by dragging (walls, houses, roads): each one that fits and can be paid for is placed. They wait
 // their turn for a construction slot, so a long row of houses goes up one pair at a time; walls need no slot.
-export const STROKE_KINDS: BuildingKind[] = ['wall', 'house']
+export const STROKE_KINDS: BuildingKind[] = ['wall', 'house', 'road']
 
 export function buildMany(world: World, kingdom: Kingdom, stage: number, kind: BuildingKind, spots: Point[], now: number) {
   const spec = BUILDINGS[kind]
@@ -1309,7 +1312,9 @@ export const fealtyError = (kingdom: Kingdom, index: number, crowns: number, now
 
 // Sworn, the lord starts in its crown's good graces.
 export const swearFealty = (kingdom: Kingdom, index: number, crowns: number, now = Infinity): Kingdom =>
-  fealtyError(kingdom, index, crowns, now) ? kingdom : changeCrownRelation({ ...kingdom, liege: index }, index, balance.cities.crown.relation.swear)
+  fealtyError(kingdom, index, crowns, now)
+    ? kingdom
+    : changeCrownRelation({ ...kingdom, liege: index, ...(Number.isFinite(now) && { liegeAt: now }) }, index, balance.cities.crown.relation.swear)
 
 // An upgrade takes a construction slot; the building stands as a building site (and makes nothing) until it ends.
 export function upgradeBuilding(kingdom: Kingdom, id: number, now: number): Kingdom {

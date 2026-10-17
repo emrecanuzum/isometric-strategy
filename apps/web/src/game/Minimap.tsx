@@ -63,6 +63,8 @@ export interface MinimapPatrol {
 interface Props {
   world: World
   center: Point | null
+  // The screen's corners on the ground (see WorldHandlers.onCamera): the area in view.
+  corners?: Point[] | null
   flags?: MinimapFlag[]
   towns?: MinimapTown[]
   patrols?: MinimapPatrol[]
@@ -181,7 +183,20 @@ function drawPatrol(ctx: CanvasRenderingContext2D, x: number, y: number, color: 
   ctx.restore()
 }
 
-export function Minimap({ world, center, flags = [], towns = [], patrols = [], onJump }: Props) {
+// The smallest the view outline is drawn, in canvas pixels across, so it still shows zoomed in close.
+const MIN_VIEW = 18
+
+// The screen's corners times `scale`, grown about the middle to at least `min` across (in scaled units).
+export function viewOutline(center: Point, corners: Point[], scale: number, min = MIN_VIEW) {
+  const span = Math.max(...corners.map((c) => Math.hypot(c.x - center.x, c.y - center.y))) * 2 * scale
+  const grow = span < min ? min / Math.max(span, 1e-6) : 1
+  return corners.map((c) => ({
+    x: (center.x + (c.x - center.x) * grow) * scale,
+    y: (center.y + (c.y - center.y) * grow) * scale,
+  }))
+}
+
+export function Minimap({ world, center, corners, flags = [], towns = [], patrols = [], onJump }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const base = useMemo(() => renderBase(world), [world])
 
@@ -189,11 +204,6 @@ export function Minimap({ world, center, flags = [], towns = [], patrols = [], o
     const ctx = canvas.current!.getContext('2d')!
     ctx.putImageData(base, 0, 0)
     const scale = SIZE / world.size
-    if (center) {
-      ctx.strokeStyle = '#fff'
-      ctx.lineWidth = 4
-      ctx.strokeRect(center.x * scale - 12, center.y * scale - 12, 24, 24)
-    }
     // Each kingdom's lands in its colour, the player's edged in gold.
     for (const flag of flags) {
       if (!flag.rect) continue
@@ -214,7 +224,22 @@ export function Minimap({ world, center, flags = [], towns = [], patrols = [], o
     // Back to front on screen (the screen's vertical is x + y), the player's own on top.
     const order = [...flags].sort((a, b) => Number(a.own) - Number(b.own) || a.site.x + a.site.y - (b.site.x + b.site.y))
     for (const flag of order) drawFlag(ctx, flag.site.x * scale, flag.site.y * scale, flag.color, flag.own)
-  }, [base, center, flags, towns, patrols, world])
+    // The area on screen: the screen's corners on the ground, a slanted shape that grows and shrinks with the zoom. The
+    // canvas clips what falls off the world; a dark edge under the white keeps it plain on snow.
+    if (center && corners?.length === 4) {
+      const outline = viewOutline(center, corners, scale)
+      ctx.beginPath()
+      outline.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+      ctx.closePath()
+      ctx.lineJoin = 'miter'
+      ctx.strokeStyle = 'rgba(18, 13, 11, 0.7)'
+      ctx.lineWidth = 6
+      ctx.stroke()
+      ctx.strokeStyle = '#fff'
+      ctx.lineWidth = 3
+      ctx.stroke()
+    }
+  }, [base, center, corners, flags, towns, patrols, world])
 
   return (
     <div className="minimap">

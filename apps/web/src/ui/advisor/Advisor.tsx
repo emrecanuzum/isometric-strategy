@@ -3,7 +3,8 @@ import { Icon } from '../icons'
 import { babble } from '../../audio/sfx'
 import { EnvoyPortrait } from './EnvoyPortrait'
 import {
-  ADVISOR_EVERY_MINUTES, IDLE_LINES, LATER, LATER_ANSWERS, SMALL_TALK, SNOOZE_MINUTES, STEPS, TIPS, TOPICS, TUTORIAL_DONE,
+  ADVISOR_EVERY_MINUTES, IDLE_LINES, LATER, LATER_ANSWERS, SKIP_ANSWERS, SMALL_TALK, SNOOZE_MINUTES, STEPS, TIPS, TOPICS, TOPICS_ASK, TUTORIAL_DONE,
+  TUTORIAL_OFF_ANSWERS,
 } from './lines'
 import type { AdvisorAction, AdvisorCtx, Reply, Step, Tip, Topic } from './lines'
 
@@ -23,6 +24,8 @@ export interface AdvisorMemory {
   // Tutorial steps already congratulated, and those the lord chose to skip.
   cheered?: string[]
   skipped?: string[]
+  // The next wording to use for each thing he says (they are taken in turn).
+  turns?: Record<string, number>
 }
 
 const EVENT = 'advisor:memory'
@@ -54,6 +57,19 @@ export function useAdvisorMemory(key: string): [AdvisorMemory, (change: Partial<
   }, [key])
   const update = useCallback((change: Partial<AdvisorMemory>) => writeMemory(key, { ...readMemory(key), ...change }), [key])
   return [memory, update]
+}
+
+// One of the wordings of something he says: they come in turn (starting anywhere), so the same advice twice in a
+// row never sounds the same.
+type Pick = <T>(key: string, options: readonly T[]) => T
+
+function pickLine<T>(store: string, key: string, options: readonly T[]): T {
+  if (options.length < 2) return options[0]
+  const m = readMemory(store)
+  const turns = m.turns ?? {}
+  const at = (turns[key] ?? Math.floor(Math.random() * options.length)) % options.length
+  writeMemory(store, { ...m, turns: { ...turns, [key]: (at + 1) % options.length } })
+  return options[at]
 }
 
 // The envoy's switches in the settings window.
@@ -177,27 +193,30 @@ const safe = <T,>(f: () => T, fallback: T): T => {
 const tipFor = (c: AdvisorCtx, snoozed: Record<string, number>) => TIPS.find((t) => (snoozed[t.id] ?? 0) <= c.now && safe(() => t.when(c), false)) ?? null
 const stepFor = (c: AdvisorCtx, skipped: string[] = []) => STEPS.findIndex((s) => !skipped.includes(s.id) && !safe(() => s.done(c), true))
 
-function tipSpeech(t: Tip, c: AdvisorCtx, seed: number): Speech {
-  const later = seed % LATER.length
+function tipSpeech(t: Tip, c: AdvisorCtx, pick: Pick): Speech {
+  const snooze = t.snooze ?? SNOOZE_MINUTES
+  const joke = t.jokes?.length ? pick(`joke:${t.id}`, t.jokes) : null
   return {
-    text: safe(() => t.say(c), ''),
+    text: pick(`tip:${t.id}`, safe(() => t.say(c), [''])),
     replies: [
       ...(t.go ? [{ label: t.go.label, act: t.go.act }] : []),
-      { label: LATER[later], answer: LATER_ANSWERS[seed % LATER_ANSWERS.length], snooze: t.snooze ?? SNOOZE_MINUTES, id: t.id },
-      ...(t.joke ? [{ label: t.joke[0], answer: t.joke[1], snooze: t.snooze ?? SNOOZE_MINUTES, id: t.id }] : []),
+      { label: pick('laterLabel', LATER), answer: pick('later', LATER_ANSWERS), snooze, id: t.id },
+      ...(joke ? [{ label: joke[0], answer: joke[1], snooze, id: t.id }] : []),
     ],
   }
 }
 
-function stepSpeech(s: Step, index: number, c: AdvisorCtx, cheer?: string): Speech {
+function stepSpeech(s: Step, index: number, c: AdvisorCtx, pick: Pick, cheer?: string): Speech {
+  const core = safe(() => s.say(c), '')
+  const quip = pick(`step:${s.id}`, s.quips)
   return {
-    text: `${cheer ? `${cheer}\n\n` : ''}${safe(() => s.say(c), '')}`,
+    text: `${cheer ? `${cheer}\n\n` : ''}${s.lead ? `${quip} ${core}` : `${core} ${quip}`}`,
     step: { index, of: STEPS.length, title: s.title },
     replies: [
       ...(s.go ? [{ label: s.go.label, act: s.go.act }] : []),
       { label: 'Nasıl yapılır?', topic: 'build' },
-      { label: 'Bu adımı geç', answer: 'Peki lordum, o işi şimdilik bir kenara koyuyorum. Sıradakine geçelim.', skip: s.id },
-      { label: 'Öğreticiyi kapat', answer: 'Peki lordum, artık kendi yolunuzu çiziyorsunuz. Bir şey sormak isterseniz sohbetin yanındaki Elçi düğmesi beni çağırır.', tutorial: 'off' },
+      { label: 'Bu adımı geç', answer: pick('skip', SKIP_ANSWERS), skip: s.id },
+      { label: 'Öğreticiyi kapat', answer: pick('tutorialOff', TUTORIAL_OFF_ANSWERS), tutorial: 'off' },
     ],
   }
 }
@@ -209,7 +228,7 @@ function topicSpeech(t: Topic, c: AdvisorCtx): Speech {
   }
 }
 
-const topicsSpeech = (): Speech => ({ text: 'Ne öğrenmek istersiniz, lordum? Bilmediğim şey yok; olsa da söylemem.', replies: [{ label: 'Vazgeçtim', answer: '' }], topics: true })
+const topicsSpeech = (pick: Pick): Speech => ({ text: pick('topics', TOPICS_ASK), replies: [{ label: 'Vazgeçtim', answer: '' }], topics: true })
 
 // ---- The panel ----------------------------------------------------------------------------------------------------------
 
@@ -218,6 +237,7 @@ export function Advisor({
   ctx,
   blocked,
   busy,
+  aside = false,
   summon,
   onAct,
   onHint,
@@ -228,6 +248,8 @@ export function Advisor({
   blocked: boolean
   // The lord is in the middle of something (placing buildings, aiming an army): he does not come on his own.
   busy: boolean
+  // The lord is placing something on the map: what he is saying waits, so the map stays clear to click.
+  aside?: boolean
   // Bumped when the lord calls him (the envoy button).
   summon: number
   onAct: (action: AdvisorAction) => void
@@ -236,9 +258,9 @@ export function Advisor({
 }) {
   const [memory, update] = useAdvisorMemory(storeKey)
   const [speech, setSpeech] = useState<Speech | null>(null)
+  const pick = useCallback<Pick>((key, options) => pickLine(storeKey, key, options), [storeKey])
   const ctxRef = useRef(ctx)
   ctxRef.current = ctx
-  const said = useRef(0)
   // A new lord starts with the tutorial on; a grown one with it off (he can turn it on in the settings).
   useEffect(() => {
     if (memory.tutorial === undefined) update({ tutorial: ctx.kingdom.buildings.length < 6 ? 'on' : 'off' })
@@ -253,9 +275,9 @@ export function Advisor({
   useEffect(() => {
     if (tutorial && stepIndex < 0) {
       update({ tutorial: 'done' })
-      if (!blocked) setSpeech({ text: TUTORIAL_DONE, replies: [{ label: 'Bana oyunu anlat', topic: '' }, { label: 'Sağ ol, elçi efendi', answer: '' }] })
+      if (!blocked) setSpeech({ text: pick('tutorialDone', TUTORIAL_DONE), replies: [{ label: 'Bana oyunu anlat', topic: '' }, { label: 'Sağ ol, elçi efendi', answer: '' }] })
     }
-  }, [tutorial, stepIndex, blocked, update])
+  }, [tutorial, stepIndex, blocked, update, pick])
 
   // The glowing tab for the step under way.
   useEffect(() => {
@@ -275,16 +297,16 @@ export function Advisor({
     lastStep.current = stepIndex
     if (prev === null) {
       // First look (or the tutorial just turned on): the step under way, at once.
-      if (stepIndex >= 0) setSpeech(stepSpeech(STEPS[stepIndex], stepIndex, ctxRef.current))
+      if (stepIndex >= 0) setSpeech(stepSpeech(STEPS[stepIndex], stepIndex, ctxRef.current, pick))
       return
     }
     if (stepIndex !== prev && prev >= 0 && stepIndex >= 0) {
       const finished = STEPS[prev]
       const cheered = memory.cheered ?? []
       // A skipped step is not cheered.
-      const cheer = cheered.includes(finished.id) || (memory.skipped ?? []).includes(finished.id) ? undefined : finished.cheer
+      const cheer = cheered.includes(finished.id) || (memory.skipped ?? []).includes(finished.id) ? undefined : pick(`cheer:${finished.id}`, finished.cheers)
       update({ cheered: [...cheered, finished.id] })
-      setSpeech(stepSpeech(STEPS[stepIndex], stepIndex, ctxRef.current, cheer))
+      setSpeech(stepSpeech(STEPS[stepIndex], stepIndex, ctxRef.current, pick, cheer))
     }
     // memory.cheered and memory.skipped are read at the moment the step changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -297,11 +319,17 @@ export function Advisor({
     lastSummon.current = summon
     if (speech) return setSpeech(null)
     const c = ctxRef.current
-    said.current++
-    if (step) return setSpeech(stepSpeech(step, stepIndex, c))
+    if (step) return setSpeech(stepSpeech(step, stepIndex, c, pick))
     const tip = tipFor(c, {})
-    if (tip) return setSpeech({ ...tipSpeech(tip, c, said.current), replies: [...tipSpeech(tip, c, said.current).replies.slice(0, 2), { label: 'Bana oyunu anlat', topic: '' }] })
-    setSpeech({ text: IDLE_LINES[said.current % IDLE_LINES.length], replies: [{ label: 'Bana oyunu anlat', topic: '' }, SMALL_TALK[said.current % SMALL_TALK.length], { label: 'Bir şey yok, sağ ol', answer: '' }] })
+    if (tip) {
+      const said = tipSpeech(tip, c, pick)
+      return setSpeech({ ...said, replies: [...said.replies.slice(0, 2), { label: 'Bana oyunu anlat', topic: '' }] })
+    }
+    const talk = pick('smallTalk', SMALL_TALK)
+    setSpeech({
+      text: pick('idle', IDLE_LINES),
+      replies: [{ label: 'Bana oyunu anlat', topic: '' }, { label: talk.label, answer: pick(`talk:${talk.label}`, talk.answers) }, { label: 'Bir şey yok, sağ ol', answer: '' }],
+    })
     // Only the button calls him.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [summon])
@@ -314,19 +342,18 @@ export function Advisor({
       played.current += 5
       if (played.current < ADVISOR_EVERY_MINUTES * 60) return
       const c = ctxRef.current
-      said.current++
       if (step) {
         played.current = 0
-        return setSpeech(stepSpeech(step, stepIndex, c))
+        return setSpeech(stepSpeech(step, stepIndex, c, pick))
       }
       const tip = tipFor(c, memory.snoozed ?? {})
       if (tip) {
         played.current = 0
-        setSpeech(tipSpeech(tip, c, said.current))
+        setSpeech(tipSpeech(tip, c, pick))
       } else played.current = ADVISOR_EVERY_MINUTES * 60 * 0.75
     }, 5000)
     return () => clearInterval(id)
-  }, [blocked, busy, speech, memory.muted, memory.snoozed, step, stepIndex])
+  }, [blocked, busy, speech, memory.muted, memory.snoozed, step, stepIndex, pick])
 
   const reply = (r: Reply) => {
     if (r.snooze && r.id) update({ snoozed: { ...(memory.snoozed ?? {}), [r.id]: ctxRef.current.now + r.snooze * 60_000 } })
@@ -339,14 +366,14 @@ export function Advisor({
     }
     if (r.topic !== undefined) {
       const topic = TOPICS.find((t) => t.id === r.topic)
-      setSpeech(topic ? topicSpeech(topic, ctxRef.current) : topicsSpeech())
+      setSpeech(topic ? topicSpeech(topic, ctxRef.current) : topicsSpeech(pick))
       return
     }
     if (r.answer) setSpeech({ text: r.answer, replies: [{ label: 'Tamam', answer: '' }] })
     else setSpeech(null)
   }
 
-  if (!speech || blocked) return null
+  if (!speech || blocked || aside) return null
   return <Panel speech={speech} onReply={reply} onTopic={(t) => setSpeech(topicSpeech(t, ctxRef.current))} onClose={() => setSpeech(null)} />
 }
 

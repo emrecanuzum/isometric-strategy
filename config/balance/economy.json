@@ -399,6 +399,22 @@
       "buildSeconds": 4,
       "outsideQueue": true
     },
+    "road": {
+      "size": 1,
+      "cost": {
+        "gold": 1,
+        "materials": 1
+      },
+      "buildSeconds": 2,
+      "outsideQueue": true,
+      "maxByPalaceLevel": [
+        400,
+        400,
+        400,
+        400,
+        400
+      ]
+    },
     "gate": {
       "size": 1,
       "requiresPalace": 2,

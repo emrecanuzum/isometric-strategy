@@ -129,6 +129,13 @@
   transform-origin: 50% 0;
 }
 
+/* No medal won: only the faint outline of one, standing still. */
+.minigame-medal.none {
+  opacity: 0.3;
+  filter: grayscale(1);
+  animation: none;
+}
+
 .minigame-stars {
   display: flex;
   gap: calc(var(--px) * 2);

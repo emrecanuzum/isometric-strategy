@@ -145,7 +145,9 @@ export function CrownIntro({ world, kingdom, online, lobby, onSwear, onClose }: 
                 </li>
               ))}
             </ul>
-            <p>Rakip tacın devriyeleri ise kapına gelip haraç ister. Ödersen o taçla da aran düzelir; reddedersen bozulur.</p>
+            <p>
+              Rakip tacın haraççıları ise her {Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir kapına gelip hazinenin %{Math.round(balance.cities.crown.patrol.tribute.share * 100)}'ini ister. Ödersen o taçla da aran düzelir; reddedersen bozulur.
+            </p>
             <p>Taçla ilişkini en çok, tüccarını onun başkentine göndererek artırırsın: her sefer onun ticaretine yarar.</p>
           </div>
         )}
@@ -153,7 +155,7 @@ export function CrownIntro({ world, kingdom, online, lobby, onSwear, onClose }: 
           <div className="away-lines">
             <p>
               Her taç dönem dönem bir malın ticaretini yönetir. O malı satarken taçla ilişkin iyiyse %{Math.round(c.stewardship.bonus * 100)}'e kadar daha pahalıya
-              satarsın; kötüyse daha ucuza. İlişkin {c.stewardship.refuseBelow}'nin altına düşerse o tacın tüccarları seninle alışveriş etmez.
+              satarsın; kötüyse daha ucuza. İlişkin {String(c.stewardship.refuseBelow).replace('-', '−')}'nin altına düşerse o tacın tüccarları seninle alışveriş etmez.
             </p>
             <p>Bu yüzden rakip tacı da büsbütün küstürmemek akıllıcadır.</p>
           </div>
@@ -161,7 +163,7 @@ export function CrownIntro({ world, kingdom, online, lobby, onSwear, onClose }: 
         {page === 4 && (
           <div className="away-lines">
             <p>Birine biat et. Biat sezon boyunca değişmez; sarayını {c.requiredForPalaceLevel}. seviyeye yükseltmek için de biat şarttır.</p>
-            <div className="goods" role="group" aria-label="Taç krallıkları">
+            <div className="goods choices" role="group" aria-label="Taç krallıkları">
               {infos.map((info, i) => (
                 <div key={i} className="good">
                   <CrownBanner world={world} liege={i} size={24} />

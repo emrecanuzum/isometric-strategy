@@ -1,4 +1,6 @@
 import {
+  crisisWarded,
+  isCrisis,
   RESEARCH,
   RESEARCH_CATEGORIES,
   RESEARCH_IDS,
@@ -74,7 +76,7 @@ export function UniversityPanel({ data }: { data: HudData }) {
                 {pair.map((id, k) => (
                   <Fragment key={id}>
                     {k > 0 && <span className="tree-or">ya da</span>}
-                    <ResearchNode id={id} data={data} onStart={() => online?.act({ type: 'research', id })} />
+                    <ResearchNode id={id} other={pair.find((o) => o !== id)} data={data} onStart={() => online?.act({ type: 'research', id })} />
                   </Fragment>
                 ))}
               </div>
@@ -90,8 +92,12 @@ export function UniversityPanel({ data }: { data: HudData }) {
   )
 }
 
-function ResearchNode({ id, data, onStart }: { id: string; data: HudData; onStart: () => void }) {
+// Choosing one path of a tier closes the other for good: the first tap asks, the second starts it.
+function ResearchNode({ id, other, data, onStart }: { id: string; other?: string; data: HudData; onStart: () => void }) {
   const { kingdom, now } = data
+  const [asking, setAsking] = useState(false)
+  // The other path is still open (neither taken nor closed): starting this one shuts it.
+  const closes = !!other && researchError(kingdom, other, now) !== 'excluded' && !(kingdom.researches ?? []).some((x) => x.id === other)
   const spec = RESEARCH[id]
   const r = RESEARCH_NAMES[id]
   const error = researchError(kingdom, id, now)
@@ -114,8 +120,21 @@ function ResearchNode({ id, data, onStart }: { id: string; data: HudData; onStar
       ) : (
         <>
           <CostList cost={spec.cost} stock={kingdom.stock} />
-          <button className="btn small" disabled={error !== null} onClick={onStart}>
-            {error ? RESEARCH_BLOCKED[error] ?? 'Şu an olmaz' : `Araştır · ${secs(spec.seconds * 1000)}`}
+          <button
+            className="btn small"
+            disabled={error !== null}
+            onClick={() => {
+              if (closes && !asking) return setAsking(true)
+              setAsking(false)
+              onStart()
+            }}
+            onBlur={() => setAsking(false)}
+          >
+            {error
+              ? RESEARCH_BLOCKED[error] ?? 'Şu an olmaz'
+              : asking
+                ? `Emin misin? ${RESEARCH_NAMES[other!]?.name ?? 'Öbür yol'} kapanır`
+                : `Araştır · ${secs(spec.seconds * 1000)}`}
           </button>
         </>
       )}
@@ -191,11 +210,13 @@ export function FortuneNote({ kingdom, now }: { kingdom: Kingdom; now: number })
     <>
       {fortunesAt(kingdom, now).map((f) => {
         const t = FORTUNE_TEXTS[f.kind]
+        // A crisis met by the villagers or the army does no harm: the strip says so instead of the harm.
+        const warded = isCrisis(f.kind) && crisisWarded(kingdom, f)
         return (
-          <p key={f.scope + f.start} className={`fortune-note tone-${t?.tone ?? 'good'}`}>
+          <p key={f.scope + f.start} className={`fortune-note tone-${warded ? 'good' : t?.tone ?? 'good'}`}>
             <Icon name={t?.icon ?? 'star'} size={16} />
             <span>
-              <small className="scope">{SCOPE_NAMES[f.scope]}</small> <b>{t?.title}</b> {t?.text} <small>({secs(f.end - now)} kaldı)</small>
+              <small className="scope">{SCOPE_NAMES[f.scope]}</small> <b>{t?.title}</b> {warded ? 'Zarar önlendi; olayın kötü etkisi işlemiyor.' : t?.text} <small>({secs(f.end - now)} kaldı)</small>
             </span>
           </p>
         )

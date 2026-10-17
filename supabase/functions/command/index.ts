@@ -64,9 +64,15 @@ async function rollSite(world: World, lobby: string, seen: Point[]): Promise<Poi
   const taken = (data ?? []).flatMap((k) => (k.state ? [k.state.site as Point] : []))
   // Kept clear of the towns too (CLAUDE.md §8.4).
   const towns = await townsOf(lobby)
+  // A fair start (CLAUDE.md §4.3): the first tries ask for a trade post plot and a dock plot within reach; a site with
+  // neither road nor water nearby leaves its lord without a merchant. Only if none is found is any clear site taken.
+  const reachable = (site: Point) => {
+    const land = game.territoryRect(site, 0)
+    return !!game.findPlot(world, land, game.TileRule.TradePostOnly) && !!game.findPlot(world, land, game.TileRule.DockOnly)
+  }
   for (let attempt = 0; attempt < 24; attempt++) {
     const site = game.assignStartSite(world, Math.random)
-    if (site && game.siteIsClear(site, taken) && game.siteClearOfTowns(site, towns) && !seen.some((s) => s.x === site.x && s.y === site.y)) return site
+    if (site && game.siteIsClear(site, taken) && game.siteClearOfTowns(site, towns) && !seen.some((s) => s.x === site.x && s.y === site.y) && (attempt >= 16 || reachable(site))) return site
   }
   return refuse('full')
 }
@@ -558,6 +564,8 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       await admin.from('armies').delete().eq('kingdom_id', row.id)
       await admin.from('spy_missions').update({ ended_at: iso(now), end_reason: 'reset' }).eq('owner_id', row.id).is('ended_at', null)
       await admin.from('pacts').update({ ended_at: iso(now), ended_by: row.id }).or(`from_id.eq.${row.id},to_id.eq.${row.id}`).is('ended_at', null)
+      // A crown's tribute demand still waiting on the old lord is dropped: it would otherwise be taken from the new one.
+      await admin.from('patrol_visits').update({ status: 'done' }).eq('kingdom_id', row.id).eq('status', 'pending')
       next = { state: null, name: null, color: null, sites: await rollSites(world, lobby, []) }
       break
     case 'seen':
@@ -845,6 +853,28 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       const { data } = await admin.from('patrol_visits').select('*').eq('id', Number(cmd.visit)).eq('kingdom_id', me.id).maybeSingle()
       const visit = data as VisitRow | null
       if (!visit || visit.status !== 'pending' || ms(visit.expires_at) <= now) refuse('none')
+      // A word with the captain first (once a visit): the server works the outcome out again from the replies and
+      // writes the new demand on the visit, so paying, refusing and the payment taken on expiry all go by it.
+      if (cmd.talk !== undefined) {
+        if (visit!.talk) refuse('talked')
+        const { data: info } = await admin.from('lobbies').select('seed').eq('id', lobby).single()
+        const outcome = info ? game.tributeTalk(info.seed, visit!.id, cmd.talk) : null
+        if (!outcome) refuse('rejected')
+        const amount = game.talkedTribute(visit!.amount, outcome!.factor)
+        const talk = { replies: cmd.talk as number[], factor: outcome!.factor, angry: outcome!.angry, asked: visit!.amount }
+        const { data: talked } = await admin
+          .from('patrol_visits')
+          .update({ amount, talk })
+          .eq('id', visit!.id)
+          .eq('status', 'pending')
+          .is('talk', null)
+          .select('id')
+          .maybeSingle()
+        if (!talked) refuse('talked')
+        visit!.amount = amount
+        visit!.talk = talk
+        if (cmd.pay === undefined) return { amount, factor: outcome!.factor, angry: outcome!.angry }
+      }
       const pay = cmd.pay === true
       if (pay) {
         await mutateKingdom(me.id, now, (k) => {
@@ -861,7 +891,8 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       if (!pay) await refuseDemand(visit!, rows, now)
       // The crown remembers how it was received.
       const r = game.balance.cities.crown.relation
-      await mutateKingdom(me.id, now, (k) => game.changeCrownRelation(k, visit!.crown, pay ? r.tributePaid : r.tributeRefused))
+      const angry = !pay && visit!.talk?.angry ? game.patrolSpec().tribute.talk.angryRefuseFactor : 1
+      await mutateKingdom(me.id, now, (k) => game.changeCrownRelation(k, visit!.crown, pay ? r.tributePaid : r.tributeRefused * angry))
       return { paid: pay }
     }
     case 'ransom': {
@@ -1206,8 +1237,11 @@ Deno.serve(async (req) => {
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
   const token = req.headers.get('Authorization')?.replace(/^Bearer /, '')
-  const { data: auth } = token ? await admin.auth.getUser(token) : { data: { user: null } }
-  if (!auth.user) return json({ error: 'auth' }, 401)
+  const { data: auth, error: authError } = token ? await admin.auth.getUser(token) : { data: { user: null }, error: null }
+  // Only a token the auth server turned down is a 401 (the client signs the player out on it); an auth server that
+  // could not be reached or failed is a 503, so a busy moment does not throw everyone back to the sign-in screen.
+  const refused = !authError || (authError.status !== undefined && authError.status >= 400 && authError.status < 500)
+  if (!auth.user) return refused ? json({ error: 'auth' }, 401) : json({ error: 'busy' }, 503)
   try {
     const body = await req.json()
     const { ...cmd } = body

@@ -31,7 +31,9 @@ export function scoreOf(k: Kingdom, at: number): Score {
     growth +=
       b.kind === 'palace'
         ? level * s.palacePerLevel
-        : b.kind === 'wall' || b.kind === 'gate'
+        : b.kind === 'road'
+          ? s.roadPer
+          : b.kind === 'wall' || b.kind === 'gate'
           ? s.wallPer
           : // The dynasty's memorial is built for the glory of it (CLAUDE.md §9.8).
             b.kind === 'memorial'

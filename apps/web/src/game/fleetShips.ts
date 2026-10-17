@@ -1,6 +1,7 @@
-import { Terrain, balance, dockPier, dockWater, hash, isWaterTile, pathLength, waterPath } from '@game/shared'
+import { Terrain, alongPath, balance, dockPier, dockWater, hash, isWaterTile, pathLength, waterPath } from '@game/shared'
 import type { Blockade, MissionKind, Point, Rect, Sail, World } from '@game/shared'
 import type { FleetShip } from './ambient'
+import { worldDecks } from './chunkPainter'
 import type { ShipKind } from './shipSprites'
 
 // Where the lords' ships show on the map (CLAUDE.md §8.5): the harbour's ships moored by each dock's jetty; a fleet at
@@ -55,6 +56,8 @@ type Berth = { at: Point; along: 'x' | 'y'; length: number }
 
 export function fleetShips(world: World, lords: NavyOnMap[]): FleetShip[] {
   const out: FleetShip[] = []
+  // No ship rests on or under a bridge (they sail under them, see ambient.ts).
+  const decks = worldDecks(world)
   // Ships already placed (and the jetties): no two hulls on top of each other, none on a jetty.
   const taken: Berth[] = []
   const piers: { x: number; y: number; w: number; h: number }[] = []
@@ -66,6 +69,7 @@ export function fleetShips(world: World, lords: NavyOnMap[]): FleetShip[] {
   const fits = (b: Berth) => {
     const r = box(b, 0.15)
     for (let x = r.x0; x <= r.x1 + 1e-6; x += 0.35) for (let y = r.y0; y <= r.y1 + 1e-6; y += 0.35) if (!water(world, x, y)) return false
+    if (decks.near(b.at.x, b.at.y, b.length / 2 + 0.3)) return false
     const me = box(b, 0.1)
     if (piers.some((p) => overlaps(me, { x0: p.x - 0.2, x1: p.x + p.w + 0.2, y0: p.y - 0.2, y1: p.y + p.h + 0.2 }))) return false
     return !taken.some((t) => overlaps(me, box(t, 0.1)))
@@ -113,15 +117,22 @@ export function fleetShips(world: World, lords: NavyOnMap[]): FleetShip[] {
       const loop = !anchor
         ? null
         : f.mission === 'fish'
-          ? cruise(world, anchor, 5, seed, 2.2, 0)
+          ? cruise(world, anchor, 5, seed, 2.2, 0, decks.near)
           : f.mission === 'hunt'
-            ? cruise(world, anchor, 12, seed, 1.3, 0)
+            ? cruise(world, anchor, 12, seed, 1.3, 0, decks.near)
             : f.mission === 'trade'
-              ? outAndBack(world, anchor, 26, seed, f.departedAt ?? 0, f.tripMs)
+              ? outAndBack(world, anchor, 26, seed, f.departedAt ?? 0, f.tripMs, decks.near)
               : null
       if (anchor && (f.sail || loop)) {
+        // Where along its way each ship of a sailed fleet comes to rest: in a line behind the first, but never on or
+        // under a bridge (a ship that would stops short of it, and those behind it keep their distance).
+        const total = f.sail ? pathLength(f.sail.path) : 0
+        let rest = total + 2.8
         for (const [i, kind] of kinds.entries()) {
-          out.push({ key: `s${lord.id}:${f.id}:${i}`, at: anchor, along, reverse, seed: seed + i, length: SHIP_LENGTHS[kind], kind, lord: lord.id, fleet: f.id, color: lord.color, ...(i === 0 && { tag: tag(n, f.ships, f.rough) }), ...(f.sail && { route: f.sail }), ...(loop && { loop }), behind: i * 2.8 })
+          const length = SHIP_LENGTHS[kind]
+          rest = Math.min(total - i * 2.8, rest - 2.8)
+          if (f.sail && !loop) while (rest > 0 && decks.near(alongPath(f.sail.path, rest).at.x, alongPath(f.sail.path, rest).at.y, length / 2 + 0.3)) rest -= 0.25
+          out.push({ key: `s${lord.id}:${f.id}:${i}`, at: anchor, along, reverse, seed: seed + i, length, kind, lord: lord.id, fleet: f.id, color: lord.color, ...(i === 0 && { tag: tag(n, f.ships, f.rough) }), ...(f.sail && { route: f.sail }), ...(loop && { loop }), behind: i * 2.8, ...(f.sail && !loop && { rest: Math.max(0, rest) }) })
         }
         continue
       }
@@ -145,26 +156,29 @@ const SECONDS_PER_TILE = balance.navy.sail.secondsPerTile
 
 // A loop over the water about `anchor`: out to a few points within `radius` tiles that water joins to it, and back.
 // `slow` stretches the time it takes (fishing boats dawdle).
-function cruise(world: World, anchor: Point, radius: number, seed: number, slow: number, start: number) {
+// (`nearBridge`: no stop is made on or by a bridge.)
+type NearBridge = (x: number, y: number, pad: number) => boolean
+
+function cruise(world: World, anchor: Point, radius: number, seed: number, slow: number, start: number, nearBridge: NearBridge) {
   const stops: Point[] = []
   for (let j = 0; j < 12 && stops.length < 3; j++) {
     const angle = ((j * 5) % 12) / 12 * Math.PI * 2 + hash(seed, j, 77) * 0.5
     const r = radius * (0.45 + 0.55 * hash(seed, j, 78))
     const p = { x: Math.floor(anchor.x + Math.cos(angle) * r) + 0.5, y: Math.floor(anchor.y + Math.sin(angle) * r) + 0.5 }
-    if (isWaterTile(world, p.x, p.y) && Math.hypot(p.x - anchor.x, p.y - anchor.y) > 1.5) stops.push(p)
+    if (isWaterTile(world, p.x, p.y) && Math.hypot(p.x - anchor.x, p.y - anchor.y) > 1.5 && !nearBridge(p.x, p.y, 1.5)) stops.push(p)
   }
   return loopThrough(world, [anchor, ...stops, anchor], slow, start)
 }
 
 // Out to the furthest water within `radius` tiles that the water joins to `anchor`, and back: one trade voyage, taking
 // `tripMs` (or as long as the sailing takes).
-function outAndBack(world: World, anchor: Point, radius: number, seed: number, start: number, tripMs?: number) {
+function outAndBack(world: World, anchor: Point, radius: number, seed: number, start: number, tripMs: number | undefined, nearBridge: NearBridge) {
   let best: { path: Point[]; length: number } | null = null
   for (let j = 0; j < 16; j++) {
     const angle = (j / 16) * Math.PI * 2 + hash(seed, j, 79) * 0.3
     for (const r of [radius, radius * 0.7, radius * 0.45]) {
       const p = { x: Math.floor(anchor.x + Math.cos(angle) * r) + 0.5, y: Math.floor(anchor.y + Math.sin(angle) * r) + 0.5 }
-      if (!isWaterTile(world, p.x, p.y)) continue
+      if (!isWaterTile(world, p.x, p.y) || nearBridge(p.x, p.y, 1.5)) continue
       const path = waterPath(world, anchor, p, 8000)
       if (!path) continue
       const length = pathLength(path)

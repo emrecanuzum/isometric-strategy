@@ -16,7 +16,19 @@
         "everySeconds": 1800,
         "share": 0.05,
         "afkFactor": 1.5,
-        "onlineMinutes": 7
+        "onlineMinutes": 7,
+        "lateSeenSeconds": 90,
+        "clearSeconds": 60,
+        "marginSeconds": 30,
+        "stepSeconds": 15,
+        "talk": {
+          "exchanges": 3,
+          "discount": [0, 0.1, 0.25, 0.4],
+          "badRaise": 0.1,
+          "angryAt": 2,
+          "angryFactor": 1.2,
+          "angryRefuseFactor": 1.5
+        }
       },
       "refuseRelation": -8,
       "tip": 120

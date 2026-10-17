@@ -28,12 +28,15 @@ export interface Profile {
 }
 
 export async function loadProfile(): Promise<Profile | null> {
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth.user) return null
-  const { data } = await supabase.from('profiles').select('username, settings, is_admin').eq('user_id', auth.user.id).maybeSingle()
+  const { data: auth, error } = await supabase.auth.getUser()
+  // A busy or unreachable server is not a signed-out player: the session's own user stands in until it answers.
+  const refused = !!error && typeof error.status === 'number' && error.status >= 400 && error.status < 500
+  const user = auth.user ?? (refused ? null : (await supabase.auth.getSession()).data.session?.user ?? null)
+  if (!user) return null
+  const { data } = await supabase.from('profiles').select('username, settings, is_admin').eq('user_id', user.id).maybeSingle()
   return {
-    username: data?.username ?? auth.user.email?.split('@')[0] ?? '',
-    email: auth.user.email ?? '',
+    username: data?.username ?? user.email?.split('@')[0] ?? '',
+    email: user.email ?? '',
     admin: data?.is_admin === true,
     settings: { ...DEFAULT_SETTINGS, ...(data?.settings as Partial<Settings> | undefined) },
   }

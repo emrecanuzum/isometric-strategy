@@ -78,10 +78,18 @@ export function PlanBar({
       {!asking && <div className="plan-bar frame" role="status">
         <Icon name="build" size={24} />
         <span className="plan-text">
-          <b>Plan</b> · {text}
+          {/* One line: in the column below, a bare "· text" was left hanging on a line of its own. */}
+          <span>
+            <b>Plan</b> · {text}
+          </span>
           <small className={steps.length >= balance.economy.maxPlan ? 'plan-count down' : 'plan-count'} title="Bir planda en fazla bu kadar adım olur">
             {steps.length} / {balance.economy.maxPlan} adım{steps.length >= balance.economy.maxPlan ? ' · plan dolu, önce onayla' : ''}
           </small>
+          {skipped > 0 && (
+            <small className="plan-count down" title="Malzeme, yer ya da sınır yetmediği için bu adımlar onayda atlanır">
+              {skipped} adım şu an yapılamıyor (malzeme ya da sınır yetmiyor)
+            </small>
+          )}
           <span className="card-meta">
             {Object.keys(spent).length > 0 && <CostList cost={spent} stock={kingdom.stock} />}
             {Object.keys(back).length > 0 && (

@@ -296,9 +296,15 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   taş köprünün kamburu 34 piksel). Güverte zemine boyandığı için ekranda
   kapladığı alan ayrıca hesaplanır (`chunkPainter.ts` → `worldDecks`):
   nehir parıltıları, ördek ve kuğular güvertenin örttüğü yerde çizilmez;
-  köprünün arkasındaki ya da altındaki gemiler (ve gölgeleri) güvertenin
-  ters maskesiyle kesilir, köprünün altından geçiyormuş gibi görünür; taş
-  köprünün kemer boşlukları maskede açıktır, gemi kemerin altından görünür.
+  köprünün arkasındaki ya da altındaki gemiler (taç kadırgaları ve
+  lordların bütün gemileri; gölgeleri ve seçili filonun dış hattı da)
+  güvertenin ters maskesiyle kesilir, köprünün altından geçiyormuş gibi
+  görünür; taş köprünün kemer boşlukları maskede açıktır, gemi kemerin
+  altından görünür. Maske gemi başınadır (`worldDecks` → `cut`): gövdesi
+  güvertenin önüne çıkmış bir geminin yalnız kıç tarafı (ekranda gövdenin
+  güvertenin ön kenarını kestiği noktanın o yanı) kesilir, önde kalan
+  pruvası, direği ve yelkeni güvertenin üstünde görünür. Hiçbir gemi
+  köprünün üstünde ya da altında demirlemez, beklemez (`near`).
   Köprüden geçen ordular (yol köprü karolarında zigzag çizse ya da sunucunun
   yolu çizilen köprünün bir iki karo yanından geçse de) güvertenin ortasından
   düz yürür.
@@ -426,7 +432,10 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   saat kulesi, çeşme), kışla (talim alanı, saman kuklalar, hedefler,
   ahır), casus evi (dar, üç katlı, çıkmalı is lekeli ev, kapalı panjurlar,
   tek yanan pencere, kapı feneri, kukuletalı adam, mahyada kuzgunlar, arka
-  mahzen kapısı), gözcü kulesi, hapishane (parmaklıklı taş zindan, demir
+  mahzen kapısı), gözcü kulesi (uzun yuvarlak taş gövde, tepesinde
+  dikmeli ahşap balkon ve kırma çatı; iki çeşidi yalnızca taş ve çatı
+  malzemesiyle ayrılır, inşa menüsündeki resimle haritadaki aynıdır; 2.
+  seviyede balkonda mangal, 3.de nöbetçi ve flama), hapishane (parmaklıklı taş zindan, demir
   parmaklıklı avlu, gardiyan; doluyken avluda taçlı kraliçe), üniversite,
   hastane (şifacıların altın kâsesi tabelası, şifalı ot tarhları, çamaşır
   ipinde çarşaflar; kızıl haç yok), tapınak (çan kuleli kilise ya da
@@ -455,7 +464,10 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
 
 Prosedürel (seed tabanlı), ama **adil başlangıç** kurallarıyla:
 her oyuncunun başlangıç bölgesinden bir ticaret yoluna veya nehre makul
-uzaklık olmalı; kimse tamamen dezavantajlı başlamamalı.
+uzaklık olmalı; kimse tamamen dezavantajlı başlamamalı. Sunucu başlangıç
+yerini çekerken önce ticaret arsası **ve** iskele arsası bulunabilen yerleri
+dener (ilk 16 deneme); yalnızca hiçbiri çıkmazsa böyle bir yer verir
+(`command` → `rollSite`). Önceden ~%2 yerde ikisi de yoktu: tüccarsız lordluk.
 
 ---
 
@@ -813,7 +825,11 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 - **Patikalar:** Her yapının kapısından saraya ve köylülerin evden işe
   yürüdüğü yollar boyunca, yapıların etrafından dolaşan ince toprak
   patikalar zemine işlenir; cetvelle çizilmiş gibi düz değil, hafifçe
-  dalgalanarak uzanırlar (yürüyenler yine aynı yolu izler). Patikalar
+  dalgalanarak uzanırlar (yürüyenler yine aynı yolu izler). Patika katı
+  kahverengi bir çizgi değil, çimenin arasından görünen **aşınmış topraktır**:
+  en fazla ~%55 opaklıkta, birkaç dither basamağıyla yarı saydam, ortası
+  belirgin, kenarları çimene karışarak söner; genişliği yol boyunca hafifçe
+  daralıp genişler, yer yer çimen tutunduğu için lekelidir. Patikalar
   binaların da **tarlaların da** içinden geçmez, yanlarından dolanır; tarlaya
   giden patika tarlanın kenarında biter (köylüler tarlada çalışmak için
   içine yürür). Başka bir
@@ -837,6 +853,23 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   çalılar (böğürtlen de) serpilir; patika kenarında daha sıktır. Çölde
   seyrektir: kuru ot tutamı, çakıl, bodur çalı. Binanın oturduğu karoya ve
   patikanın üstüne bir şey konmaz (`chunkPainter.ts`).
+- **Yol (inşa edilen):** 1. seviye sarayda açılır; 1×1, çok ucuzdur (1 altın
+  + 1 yapı malzemesi, 2 sn; `economy.json` → `buildings.road`), inşaat
+  sırasına girmez, işçi istemez, iskelesi yoktur. Sur ve ev gibi basılı tutup
+  sürükleyerek sıra hâlinde plana eklenir (her karo bir adım). Hudut içinde
+  serbest karoya kurulur; binalar yolun üstüne, yol binaların altına
+  kurulamaz; surla arasında boşluk gerekmez. Taşınamaz, yıkılabilir (yarı
+  iade). Sınırı 400 karodur; puana katkısı yoktur (`society.json` →
+  `score.roadPer`), yapı sayısı eşiklerinde (taçların tanıtımı, hedefler)
+  sayılmaz, günlüğe ve haritaya "tamamlandı" yazmaz. Köylüler, tüccar ve
+  ordular yolun üstünden yürür (tarla gibi düzdür); yol ticaret yolu gibi
+  aşınmış zemin sayılır: yürüyenler onu seçer, patika yolun üstüne ya da
+  yanına çizilmez, yola varan patika kenarında birleşir. Yol zemine boyanır
+  (`chunkPainter.ts` → `setLanes`): her yol karosu komşu yol karolarına (köşe
+  komşusuna da) ve değdiği ticaret yoluna bağlanır, dönüşler yuvarlaktır;
+  sıkıştırılmış toprak ve çakıl, koyu kenar, iki silik araba izi, ara ara
+  çakıl taşı; kenarı dalgalanarak çimene dither ile karışır. Gölge düşürmez,
+  sprite değildir; üstüne gelince "Yol" yazar.
 - **İnşa menüsü (devam):**
   - **İnşa listesi** saray seviyesine göre 5 sekmedir (1. sv. … 5. sv.): her
     sekmede o seviyede açılan yapılar ve sınırı artan yapılar yazar; henüz
@@ -853,8 +886,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     sonra taşımalar, sonra inşalar uygulanır; inşaat yeri doluysa adım yer
     boşalınca başlar; yapılamayan adımlar atlanır
     (`packages/shared/src/economy.ts` → `applyPlan`).
-  - **Sur ve ev** basılı tutup sürükleyerek sıra hâlinde plana eklenir. Sur
-    parçaları inşaat sırasına girmez (aynı anda kurulur); evler sıraya
+  - **Sur, ev ve yol** basılı tutup sürükleyerek sıra hâlinde plana eklenir. Sur
+    parçaları ve yollar inşaat sırasına girmez (aynı anda kurulur); evler sıraya
     girer, yer boşaldıkça başlar.
   - **Yıkım modu:** Bina menüsündeki "Yık" o binayı plana ekler ve yıkım
     modunu açar: imleç **çekiç** olur, üstüne gelinen bina **kırmızı** dış
@@ -1427,18 +1460,45 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     başkentten lordun sarayına haraç isteme anında varacak şekilde yola
     çıkar, cevap süresince kapıda bekler, sonra döner; herkes görür): Rakip taç, öbür taca bağlı her
     lordun kapısına **30 dakikada bir** haraççı gönderir (`patrol.tribute`
-    → `everySeconds`); her lordun geliş anı tohumdan sabittir, aralık hep
-    30 dakikadır (`tributeVisitAt`). Haraççı **hazinenin sabit %5'ini**
+    → `everySeconds`); her lordun geliş anı tohumdan çekilir, dilimin ilk
+    üçte ikisindedir (`tributeVisitAt`). **İki tacın askerleri bir sarayda
+    buluşmaz:** haraççıların kapıdaki kalışı (varıştan 1 dk önce, cevap
+    süresi ve dönüşün ilk 1 dk'sı, iki yanda 30 sn pay) lordun kendi tacının
+    devriyesinin orada olduğu aralıkla (varıştan 1 dk önce – ayrılıştan 1 dk
+    sonra) ya da başka bir rakip tacın haraççılarıyla çakışırsa, geliş anı
+    çakışmasız ilk ana 15 saniyelik adımlarla kaydırılır (yoksa en az
+    çakışana; `tribute.clearSeconds`, `marginSeconds`, `stepSeconds`).
+    Lordların listesiyle (kimin kime bağlı olduğu) hesaplanır; sunucu ve
+    istemci aynı anı bulur. Haraççı **hazinenin sabit %5'ini**
     ister (`share`; 7000 altında 350); ilişki ve güç bunu değiştirmez.
-    Elçi diyaloğunda **"Öde"** ya da **"Reddet"**. Reddedilirse o tacın
+    Elçi diyaloğunda **"Öde"**, **"Reddet"** ya da **"Konuş"**. Reddedilirse o tacın
     bütün lordlarıyla ilişki **−8** düşer. 5 dakika içinde cevap
     verilmezse haraç **kendiliğinden ödenir** (hazinede ne kadar varsa),
     ilişki bozulmaz: oyuncu **çevrimdışıysa** olağan haracı öder, ceza
     yoktur; **oyundaysa** (süre dolarken son 7 dakikada görülmüşse; oyun açıkken 5 dakikada bir haber verir. AFK)
     haracı **%50 fazlasıyla** öder (`tribute.afkFactor`, `onlineMinutes`).
+    Lordun hiç sorulmadığı (sunucu isteği ancak cevap süresi dolduktan sonra
+    görebildi) ya da süre dolduktan çok sonra (`lateSeenSeconds`, 90 sn)
+    görüldüğü haraçta bu fazlalık alınmaz. Lordun bağlılığından önceki
+    (`Kingdom.liegeAt`) devriye ve haraççı ziyaretleri sayılmaz.
     Haraç diyaloğu bu fazlalığı önceden yazar, ödeme haberi de hangisinin
     olduğunu söyler. Böylece dolu
     hazine düzenli boşalır ve tüccar yeniden satar (§6.4).
+  - **Haraççıyla konuşmak** (`packages/shared/src/tributeTalk.ts`;
+    `cities.json` → `tribute.talk`): haraççıların başının lobi tohumundan ve
+    ziyaretten çekilen bir adı ("Yüzbaşı Topal Rıza") ve huyu vardır:
+    **kibirli, açgözlü, yorgun, dindar, sılayı özleyen**. Üç kez konuşur, her
+    birine üç cevap verilir (sırası karışık): huyuna uyan (kibirliyi öv,
+    açgözlüye göz kırp, yorgunu dinlendir, dindarı dua ile, sılayı özleyeni
+    köyünü sorarak al), kuru bir cevap, ya da sert/aşağılayıcı bir cevap.
+    Huyuna uyan cevap sayısına göre haraç %0 / 10 / 25 / **40** düşer, her
+    sert cevap %10 artırır; **iki sert cevapta** konuşma biter, haraççı
+    kızar: haraç %20 artar ve reddedilirse ilişki kayıpları 1,5 katıdır.
+    Ziyaret başına **bir kez** konuşulur; konuşmadan sonra yeni miktar
+    ödenir ya da reddedilir (cevapsız kalırsa kendiliğinden ödenen de odur).
+    Sunucu konuşmayı aynı tohum ve cevaplarla yeniden kurup sonucu kendisi
+    bulur (`patrolAnswer` komutu, `talk: number[]`; `patrol_visits.talk`
+    sonucu ve ilk istenen miktarı tutar, `amount` yeni miktar olur).
   - Biat etmemiş lordlara ne devriye ne haraççı gelir.
 - **Eğlence merkezi** (4. seviye saray, krallıkta bir tane; 1200 altın, 700
   yapı malzemesi, 120 sn): bayraklı, fenerli, küçük sahneli iki katlı bir
@@ -1565,7 +1625,7 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   emrini uygulamaya devam eder. Böylece ordu sistemi tam gerçek zamanlı
   değildir: her ordunun en az 30 dakikalık geleceği önceden bellidir.
 - Kendi yerleşiminde/garnizonunda bekleyen orduya emir anında verilir.
-- **Kral ordunun başında:** Ordu kartındaki "Kral ordunun başına geçsin"
+- **Kral ordunun başında:** Ordu kartındaki "Kral komutayı alsın"
   hükümdarı orduya katar. Şartları: ordu **sarayın kapısının önünde**
   (3 karo içinde) durmalı, savaşta olmamalı; naipler konseyi değil yaşayan
   bir hükümdar, sarayda (kaçırılmamış) bir **kraliçe** ve en az bir **oğul**
@@ -1589,6 +1649,17 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   ve adıyla gösterilir; tıklayınca ordu oraya gider (lordda sarayına,
   kasabada kapısına; kasaba kuşatması yalnızca kasaba panelinden başlar). Kendi ordusunun 2,5 karo yakınındaki boş yere
   tıklamak o orduyu seçer (ordu sekmesi açılır).
+- **Sağ tık ile emir** (fare): seçili kendi ordun varken haritada sağ
+  tıklanan yere "Hareket" ile tıklamış gibi gider (hedefe yapışma ve elçi
+  kuralları aynıdır; yapıştığı hedefin adı yerden yükselir). Seçili kendi
+  filon varken sağ tık onu oraya yüzdürür ("Hareket et" gibi; karada "Gemiler
+  yalnız suda yüzer", ulaşılamayan suda "Oraya su yolu yok"). Tıklanan yerde
+  daralan halkalı kısa bir işaret belirir (ordu altın, filo mavi). Aynı anda
+  ya bir ordu ya bir filo seçilidir; boş yere tıklamak ordunun seçimini
+  kaldırır. Hiçbir şey seçili değilse sağ tık bir şey yapmaz; yerleştirme ya
+  da yıkım/taşıma modunu kapatır, ordu nişanı ve filo yönlendirmesi sırasında
+  sol tık gibidir (`App.tsx` → `rightTapRef`, `createWorld.ts` → `onRightTap`,
+  `markMove`).
 - **Takip et:** Ordu kartındaki düğme kamerayı orduya kilitler; kamera
   orduyla birlikte kayar. Düğmeye yeniden basınca, alttaki şeritteki
   "Bırak" ile ya da harita sürüklenince takip biter.
@@ -1853,8 +1924,10 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
   karo). Gövde boyla birlikte bütünüyle küçülür (genişlik, direk, kürek).
   Her gemi yalnız gövdesinin tamamını alan açık suya yerleşir
   (`fleetShips.ts` → `berth`): istenen yere en yakın uygun yer aranır, dar
-  nehirde gemi nehrin yönüne döner, iskeleye ve başka gemilere binmez; yer
-  yoksa çizilmez. **Gemiye tıklamak** kendi gemindeyse Ordu → Donanma'yı
+  nehirde gemi nehrin yönüne döner, iskeleye, köprülere ve başka gemilere
+  binmez; yer yoksa çizilmez. Balık ve korsan avındaki filonun durakları ve
+  ticaret seferinin dönüm noktası köprü dibine düşmez; seyri biten filonun
+  arkadaki gemileri bir köprünün altına denk gelirse köprüden önce durur. **Gemiye tıklamak** kendi gemindeyse Ordu → Donanma'yı
   açar (filodaysa Filolar, limandaysa Liman bölümü), başkasınınkindeyse o
   lordu Diplomasi'de açar (`ambient.ts` → `pickShip`).
 - **Gemiler:**
@@ -1923,7 +1996,13 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
   gönderilir: "Hareket et" deyip bir nehre ya da göle tıklanır. **Karaya
   tıklanamaz** ("Gemiler yalnız suda yüzer"), aynı suya bağlı olmayan yere
   gidilemez ("Oraya su yolu yok"). Yol karo karo su üstünde aranır (A*,
-  karadan köşe kesmeden), sonra suyun izin verdiği yerde düzleştirilir;
+  karadan köşe kesmeden). Gemiler **suyun ortasından** gider: kıyıya yakın
+  karo pahalıdır (karaya 1 / 2 / 3 karo uzaklıkta adım +%150 / +%60 / +%20;
+  `navy.json` → `sail.shorePenalty`, `shoreClearance`), dar nehirde her karo
+  aynı pahada olduğu için yine geçilir. Sonra yol suyun izin verdiği yerde
+  düzleştirilir, ama düz çizgi kestiği karolardan kıyıya daha yakın geçemez
+  (uçlarına bir buçuk karo kalana dek); yol ortadan birkaç yüzde uzar, süre
+  yine yolun boyundan hesaplanır;
   filo karo başına 0,5 sn'de yol alır (`navy.json` → `sail`) ve vardığı
   yerde demirler. Hedef dar ya da kıyıya yapışık bir su karosuysa filo
   4 karo içindeki en yakın açık suya (çevresi de su olan karoya) demirler,
@@ -1988,8 +2067,12 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   çocukları ve ataları gösterir.
 - **Saray sekmesinin bölümleri:** Saray sekmesi üç alt sekmeye ayrılır:
   **Seviye** (saray kartı, hudut ve saray yükseltme, iskele, Bağlılık),
-  **Hanedan** ve **Yapılar** (kurulu / sınır listesi); Ayarlar hepsinin
-  altında durur. Son açılan alt sekme tarayıcıda hatırlanır
+  **Hanedan** ve **Yapılar** (kurulu / sınır listesi); hepsinin altında
+  **Lordluğu sıfırla** durur ("her şey en baştan başlar" açıklamasıyla). Önce
+  düğme "Emin misin?" diye sorar, sonra elçi "Emin misiniz, lordum?"
+  penceresiyle son kez sorar; ancak orada "Evet, her şeyi sıfırla" denince
+  sıfırlanır (ordular, casus görevleri, anlaşmalar ve eski lorda bekleyen taç
+  haraç istekleri de düşer). Ayarlar ve ana menü Saray sekmesinde değil, köşedeki menüdedir. Son açılan alt sekme tarayıcıda hatırlanır
   (`tabs.tsx` → `showPalacePart`). Adı konmamış ya da eğitimi seçilmemiş
   reşit olmayan bir çocuk varsa Hanedan sekmesinde kırmızı bir nokta yanar.
 - **Yetenekler** (0–10): **Maliye** (vergi ±%3, ticaret geliri ±%2 / puan),
@@ -2034,7 +2117,10 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   devam eder, tahta geçiş kuralları işler ve savaştaki bütün taraflara
   elçi haber getirir (`king_fell`). Yerine en
   büyük oğlu geçer; oğlu yoksa ya da reşit değilse **naipler konseyi**
-  yönetir (yetenekler 4/3/4), oğul reşit olunca tahta çıkar. Eski kraliçe
+  yönetir (yetenekler 4/3/4), oğul reşit olunca tahta çıkar. Hiç oğlu yoksa
+  konsey 3 yıl (`dynasty.json` → `council.kinsmanYears`) yönetir, sonra
+  hanedandan bir **akraba** (26–38 yaşında, yeni yetenekler) tahta çağrılır
+  (`Dynasty.kinsmanAt`); hanedan bitmez, yeni hükümdar kendi kraliçesini alır. Eski kraliçe
   kraliçe ana olur: yeni hükümdar kendi kraliçesini almalıdır.
 - **Haberler:** doğum, reşit olma, ölüm, tahta çıkış, naipler konseyi ve
   kraliçenin gelişi, oyundaki olay pencereleri gibi çizimli birer pencereyle
@@ -2395,7 +2481,9 @@ mertebesindedir.
   içinden geçmez; **sur kapısından** yalnızca sahibinin orduları geçer
   (yıkık sur geçilir). Bir binanın üstüne gönderilen ordu yanındaki boş
   karoda, bir saraya gönderilen ordu sarayın kapısının (ön köşesi) önünde
-  durur; yeni çıkarılan ve eve dönen ordular da oradadır. Surla çevrili bir
+  durur; yeni çıkarılan ve eve dönen ordular da oradadır (kapının önüne bir
+  yapı kurulmuşsa ordu yola çıkarken önce en yakın boş kareye adım atar;
+  `armies.ts` → `march`). Surla çevrili bir
   sarayı kuşatan ordu surların önünde durur ve kuşatma orada başlar.
 - **Detay animasyonları** (Ayarlar → Görüntü, varsayılan açık): 1× ve üstü
   yakınlaştırmada ağaçlar zemine işlenmek yerine ayrı çizilir ve rüzgârda
@@ -2803,9 +2891,12 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   dönerse) oyuncunun oturumu kapatılır ve giriş ekranına döner
   (`apps/web/src/lib/supabase.ts`).
 - **Ana menü:** Giriş sonrası Lobiler / Nasıl oynanır / Ayarlar. Oyun
-  içinden Saray sekmesindeki "Ana menü" ile dönülür. Lobi silinirse
+  içinden köşedeki menünün "Ana menü"süyle dönülür. Lobi silinirse
   içindeki oyuncular kendiliğinden ana menüye döner (yayın + dakikalık
   yoklama).
+- Ortadaki alt şeritler (ordu takibi, hedef seçme, filo seyri; bekleyen plan)
+  menü (dock) görünürken onun üstünde durur, menünün sekmelerini örtmez;
+  yerleştirirken menü gizli olduğu için en altta kalırlar.
 - Telefonda yakınlaştırma (+/−) ve üsse dön düğmeleri sağ altta, küçük
   harita sol alttadır; sohbet düğmesi küçük haritanın, sayaçlar sohbet
   düğmesinin üstünde durur. Üst çubuk ekranın tam genişliğindedir, her
@@ -2816,7 +2907,7 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   git" / "Halka git" ilgili sekmeyi açar, başka yere dokunmak kartı kapatır.
 - Dünya haritası (telefonda küçük haritaya dokununca) yakınlaştırılınca her
   yöne, yukarı-aşağı da kaydırılabilir; yakınlaştırma bakılan yeri ortaya
-  getirir.
+  getirir. M tuşu açıp kapatır, Esc kapatır.
 - Küçük haritada her krallığın **hududu kendi renginde** yarı saydam bir
   alan ve çerçeveyle (oyuncununki altın çerçeveli) boyanır. Simgeler (kale,
   kasaba, devriye) büyüktür; krallık sancakları onlardan biraz küçüktür.
@@ -2829,11 +2920,37 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   sancaklar en üstte çizilir. Dünya haritasında da kasabalar ve devriyeler
   görünür. Küçük harita 512 piksel çözünürlükle (2 karoya 1 piksel) çizilir
   ve masaüstünde 320, orta ekranda 200, telefonda 132 piksel karedir.
-- Harita ekranının sağ üstünde, ayarların altında **ana menüye dön**
-  düğmesi (ev ikonu) vardır. Yakınlaştırma düğmelerinin üstündeki **üsse
+- Küçük haritada ve dünya haritasında **ekranda görünen alan** beyaz bir
+  çerçeveyle çizilir: ekranın dört köşesinin zemindeki karşılığı (izometrik
+  olduğu için eğik bir dörtgen); yakınlaştırınca küçülür, uzaklaştırınca
+  büyür, harita dışına taşan kısmı kesilir. Çok yakından bakarken de
+  görünsün diye en küçük boyu vardır (küçük haritada 18 piksel). Kamera bir
+  karo kaydıkça güncellenir (`createWorld.ts` → `onCamera`).
+- Harita ekranının sağ üstünde tek bir **hamburger** düğmesi vardır; aşağı
+  açılan menüsünde **Ayarlar** ve **Ana menü** durur (telefonda aynı menü üst
+  çubuğun son kartıdır). Yakınlaştırma düğmelerinin üstündeki **üsse
   dön** düğmesi (konum pini) kamerayı krallığa götürür.
-- **Ayarlar ve ses:** Harita ekranının köşesindeki dişli **Ayarlar**
-  penceresini açar: müzik ve **ses efektleri** ayrı ayrı açılıp kapanır,
+- Haritada sağ tık tarayıcının sağ tık menüsünü açmaz (yalnızca harita
+  tuvalinde engellenir; menüler, üst çubuk, sohbet gibi arayüz öğelerinde
+  açılır). Sağ ve orta tuş haritayı sürüklemez, karo seçmez.
+- **Küçük haritanın köşe düğmeleri** (`apps/web/src/ui/MinimapCorners.tsx`):
+  baklava biçimli küçük haritanın çevresindeki dört boş köşede yuvarlak
+  ahşap düğmeler durur (her ekran boyunda, telefonda daha küçük):
+  sol üstte **Dünya haritası** (M), sağ üstte **Sıcak noktalar** (H; o an
+  önemli olanlar: içinde olduğun muharebe ve kuşatmalar, kuşatılan, asileri
+  kapıda ya da ayaklanmış kasabaların, sınırının 14 karo yakınındaki
+  savaştaki düşman orduları, sana gelen haraççılar ve taç devriyesi; sayı
+  rozeti, varken düğme yavaşça kızarır), sol altta **Ordularım ve
+  filolarım** (Tab, sayfada odaklı bir şey yokken; sayı rozeti) ve sağ
+  altta **Fotoğraf modu** (P). Sıcak noktalar ve ordular düğmesi her
+  basışta sıradakine geçer: kamera oraya gider (ordu ya da filo seçilir),
+  küçük haritanın üstünde "2/3 · …" diye kısa bir yazı çıkar; yoksa düğme
+  sönüktür. Kısayollar yazı yazarken ve Ctrl/Cmd/Alt basılıyken çalışmaz.
+  **Fotoğraf modu** bütün arayüzü gizler (yalnız harita kalır), kenarları
+  hafifçe karartır ve sol altta lordun adını ve tarihi yazar; Boşluk
+  kamerayı yavaşça süzdürür, tekerlek yakınlaştırır, başka herhangi bir
+  tuş ya da tıklama moddan çıkar.
+- **Ayarlar ve ses:** Köşedeki menünün **Ayarlar**'ı pencereyi açar: müzik ve **ses efektleri** ayrı ayrı açılıp kapanır,
   sesleri yüzde olarak ayarlanır (profilde saklanır). Efektler tarayıcıda
   sentezlenir (`apps/web/src/audio/sfx.ts`): savaş davulu ve boru,
   savaş ilanı, elçi borusu, kötü haber çanı, inşaat başlarken testere ve

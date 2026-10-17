@@ -8,7 +8,9 @@ import {
   balance,
   townCenter,
   cityCenter,
+  crisisDecideMs,
   crisisKey,
+  dilemmaDecideMs,
   fealtyOpen,
   townWalled,
   townGate,
@@ -106,6 +108,7 @@ import { CrownIntro, introSeen } from './ui/CrownIntro'
 import { FortuneDialog } from './ui/FortuneDialog'
 import type { FortuneEvent } from './ui/FortuneDialog'
 import { HouseDialog, allKnown, houseNews, readKnown, writeKnown } from './ui/hud/dynasty'
+import { usePlaying } from './ui/hud/minigames/playing'
 import type { HouseNews } from './ui/hud/dynasty'
 import type { KingdomInfo, Online } from './ui/hud/online'
 import { relationTermsIn } from './ui/hud/online'
@@ -126,6 +129,7 @@ import { ExpeditionReport } from './ui/hud/expeditions'
 import { EXPEDITION_TEXTS, GOAL_TEXTS } from './ui/expeditionNames'
 import { BuildingSheet } from './ui/hud/BuildingSheet'
 import { MapAlerts } from './ui/hud/MapAlerts'
+import { MinimapCorners } from './ui/MinimapCorners'
 import { InnTip, MapTip } from './ui/hud/MapTip'
 import { InnSheet } from './ui/hud/inns'
 import { CitySheet, CityTip, CrownBanner } from './ui/hud/cities'
@@ -151,7 +155,7 @@ const FEATURE_NAMES: Record<number, string> = {
   [Feature.Road]: 'Ticaret yolu',
   [Feature.Bridge]: 'Köprü',
   [Feature.Inn]: 'Han',
-  [Feature.City]: 'Serbest şehir',
+  [Feature.City]: 'Taç başkenti',
 }
 
 const RULE_NAMES: Record<number, string> = {
@@ -195,6 +199,7 @@ const REFUSALS: Record<string, string> = {
   building: 'Bunun için gereken bina yok',
   have: 'Zaten var',
   none: 'Yapılacak bir şey yok',
+  talked: 'Haraççıyla zaten konuştun',
   target: 'Lord bulunamadı',
   founded: 'Önce lordluğunu kur',
   prison: 'Kraliçe kaçırmak için önce hapishane kur (2. seviye saray)',
@@ -345,12 +350,18 @@ const doorstep = (b: TownBuilding): Point => ({ x: b.x + b.size * 0.7, y: b.y + 
 function footpaths(world: World, buildings: TownBuilding[], time: number): Point[][] {
   const palace = buildings.find((b) => b.kind === 'palace')
   const solid = new Set<number>()
+  // Roads the lord laid are worn ground like a trade route (see nearRoad).
+  const laid = new Set<number>()
   for (const b of buildings) {
+    if (b.kind === 'road') {
+      laid.add(b.y * world.size + b.x)
+      continue
+    }
     // Gates are walked through; everything else, the fields too, is walked around.
     if (b.kind === 'gate') continue
     for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) solid.add(y * world.size + x)
   }
-  const visited = buildings.filter((b) => b !== palace && b.doneAt <= time && b.kind !== 'wall' && b.kind !== 'gate')
+  const visited = buildings.filter((b) => b !== palace && b.doneAt <= time && b.kind !== 'wall' && b.kind !== 'gate' && b.kind !== 'road')
   const gate = palace && doorstep(palace)
   const far = (p: Point) => (gate ? Math.hypot(p.x - gate.x, p.y - gate.y) : 0)
   const routes = [
@@ -360,7 +371,7 @@ function footpaths(world: World, buildings: TownBuilding[], time: number): Point
   // Tiles a footpath already wears, with a tile of margin either side: a later walk there keeps to that path and is
   // not drawn again beside it (two lines a tile apart read as a braid).
   const worn = new Set<number>()
-  // A trade route (and a tile beside it) is worn ground already: walks keep to it, and no footpath is drawn on it or
+  // A trade route or a laid road (and a tile beside it) is worn ground already: walks keep to it, and no footpath is drawn on it or
   // running alongside it; a path that reaches it simply ends there.
   const nearRoad = (x: number, y: number) => {
     for (let dy = -1; dy <= 1; dy++) {
@@ -369,7 +380,7 @@ function footpaths(world: World, buildings: TownBuilding[], time: number): Point
         const ny = y + dy
         if (nx < 0 || ny < 0 || nx >= world.size || ny >= world.size) continue
         const f = world.feature[ny * world.size + nx]
-        if (f === Feature.Road || f === Feature.Bridge) return true
+        if (f === Feature.Road || f === Feature.Bridge || laid.has(ny * world.size + nx)) return true
       }
     }
     return false
@@ -477,12 +488,15 @@ function App({
   const [view, setView] = useState<WorldView | null>(null)
   const [hover, setHover] = useState<Hover | null>(null)
   const [cameraCenter, setCameraCenter] = useState<Point | null>(null)
+  // The screen's corners on the ground, drawn on the minimap and world map as the area in view.
+  const [cameraCorners, setCameraCorners] = useState<Point[] | null>(null)
   const [loading, setLoading] = useState(true)
   // The first view is held back until the ground around the kingdom (or the sites to choose from) is painted: the
   // camera has moved there and no chunk on screen is missing for a moment.
   const [ready, setReady] = useState(false)
   const tapRef = useRef<(tile: Point, building?: number, army?: number, inn?: number, city?: number, ship?: { lord: number; fleet?: number }) => void>(() => {})
   const strokeRef = useRef<(spots: Point[]) => void>(() => {})
+  const rightTapRef = useRef<(tile: Point) => void>(() => {})
 
   useEffect(() => {
     let cancelled = false
@@ -492,10 +506,14 @@ function App({
       seed,
       {
         onHover: setHover,
-        onCamera: setCameraCenter,
+        onCamera: (center, corners) => {
+          setCameraCenter(center)
+          setCameraCorners(corners)
+        },
         onLoading: setLoading,
         onTap: (tile, building, army, inn, city, ship) => tapRef.current(tile, building, army, inn, city, ship),
         onStroke: (spots) => strokeRef.current(spots),
+        onRightTap: (tile) => rightTapRef.current(tile),
       },
       serverNow,
       lobby.world_rev ?? 1,
@@ -520,10 +538,12 @@ function App({
   // The phone menu (settings, main menu); a tap anywhere else closes it.
   const [menuOpen, setMenuOpen] = useState(false)
   const mapMenu = useRef<HTMLDivElement>(null)
+  // The same menu in the top-right corner on wider screens.
+  const cornerMenu = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!menuOpen) return
     const away = (e: PointerEvent) => {
-      if (!mapMenu.current?.contains(e.target as Node)) setMenuOpen(false)
+      if (!mapMenu.current?.contains(e.target as Node) && !cornerMenu.current?.contains(e.target as Node)) setMenuOpen(false)
     }
     document.addEventListener('pointerdown', away)
     return () => document.removeEventListener('pointerdown', away)
@@ -757,7 +777,6 @@ function App({
   useEffect(() => {
     if (view && site) view.centerOn(site)
     // Only when the site itself changes, not on every kingdom update.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, site?.x, site?.y])
   // Ready once the camera is on the site and nothing on screen has been missing for a short while (a chunk still to
   // paint turns `loading` back on and starts the wait over).
@@ -834,7 +853,12 @@ function App({
             : null
       if (cue) play(cue)
       const begun = events.filter((e): e is FortuneEvent => e.kind === 'fortune' && e.until > time)
-      if (begun.length > 0) setFortunes((list) => [...list, ...begun])
+      // Waiting fortunes that have run their course meanwhile (behind a report or another dialog) are dropped: the
+      // journal keeps them; only news still under way pops up.
+      setFortunes((list) => {
+        const kept = list.filter((f) => f.until > time)
+        return begun.length > 0 ? [...kept, ...begun] : kept.length === list.length ? list : kept
+      })
       const palace = next.buildings.find((b) => b.kind === 'palace')
       for (const event of events) {
         if (event.kind === 'trade' && palace) {
@@ -843,7 +867,7 @@ function App({
             event.sold > 0 ? `+${event.gold} altın` : event.full ? 'Hazine dolu: tüccar bekliyor' : event.walledIn ? 'Tüccar surdan çıkamıyor: kapı yap' : `Satacak ${RESOURCE_NAMES[event.good].toLowerCase()} yok`,
             event.sold > 0 ? 0xf2d16b : event.full ? 0xf2d16b : 0xff7a6a,
           )
-        } else if (event.kind === 'built') {
+        } else if (event.kind === 'built' && event.building.kind !== 'road') {
           view.float(center(event.building), `${BUILDING_NAMES[event.building.kind]} tamamlandı`, 0x9ee6a0)
         } else if (event.kind === 'goal' && palace) {
           view.float(center(palace), `★ ${GOAL_TEXTS[event.track]?.badges[event.tier - 1] ?? 'Hedef'}`, 0xf2d16b)
@@ -871,7 +895,10 @@ function App({
       const own = owner === null
       const done = b.doneAt <= time
       const pier = done && b.kind === 'dock' ? dockPier(view.world, b) : null
-      const look: StructureLook = !done
+      // A road is laid in a moment and needs no scaffolding.
+      const look: StructureLook = b.kind === 'road'
+        ? 'road'
+        : !done
         ? 'scaffold'
         : b.kind === 'wall'
           ? b.broken
@@ -932,7 +959,7 @@ function App({
     const middle = (b: { x: number; y: number; size: number }) => ({ x: b.x + b.size / 2, y: b.y + b.size / 2 })
     const marks: ProgressMark[] = []
     for (const b of kingdom?.buildings ?? []) {
-      if (b.doneAt <= time || b.doneAt === 0) continue
+      if (b.doneAt <= time || b.doneAt === 0 || b.kind === 'road') continue
       marks.push({ key: `b:${b.id}`, at: middle(b), lift: 26 + b.size * 14, startedAt: b.doneAt - buildSeconds(b) * 1000, endsAt: b.doneAt, color: 0xe8c65a })
     }
     for (const battle of layer.battles) {
@@ -953,7 +980,6 @@ function App({
       if (palace) marks.push({ key: `k:${id}`, at: middle(palace), lift: 110, startedAt: until - spanOf(id), endsAt: until, color: 0x8fc4e8, label: 'Kuşatma kalkanı' })
     }
     view.setProgress(marks)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, worksKey, siegeKey, shieldKey])
 
   // Villagers walk from their houses to the fields and workshops; every kingdom's merchant walks to its trade post.
@@ -1123,9 +1149,9 @@ function App({
 
   // While an army is being sent, the target the pointer is on or near (CLAUDE.md §8.2.1): another lord's lands, a
   // crown city or a town, whichever is nearest within AIM_SNAP_TILES; it is outlined, and a tap sends the army there.
-  const aimTarget = useMemo((): (AimMark & { point: Point }) | null => {
-    if (aiming === null || !hover || !view) return null
-    const p = { x: hover.tile.x + 0.5, y: hover.tile.y + 0.5 }
+  const snapAt = (tile: Point): (AimMark & { point: Point }) | null => {
+    if (!view) return null
+    const p = { x: tile.x + 0.5, y: tile.y + 0.5 }
     const away = (r: { x: number; y: number; size: number }) =>
       Math.hypot(Math.max(r.x - p.x, 0, p.x - (r.x + r.size)), Math.max(r.y - p.y, 0, p.y - (r.y + r.size)))
     const t = serverNow()
@@ -1162,7 +1188,8 @@ function App({
       }
     }
     return best
-  }, [aiming, hover?.tile.x, hover?.tile.y, view, rivals, layer.towns])
+  }
+  const aimTarget = useMemo(() => (aiming === null || !hover ? null : snapAt(hover.tile)), [aiming, hover?.tile.x, hover?.tile.y, view, rivals, layer.towns])
   const aimTargetRef = useRef(aimTarget)
   aimTargetRef.current = aimTarget
   useEffect(() => {
@@ -1177,6 +1204,44 @@ function App({
       if (at && Date.parse(at) > serverNow() + 5000) setToast('Elçi yola çıktı; emir orduya ulaşınca uygulanacak')
     })
     setAiming(null)
+  }
+
+  // Only one thing is picked to be sent at a time: an army or a fleet, whichever was picked last.
+  useEffect(() => {
+    if (armyFocus !== null) setFleetFocus((f) => (f?.lord === mine.id ? null : f))
+  }, [armyFocus, mine.id])
+  useEffect(() => {
+    if (fleetFocus?.lord === mine.id) setArmyFocus(null)
+  }, [fleetFocus, mine.id])
+
+  // A right click on the map: the picked fleet sails there, or the picked army marches there (snapping onto a lord, a
+  // city or a town nearby, as Hareket does; the messenger rules hold). While aiming or sailing it acts as a tap; while
+  // placing or holding a tool it puts it down. With nothing picked it does nothing.
+  rightTapRef.current = (tile) => {
+    if (aiming !== null || sailing !== null) return tapRef.current(tile)
+    if (placingKind || tool || movingBuilding) return cancelPlacing()
+    const current = kingdomRef.current
+    if (!view || !current) return
+    if (fleetFocus?.lord === mine.id) {
+      const id = fleetFocus.fleet
+      const to = { x: tile.x + 0.5, y: tile.y + 0.5 }
+      const why = sailError(view.world, current, id, to, serverNow())
+      if (why === 'land') return setToast('Gemiler yalnız suda yüzer: bir nehre ya da göle tıkla')
+      if (why === 'route') return setToast('Oraya su yolu yok')
+      if (why) return setToast(why === 'away' ? 'Filo bir görevde; önce limana çağır' : 'Filo gönderilemedi')
+      play('click')
+      view.markMove(to, 0x7ad0ff)
+      act({ type: 'fleet', action: 'sail', fleet: id, x: to.x, y: to.y })
+      return
+    }
+    const army = armyFocus === null ? undefined : layer.armies.find((a) => a.id === armyFocus && a.kingdom_id === mine.id)
+    if (!army) return
+    if (army.status === 'battle') return setToast('Ordu muharebede; şimdi emir alamaz')
+    const snap = snapAt(tile)
+    play('click')
+    view.markMove({ x: tile.x + 0.5, y: tile.y + 0.5 }, 0xf2d16b)
+    if (snap) view.float(snap.point, snap.label, snap.color)
+    sendArmy(army.id, snap?.point ?? tile)
   }
 
   tapRef.current = (tile, building, picked, inn, city, ship) => {
@@ -1288,6 +1353,8 @@ function App({
       return
     }
     if (view && current && !placingKind) {
+      // A tap on open ground lets go of the picked army.
+      if (building === undefined) setArmyFocus(null)
       setSelected(building ?? null)
       if (building !== undefined) setPanel(null)
       return
@@ -1423,14 +1490,20 @@ function App({
     void command({ type: 'roll' })
   })
 
+  // Starting over asks twice: the button once, then the envoy himself.
   const [confirmReset, setConfirmReset] = useState(false)
+  const [resetAsk, setResetAsk] = useState(false)
   const reset = () => {
     if (!confirmReset) {
       setConfirmReset(true)
-      setTimeout(() => setConfirmReset(false), 3000)
+      setTimeout(() => setConfirmReset(false), 5000)
       return
     }
     setConfirmReset(false)
+    setResetAsk(true)
+  }
+  const resetNow = () => {
+    setResetAsk(false)
     cancelPlacing()
     setPanel(null)
     resetJournal()
@@ -1459,7 +1532,6 @@ function App({
       ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings, shieldUntil: r.shield_until, score: r.score ?? null, tradeGood: r.trade_good ?? null, tradeLedger: r.trade_ledger ?? null, tradeDamaged: !!r.trade_damaged, liege: r.liege ?? null, navy: r.navy ?? null, blockade: r.blockade ?? null })),
     ],
     // Palace levels only change with the buildings.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [kingdom?.name, kingdom?.color, kingdom?.site, kingdom?.queen, kingdom?.buildings, kingdom?.trade, rivals, mine.id],
   )
   const online: Online = {
@@ -1584,7 +1656,7 @@ function App({
       for (const crown of tributeCrowns(view.world.cities.length, lord.liege)) {
         const city = view.world.cities[crown]
         for (const s of [tributeSlot - 1, tributeSlot, tributeSlot + 1]) {
-          const arrive = tributeVisitAt(view.world.seed, crown, lord.id, s)
+          const arrive = tributeVisitAt(view.world.seed, crown, lord.id, s, lords, view.world.cities.length)
           if (t < arrive - ride || t >= arrive + wait + ride) continue
           const route = routeTo(`tribute:${crown}:${lord.id}:${palace.x},${palace.y}`, city, palace)
           if (!route || route.length === 0) continue
@@ -1615,7 +1687,6 @@ function App({
     })
     if (patrolRoutes.current.size > 256) patrolRoutes.current.clear()
     return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, lordsKey, patrolStep, mapBuildings, rivals])
 
   // When the crown's patrol or a rival crown's collectors reach the player's palace, the server is nudged at that
@@ -1633,7 +1704,7 @@ function App({
     const wait = balance.cities.crown.patrol.answerSeconds * 1000
     for (const crown of tributeCrowns(view.world.cities.length, shown.liege)) {
       for (const s of [tributeSlotAt(t), tributeSlotAt(t) + 1]) {
-        const arrive = tributeVisitAt(view.world.seed, crown, mine.id, s)
+        const arrive = tributeVisitAt(view.world.seed, crown, mine.id, s, lords, view.world.cities.length)
         due.push(arrive, arrive + wait)
       }
     }
@@ -1641,7 +1712,6 @@ function App({
     if (!Number.isFinite(next)) return
     const id = window.setTimeout(() => settle(lobby.id).then(() => refreshAll()), next - t + 1500)
     return () => clearTimeout(id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, lordsKey, patrolStep, mine.id, shown?.liege])
 
   // A town's rebels camped at its gate (CLAUDE.md §8.4), drawn as a squad in black and grey, everyone sees them.
@@ -1719,11 +1789,14 @@ function App({
       })
     }
     view.setFleets(fleetShips(view.world, lords))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, fleetKey])
 
   // The envoy's dialogs, one at a time, once their moment has come.
-  const notice = layer.notices.find((n) => Date.parse(n.show_at) <= now) ?? null
+  // A tribute demand still waiting for an answer comes before older news: it is paid on its own when its time runs out.
+  const notice =
+    layer.notices.find((n) => n.kind === 'patrol_tribute' && Date.parse(n.show_at) <= now && Number((n.payload as { expiresAt?: number }).expiresAt) > now) ??
+    layer.notices.find((n) => Date.parse(n.show_at) <= now) ??
+    null
   // Every piece of news is also written in the journal, on the envoy's paper (its sound plays as its dialog opens:
   // Envoy.tsx → soundForNotice).
   useEffect(() => {
@@ -1778,9 +1851,23 @@ function App({
 
   // The envoy as advisor and teacher (CLAUDE.md §9.8): called with the envoy button, coming on his own otherwise.
   const [advisorCall, setAdvisorCall] = useState(0)
-  const noticeShown = !!notice && !!kingdom && !away && !houseQueue[0] && (introDone || kingdom.liege !== undefined || !fealtyOpen(kingdom, now))
+  // A mini game's window is open (CLAUDE.md §6.5).
+  const playing = usePlaying()
   const introShown = !!view && !!kingdom && !away && !introDone && kingdom.liege === undefined && view.world.cities.length > 1 && fealtyOpen(kingdom, now)
-  const advisorBlocked = noticeShown || introShown || !!away || !!houseQueue[0] || (!notice && !!fortunes[0]) || settingsOpen || !!watchedBattle || !!watchedTown || fullMap || !!preview
+  // The merchant's first good is asked for in a dialog of its own; the envoy waits behind it, not over it.
+  const pickingGood = !!kingdom && !needsPalace && hasTradePost(kingdom) && kingdom.trade.good === null && !kingdom.trade.idle
+  // A crisis or a choice still waiting for an answer shows over the away report; one whose time ran out waits behind it.
+  const fortuneDecisionOpen = (f: FortuneEvent, k: Kingdom, at: number) =>
+    (!!f.crisis || !!f.dilemma) &&
+    f.start !== undefined &&
+    !k.responses?.[crisisKey({ scope: f.scope ?? 'kingdom', start: f.start })]?.choice &&
+    at <= f.start + (f.dilemma ? dilemmaDecideMs() : crisisDecideMs())
+  // A crisis or a choice still to be answered goes before the envoy's news: its time to decide runs out (a tribute
+  // demand, which also runs out, is the one notice that stays ahead of it).
+  const decisionFirst = !!kingdom && !!fortunes[0] && fortuneDecisionOpen(fortunes[0], kingdom, now) && notice?.kind !== 'patrol_tribute'
+  const noticeShown = !!notice && !!kingdom && !away && !houseQueue[0] && !decisionFirst && (introDone || kingdom.liege !== undefined || !fealtyOpen(kingdom, now))
+  const royalShown = !!view && !!kingdom && !!royalLive && !royalLive.accepted && royalSeen !== royalLive.req.n && !notice && !away && !houseQueue[0] && !fortunes[0]
+  const advisorBlocked = playing || pickingGood || royalShown || resetAsk || noticeShown || introShown || !!away || !!houseQueue[0] || (!notice && !!fortunes[0]) || settingsOpen || !!watchedBattle || !!watchedTown || fullMap || !!preview
   // A tap on a timer: the building's menu (the camera to it), or the tab it belongs to.
   const timerGo = (go: TimerGo) => {
     if ('building' in go) {
@@ -1857,7 +1944,6 @@ function App({
       ...(kingdom ? [{ site: kingdom.site, color: hexOf(kingdom.color), own: true, rect: territoryRect(kingdom.site, stage) }] : []),
     ],
     // The player's site and colour only change at founding.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [rivals, kingdom?.site, kingdom?.color, stage],
   )
 
@@ -1884,7 +1970,7 @@ function App({
 
   return (
     <>
-      <div ref={host} style={{ width: '100%', height: '100%' }} />
+      <div ref={host} className="world-host" style={{ width: '100%', height: '100%' }} />
       <div className="top">
         {kingdom && (
           <TopBar
@@ -1924,12 +2010,57 @@ function App({
           />
         )}
       </div>
-      <button className="btn icon-only exit frame" onClick={onExit} title="Ana menüye dön" aria-label="Ana menüye dön">
-        <Icon name="home" size={16} />
-      </button>
-      <button className="btn icon-only music frame" onClick={() => setSettingsOpen(true)} title="Ayarlar" aria-label="Ayarlar">
-        <Icon name="gear" size={16} />
-      </button>
+      <div className="corner-menu" ref={cornerMenu}>
+        <button className="btn icon-only menu-chip frame" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} title="Menü" aria-label="Menü">
+          <Icon name={menuOpen ? 'close' : 'menu'} size={16} />
+        </button>
+        {menuOpen && (
+          <div className="corner-menu-list frame" role="menu">
+            <button
+              className="btn small"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false)
+                setSettingsOpen(true)
+              }}
+            >
+              <Icon name="gear" size={16} /> Ayarlar
+            </button>
+            <button className="btn small" role="menuitem" onClick={onExit}>
+              <Icon name="home" size={16} /> Ana menü
+            </button>
+          </div>
+        )}
+      </div>
+      {resetAsk && (
+        <div className="modal" role="dialog" aria-labelledby="reset-title">
+          <section className="dialog frame fortune-dialog envoy-dialog bad">
+            <header className="fortune-banner">
+              <span className="envoy-face">
+                <EnvoyPortrait size={44} talking />
+              </span>
+              <div>
+                <small>Elçinin sözü</small>
+                <h2 id="reset-title">Emin misiniz, lordum?</h2>
+              </div>
+            </header>
+            <div className="fortune-body">
+              <p>
+                Lordum, bir söyleyin de içim rahat etsin: sarayı, ambarları, hazineyi, ordunuzu, hanedanınızı... hepsini rüzgâra mı savuruyoruz? Bir
+                kez "evet" derseniz geri dönüşü yok; ben de yeni sarayda yine kuzey kulesini isterim.
+              </p>
+              <div className="row spread">
+                <button className="btn small" onClick={() => setResetAsk(false)}>
+                  Vazgeçtim
+                </button>
+                <button className="btn small danger" onClick={resetNow}>
+                  Evet, her şeyi sıfırla
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
       {settingsOpen && (
         <div className="modal" role="dialog" aria-labelledby="settings-title" onClick={(e) => e.target === e.currentTarget && setSettingsOpen(false)}>
           <section className="dialog frame settings-dialog">
@@ -2171,7 +2302,7 @@ function App({
           onConfirm={confirmPlan}
         />
       )}
-      {kingdom && !needsPalace && hasTradePost(kingdom) && kingdom.trade.good === null && !kingdom.trade.idle && <GoodPicker kingdom={kingdom} onGood={chooseGood} market={layer.market} now={now} />}
+      {kingdom && pickingGood && <GoodPicker kingdom={kingdom} onGood={chooseGood} market={layer.market} now={now} />}
       {toast && (
         <div className="toast frame" role="alert">
           <Icon name="warn" size={16} /> {toast}
@@ -2215,7 +2346,29 @@ function App({
           </button>
         </div>
       )}
-      {view && <Minimap world={view.world} center={cameraCenter} flags={flags} towns={townMarks} patrols={patrolDots} onJump={(tile) => (touchOnly ? setFullMap(true) : view.centerOn(tile))} />}
+      {view && <Minimap world={view.world} center={cameraCenter} corners={cameraCorners} flags={flags} towns={townMarks} patrols={patrolDots} onJump={(tile) => (touchOnly ? setFullMap(true) : view.centerOn(tile))} />}
+      {view && (
+        <MinimapCorners
+          view={view}
+          center={cameraCenter}
+          me={mine.id}
+          kingdom={kingdom}
+          rect={kingdom && site ? territoryRect(site, stage) : null}
+          armies={layer.armies}
+          battles={layer.battles}
+          towns={layer.towns}
+          pacts={layer.pacts}
+          patrols={patrols}
+          nameOf={(id) => kingdoms.find((k) => k.id === id)?.name ?? 'Bir lord'}
+          seasonStart={seasonStart}
+          onWorldMap={() => setFullMap((open) => !open)}
+          onArmy={(id) => {
+            setFleetFocus(null)
+            setArmyFocus(id)
+          }}
+          onFleet={(id) => setFleetFocus({ lord: mine.id, fleet: id })}
+        />
+      )}
       {view && fullMap && (
         <WorldMap
           world={view.world}
@@ -2230,6 +2383,7 @@ function App({
             })),
           ]}
           center={cameraCenter}
+          corners={cameraCorners}
           towns={townMarks}
           patrols={patrolDots}
           onJump={view.centerOn}
@@ -2333,15 +2487,19 @@ function App({
           }}
         />
       )}
+      {/* While a mini game is being played, the popups below wait (they would take its keys and taps). */}
+      {!playing && (
+        <>
       {view && kingdom && !away && !introDone && kingdom.liege === undefined && view.world.cities.length > 1 && fealtyOpen(kingdom, now) && (
         <CrownIntro world={view.world} kingdom={kingdom} online={online} lobby={lobby.id} onSwear={(city) => online.act({ type: 'swear', city })} onClose={() => setIntroDone(true)} />
       )}
       {kingdom && !away && houseQueue[0] && (
         <HouseDialog news={houseQueue[0]} kingdom={kingdom} now={now} online={online} onClose={() => setHouseQueue((q) => q.slice(1))} />
       )}
-      {notice && kingdom && !away && !houseQueue[0] && (introDone || kingdom.liege !== undefined || !fealtyOpen(kingdom, now)) && <EnvoyDialog notice={notice} online={online} onClose={closeNotice} />}
+      {notice && kingdom && !away && !houseQueue[0] && !decisionFirst && (introDone || kingdom.liege !== undefined || !fealtyOpen(kingdom, now)) && <EnvoyDialog notice={notice} online={online} onClose={closeNotice} />}
       {!notice && !away && kingdom && !fortunes[0] && returned && <ExpeditionReport expedition={returned} kingdom={kingdom} online={online} onClose={() => markExpeditionSeen(returned.id)} />}
-      {!notice && kingdom && fortunes[0] && (
+      {/* A plain news of the day waits behind the away report (it is told there too); a crisis or a choice, timed, does not. */}
+      {(!notice || decisionFirst) && kingdom && fortunes[0] && (!away || fortuneDecisionOpen(fortunes[0], kingdom, now)) && (
         <FortuneDialog
           event={fortunes[0]}
           now={now}
@@ -2351,14 +2509,17 @@ function App({
           onClose={() => setFortunes((list) => list.slice(1))}
         />
       )}
-      {view && kingdom && royalLive && !royalLive.accepted && royalSeen !== royalLive.req.n && !notice && !away && !houseQueue[0] && !fortunes[0] && (
+      {view && kingdom && royalLive && royalShown && (
         <RoyalDialog world={view.world} kingdom={kingdom} req={royalLive.req} online={online} onClose={() => seeRoyal(royalLive.req.n)} />
+      )}
+        </>
       )}
       {view && kingdom && (
         <Advisor
           storeKey={`advisor:${lobby.id}:${mine.id}`}
           ctx={{ kingdom, now, online, crowns: view.world.cities.length }}
           blocked={advisorBlocked}
+          aside={holding && !needsPalace}
           busy={(holding && !needsPalace) || aiming !== null || sailing !== null || selected !== null || panel !== null || plan.length > 0}
           summon={advisorCall}
           onAct={advisorAct}

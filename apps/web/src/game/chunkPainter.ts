@@ -54,12 +54,24 @@ export interface PaintContext {
   // painting measures the distance to them exactly, as tile-centre distances blend a thin line crossing a tile
   // corner-wise into a string of dots.
   trailNear: Map<number, number[]>
+  // Per tile whether a road the lord laid (CLAUDE.md §6.4, "Yol") passes over or near it, and for those tiles the road's
+  // centre-line segments ([ax, ay, bx, by] each), joining each road tile to its road neighbours (and to a trade route
+  // beside it), so the road bends round in smooth, rounded joints.
+  lane: Uint8Array
+  laneNear: Map<number, number[]>
 }
 
 export type { Structure }
 
 // Footpaths are this many tiles wide either side of their center line.
 const TRAIL_HALF = 0.2
+// How a footpath is painted: worn earth showing through the grass at most this opaque (dithered in steps), its width
+// swelling and narrowing gently along the way (by this share either side), and patchy where the grass holds on.
+const TRAIL_ALPHA = 0.55
+const TRAIL_SWELL = 0.3
+// A laid road: half its width (tiles), and its two cart ruts this far either side of the middle.
+const LANE_HALF = 0.42
+const LANE_RUT = 0.17
 const TRAIL_REACH = 2
 // How far a footpath wanders off its straight line, in tiles (peak to peak).
 const WANDER = 1.3
@@ -116,6 +128,7 @@ export function setStructures(context: PaintContext, structures: Structure[], tr
       for (let x = Math.max(0, p.x - 1); x < Math.min(size, p.x + p.w + 1); x++) context.occupied[y * size + x] = 1
     }
   }
+  setLanes(context, structures)
   context.trail = new Float32Array(size * size).fill(TRAIL_REACH + 1)
   context.trailNear = new Map()
   // An end of a path is loose unless it meets another path there (a branch joining a trunk), reaches a building's
@@ -171,6 +184,77 @@ export function setStructures(context: PaintContext, structures: Structure[], tr
   }
 }
 
+// The roads laid by the lords: each road tile joined to the road tiles beside it (straight neighbours, and diagonal
+// ones that share no straight neighbour), and to a trade route it touches; a lone tile is a round patch.
+function setLanes(context: PaintContext, structures: Structure[]) {
+  const { size, feature } = context.world
+  context.lane = new Uint8Array(size * size)
+  context.laneNear = new Map()
+  const roads = new Set<number>()
+  for (const s of structures) if (s.look === 'road' && s.x >= 0 && s.y >= 0 && s.x < size && s.y < size) roads.add(s.y * size + s.x)
+  const isRoad = (x: number, y: number) => x >= 0 && y >= 0 && x < size && y < size && roads.has(y * size + x)
+  const isRoute = (x: number, y: number) => x >= 0 && y >= 0 && x < size && y < size && (feature[y * size + x] === Feature.Road || feature[y * size + x] === Feature.Bridge)
+  const add = (ax: number, ay: number, bx: number, by: number) => {
+    for (let y = Math.max(0, Math.floor(Math.min(ay, by)) - 1); y <= Math.min(size - 1, Math.floor(Math.max(ay, by)) + 1); y++) {
+      for (let x = Math.max(0, Math.floor(Math.min(ax, bx)) - 1); x <= Math.min(size - 1, Math.floor(Math.max(ax, bx)) + 1); x++) {
+        const i = y * size + x
+        context.lane[i] = 1
+        const near = context.laneNear.get(i)
+        if (near) near.push(ax, ay, bx, by)
+        else context.laneNear.set(i, [ax, ay, bx, by])
+      }
+    }
+  }
+  for (const i of roads) {
+    const x = i % size
+    const y = (i - x) / size
+    const cx = x + 0.5
+    const cy = y + 0.5
+    let linked = false
+    for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+      if (isRoad(x + dx, y + dy)) {
+        linked = true
+        // Each straight link once, from the tile before.
+        if (dx > 0 || dy > 0) add(cx, cy, cx + dx, cy + dy)
+      } else if (isRoute(x + dx, y + dy)) {
+        linked = true
+        add(cx, cy, cx + dx, cy + dy)
+      }
+    }
+    for (const [dx, dy] of [[1, 1], [1, -1], [-1, -1], [-1, 1]]) {
+      if (!isRoad(x + dx, y + dy) || isRoad(x + dx, y) || isRoad(x, y + dy)) continue
+      linked = true
+      if (dx > 0) add(cx, cy, cx + dx, cy + dy)
+    }
+    if (!linked) add(cx - 0.12, cy - 0.12, cx + 0.12, cy + 0.12)
+  }
+}
+
+// Distance from (x, y) to the nearest road centre-line segment ([ax, ay, bx, by] each).
+function laneDistance(segments: number[], x: number, y: number) {
+  let best = Infinity
+  for (let i = 0; i < segments.length; i += 4) {
+    const ax = segments[i]
+    const ay = segments[i + 1]
+    const dx = segments[i + 2] - ax
+    const dy = segments[i + 3] - ay
+    const t = Math.min(1, Math.max(0, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)))
+    best = Math.min(best, Math.hypot(x - ax - dx * t, y - ay - dy * t))
+  }
+  return best
+}
+
+// Two colours mixed, `t` of the way from `a` to `b` (channel by channel).
+function mix(a: number, b: number, t: number) {
+  let out = 0
+  for (let shift = 0; shift < 24; shift += 8) {
+    const ca = (a >>> shift) & 0xff
+    const cb = (b >>> shift) & 0xff
+    out |= Math.round(ca + (cb - ca) * t) << shift
+  }
+  return (out | (a & 0xff000000)) >>> 0
+}
+
 // A straight wooden bridge carrying a route over water, from bank point `a` to bank point `b`.
 export interface Bridge {
   // The stretch of the resampled route (see resampleRoute) the bridge replaces.
@@ -199,6 +283,8 @@ const BEACH = ramp(0xc7a970, 0xdcc388, 0xecd9a2, 0xf6e8bd)
 const ROAD = ramp(0x5e4630, 0x7c5f3f, 0x9b7c52, 0xb89866, 0xcdb07e)
 const WOOD = ramp(0x3a2619, 0x5a3d28, 0x7a5535, 0x9c7245, 0xb98d58)
 const MASONRY = ramp(0x3b3542, 0x575060, 0x766d78, 0x958b8c, 0xb3a89f, 0xcfc4b4)
+// Laid roads: packed earth and gravel, a little paler and greyer than the worn trade routes.
+const LANE = ramp(0x4e4034, 0x6a5946, 0x87745c, 0xa38f72, 0xbba887, 0xd2c3a2)
 const EARTH = ramp(0x2a1f1c, 0x3d2c24, 0x54392b)
 const FLOWERS = [ramp(0xf6f3e4), ramp(0xf2cf4a), ramp(0xe2798f), ramp(0xb48be0)]
 
@@ -299,7 +385,7 @@ export function preparePaint(world: World): PaintContext {
     }
   }
   for (let i = 0; i < road.length; i++) if (road[i] === Infinity) road[i] = reach + 1
-  return { world, lit, patch, road, bridges, structures: [], occupied: new Uint8Array(size * size), footprint: new Uint8Array(size * size), trail: new Float32Array(size * size).fill(TRAIL_REACH + 1), trailNear: new Map() }
+  return { world, lit, patch, road, bridges, structures: [], occupied: new Uint8Array(size * size), footprint: new Uint8Array(size * size), trail: new Float32Array(size * size).fill(TRAIL_REACH + 1), trailNear: new Map(), lane: new Uint8Array(size * size), laneNear: new Map() }
 }
 
 // How a biome border looks around a point: finely dithered, in blotches and islands, or in frayed fibres. The
@@ -567,8 +653,28 @@ export interface Decks {
   covers(x: number, y: number): boolean
   // A point on a deck carried onto the deck's middle line (a walk over the bridge tiles zigzags); others as they are.
   snap(p: Point): Point
-  // Whether a point of the water lies under or behind a deck (seen from the viewer), close to it.
-  behind(x: number, y: number): boolean
+  // What of the decks hides a ship whose hull runs `length` tiles along `along` about (x, y): for each deck it lies
+  // behind or under, that deck's slices — only on the stern's side (on screen) of where the hull comes out in front
+  // of the deck, if it does. Empty when nothing hides it; `key` changes whenever the cut does.
+  cut(x: number, y: number, along: 'x' | 'y', length: number): { polygons: number[][]; key: string }
+  // Whether a point of the water lies within `pad` tiles of a deck's footprint (no ship rests there).
+  near(x: number, y: number, pad: number): boolean
+}
+
+// A convex polygon (x, y pairs) cut down to the side x ≤ c (side < 0) or x ≥ c (side > 0) of a vertical line.
+function clipX(poly: number[], c: number, side: number): number[] {
+  const out: number[] = []
+  const n = poly.length / 2
+  const keep = (x: number) => (side < 0 ? x <= c : x >= c)
+  for (let i = 0; i < n; i++) {
+    const ax = poly[i * 2]
+    const ay = poly[i * 2 + 1]
+    const bx = poly[((i + 1) % n) * 2]
+    const by = poly[((i + 1) % n) * 2 + 1]
+    if (keep(ax)) out.push(ax, ay)
+    if (keep(ax) !== keep(bx)) out.push(c, ay + ((by - ay) * (c - ax)) / (bx - ax))
+  }
+  return out.length >= 6 ? out : []
 }
 const decksOf = new WeakMap<World, Decks>()
 export function worldDecks(world: World): Decks {
@@ -663,13 +769,50 @@ export function worldDecks(world: World): Decks {
       }
       return p
     },
-    behind(x, y) {
+    cut(x, y, way, length) {
+      const polygons: number[][] = []
+      let key = ''
+      const half = length / 2
+      const ux = way === 'x' ? half : 0
+      const uy = way === 'y' ? half : 0
+      for (const [i, it] of items.entries()) {
+        const { t, across } = along(it, { x, y })
+        const reach = 0.15 + half / it.length
+        if (t < -reach || t > 1 + reach || Math.abs(across) > 6) continue
+        // How far toward the viewer (+x +y) each end of the hull lies past the deck's front edge (≤ 0: behind or under).
+        const s = it.nx + it.ny
+        const edge = it.half * Math.abs(s) + 0.3
+        const past = (px: number, py: number) => ((px - it.bridge.ax) * it.nx + (py - it.bridge.ay) * it.ny) * s - edge
+        const ga = past(x - ux, y - uy)
+        const gb = past(x + ux, y + uy)
+        if (ga > 0 && gb > 0) continue
+        if (ga <= 0 && gb <= 0) {
+          polygons.push(...it.slices)
+          key += `${i};`
+          continue
+        }
+        // The hull comes out from under the deck: hide only the part of the ship behind it, which on screen lies to
+        // one side of the point where the hull crosses the deck's front edge (a hull runs along a tile axis, a slant
+        // on screen; its masts and sails stand straight above it).
+        const f = ga / (ga - gb)
+        const cx = x - ux + 2 * ux * f
+        const cy = y - uy + 2 * uy * f
+        const c = (cx - cy) * (TILE_WIDTH / 2)
+        const hidden = ga <= 0 ? -ux + uy : ux - uy
+        const side = hidden < 0 ? -1 : 1
+        for (const poly of it.slices) {
+          const clipped = clipX(poly, c, side)
+          if (clipped.length) polygons.push(clipped)
+        }
+        key += `${i}:${Math.round(c)}:${side};`
+      }
+      return { polygons, key }
+    },
+    near(x, y, pad) {
       for (const it of items) {
         const { t, across } = along(it, { x, y })
-        if (t < -0.15 || t > 1.15 || Math.abs(across) > 6) continue
-        // How far toward the viewer (+x +y) the point lies from the deck's middle line, against the deck's reach that way.
-        const toward = across * (it.nx + it.ny)
-        if (toward <= it.half * Math.abs(it.nx + it.ny) + 0.3) return true
+        const reach = pad / it.length
+        if (t >= -reach && t <= 1 + reach && Math.abs(across) <= it.half + pad) return true
       }
       return false
     },
@@ -758,7 +901,7 @@ function shadowOf(sprite: Sprite, foot: number, sun: SunShadow) {
 // round it whose trees are lifted too ('all' when every chunk's are), so the trees of theirs reaching into this one are
 // left to them, and those of the others painted here.
 export function paintChunk(context: PaintContext, cx: number, cy: number, k: number, lift = false, sun: SunShadow = NOON, liftedNear: number[] | 'all' = 'all'): ChunkImage {
-  const { world, lit, patch, road, bridges, structures, occupied, footprint, trail, trailNear } = context
+  const { world, lit, patch, road, bridges, structures, occupied, footprint, trail, trailNear, lane, laneNear } = context
   const { size, seed, elevation, moisture, height, levels } = world
   const S = balance.map.chunkSize
   const chunkCount = size / S
@@ -816,6 +959,19 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
         if (near) foot = segmentDistance(near, wx + (valueNoise(wx * 0.22, wy * 0.22, seed + 91) - 0.5) * WANDER, wy + (valueNoise(wx * 0.22, wy * 0.22, seed + 97) - 0.5) * WANDER, seed)
       }
       const depthBelow = levels.lake - e
+      // A laid road over or near this point: the distance to its middle, its edge wandering a little.
+      let lanes = Infinity
+      const li = Math.min(size - 1, Math.max(0, Math.floor(wy))) * size + Math.min(size - 1, Math.max(0, Math.floor(wx)))
+      if (lane[li]) lanes = laneDistance(laneNear.get(li)!, wx, wy)
+      // How worn a footpath leaves the grass here (0: not at all): strongest along its middle, its width swelling and
+      // narrowing gently, patchy where the grass holds on, fading out at its sides.
+      let wear = 0
+      if (foot < TRAIL_HALF * (1 + TRAIL_SWELL) + 0.2) {
+        const half = TRAIL_HALF * (1 - TRAIL_SWELL + valueNoise(wx * 0.31, wy * 0.31, seed + 131) * 2 * TRAIL_SWELL)
+        const body = 1 - smoothstep(half * 0.35, half + 0.14, foot)
+        const patchy = 0.4 + valueNoise(wx * 1.7, wy * 1.7, seed + 137) * 0.8
+        wear = Math.min(1, body * patchy) * TRAIL_ALPHA
+      }
 
       const y = row + pad - Math.round(h * k)
       if (row < first) {
@@ -853,11 +1009,22 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
         tone = way > ROAD_HALF - 0.13 ? 0.6 : 2.6 + broad * 1.5 + (speck > 0.9 ? 1 : speck < 0.12 ? -1 : 0)
         tone += light * 6
         spread = 0.3
-      } else if (foot < TRAIL_HALF + dither * 0.12 + mid * 0.06) {
-        // Footpaths worn between the player's buildings: bare earth, its edge broken up by grass.
-        colors = ROAD
-        tone = (foot > TRAIL_HALF - 0.1 ? 1 : 2) + broad * 1.2 + (speck > 0.88 ? 1 : speck < 0.1 ? -1 : 0) + light * 6
+      } else if (lanes < LANE_HALF + (dither - 0.5) * 0.13 + mid * 0.07 + (valueNoise(wx * 2.3, wy * 2.3, seed + 147) - 0.5) * 0.14) {
+        // A road the lord laid: packed earth, a darker rim where it meets the grass, two faint cart ruts and gravel.
+        wear = 0
+        const rut = Math.abs(lanes - LANE_RUT) < 0.035 + (valueNoise(wx * 3.1, wy * 3.1, seed + 141) - 0.5) * 0.03
+        colors = LANE
+        tone = 3 + broad * 1.2 + light * 6 + (speck > 0.9 ? 0.8 : speck < 0.1 ? -0.8 : 0)
+        if (lanes > LANE_HALF - 0.08) tone -= 1.3
+        else if (rut) tone -= 1.2
+        else if (lanes < 0.07) tone += 0.4
         spread = 0.35
+        // Pebbles: a few pixels of stone, lit on top.
+        const pebble = hash(gx >> 1, gy >> 1, seed + 143)
+        if (lanes < LANE_HALF - 0.1 && pebble > 0.965) {
+          colors = ROCK
+          tone = 4.5 + light * 4 + (pebble > 0.985 ? 1 : 0)
+        }
       } else {
         const land = -depthBelow
         const m = moisture[i00] * w00 + moisture[i00 + 1] * w01 + moisture[i10] * w10 + moisture[i10 + 1] * w11
@@ -951,7 +1118,13 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       for (let yy = top; yy <= y; yy++) {
         const d = yy === y ? dither : BAYER[(gx & 3) | (((gy0 + yy) & 3) << 2)] - 0.5
         const index = Math.floor(tone + 0.5 + d * spread)
-        out[yy * width + px] = colors[index < 0 ? 0 : index >= colors.length ? colors.length - 1 : index]
+        let color = colors[index < 0 ? 0 : index >= colors.length ? colors.length - 1 : index]
+        // A footpath's worn earth over the ground, in a few dithered steps of see-through rather than a smooth fade.
+        if (wear > 0 && colors !== ROAD && colors !== LANE && colors !== WATER && colors !== FOAM && colors !== POOL) {
+          const step = Math.floor((wear / TRAIL_ALPHA) * 3 + d) / 3
+          if (step > 0) color = mix(color, ROAD[Math.max(0, Math.min(ROAD.length - 1, Math.round(1.6 + broad * 1.2 + light * 6)))], Math.min(1, step) * TRAIL_ALPHA)
+        }
+        out[yy * width + px] = color
         depth[yy * width + px] = row
       }
       previous = y
@@ -998,7 +1171,7 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
     for (let dy = 0; dy <= 2; dy++) {
       for (let dx = 0; dx <= 2; dx++) {
         const i = Math.max(0, y - dy) * size + Math.max(0, x - dx)
-        if (road[i] < ROAD_HALF + 0.4 || trail[i] < TRAIL_HALF + 0.6 + WANDER / 2) return true
+        if (road[i] < ROAD_HALF + 0.4 || trail[i] < TRAIL_HALF + 0.6 + WANDER / 2 || lane[i]) return true
       }
     }
     return false
@@ -1217,7 +1390,8 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
   }
   const buildings = [
     ...world.inns.map((p) => ({ fx: p.x + 2, fy: p.y + 2, z: heightAt(world, p.x + 1, p.y + 1), sprite: innLook(world, p).sprite, foot: 2 })),
-    ...structures.flatMap((s) => structureParts(world, s).map((part) => ({ ...part, foot: -1 }))),
+    // Roads are painted into the ground itself (see setLanes), not as sprites.
+    ...structures.filter((s) => s.look !== 'road').flatMap((s) => structureParts(world, s).map((part) => ({ ...part, foot: -1 }))),
   ]
   for (const p of buildings) {
     // Tall buildings reach into chunks well behind them, so they are culled by their screen box (below).

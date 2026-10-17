@@ -5,6 +5,7 @@ import type React from 'react'
 import { Icon } from '../ui/icons'
 import { TERRAIN_COLORS } from './createWorld'
 import { cityInfo } from './cities'
+import { viewOutline } from './Minimap'
 import type { MinimapPatrol, MinimapTown } from './Minimap'
 
 // The whole world on one screen, opened from the minimap on phones: the land in the same isometric angle as the
@@ -61,6 +62,7 @@ export function WorldMap({
   world,
   kingdoms,
   center,
+  corners,
   towns = [],
   patrols = [],
   onJump,
@@ -69,6 +71,8 @@ export function WorldMap({
   world: World
   kingdoms: MapKingdom[]
   center: Point | null
+  // The screen's corners on the ground: the area in view, outlined on the map.
+  corners?: Point[] | null
   // The towns (CLAUDE.md §8.4) and the crowns' patrols where they ride now (§7.8).
   towns?: MinimapTown[]
   patrols?: MinimapPatrol[]
@@ -80,6 +84,14 @@ export function WorldMap({
   const [zoom, setZoom] = useState(0)
   const scroller = useRef<HTMLDivElement>(null)
   const here = useRef<HTMLSpanElement>(null)
+  // Escape closes the map, as it does every other window (M opens and closes it too).
+  const close = useRef(onClose)
+  close.current = onClose
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close.current()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   // Zooming brings the spot being looked at (or the middle of the world) to the middle of the screen.
   useLayoutEffect(() => {
     const box = scroller.current
@@ -199,6 +211,18 @@ export function WorldMap({
               {kingdom.name}
             </span>
           ))}
+          {center && corners?.length === 4 && (
+            <svg className="worldmap-view" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
+              <polygon
+                points={viewOutline(center, corners, 1, 36)
+                  .map((p) => {
+                    const c = toCanvas(p)
+                    return `${c.x},${c.y}`
+                  })
+                  .join(' ')}
+              />
+            </svg>
+          )}
           {center && <span ref={here} className="worldmap-here" style={marker(center)} aria-label="Şu an baktığın yer" />}
         </div>
         </div>

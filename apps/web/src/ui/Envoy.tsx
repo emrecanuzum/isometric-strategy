@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
-import { balance, overreachOf } from '@game/shared'
+import { useEffect, useState } from 'react'
+import { balance, overreachOf, tributeTalk, tributeTalkReact, tributeTalkScript } from '@game/shared'
+import { supabase } from '../lib/supabase'
 import type { Envoy as EnvoyRow, Operation, PeaceTerms, SpyTopic } from '@game/shared'
 import type { Notice } from '../net/online'
 import { Icon } from './icons'
@@ -199,7 +200,12 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
           ? { icon: 'crown', title: `${p.name} ayaklanması bastırıldı`, text: `Ordun asileri dağıttı (kayıplar: ${losses}). Ayaklanma bitti, kasabanın sadakati +${r.quellLoyalty} arttı ve ${Math.round(r.quietSeconds / 60)} dakika yeniden ayaklanmaz; sadakati düşük kalırsa sonra yine ayaklanabilir.` }
           : { icon: 'warn', title: `${p.name} asileri direndi`, text: `Ordun asilere yenildi ve eve çekiliyor (kayıplar: ${losses}). Asiler kasabanın kapısında kalıyor; daha büyük bir orduyla yeniden gelebilirsin.` }
       }
-      return { icon: 'swords', title: `${p.kind === 'siege' ? 'Kuşatma' : 'Savaş'} bitti: ${p.winner === 'attackers' ? 'saldıranlar' : 'savunanlar'} kazandı`, text: `Kayıplar: ${losses}.${loot}` }
+      // Told from the lord's own side when the battle is known: "you won" reads better than "the defenders won".
+      const fought = online.battles.find((b) => b.id === p.battle)
+      const side = fought?.attackers.some((f) => f.kingdom === online.me) ? 'attackers' : fought?.defenders.some((f) => f.kingdom === online.me) ? 'defenders' : null
+      const what = p.kind === 'siege' ? 'Kuşatma' : 'Savaş'
+      const outcome = side ? (side === p.winner ? 'kazandın!' : 'yenildin') : `${p.winner === 'attackers' ? 'saldıranlar' : 'savunanlar'} kazandı`
+      return { icon: 'swords', title: `${what} bitti: ${outcome}`, text: `Kayıplar: ${losses}.${loot}` }
     }
     case 'siege_people':
       return p.taken
@@ -333,42 +339,175 @@ export function EnvoyDialog({ notice, online, onClose }: { notice: Notice; onlin
         </div>
         <div className="fortune-body">
           {text && <p>{text}</p>}
-          <div className="row spread">
-            {demand ? (
-              <>
-                <button className="btn small danger" onClick={() => (online.act({ type: 'patrolAnswer', visit: p.visit as number, pay: false }), onClose())}>
-                  Reddet
-                </button>
-                <button className="btn small" onClick={() => (online.act({ type: 'patrolAnswer', visit: p.visit as number, pay: true }), onClose())}>
-                  <Icon name="gold" size={16} /> {fmt(Number(p.amount))} altın öde
-                </button>
-              </>
-            ) : pending ? (
-              <>
-                <button className="btn small danger" onClick={() => (online.act({ type: 'respond', envoy: p.envoy as number, accept: false }), onClose())}>
-                  Reddet
-                </button>
-                <button className="btn small" onClick={() => (online.act({ type: 'respond', envoy: p.envoy as number, accept: true }), onClose())}>
-                  Kabul et
-                </button>
-              </>
+          {demand ? (
+            <TributeAnswer online={online} visit={p.visit as number} asked={Number(p.amount)} onClose={onClose} />
+          ) : (
+            <div className="row spread">
+              {pending ? (
+                <>
+                  <button className="btn small danger" onClick={() => (online.act({ type: 'respond', envoy: p.envoy as number, accept: false }), onClose())}>
+                    Reddet
+                  </button>
+                  <button className="btn small" onClick={() => (online.act({ type: 'respond', envoy: p.envoy as number, accept: true }), onClose())}>
+                    Kabul et
+                  </button>
+                </>
+              ) : (
+                <>
+                  {battle !== null ? (
+                    <button className="btn small" onClick={() => (online.watch(battle), onClose())}>
+                      <Icon name="swords" size={16} /> İzle
+                    </button>
+                  ) : (
+                    <span />
+                  )}
+                  <button className="btn small" onClick={onClose}>
+                    Tamam
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+// A rival crown's demand at the gate (CLAUDE.md §7.8): refuse, pay, or first have a word with the collectors' captain.
+// The talk is drawn from the lobby seed and the visit, so it is the same here as on the server, which works out again
+// what the replies did to the demand. Once a visit.
+function TributeAnswer({ online, visit, asked, onClose }: { online: Online; visit: number; asked: number; onClose: () => void }) {
+  const seed = online.lobby.seed
+  const [amount, setAmount] = useState(asked)
+  // Null until known whether the captain has been talked to already (the dialog may have been closed and opened again).
+  const [talked, setTalked] = useState<boolean | null>(null)
+  const [angry, setAngry] = useState(false)
+  const [talking, setTalking] = useState(false)
+  const [replies, setReplies] = useState<number[]>([])
+  const [sending, setSending] = useState(false)
+  useEffect(() => {
+    let live = true
+    supabase
+      .from('patrol_visits')
+      .select('amount, talk')
+      .eq('id', visit)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!live) return
+        if (data?.talk) {
+          setAmount(Number(data.amount))
+          setAngry(!!(data.talk as { angry?: boolean }).angry)
+        }
+        setTalked(!!data?.talk)
+      })
+    return () => {
+      live = false
+    }
+  }, [visit])
+  const script = tributeTalkScript(seed, visit)
+  const outcome = tributeTalk(seed, visit, replies)
+  const answer = (pay: boolean) => (online.act({ type: 'patrolAnswer', visit, pay }), onClose())
+  const pick = (r: number) => {
+    const next = [...replies, r]
+    setReplies(next)
+    const done = tributeTalk(seed, visit, next)
+    if (!done) return
+    setSending(true)
+    online
+      .act<{ amount: number; angry: boolean }>({
+        type: 'patrolAnswer',
+        visit,
+        talk: next,
+      })
+      .then((res) => {
+        setSending(false)
+        setTalked(true)
+        if (res) {
+          setAmount(res.amount)
+          setAngry(res.angry)
+        }
+      })
+  }
+  const refusal = -Math.round(balance.cities.crown.patrol.refuseRelation * (angry ? balance.cities.crown.patrol.tribute.talk.angryRefuseFactor : 1))
+  const buttons = (
+    <div className="row spread">
+      <button className="btn small danger" onClick={() => answer(false)}>
+        Reddet
+      </button>
+      {talked === false && !talking && (
+        <button className="btn small" onClick={() => setTalking(true)}>
+          <Icon name="scroll" size={16} /> Konuş
+        </button>
+      )}
+      <button className="btn small" disabled={sending} onClick={() => answer(true)}>
+        <Icon name="gold" size={16} /> {fmt(amount)} altın öde
+      </button>
+    </div>
+  )
+  if (!talking) {
+    return (
+      <div className="tribute-answer">
+        {talked && amount !== asked && (
+          <p className="muted">
+            Haraççıyla konuştun: istenen {fmt(asked)} değil, {fmt(amount)} altın.
+            {angry ? ` Kızgın gitti; reddedersen o tacın lordlarıyla ilişkin ${refusal} düşer.` : ''}
+          </p>
+        )}
+        {buttons}
+      </div>
+    )
+  }
+  const at = replies.length
+  return (
+    <div className="tribute-answer tribute-talk">
+      <p className="muted">
+        <b>{script.name}</b> ({script.label}) ile konuşuyorsun. Huyuna göre konuşursan haracı düşürebilir; ters konuşursan artırır.
+      </p>
+      <p className="talk-line">“{script.greet}”</p>
+      {script.exchanges.slice(0, outcome ? at : at + 1).map((ex, i) => {
+        if (i > at) return null
+        const chose = replies[i]
+        return (
+          <div key={i} className="talk-step">
+            <p className="talk-line">“{ex.say}”</p>
+            {chose === undefined ? (
+              outcome ? null : (
+                <div className="talk-replies">
+                  {ex.replies.map((r, j) => (
+                    <button key={j} className="btn small talk-reply" onClick={() => pick(j)}>
+                      {r.text}
+                    </button>
+                  ))}
+                </div>
+              )
             ) : (
               <>
-                {battle !== null ? (
-                  <button className="btn small" onClick={() => (online.watch(battle), onClose())}>
-                    <Icon name="swords" size={16} /> İzle
-                  </button>
-                ) : (
-                  <span />
-                )}
-                <button className="btn small" onClick={onClose}>
-                  Tamam
-                </button>
+                <p className="talk-mine">— {ex.replies[chose].text}</p>
+                <p className="talk-line">“{tributeTalkReact(seed, visit, i, ex.replies[chose].points)}”</p>
               </>
             )}
           </div>
-        </div>
-      </section>
+        )
+      })}
+      {outcome && (
+        <>
+          <p className="talk-line">
+            <b>“{outcome.line}”</b>
+          </p>
+          <p className="muted">
+            {sending
+              ? 'Haraççı defterine bir şeyler karalıyor…'
+              : amount < asked
+                ? `Haraç ${fmt(asked)} altından ${fmt(amount)} altına indi.`
+                : amount > asked
+                  ? `Haraç ${fmt(asked)} altından ${fmt(amount)} altına çıktı.${angry ? ` Kızgın: reddedersen o tacın lordlarıyla ilişkin ${refusal} düşer.` : ''}`
+                  : `Haraç aynı kaldı: ${fmt(amount)} altın.`}
+            {!sending && ` Cevapsız bırakırsan oyundayken ${fmt(Math.round(amount * balance.cities.crown.patrol.tribute.afkFactor))} altın olarak kendiliğinden ödenir.`}
+          </p>
+          {buttons}
+        </>
+      )}
     </div>
   )
 }

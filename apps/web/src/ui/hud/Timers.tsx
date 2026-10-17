@@ -130,11 +130,16 @@ function timersOf(kingdom: Kingdom, online: Online | undefined, now: number): Ti
   return out
 }
 
+// How much sooner than its end a timer may leave its list and still flash as done (clock drift, a round's settling).
+const EARLY_MS = 15_000
+
 export function Timers({ kingdom, online, now, onGo }: { kingdom: Kingdom; online?: Online; now: number; onGo?: (go: TimerGo) => void }) {
   // Timers that left the lists when they ended (soldiers join the garrison, envoys arrive) are kept to flash.
   const seen = useRef(new Map<string, Timer>())
-  for (const t of timersOf(kingdom, online, now)) seen.current.set(t.key, t)
-  for (const [key, t] of seen.current) if (t.end <= now - FLASH_MS) seen.current.delete(key)
+  const live = new Set<string>()
+  for (const t of timersOf(kingdom, online, now)) (seen.current.set(t.key, t), live.add(t.key))
+  // One gone well before its end was cut short (a royal request delivered, a party called home): it does not linger.
+  for (const [key, t] of seen.current) if (t.end <= now - FLASH_MS || (!live.has(key) && t.end > now + EARLY_MS)) seen.current.delete(key)
   const list = [...seen.current.values()].sort((a, b) => a.end - b.end)
   // Folded away to its header (remembered in the browser): the count and the soonest to end.
   const [folded, setFolded] = useState(() => {

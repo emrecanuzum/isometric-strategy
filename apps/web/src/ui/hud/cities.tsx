@@ -26,10 +26,13 @@ export function TradeDestination({ world, kingdom, market, now, onCity }: {
   const wait = Math.max(0, Math.ceil((tradeCityReadyAt(kingdom) - now) / 1000))
   const { loadFactor, changeCooldownSeconds } = balance.cities.trade
   const premium = Math.round((balance.cities.trade.priceFactor - 1) * 100)
+  // The city's price beside the lobby's: "lobi fiyatı", "lobi fiyatı +%5" or "lobi fiyatı −%5".
+  const pricing = premium === 0 ? 'lobi fiyatı' : `lobi fiyatı ${premium > 0 ? '+' : '−'}%${Math.abs(premium)}`
+  const impact = Math.round(balance.cities.trade.marketImpact * 100)
   const good = kingdom.trade.good
   return (
     <Section title="Tüccar nereye gitsin" icon="trade" aside={wait > 0 ? `${wait} sn sonra değişir` : undefined}>
-      <div className={world.cities.length === 1 ? 'goods two' : 'goods'} role="radiogroup" aria-label="Tüccarın gideceği yer">
+      <div className="goods choices" role="radiogroup" aria-label="Tüccarın gideceği yer">
         <button role="radio" aria-checked={current === null} className={current === null ? 'good active' : 'good'} disabled={wait > 0 && current !== null} onClick={() => onCity(null)}>
           <Icon name="gold" size={24} />
           <b>Lobi pazarı</b>
@@ -44,14 +47,14 @@ export function TradeDestination({ world, kingdom, market, now, onCity }: {
               <Icon name="crown" size={24} />
               <b>{cityInfo(world, index).name}</b>
               <small>{trip ? `${seconds(trip)} sn sefer` : 'yol yok'}</small>
-              <small>{tradeUnits(kingdom) * loadFactor} birim, lobi fiyatı +%{premium}</small>
+              <small>{tradeUnits(kingdom) * loadFactor} birim, {pricing}</small>
               {good && <small>birimi {price(cityPrice(good, market, now))} altın</small>}
             </button>
           )
         })}
       </div>
       <p className="hint">
-        Serbest şehir {loadFactor} kat yük alır ve lobinin o anki fiyatının %{premium} fazlasını öder; lobinin fiyatlarını lobi pazarının yarısı kadar düşürür. Ama yol uzundur: sefer şehrin uzaklığıyla uzar.
+        Taç başkenti {loadFactor} kat yük alır ve {premium === 0 ? 'lobinin o anki fiyatından öder' : `lobinin o anki fiyatının %${Math.abs(premium)} ${premium > 0 ? 'fazlasını' : 'eksiğini'} öder`}; bu satış lobi fiyatlarını da düşürür (lobi pazarındaki etkinin %{impact} kadarı). Ama yol uzundur: sefer başkentin uzaklığıyla uzar.
         Değiştirince tüccar yeni sefere başlar; {Math.round(changeCooldownSeconds / 60)} dakika yeniden değiştiremezsin.
       </p>
     </Section>
@@ -120,7 +123,7 @@ export function CitySheet({ world, index, kingdom, online, market, now, onCity, 
             </small>
           </div>
         </div>
-        <Section title="Şehrin ödediği fiyat" icon="gold" aside={`lobi fiyatı +%${Math.round((balance.cities.trade.priceFactor - 1) * 100)}`}>
+        <Section title="Şehrin ödediği fiyat" icon="gold" aside={(() => { const p = Math.round((balance.cities.trade.priceFactor - 1) * 100); return p === 0 ? 'lobi fiyatı' : `lobi fiyatı ${p > 0 ? '+' : '−'}%${Math.abs(p)}` })()}>
           <div className="price-row">
             {GOODS.map((g) => (
               <span key={g} className="price" title={RESOURCE_NAMES[g]}>
@@ -130,7 +133,7 @@ export function CitySheet({ world, index, kingdom, online, market, now, onCity, 
               </span>
             ))}
           </div>
-          <p className="hint">Tüccarın buraya seferde {loadFactor} kat yük getirir; satış lobinin fiyatlarını etkilemez.</p>
+          <p className="hint">Tüccarın buraya seferde {loadFactor} kat yük götürür; buradaki satış lobi fiyatlarını lobi pazarının %{Math.round(balance.cities.trade.marketImpact * 100)} kadar düşürür.</p>
         </Section>
         {kingdom && <CrownStanding world={world} index={index} kingdom={kingdom} />}
         <CrownRivalry world={world} online={online} />
@@ -140,16 +143,16 @@ export function CitySheet({ world, index, kingdom, online, market, now, onCity, 
           <Section title="Tüccarın" icon="trade">
             {here ? (
               <>
-                <p className="hint">Tüccarın şu an bu şehre gidip geliyor ({trip ? seconds(trip) : '?'} sn sefer).</p>
+                <p className="hint">Tüccar şu an bu şehre gidip geliyor ({trip ? seconds(trip) : '?'} sn sefer).</p>
                 <button className="btn small" disabled={wait > 0} onClick={() => onCity(null)}>
-                  {wait > 0 ? `${wait} sn sonra` : 'Lobi pazarına dön'}
+                  {wait > 0 ? `Lobi pazarına dönmek için ${wait} sn bekle` : 'Lobi pazarına dön'}
                 </button>
               </>
             ) : trip ? (
               <>
                 <p className="hint">Ticaret noktandan sefer {seconds(trip)} sn sürer.</p>
                 <button className="btn small" disabled={wait > 0} onClick={() => onCity(index)}>
-                  {wait > 0 ? `${wait} sn sonra` : 'Tüccarı buraya gönder'}
+                  {wait > 0 ? `Göndermek için ${wait} sn bekle` : 'Tüccarı buraya gönder'}
                 </button>
               </>
             ) : (
@@ -278,13 +281,18 @@ function CrownStanding({ world, index, kingdom }: { world: World; index: number;
   const r = balance.cities.crown.relation
   const sworn = kingdom.liege === index
   const gift = giftAt(relation)
+  const o = balance.cities.crown.orders
+  const q = balance.cities.crown.quests
+  const royal = balance.cities.crown.royal.relation
   return (
     <Section title="Seninle ilişkisi" icon="happy" aside={signedInt(relation)}>
       <Meter value={(relation + 100) / 200} tone={relation >= 30 ? 'up' : relation <= -30 ? 'down' : 'gold'} label={`${info.name} ile ilişki`} segments={20} />
       <p className="hint">
         Zamanla {signedInt(rest)} düzeyine döner ({sworn ? 'kendi tacın sana sıcak bakar' : kingdom.liege !== undefined ? 'rakip taç sana soğuk bakar' : 'henüz kimseye biat etmedin'}).
-        İlişkiyi artıranlar: tüccarını {info.capital} şehrine göndermek (her sefer {signedDec(r.cityTrip)}), devriyesini ağırlamak ({signedInt(r.visit)}), istediği haracı
-        ödemek ({signedInt(r.tributePaid)}). Azaltanlar: haracı reddetmek ({signedInt(r.tributeRefused)}). Cevapsız kalan haraç kendiliğinden ödenir (oyundaysan fazlasıyla); ilişkiyi bozmaz.
+        İlişkiyi artıranlar: tüccarını {info.capital} şehrine göndermek (her sefer {signedDec(r.cityTrip)}), siparişlerini göndermek ({signedDec(sworn ? o.relation.own : o.relation.other)}), görevlerini bitirmek ({signedInt(sworn ? q.relation.own : q.relation.other)})
+        {sworn
+          ? `, devriyesini ağırlamak (${signedInt(r.visit)}), kraliyet isteklerini teslim etmek (${signedInt(royal.deliver)}). Azaltanlar: kraliyet isteğini geri çevirmek (${signedInt(royal.decline)}).`
+          : `, istediği haracı ödemek (${signedInt(r.tributePaid)}). Azaltanlar: haracı reddetmek (${signedInt(r.tributeRefused)}). Cevapsız kalan haraç kendiliğinden ödenir (oyundaysan fazlasıyla); ilişkiyi bozmaz.`}
       </p>
       <ul className="tiers">
         {balance.cities.crown.gifts.map((g) => (
@@ -402,7 +410,7 @@ function Stewardship({ world, kingdom, now }: { world: World; kingdom: Kingdom; 
       </ul>
       <p className="hint">
         Her taç dönem dönem bir malın ticaretini yönetir. O malı sattığında (lobi pazarında da, şehirde de) fiyatın taçla ilişkine göre değişir: en çok %
-        {Math.round(s.bonus * 100)} fazla ya da %{Math.round(s.penalty * 100)} az; ilişkin {s.refuseBelow}'nin altındaysa o tacın tüccarları seninle alışveriş etmez ve
+        {Math.round(s.bonus * 100)} fazla ya da %{Math.round(s.penalty * 100)} az; ilişkin {signedInt(s.refuseBelow)}'nin altındaysa o tacın tüccarları seninle alışveriş etmez ve
         fiyatın yarıya düşer.
       </p>
     </Section>
@@ -525,7 +533,7 @@ export function CrownsPanel({ world, kingdom, online, market, now }: { world: Wo
         const sworn = kingdom.liege === i
         const goodName = (g: keyof typeof RESOURCE_NAMES) => RESOURCE_NAMES[g].toLowerCase()
         return (
-          <Section key={i} title={info.name} icon="crown" aside={sworn ? 'biat ettiğin taç' : `ilişki ${signedInt(Math.round(relation))}`}>
+          <Section key={i} title={info.name} icon="crown" aside={`${sworn ? 'biat ettiğin taç · ' : ''}ilişki ${signedInt(Math.round(relation))}`}>
             <div className="feature">
               <Icon name="crown" size={32} />
               <div>

@@ -221,7 +221,7 @@ function Products({ building: b, data, onProduct }: { building: Building; data: 
   const chosen = productAllowed(data.kingdom, b.kind, productOf(b)!, data.now) ? productOf(b) : Object.keys(products)[0]
   return (
     <Section title="Ne üretsin?" icon="chest">
-      <div className={Object.keys(products).length === 4 ? 'goods two' : 'goods'} role="radiogroup" aria-label="Ürün">
+      <div className="goods choices" role="radiogroup" aria-label="Ürün">
         {Object.entries(products).map(([id, p]) => (
           <button
             key={id}
@@ -288,13 +288,14 @@ function Levels({ building: b, data, onUpgrade }: { building: Building; data: Hu
   const error = upgradeError(data.kingdom, b.id, data.now)
   const now = levelSpec(b.kind, level)
   const next = up ? levelSpec(b.kind, level + 1) : null
+  const tr = (v: number | undefined) => (v ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 })
   const gains = next
     ? [
-        next.amount !== now.amount && `Üretim ${now.amount} → ${next.amount}`,
+        next.amount !== now.amount && `Üretim ${tr(now.amount)} → ${tr(next.amount)}`,
         next.workers !== now.workers && `İşçi ${now.workers} → ${next.workers}`,
         next.villagers !== now.villagers && `Köylü ${now.villagers} → ${next.villagers}`,
-        next.storage !== now.storage && `Depo yeri ${now.storage} → ${next.storage}`,
-        next.gold !== now.gold && `Altın yeri ${now.gold} → ${next.gold}`,
+        next.storage !== now.storage && `Depo yeri ${tr(now.storage)} → ${tr(next.storage)}`,
+        next.gold !== now.gold && `Altın yeri ${tr(now.gold)} → ${tr(next.gold)}`,
       ].filter(Boolean)
     : []
   return (

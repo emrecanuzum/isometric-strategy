@@ -129,56 +129,39 @@ function barracksFrame(v: number, level: number, f: number): Sprite {
   return smoky(canvas.sprite(cx, base, 0), tops)
 }
 
-// The watchtower (CLAUDE.md §9.7) in two looks per level, picked by the building: 0 a timber tower on four braced
-// legs with a ladder, its lookout under a little roof; 1 a round stone tower. Level 2 is taller with a brazier lit on
-// the lookout, level 3 the tallest with a pennant, a horn and a guard on watch. The brazier's fire flickers.
+// The watchtower (CLAUDE.md §9.7): a tall round stone tower with a timber gallery round its top under a roof; the two
+// looks picked by the building differ only in stone and roof (grey granite under slate, black basalt under shingles),
+// so the build menu shows what the map will. Level 2 is taller with a brazier lit on the gallery, level 3 the
+// tallest with a guard on watch and a pennant on the roof. The brazier's fire flickers.
 export function watchtower(variant = 0, level = 1): Sprite {
   return animate((f) => towerFrame(variant % 2, level, f), 4, 6)
 }
 function towerFrame(v: number, level: number, f: number): Sprite {
-  const { canvas, cx, base, m } = plot(1, 80 + level * 18)
-  const tall = 30 + level * 10
-  if (v === 0) {
-    // Four legs leaning in, braced crosswise.
-    const lo = [[6, 6], [26, 6], [6, 26], [26, 26]] as const
-    const hi = (a: number) => (a < 16 ? a + 3 : a - 3)
-    for (const [a, b] of lo) m.line([a, b, 0], [hi(a), hi(b), tall], OAK[a < 16 && b > 16 ? 4 : 2])
-    for (const [a, b] of lo) for (let z = 0; z < tall; z += 0.5) for (const d of [0.5, -0.5]) m.put(a + (hi(a) - a) * (z / tall) + d * 0.5, b + (hi(b) - b) * (z / tall) - d * 0.5, z, OAK[a < 16 && b > 16 ? 4 : a > 16 && b > 16 ? 3 : 2])
-    for (let k = 0; k < 3; k++) {
-      const z0 = (tall / 3) * k
-      const z1 = z0 + tall / 3
-      const at = (a: number, z: number) => a + (hi(a) - a) * (z / tall)
-      m.line([at(6, z0), at(26, z0), z0], [at(26, z1), at(26, z1), z1], OAK[3])
-      m.line([at(26, z0), at(6, z0), z0], [at(26, z1), at(26, z1), z1], OAK[2])
-      m.line([at(6, z0), at(26, z0), z0], [at(26, z0), at(26, z0), z0], OAK[2])
-    }
-    // The ladder up the front.
-    for (let z = 0; z < tall; z += 0.5) for (const du of [12, 16]) m.put(du, 27 - z * 0.06, z, OAK[3], 0.5)
-    for (let z = 2; z < tall; z += 3) m.line([12, 27 - z * 0.06, z], [16, 27 - z * 0.06, z], BOARDS[4], 0.6)
-    // The lookout: a plank floor with a railing.
-    woodBox(m, 7, 7, 25, 25, tall, tall + 1.5, BOARDS)
-    m.front(7, 25, 25, tall + 1.5, tall + 6, (s, z, x, y) => (Math.round(s * 2) % 6 === 0 || z > tall + 5 ? dith(BOARDS, 3.4, x, y) : dith(BOARDS, 2.6 - (Math.round(s) % 3 === 0 ? 0.6 : 0), x, y)))
-    m.side(7, 25, 25, tall + 1.5, tall + 6, (s, z, x, y) => dith(BOARDS, Math.round(s * 2) % 6 === 0 || z > tall + 5 ? 2 : 1.2, x, y))
-    for (const [a, b] of [[8, 24], [24, 24], [24, 8]]) post(m, a, b, tall, tall + 14, OAK, 1)
-    block(m, { u0: 6, v0: 6, u1: 26, v1: 26, z0: tall + 14, wall: 0.1, walls: mat.boards(BOARDS), roof: { form: 'hip', rise: 9, oh: 1.5, style: { kind: level === 1 ? 'thatch' : 'shingle', r: level === 1 ? THATCH_ROOF : SHINGLE_ROOF, seed: 101 } } })
-    m.solidBox(7, 7, 25, 25, 0, tall + 6)
-  } else {
-    roundTower(m, 16, 16, 10, tall, GRANITE, level === 1 ? null : { kind: 'slate', r: SLATE_TILE }, { seed: 102, lit: level >= 2 })
-    // A door at its foot.
-    for (let s = -2; s <= 2; s += 0.5) for (let z = 0; z < 7 + (Math.abs(s) < 1.5 ? 1 : 0); z += 0.5) m.put(16 + 7.5 + s * 0.5, 16 + 7.5 - s * 0.5, z, Math.abs(s) > 1.6 ? GRANITE[1] : BOARDS[Math.round(s * 2) % 2 ? 2 : 3], 0.6)
-  }
-  // The brazier on the lookout and a guard (from level 2).
-  if (level >= 2 && v === 0) {
+  const { canvas, cx, base, m } = plot(1, 112 + level * 20)
+  const tall = 44 + level * 12
+  const stone = v ? BASALT : GRANITE
+  roundTower(m, 16, 16, 9, tall, stone, null, { seed: 102 + v, lit: level >= 2 })
+  // A door at its foot.
+  for (let s = -2; s <= 2; s += 0.5) for (let z = 0; z < 7 + (Math.abs(s) < 1.5 ? 1 : 0); z += 0.5) m.put(16 + 6.6 + s * 0.5, 16 + 6.6 - s * 0.5, z, Math.abs(s) > 1.6 ? stone[1] : BOARDS[Math.round(s * 2) % 2 ? 2 : 3], 0.6)
+  // The gallery: a plank floor on corbels, a railing, corner posts and the roof over it.
+  for (const [a, b] of [[8, 24], [24, 24], [24, 8], [8, 8]] as const) m.line([a + (16 - a) * 0.35, b + (16 - b) * 0.35, tall - 5], [a, b, tall], OAK[2])
+  woodBox(m, 5, 5, 27, 27, tall, tall + 1.5, BOARDS)
+  m.front(5, 27, 27, tall + 1.5, tall + 6, (s, z, x, y) => (Math.round(s * 2) % 5 === 0 || z > tall + 5 ? dith(BOARDS, 3.4, x, y) : 0))
+  m.side(5, 27, 27, tall + 1.5, tall + 6, (s, z, x, y) => (Math.round(s * 2) % 5 === 0 || z > tall + 5 ? dith(BOARDS, 2, x, y) : 0))
+  for (const [a, b] of [[6, 26], [26, 26], [26, 6], [6, 6]]) post(m, a, b, tall, tall + 15, OAK, 1)
+  block(m, { u0: 4, v0: 4, u1: 28, v1: 28, z0: tall + 15, wall: 0.1, walls: mat.boards(BOARDS), roof: { form: 'hip', rise: 11, oh: 1.5, style: { kind: v ? 'shingle' : 'slate', r: v ? SHINGLE_ROOF : SLATE_TILE, seed: 101 + v } } })
+  m.solidBox(5, 5, 27, 27, tall, tall + 6)
+  // The brazier on the gallery and a guard (from level 2).
+  if (level >= 2) {
     const z = tall + 1.5
-    const bu = v === 0 ? 20 : 20
-    m.cylinder(bu, 20, 1.6, z, z + 3, (_, __, l, x, y) => dith(IRON, toneOf(6, l), x, y), false)
+    m.cylinder(21, 21, 1.6, z, z + 3, (_, __, l, x, y) => dith(IRON, toneOf(6, l), x, y), false)
     const k = f < 0 ? 0 : f
-    m.card(bu, 20, z + 3, (set) => {
+    m.card(21, 21, z + 3, (set) => {
       for (let dx = -1; dx <= 1; dx++) for (let dz = 0; dz < 3 + ((dx + k) % 2 === 0 ? 1 : 0); dz++) set(dx, dz, FIRE[dz === 0 ? 3 : dz === 1 ? 4 : hash(dx, k, 3) > 0.5 ? 5 : 2])
     }, 1)
-    if (level === 3) figure(m, 12, 22, z, { tunic: CLOTH_GREEN, hat: IRON, tool: 'spear' })
+    if (level === 3) figure(m, 11, 23, z, { tunic: CLOTH_GREEN, hat: IRON, tool: 'spear' })
   }
-  if (level === 3 && f >= 0) flagpole(m, 16, 16, v === 0 ? tall + 23 : tall + 27, 8, CLOTH_RED, f / 4, 7, 4)
+  if (level === 3 && f >= 0) flagpole(m, 16, 16, tall + 26, 8, CLOTH_RED, f / 4, 7, 4)
   return canvas.sprite(cx, base, 0)
 }
 

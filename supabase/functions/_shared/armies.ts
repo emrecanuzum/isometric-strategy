@@ -89,7 +89,12 @@ export function march(
 ) {
   const now = armyNow(army, world, owner, at)
   const end = game.standingSpot(world.world, dest, standOff ?? blocked) as Point
-  const found = game.findRoute(world.world, now.here, end, blocked) as Point[] | null
+  // Standing inside a building (one was put up on the palace's doorstep, or where the army camps): it first steps out
+  // to the nearest free tile, or no route would ever start.
+  const inside = !!blocked?.(Math.floor(now.here.x), Math.floor(now.here.y))
+  const start = inside ? (game.standingSpot(world.world, now.here, blocked) as Point) : now.here
+  const out = game.findRoute(world.world, start, end, blocked) as Point[] | null
+  const found = out && start !== now.here ? [now.here, ...out] : out
   const route = found && halt ? (game.haltBefore(found, halt) as Point[]) : found
   if (!route) return null
   return {

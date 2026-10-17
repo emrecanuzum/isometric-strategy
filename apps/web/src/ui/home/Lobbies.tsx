@@ -169,7 +169,7 @@ function CreateLobby({
       </label>
       <div className="field">
         <span>Lobi büyüklüğü</span>
-        <div className="segmented" role="radiogroup" aria-label="Lobi büyüklüğü">
+        <div className="segmented choices" role="radiogroup" aria-label="Lobi büyüklüğü">
           {LOBBY_SIZES.map((size) => (
             <button key={size} type="button" role="radio" aria-checked={players === size} className="btn small" onClick={() => setPlayers(size)}>
               {size} lord

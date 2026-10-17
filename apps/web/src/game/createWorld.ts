@@ -73,6 +73,8 @@ const WHEEL_STEP = 50
 const WHEEL_COOLDOWN_MS = 220
 // A press that moves less than this many screen pixels is a tap, not a drag.
 const TAP_SLOP = 10
+// How long a move order's mark stays on the ground.
+const MARK_SECONDS = 0.9
 const TEXTURE_BUDGET_BYTES = 320 * 1024 * 1024
 const MAX_WORKERS = 4
 // Caravans are too small to make out below this zoom.
@@ -142,13 +144,17 @@ export interface Placement {
 
 export interface WorldHandlers {
   onHover(hover: Hover | null): void
-  onCamera(center: Point): void
+  // Where the camera looks and the screen's four corners on the ground (top left, top right, bottom right, bottom left),
+  // in tiles; sent again only when one of them moves by a tile.
+  onCamera(center: Point, corners: Point[]): void
   onLoading(loading: boolean): void
   // A tap or click that did not drag the map, and the player's building or the army drawn under it, if any; or a
   // lord's ship (whose, and its fleet).
   onTap(tile: Point, building?: number, army?: number, inn?: number, city?: number, ship?: { lord: number; fleet?: number }): void
   // A row of footprints drawn by dragging while placing a stroke kind (see Placement.stroke).
   onStroke?(spots: Point[]): void
+  // A right click that did not drag: the tile under it (a selected army or fleet is sent there).
+  onRightTap?(tile: Point): void
 }
 
 export interface RivalTerritory {
@@ -230,6 +236,8 @@ export interface WorldView {
   blocksWalkers(x: number, y: number): boolean
   // A short message rising from a spot on the ground.
   float(tile: Point, text: string, color: number): void
+  // A move order's mark on the ground (rings closing in on the spot), fading in under a second.
+  markMove(at: Point, color: number): void
   /** Steps the zoom in (+1) or out (-1) around the middle of the screen. */
   zoomBy(step: number): void
   destroy(): void
@@ -261,7 +269,7 @@ interface Job {
 export async function createWorld(
   host: HTMLElement,
   seed: number,
-  { onHover, onCamera, onLoading, onTap, onStroke }: WorldHandlers,
+  { onHover, onCamera, onLoading, onTap, onStroke, onRightTap }: WorldHandlers,
   // The shared game clock (server time), so every player sees the same hour, caravans and animals.
   clock: () => number = Date.now,
   // How the lobby's world is made from its seed (see WORLD_REV).
@@ -306,7 +314,7 @@ export async function createWorld(
       resolution: window.devicePixelRatio * 2,
       anchor: { x: 0.5, y: 1 },
       style: {
-        fontFamily: 'system-ui, sans-serif',
+        fontFamily: "'Digits', 'Pixelify Sans', system-ui, sans-serif",
         fontSize: 12,
         fontWeight: '600',
         fill: color,
@@ -373,7 +381,9 @@ export async function createWorld(
   }
   // The target an aimed army has snapped to, outlined over everything on the ground.
   const aimLines = new Graphics()
-  camera.addChild(ground, fields, shadows.layer, rivalLines, territory, armyRoutes, fleetRoutes, ambient.under, caravans.layer, fleetMarks, marks, clogSigns, ambient.sky, cursor, carried, highlight, aimLines)
+  // Where a right click sent an army or a fleet (see markMove).
+  const moveMarks = new Graphics()
+  camera.addChild(ground, fields, shadows.layer, rivalLines, territory, armyRoutes, fleetRoutes, ambient.under, caravans.layer, fleetMarks, marks, clogSigns, ambient.sky, cursor, carried, highlight, aimLines, moveMarks)
   app.stage.addChild(camera)
   // Day and night: the whole map is multiplied by the colour of the light at this hour of the game day. Lit windows
   // and the labels sit above it, in a layer that follows the camera, so night never dims them.
@@ -457,6 +467,29 @@ export async function createWorld(
     aimLabel.position.set(border[top - 1], border[top] - 6 / camera.scale.y)
     aimLabel.scale.set(1 / camera.scale.x)
     aimLabel.visible = true
+  })
+  // Move marks: two flattened rings closing in on the spot and a dot, a fixed size on screen, gone after MARK_SECONDS.
+  let moveOrders: { at: Point; color: number; born: number }[] = []
+  app.ticker.add(() => {
+    if (moveOrders.length === 0) return
+    const now = performance.now()
+    moveOrders = moveOrders.filter((m) => now - m.born < MARK_SECONDS * 1000)
+    moveMarks.clear()
+    const k = 1 / camera.scale.x
+    for (const m of moveOrders) {
+      const age = (now - m.born) / 1000 / MARK_SECONDS
+      const s = groundToScreen(world, m.at)
+      const fade = Math.min(1, (1 - age) * 2.5)
+      for (const delay of [0, 0.22]) {
+        const t = Math.min(1, Math.max(0, (age - delay) / 0.6))
+        if (age < delay || t >= 1) continue
+        const r = (26 - 20 * t) * k
+        moveMarks.ellipse(s.x, s.y, r, r / 2).stroke({ width: 3 * k, color: 0x120d0b, alpha: 0.6 * fade })
+        moveMarks.ellipse(s.x, s.y, r, r / 2).stroke({ width: 1.5 * k, color: m.color, alpha: fade })
+      }
+      moveMarks.rect(s.x - 2 * k, s.y - 1 * k, 4 * k, 2 * k).fill({ color: m.color, alpha: fade })
+    }
+    if (moveOrders.length === 0) moveMarks.clear()
   })
   // Town names and siege bars, at a fixed size on screen above each town.
   let townMarks: { mark: TownMark; text: Text; bar: Graphics }[] = []
@@ -756,6 +789,8 @@ export async function createWorld(
     camera.y = Math.round(height / 2 - s.y * camera.scale.y)
   }
 
+  // The last camera view reported, rounded to tiles, so a pan of a pixel does not re-render the page.
+  let cameraKey = ''
   function refresh() {
     keepInside()
     const { width, height } = app.screen
@@ -797,7 +832,12 @@ export async function createWorld(
     }
     dispatch()
     report()
-    onCamera(middle)
+    const view = [middle, toTile({ x: 0, y: 0 }), toTile({ x: width, y: 0 }), toTile({ x: width, y: height }), toTile({ x: 0, y: height })]
+    const key = view.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).join(' ')
+    if (key !== cameraKey) {
+      cameraKey = key
+      onCamera(middle, view.slice(1))
+    }
   }
 
   function centerOn(tile: Point) {
@@ -1140,9 +1180,18 @@ export async function createWorld(
   const touches = new Map<number, Point>()
 
   let press: { start: Point; camera: Point; moved: boolean } | null = null
+  // A right button press (the mouse only): it never drags the map; released where it was pressed, it is a right tap.
+  let rightPress: Point | null = null
   app.stage.eventMode = 'static'
   app.stage.hitArea = app.screen
   app.stage.on('pointerdown', (e) => {
+    if (e.button === 2) {
+      // Only on the map itself, not over a panel on top of it.
+      rightPress = e.nativeEvent.target === app.canvas ? { x: e.global.x, y: e.global.y } : null
+      return
+    }
+    // Only the main mouse button drags, taps and picks; the right (and middle) button is left to its own handlers.
+    if (e.pointerType === 'mouse' && e.button !== 0) return
     touches.set(e.pointerId, { x: e.global.x, y: e.global.y })
     if (touches.size > 1) {
       // A multi-finger touch is never a tap, even after the other fingers lift.
@@ -1158,6 +1207,16 @@ export async function createWorld(
     }
   })
   const release = (e: FederatedPointerEvent) => {
+    if (e.button === 2) {
+      const from = rightPress
+      rightPress = null
+      if (from && e.type === 'pointerup' && Math.hypot(e.global.x - from.x, e.global.y - from.y) <= TAP_SLOP) {
+        const tile = tileAt({ x: e.global.x, y: e.global.y })
+        if (tile.x >= 0 && tile.y >= 0 && tile.x < world.size && tile.y < world.size) onRightTap?.(tile)
+      }
+      return
+    }
+    if (e.pointerType === 'mouse' && e.button !== 0) return
     touches.delete(e.pointerId)
     if (touches.size > 0) return
     if (stroke) {
@@ -1189,6 +1248,9 @@ export async function createWorld(
     lastPointer = null
   }
   app.canvas.addEventListener('pointerleave', leaveMap)
+  // No browser context menu over the map (right-click is a game action there); HUD panels keep theirs.
+  const noContextMenu = (e: MouseEvent) => e.preventDefault()
+  app.canvas.addEventListener('contextmenu', noContextMenu)
   app.stage.on('pointermove', (e) => {
     // Pixi hears the pointer over the whole page: over a window or panel on top of the map nothing on the map is
     // pointed at (no outline, no label), unless a drag on the map is under way.
@@ -1647,7 +1709,16 @@ export async function createWorld(
   function drawFleets(scale: number) {
     const drawn = ambient.shipsDrawn()
     fleetRoutes.clear()
-    for (const child of fleetMarks.removeChildren()) child.destroy()
+    // (An outline cut by a deck lets go of its mask first, which is then kept out of the drawing again.)
+    for (const child of fleetMarks.removeChildren()) {
+      const mask = child.mask as Container | null
+      if (mask) {
+        child.mask = null
+        mask.includeInBuild = false
+        mask.measurable = false
+      }
+      child.destroy()
+    }
     const seen = new Set<string>()
     for (const d of drawn) {
       const s = d.ship
@@ -1674,6 +1745,12 @@ export async function createWorld(
         ring.position.set(d.x, d.y)
         ring.tint = 0xf2d16b
         fleetMarks.addChild(ring)
+        // Under a bridge the outline is cut by the deck as the ship is.
+        if (d.mask) {
+          ring.setMask({ mask: d.mask, inverse: true })
+          d.mask.includeInBuild = false
+          d.mask.measurable = false
+        }
       }
       // The tag over the fleet's first ship.
       if (s.tag) {
@@ -1764,7 +1841,10 @@ export async function createWorld(
   let trailPoints: Point[] = []
   // Tiles on a footpath: the town's walkers keep to them (see findPath).
   let worn = new Set<number>()
+  // Tiles of the roads the lords laid: walkers keep to them as to the footpaths.
+  let laid = new Set<number>()
   function setStructures(placed: Structure[], townTrails: Point[][]) {
+    laid = new Set(placed.filter((s) => s.look === 'road').map((s) => s.y * world.size + s.x))
     const trails = [...cityTrails(world), ...townTrails]
     // The free cities stand with the kingdoms' buildings, and answer to the pointer as a whole (by the city's index).
     const structures = linkWalls([...cityStructures(world), ...placed])
@@ -1835,7 +1915,7 @@ export async function createWorld(
         resolution: window.devicePixelRatio * 2,
         anchor: { x: 0.5, y: 1 },
         style: {
-          fontFamily: 'system-ui, sans-serif',
+          fontFamily: "'Digits', 'Pixelify Sans', system-ui, sans-serif",
           fontSize: 14,
           fontWeight: '700',
           fill: color,
@@ -1898,7 +1978,7 @@ export async function createWorld(
         // Bridges carry walkers over the water.
         if (world.feature[y * world.size + x] === Feature.Bridge) return false
         return t === Terrain.Lake || t === Terrain.River || t === Terrain.Mountain
-      }, (x, y) => worn.has(y * world.size + x)),
+      }, (x, y) => worn.has(y * world.size + x) || laid.has(y * world.size + x)),
     blocksWalkers: (x, y) => solid.has(y * world.size + x),
     setAimMark(mark) {
       aim = mark
@@ -1957,10 +2037,14 @@ export async function createWorld(
       })
     },
     float,
+    markMove(at, color) {
+      moveOrders.push({ at, color, born: performance.now() })
+    },
     zoomBy: (step) => zoomTo(zoomIndex + step, { x: app.screen.width / 2, y: app.screen.height / 2 }),
     destroy() {
       app.canvas.removeEventListener('wheel', onWheel)
       app.canvas.removeEventListener('pointerleave', leaveMap)
+      app.canvas.removeEventListener('contextmenu', noContextMenu)
       for (const worker of workers) worker.terminate()
       for (const key of [...chunks.keys()]) drop(key)
       // Walker, animal and cloud textures are shared by every scene (see textures.ts), so they are kept.

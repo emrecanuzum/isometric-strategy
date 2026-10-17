@@ -166,7 +166,7 @@ export function DynastySection({ kingdom, now, online }: { kingdom: Kingdom; now
                       <small className={c.education ? 'education-note' : 'education-note todo'}>{c.education ? `Eğitimi: ${SKILL_NAMES[c.education]}` : 'Eğitim seçilmedi: hocalarına bir yetenek seç'}</small>
                     )}
                     {canTeach && (
-                      <div className="segmented three education" role="radiogroup" aria-label="Eğitim">
+                      <div className="segmented choices education" role="radiogroup" aria-label="Eğitim">
                         {SKILLS.map((s) => (
                           <button key={s} role="radio" aria-checked={c.education === s} className={c.education === s ? 'btn small active' : 'btn small'} onClick={() => act?.({ type: 'educate', id: c.id, focus: s })}>
                             {SKILL_NAMES[s]}
@@ -287,7 +287,7 @@ export function HouseDialog({ news, kingdom, now, online, onClose }: { news: Hou
       ? `Kraliçe ${kingdom.dynasty?.queen?.name ?? ''} bir ${p.sex === 'm' ? 'oğlan' : 'kız'} doğurdu! Halk sevinçle kutluyor. Ona bir ad koy; hükümdar yaşadıkça eğitimini Saray sekmesinin Hanedan bölümünden seçebilirsin.`
       : news.kind === 'death'
         ? `Hükümdar ${p.name}, ${Math.floor(ageOf(p, p.diedAt ?? now))} yaşında ${p.cause === 'battle' ? 'ordusunun başında savaşırken' : p.cause === 'grief' ? 'kaybedilen savaşın kahrından' : 'yaşlılıktan'} öldü. ${
-            news.heir && !kingdom.dynasty?.council ? `Yerine oğlu ${news.heir.name} geçti.` : news.heir ? `Oğlu ${news.heir.name} reşit olana kadar naipler konseyi yönetecek.` : 'Oğlu olmadığı için lordluğu naipler konseyi yönetecek.'
+            news.heir && !kingdom.dynasty?.council ? `Yerine oğlu ${news.heir.name} geçti.` : news.heir ? `Oğlu ${news.heir.name} reşit olana kadar naipler konseyi yönetecek.` : `Oğlu olmadığı için lordluğu naipler konseyi yönetecek; ${balance.dynasty.council.kinsmanYears} yıl sonra hanedandan bir akraba tahta çağrılacak.`
           } Kraliçe artık kraliçe ana; yeni hükümdarın kendi kraliçesini alması gerekecek.`
         : news.kind === 'coronation'
           ? `${p.name} tahta çıktı. Hanedanın ${kingdom.dynasty?.generation ?? 1}. hükümdarı o.`

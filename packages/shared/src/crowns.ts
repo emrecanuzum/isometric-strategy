@@ -111,7 +111,7 @@ export const byPower = (share: number, range: readonly number[]) => range[0] + (
 // ---- When a lord may swear -------------------------------------------------------------------------------------------
 
 // Fealty is offered once the lord has a few buildings standing (the crowns are introduced then).
-export const doneBuildings = (kingdom: Pick<Kingdom, 'buildings'>, at: number) => kingdom.buildings.filter((b) => b.doneAt <= at && b.kind !== 'wall' && b.kind !== 'gate').length
+export const doneBuildings = (kingdom: Pick<Kingdom, 'buildings'>, at: number) => kingdom.buildings.filter((b) => b.doneAt <= at && b.kind !== 'wall' && b.kind !== 'gate' && b.kind !== 'road').length
 export const fealtyOpen = (kingdom: Pick<Kingdom, 'buildings'>, at: number) => doneBuildings(kingdom, at) >= spec().intro.buildings
 
 // ---- Commissions: each crown orders goods every hour (CLAUDE.md §7.8) -----------------------------------------------

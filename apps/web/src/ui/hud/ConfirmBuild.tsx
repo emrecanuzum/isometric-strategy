@@ -59,7 +59,7 @@ export function ConfirmBuild({
             </span>
           ) : null}
           <span className="chip">
-            {spec.size}×{spec.size}
+            {kind === 'gate' ? '3×1' : `${spec.size}×${spec.size}`}
           </span>
         </span>
         <div className="row">

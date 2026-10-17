@@ -561,17 +561,35 @@ small {
   z-index: 4;
 }
 
-/* Back to the main menu, under the settings. */
-.exit {
+/* The corner menu (settings, main menu) opens downward under its button. */
+.corner-menu {
   position: fixed;
-  top: calc(var(--gap) + 44px + var(--px) * 4 + var(--px) * 4);
+  top: var(--gap);
   right: var(--gap);
-  z-index: 4;
+  z-index: 6;
+}
+
+.corner-menu-list {
+  position: absolute;
+  top: calc(100% + var(--px) * 4);
+  right: 0;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+  min-width: 150px;
+  padding: calc(var(--px) * 3);
+}
+
+.corner-menu-list .btn {
+  justify-content: flex-start;
+  gap: calc(var(--px) * 3);
 }
 
 /* The music switch is a one-chip bar of its own, the height of the store bar and in the same frame. */
 .btn.music,
-.btn.exit {
+.btn.exit,
+.btn.menu-chip {
   --face: var(--panel);
   --hi: var(--panel-hi);
   --lo: var(--panel-lo);
@@ -581,7 +599,8 @@ small {
 }
 
 .btn.music:hover:not(:disabled),
-.btn.exit:hover:not(:disabled) {
+.btn.exit:hover:not(:disabled),
+.btn.menu-chip:hover:not(:disabled) {
   --face: var(--panel-2);
 }
 
@@ -1298,6 +1317,24 @@ small {
 
 .worldmap-sheet {
   position: relative;
+}
+
+.worldmap-view {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.worldmap-view polygon {
+  fill: rgba(255, 255, 255, 0.08);
+  stroke: #fff;
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+  paint-order: stroke;
+  filter: drop-shadow(0 0 1px #120d0b);
 }
 
 .worldmap-sheet canvas {
@@ -2165,6 +2202,19 @@ small {
   color: var(--gold);
 }
 
+/* Wider screens: while the menu (dock) is shown at the bottom left (following an army, aiming, sailing, a plan
+   waiting), the centred bars ran over its last tabs, so they stand above it then (the plan above the placing bar).
+   While placing the dock is hidden and they keep to the bottom. */
+@media (min-width: 720px) {
+  .dock ~ .placing {
+    bottom: calc(var(--gap) + 84px);
+  }
+
+  .dock ~ .plan-bar {
+    bottom: calc(var(--gap) + 148px);
+  }
+}
+
 .plan-text {
   display: flex;
   flex-direction: column;
@@ -2229,7 +2279,7 @@ small {
 .map-alerts {
   /* On the right edge, from just under the settings and main-menu buttons down to the zoom buttons, stacked one under
      another; scrolls within itself when there are many (it never covers the buttons). */
-  --alerts-top: calc(var(--gap) + 2 * (44px + var(--px) * 4) + var(--px) * 12);
+  --alerts-top: calc(var(--gap) + 44px + var(--px) * 4 + var(--px) * 8);
   position: fixed;
   right: var(--gap);
   top: var(--alerts-top);
@@ -2320,6 +2370,166 @@ small {
     0 0 0 7px var(--ink);
 }
 
+/* The shortcuts in the four empty corners around the diamond minimap (CLAUDE.md §11). The box is the turned
+   minimap's own bounding box (320px square turned 45° and squashed to half: 452 × 226), so each button sits in a
+   corner triangle. */
+.mm-corners {
+  position: fixed;
+  right: 11px;
+  bottom: 11px;
+  width: 452px;
+  height: 226px;
+  pointer-events: none;
+  z-index: 3;
+  --mm-btn: 30px;
+  --mm-in: 4px;
+}
+
+.mm-corner {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: var(--mm-btn);
+  height: var(--mm-btn);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--wood-2);
+  box-shadow:
+    inset 0 2px 0 var(--wood-4),
+    inset 0 -2px 0 var(--wood-0),
+    0 0 0 2px var(--wood-0),
+    0 0 0 4px var(--ink);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.mm-corner:hover:not(:disabled) {
+  background: var(--wood-3);
+}
+
+.mm-corner:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.mm-corner:disabled {
+  cursor: default;
+  filter: grayscale(0.8) brightness(0.75);
+}
+
+.mm-corner.tl { left: var(--mm-in); top: var(--mm-in); }
+.mm-corner.tr { right: var(--mm-in); top: var(--mm-in); }
+.mm-corner.bl { left: var(--mm-in); bottom: var(--mm-in); }
+.mm-corner.br { right: var(--mm-in); bottom: var(--mm-in); }
+
+.mm-corner b {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  padding: 0 3px;
+  border-radius: 2px;
+  background: #a83a2a;
+  box-shadow: 0 0 0 2px var(--ink);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* Something hot going on: the button glows slowly. */
+.mm-corner.alarm {
+  animation: mm-alarm 1.6s steps(4) infinite;
+}
+
+@keyframes mm-alarm {
+  0%, 100% { background: var(--wood-2); }
+  50% { background: #8a3424; }
+}
+
+.mm-caption {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  max-width: 100%;
+  padding: calc(var(--px) * 3) calc(var(--px) * 6);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  animation: mm-caption 2.6s steps(6) both;
+}
+
+@keyframes mm-caption {
+  0% { opacity: 0; }
+  10%, 80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* The photo mode: every piece of the interface hidden but the map itself and the overlay. */
+:root[data-photo] body * {
+  visibility: hidden !important;
+}
+
+:root[data-photo] .world-host,
+:root[data-photo] .world-host *,
+:root[data-photo] .photo-overlay,
+:root[data-photo] .photo-overlay * {
+  visibility: visible !important;
+}
+
+.photo-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  cursor: pointer;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(10, 6, 4, 0.55) 100%);
+}
+
+.photo-stamp {
+  position: absolute;
+  left: 24px;
+  bottom: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #fff3c4;
+  text-shadow:
+    2px 0 0 #1c1612,
+    -2px 0 0 #1c1612,
+    0 2px 0 #1c1612,
+    0 -2px 0 #1c1612;
+  pointer-events: none;
+}
+
+.photo-stamp b {
+  font-size: 26px;
+  font-weight: normal;
+}
+
+.photo-stamp span {
+  font-size: 15px;
+  opacity: 0.85;
+}
+
+.photo-hint {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  background: rgba(28, 22, 18, 0.7);
+  color: #fff3c4;
+  font-size: 13px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+  pointer-events: none;
+  animation: mm-caption 3.5s steps(6) both;
+}
+
 /* Pixel spinner: 8 squares on a 4x4 grid ring, each lit in turn. */
 .spinner {
   --sq: 4px;
@@ -2392,6 +2602,16 @@ small {
     height: 200px;
   }
 
+  /* The smaller minimap's bounding box (200px turned: 283 × 141). */
+  .mm-corners {
+    right: 7px;
+    bottom: 9px;
+    width: 283px;
+    height: 141px;
+    --mm-btn: 26px;
+    --mm-in: 3px;
+  }
+
   .zoom {
     bottom: 180px;
   }
@@ -2423,7 +2643,8 @@ small {
 
   /* Settings and the main menu fold into one menu under the store bar, opening downward. */
   .btn.music,
-  .btn.exit {
+  .btn.exit,
+  .corner-menu {
     display: none;
   }
 
@@ -2572,7 +2793,8 @@ small {
   }
 
   .btn.music,
-  .btn.exit {
+  .btn.exit,
+  .btn.menu-chip {
     --icon-chip: calc(40px + var(--px) * 4);
   }
 
@@ -2616,6 +2838,31 @@ small {
     height: 132px;
   }
 
+  /* The phone's minimap on the left (132px turned: 187 × 93). */
+  .mm-corners {
+    left: 11px;
+    right: auto;
+    bottom: calc(var(--dock-h) + 18px + env(safe-area-inset-bottom));
+    width: 187px;
+    height: 93px;
+    --mm-btn: 24px;
+    --mm-in: 1px;
+  }
+
+  .mm-corner b {
+    top: -5px;
+    right: -5px;
+    min-width: 13px;
+    font-size: 10px;
+    line-height: 13px;
+  }
+
+  .mm-caption {
+    left: 0;
+    transform: none;
+    max-width: calc(100vw - 2 * var(--gap));
+  }
+
   .spinner:not(.big) {
     right: var(--gap);
     bottom: auto;
@@ -2625,7 +2872,8 @@ small {
   /* The open sheet covers the map controls. */
   :root[data-sheet='open'] .zoom,
   :root[data-sheet='open'] .map-alerts,
-  :root[data-sheet='open'] .minimap {
+  :root[data-sheet='open'] .minimap,
+  :root[data-sheet='open'] .mm-corners {
     display: none;
   }
 
@@ -2635,6 +2883,16 @@ small {
     transform: none;
     width: auto;
     font-size: 14px;
+  }
+
+  /* Over the dock (full width at the bottom) while it is shown: following an army, aiming, sailing. */
+  .dock ~ .placing {
+    bottom: calc(56px + var(--gap));
+  }
+
+  .dock ~ .placing ~ .plan-bar,
+  .dock ~ .plan-bar:has(~ .placing) {
+    bottom: calc(56px + var(--gap) + 64px);
   }
 
   .dialog {
@@ -2974,7 +3232,12 @@ small {
   display: inline-flex;
   align-items: center;
   gap: calc(var(--px) * 2);
-  min-width: 11ch;
+  /* Wide enough for the longest kind ("Kalkanlı piyade"), so the steppers line up. */
+  min-width: 15ch;
+}
+
+.unit-label + .btn + .stepper-value {
+  min-width: 7ch;
 }
 
 .peace {
@@ -3135,11 +3398,12 @@ small {
 
 /* The distances' bars line up whatever the length of the number beside them. */
 .site-distance .site-yield {
-  grid-template-columns: auto 1fr 64px;
+  grid-template-columns: auto 1fr minmax(64px, auto);
 }
 
 .site-distance .site-yield > b {
   text-align: right;
+  white-space: nowrap;
 }
 
 /* On a phone the three sites stack as short rows: the name, then the three multipliers side by side, then the land. */
@@ -3313,6 +3577,41 @@ small {
   width: 100%;
   height: auto;
   image-rendering: pixelated;
+}
+
+.tribute-answer {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 3);
+}
+
+.tribute-talk {
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.tribute-talk .talk-line {
+  color: var(--gold);
+  font-style: italic;
+}
+
+.tribute-talk .talk-mine {
+  color: var(--text);
+  padding-left: calc(var(--px) * 4);
+}
+
+.tribute-talk .talk-replies {
+  display: grid;
+  gap: calc(var(--px) * 2);
+}
+
+.tribute-talk .talk-reply {
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  height: auto;
+  min-height: var(--control-small);
+  padding-block: calc(var(--px) * 2);
 }
 
 .fortune-body {
@@ -4738,6 +5037,11 @@ kbd {
   color: var(--gold);
 }
 
+/* Six parts or more (the tavern's games): two rows of four, so no name is cut off at the sheet's edge. */
+.palace-tabs.wide {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 /* Four parts or more: the icon over a smaller name, so the row still fits the sheet. */
 .palace-tabs.many .btn {
   flex-direction: column;
@@ -5376,5 +5680,68 @@ input:not([type='range']):focus-visible {
   .advisor-face canvas {
     width: 48px !important;
     height: 60px !important;
+  }
+}
+
+/* ---- Choice grids ----
+   Any group of choices (ship types, units, goods, products, tax, upkeep, crisis answers…): as many columns as there
+   are choices up to three, then wrapping: one in a column, two side by side, three in a row, four as 2×2, five and six
+   in threes. Counted from the children, so a group needs no class per size; a full-width strip (.wide, or the goods'
+   "sell nothing") is not counted. Each group keeps its own gap. */
+.choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+:where(.choices) {
+  gap: calc(var(--px) * 3);
+}
+
+.choices:has(> :only-child) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.choices:has(> :nth-child(2):last-child:not(.wide, .none)),
+.choices:has(> :nth-child(4):last-child:not(.wide, .none)),
+.choices:has(> :nth-child(3):last-child:is(.wide, .none)),
+.choices:has(> :nth-child(5):last-child:is(.wide, .none)) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.choices > .wide {
+  grid-column: 1 / -1;
+}
+
+.choices > .btn {
+  justify-content: center;
+  min-width: 0;
+  height: auto;
+  padding-block: calc(var(--px) * 2);
+  line-height: 1.15;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.choices > .btn.crisis-choice {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* Phones: in three columns the icon goes above its label so every name fits. */
+@media (max-width: 560px) {
+  .choices:not(:has(> :only-child, > :nth-child(2):last-child:not(.wide, .none), > :nth-child(4):last-child:not(.wide, .none), > :nth-child(3):last-child:is(.wide, .none), > :nth-child(5):last-child:is(.wide, .none))) > .btn {
+    flex-direction: column;
+    gap: var(--px);
+    padding-inline: calc(var(--px) * 2);
+    font-size: 14px;
+  }
+
+  .choices > .btn.crisis-choice {
+    font-size: 15px;
+  }
+
+  .choices > .btn.crisis-choice small {
+    font-size: 12px;
   }
 }

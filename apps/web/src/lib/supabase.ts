@@ -10,10 +10,18 @@ const guarded: typeof fetch = async (input, init) => {
   if (response.status === 401 && !url.includes('/auth/v1/') && !leaving) {
     leaving = true
     // Outside the request, so the sign-out does not wait on the call that is still being answered.
+    // A 401 may only mean the access token ran out while its refresh failed for a moment (a busy server): the session
+    // is refreshed first, and the player is signed out only when the server turns the refresh down itself.
     setTimeout(async () => {
-      const { data } = await supabase.auth.getSession()
-      if (data.session) await supabase.auth.signOut({ scope: 'local' })
-      leaving = false
+      try {
+        const { data } = await supabase.auth.getSession()
+        if (!data.session) return
+        const { error } = await supabase.auth.refreshSession()
+        const refused = error && typeof error.status === 'number' && error.status >= 400 && error.status < 500
+        if (refused) await supabase.auth.signOut({ scope: 'local' })
+      } finally {
+        leaving = false
+      }
     }, 0)
   }
   return response

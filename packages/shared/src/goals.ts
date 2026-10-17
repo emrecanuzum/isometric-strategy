@@ -23,7 +23,7 @@ export const goalTiers = (track: string) => TRACKS[track]?.tiers ?? []
 export function goalMeasure(k: Kingdom, track: string, at: number): number {
   switch (TRACKS[track]?.measure) {
     case 'buildings':
-      return k.buildings.filter((b) => b.doneAt <= at && b.kind !== 'wall' && b.kind !== 'gate').length
+      return k.buildings.filter((b) => b.doneAt <= at && b.kind !== 'wall' && b.kind !== 'gate' && b.kind !== 'road').length
     case 'houses':
       return k.buildings.filter((b) => b.kind === 'house' && b.doneAt <= at).length
     case 'palace':

@@ -71,6 +71,8 @@ const MAPS = {
   leaf: ['.....oko', '....okyk', '...oyyok', '..oyyok.', '.oyook..', '.kook...', '.k......', 'k.......'],
   snow: ['...C....', '.C.S.C..', '..SSS...', 'CSSwSSC.', '..SSS...', '.C.S.C..', '...C....', '........'],
   star: ['...yy...', '...yy...', 'yyywwyyy', '.yywwyy.', '..yyyy..', '.yy..yy.', '.y....y.', '........'],
+  map: ['kkkkkkkk', 'kllGlllk', 'klGGlRlk', 'klllRllk', 'kllRlGlk', 'klRllGGk', 'kllllllk', 'kkkkkkkk'],
+  camera: ['........', '..kkk...', 'kkkkkkkk', 'kddkkdyk', 'kdkCwkdk', 'kdkcCkdk', 'kddkkddk', 'kkkkkkkk'],
 } as const
 
 export type IconName = keyof typeof MAPS
