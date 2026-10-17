@@ -1988,7 +1988,8 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
   **askerle**: alıcının bir ordusu kasabanın kapısında (3 karo) durmalıdır;
   ayaklanma ya da kuşatma sürerken pazar kapalıdır. Kasaba panelinin **Pazar**
   bölümünde miktar seçilir (stok, hazine ve ordunun yükü sınırlar: asker başına
-  12 birim). Altın hemen ödenir ve sahibin hazinesine girer (sığmayan boşa
+  12 birim; ordunun satırı, miktar düğmeleri ve satın al düğmesi alt alta,
+  tam genişlikte durur). Altın hemen ödenir ve sahibin hazinesine girer (sığmayan boşa
   gider; defterde `townSales`); sahip "Kasabadan iyi haber" diye kimin ne kadar
   aldığını öğrenir (`town_sale`). Sahipsiz kasabada ya da kendi kasabasından
   alanın altını kimseye gitmez. Mallar orduya yüklenir (`armies.cargo`, yalnız
@@ -2937,7 +2938,7 @@ krallıkta birer tane olur ve 3 seviyelidir.
   sıradaki yeri ("2 / 5"; sıra boşalınca sayaç sıfırlanır), sağ uçta hep
   aynı yerde ileri düğmesi (arkada pencere varsa **"İleri"**, sonuncuda
   "Tamam"). "Tümünü kapat" yalnızca bir şey bildiren pencereleri kapatır
-  (süresi işleyen haraç isteği, kriz ve seçim kalır) ve kapattıklarını
+  (süresi işleyen haraç isteği, cevap bekleyen elçi teklifi, kriz ve seçim kalır) ve kapattıklarını
   kısa bir pencerede başlık başlık (tekrarlananlar "×N") özetler.
   - **Pencerelerin raf ömrü** (`config/balance/dialogs.json`; `App.tsx` →
     `folded`): bir şey bildiren pencere geldiği andan (hanedan haberinde
