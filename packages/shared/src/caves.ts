@@ -235,6 +235,7 @@ export function clanFighter(soldiers: number) {
 // The cave a new clan settles in: drawn from the seed, the slot and its generation among the caves that are free (not
 // held by another clan, never razed, and not too close to the lords' lands or the towns; `avoid`). With none free, any
 // cave not held by another clan.
+// `seed` here is a secret roll from the server (never the lobby seed, which every lord knows).
 export function pickCave(caves: CaveSpot[], seed: number, slot: number, gen: number, held: number[], fallen: number[], avoid: (c: CaveSpot) => boolean) {
   const free = caves.filter((c) => !held.includes(c.idx) && !fallen.includes(c.idx) && !avoid(c))
   const pool = free.length > 0 ? free : caves.filter((c) => !held.includes(c.idx))

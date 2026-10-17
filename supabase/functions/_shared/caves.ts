@@ -12,6 +12,10 @@ import { admin, iso, ms, mutateKingdom, nameOf, notify } from './server.ts'
 import type { Kingdom, LobbyWorld, Point, Row } from './server.ts'
 import { lobbySeed } from './outlaws.ts'
 
+// Which cave a clan takes is drawn from the server's own randomness, not the lobby seed: every lord knows the seed and
+// the clans' generations, and could otherwise work out the hidden cave (CLAUDE.md §7.9.1).
+const secretRoll = () => crypto.getRandomValues(new Uint32Array(1))[0] >>> 1
+
 // deno-lint-ignore no-explicit-any
 type Clan = any
 // deno-lint-ignore no-explicit-any
@@ -63,7 +67,7 @@ async function ensureClans(lobby: string, world: LobbyWorld, kingdoms: Row[], no
   const held = rows.map((r) => r.cave).filter((c): c is number => c !== null)
   for (let slot = 0; slot < K.count; slot++) {
     if (rows.some((r) => r.idx === slot)) continue
-    const cave = game.pickCave(caves, seed, slot, 0, held, [], avoid)
+    const cave = game.pickCave(caves, secretRoll(), slot, 0, held, [], avoid)
     if (cave === null) continue
     held.push(cave)
     await admin.from('lobby_outlaws').upsert({ lobby_id: lobby, kind: 'clan', idx: slot, gen: 0, born_at: now, cave }, { onConflict: 'lobby_id,kind,idx', ignoreDuplicates: true })
@@ -211,7 +215,7 @@ export async function settleCaveBattle(
   const fallen = [...row!.fallen, { cave: row!.cave ?? -1, at, by: lord, byName: nameOf(kingdoms, lord), name: o.name }]
   const held = rows.filter((r) => r.idx !== o.idx).map((r) => r.cave).filter((c): c is number => c !== null)
   const gen = row!.gen + 1
-  const next = game.pickCave(caves, seed, o.idx, gen, [...held, row!.cave ?? -1], fallen.map((f) => f.cave), await avoidOf(lobby, kingdoms))
+  const next = game.pickCave(caves, secretRoll(), o.idx, gen, [...held, row!.cave ?? -1], fallen.map((f) => f.cave), await avoidOf(lobby, kingdoms))
   const { data: done } = await admin
     .from('lobby_outlaws')
     .update({ battle: null, gen, born_at: at, cave: next, losses: 0, fallen })
