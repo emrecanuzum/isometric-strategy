@@ -32,6 +32,7 @@ import { DialogFoot } from '../DialogQueue'
 import { Icon } from '../icons'
 import type { Online } from './online'
 import { Meter, Section } from './primitives'
+import { PixelSelect } from './PixelSelect'
 
 // The lord's house on the palace's tab (CLAUDE.md §9.1, §9.1.1), seen from the ruler: his parents, himself and his
 // lady, his brothers and sisters, his children, the kin, the daughters and sisters married off, the ladies married in,
@@ -81,7 +82,7 @@ const roleOfPortrait = (p: Pick<Person, 'sex'>) => (p.sex === 'm' ? 'prince' : '
 // How a man of the house feels, in a word.
 export const moodWord = (v: number) => (v >= 40 ? 'sadık' : v >= 10 ? 'iyi' : v >= I.opinion.warn ? 'mesafeli' : v >= I.revolt.below ? 'hoşnutsuz' : 'düşman')
 
-function SkillBars({ skills }: { skills: Record<Skill, number> }) {
+export function SkillBars({ skills }: { skills: Record<Skill, number> }) {
   return (
     <div className="skills">
       {SKILLS.map((s) => (
@@ -127,7 +128,7 @@ function OpinionLine({ kingdom, p, now }: { kingdom: Kingdom; p: Person; now: nu
   return (
     <div className="kin-opinion">
       <span className="skill" title={parts.map((x) => `${PART_NAMES[x.key]} ${signed(x.value)}`).join(' · ')}>
-        <small>Sana</small>
+        <small>Seninle ilişkisi</small>
         <Meter value={(op.ruler + 100) / 200} tone={op.ruler >= 10 ? 'up' : op.ruler < I.opinion.warn ? 'down' : 'gold'} label="Hükümdara bakışı" segments={10} />
         <b>{signed(op.ruler)}</b>
       </span>
@@ -160,9 +161,7 @@ function RolePicker({ kingdom, p, now, online, onDone }: { kingdom: Kingdom; p: 
   return (
     <div className="kin-picker">
       <div className="row">
-        <select className="text" value={town ?? ''} onChange={(e) => setTown(Number(e.target.value))} disabled={held.length === 0} aria-label="Kasaba">
-          {held.length === 0 ? <option value="">Elinde kasaba yok</option> : held.map((t) => <option key={t.id} value={t.id}>{t.name ?? `Kasaba ${t.id}`}</option>)}
-        </select>
+        <PixelSelect value={town} onChange={setTown} options={held.map((t) => ({ value: t.id, label: t.name ?? `Kasaba ${t.id}` }))} placeholder="Elinde kasaba yok" aria-label="Kasaba" />
         <button className="btn small" disabled={governor !== null} onClick={() => give('governor', town)}>
           Vali yap
         </button>
@@ -211,9 +210,7 @@ function MarryPicker({ kingdom, p, now, online, onDone }: { kingdom: Kingdom; p:
       </button>
       <small>Taçla ilişkin hemen +{m.crown.relation}, sonra hep +{m.crown.crownRest} daha yüksekte dinlenir; taç hanedanının erkeklerini de biraz daha sever.</small>
       <div className="row">
-        <select className="text" value={town ?? ''} onChange={(e) => setTown(Number(e.target.value))} disabled={towns.length === 0} aria-label="Kasaba">
-          {towns.length === 0 ? <option value="">Uygun kasaba yok</option> : towns.map((t) => <option key={t.id} value={t.id}>{t.name}{t.free ? ' (kimsenin değil)' : ''}</option>)}
-        </select>
+        <PixelSelect value={town} onChange={setTown} options={towns.map((t) => ({ value: t.id, label: t.name, note: t.free ? 'kimsenin değil' : undefined }))} placeholder="Uygun kasaba yok" aria-label="Kasaba" />
         <button className="btn small" disabled={!chosen || marryError(kingdom, p.id, { kind: 'town', town: chosen.id, name: chosen.name, free: chosen.free }, now) !== null} onClick={() => chosen && marry({ kind: 'town', town: chosen.id })}>
           Kasabaya gelin ver · {dowryOf('town')} altın
         </button>
@@ -223,9 +220,7 @@ function MarryPicker({ kingdom, p, now, online, onDone }: { kingdom: Kingdom; p:
         %{m.town.freeLoyalty} ile başlar; aşırı büyümeye dikkat).
       </small>
       <div className="row">
-        <select className="text" value={lord ?? ''} onChange={(e) => setLord(Number(e.target.value))} disabled={lords.length === 0} aria-label="Lord">
-          {lords.length === 0 ? <option value="">Lobide başka lord yok</option> : lords.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
-        </select>
+        <PixelSelect value={lord} onChange={setLord} options={lords.map((k) => ({ value: k.id, label: k.name }))} placeholder="Lobide başka lord yok" aria-label="Lord" />
         <button className="btn small" disabled={lord === undefined} onClick={() => lord !== undefined && marry({ kind: 'lord', id: lord })}>
           Elçiyle teklif et
         </button>

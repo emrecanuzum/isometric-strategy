@@ -74,6 +74,8 @@ export async function orderChase(world: LobbyWorld, army: ArmyRow, owner: Kingdo
   const { bands } = await outlawsIn(army.lobby_id, world)
   const band = bands.find((b: Band) => b.idx === idx)
   if (!band || !game.outlawUp(band, at)) return 'outlaw'
+  // Already after it (a repeated order): nothing new, no second word of it.
+  if (army.goal?.kind === 'chase' && army.goal.band === idx) return null
   const update = chaseMarch(world, army, owner, kingdoms, band, at, at)
   if (!update) return 'route'
   await admin.from('armies').update(update).eq('id', army.id)

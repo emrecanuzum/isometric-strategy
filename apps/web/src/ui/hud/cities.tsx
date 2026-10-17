@@ -1,11 +1,14 @@
 import { useState } from 'react'
-import { GOODS, balance, goldCap, crownDemand, questError, questProgress, crownOrder, crownOrderError, orderPay, palaceLevel, byPower, cityCenter, cityPrice, cityTripMs, crownGoods, crownPower, crownRelation, crownRest, doneBuildings, fealtyOpen, giftAt, lobbyTripMs, priceAt, stewardFactor, tradeCityReadyAt, tradeUnits } from '@game/shared'
+import { GOODS, balance, goldCap, crownDemand, questError, questProgress, crownOrder, crownOrderError, orderPay, palaceLevel, byPower, cityCenter, cityPrice, cityTripMs, crownGoods, crownPower, crownRelation, crownRest, crownTraitAt, doneBuildings, fealtyOpen, giftAt, lobbyTripMs, priceAt, stewardFactor, tradeCityReadyAt, tradeUnits } from '@game/shared'
 import type { Kingdom, Market, Point, QuestKind, World } from '@game/shared'
 import { cityInfo } from '../../game/cities'
 import { Icon } from '../icons'
 import { RESOURCE_ICONS, RESOURCE_NAMES } from '../names'
 import { Meter, Section, Stat, fmt } from './primitives'
 import type { Online } from './online'
+import { Subtabs, usePart } from './Subtabs'
+import type { Part } from './Subtabs'
+import { BetrayalCard, CrownCourt, RoyalFamily } from './crownHouse'
 
 // The free cities (CLAUDE.md §4.2, §7.6): what they are, and the merchant's choice between the lobby's market and a
 // free city's.
@@ -510,7 +513,53 @@ const QUEST_WHY: Record<string, string> = {
 }
 
 export function CrownsPanel({ world, kingdom, online, market, now }: { world: World; kingdom: Kingdom; online: Online; market?: Market | null; now: number }) {
-  if (world.cities.length === 0) return <p className="hint">Bu lobide taç krallığı yok.</p>
+  const crowns = world.cities.length
+  const ids = [...world.cities.map((_, i) => `c${i}`), 'power'] as string[]
+  const [part, setPart] = usePart<string>('crowns', ids, kingdom.liege !== undefined && kingdom.liege !== null ? `c${kingdom.liege}` : 'c0')
+  const [inner, setInner] = usePart<CrownPart>('crown-part', CROWN_PARTS, 'house')
+  if (crowns === 0) return <p className="hint">Bu lobide taç krallığı yok.</p>
+  const palace = palaceLevel(kingdom, now)
+  const claimable = (i: number) => !!questProgress(kingdom, i, now).taken && !questError(kingdom, i, 'claim', now, crowns, palace)
+  const parts: Part<string>[] = [
+    ...world.cities.map((_, i) => ({ id: `c${i}`, name: cityInfo(world, i).capital, icon: 'crown' as const, dot: claimable(i) })),
+    { id: 'power', name: 'Güç dengesi', icon: 'banner' as const },
+  ]
+  const crown = part === 'power' ? null : Number(part.slice(1))
+  return (
+    <>
+      <BetrayalCard world={world} kingdom={kingdom} online={online} now={now} />
+      <Subtabs label="Taç krallıkları" parts={parts} part={part} onPart={setPart} />
+      {crown === null ? (
+        <>
+          <CrownRivalry world={world} online={online} />
+          <Stewardship world={world} kingdom={kingdom} now={now} />
+        </>
+      ) : (
+        <>
+          <Subtabs
+            label="Tacın bölümleri"
+            parts={[
+              { id: 'house', name: 'Hanedan', icon: 'crown' },
+              { id: 'court', name: 'Saray', icon: 'banner' },
+              { id: 'policy', name: 'Politika', icon: 'scroll', dot: claimable(crown) },
+            ]}
+            part={inner}
+            onPart={setInner}
+          />
+          {inner === 'house' && <RoyalFamily world={world} kingdom={kingdom} crown={crown} now={now} />}
+          {inner === 'court' && <CrownCourt world={world} kingdom={kingdom} crown={crown} online={online} now={now} />}
+          {inner === 'policy' && <CrownPolicy world={world} kingdom={kingdom} crown={crown} online={online} market={market} now={now} />}
+        </>
+      )}
+    </>
+  )
+}
+
+type CrownPart = 'house' | 'court' | 'policy'
+const CROWN_PARTS: CrownPart[] = ['house', 'court', 'policy']
+
+// A crown's policies of the moment and the task it asks of the lord this hour.
+function CrownPolicy({ world, kingdom, crown: i, online, market, now }: { world: World; kingdom: Kingdom; crown: number; online: Online; market?: Market | null; now: number }) {
   const demand = crownDemand(now)
   const { goods, endsAt } = crownGoods(kingdom.lobbyKey, now)
   const crowns = world.cities.length
@@ -519,9 +568,10 @@ export function CrownsPanel({ world, kingdom, online, market, now }: { world: Wo
   const tribute = balance.cities.crown.patrol.tribute
   const minutes = (ms: number) => `${Math.max(1, Math.ceil(ms / 60_000))} dk`
   const goldRoom = goldCap(kingdom, now) - kingdom.stock.gold
+  const trait = crownTraitAt(kingdom, i, now)
   return (
     <>
-      {world.cities.map((_, i) => {
+      {(() => {
         const info = cityInfo(world, i)
         const buys = demand[i]
         const order = crownOrder(kingdom.lobbyKey, i, now)
@@ -533,7 +583,7 @@ export function CrownsPanel({ world, kingdom, online, market, now }: { world: Wo
         const sworn = kingdom.liege === i
         const goodName = (g: keyof typeof RESOURCE_NAMES) => RESOURCE_NAMES[g].toLowerCase()
         return (
-          <Section key={i} title={info.name} icon="crown" aside={`${sworn ? 'biat ettiğin taç · ' : ''}ilişki ${signedInt(Math.round(relation))}`}>
+          <Section title={info.name} icon="crown" aside={`${sworn ? 'biat ettiğin taç · ' : ''}ilişki ${signedInt(Math.round(relation))}`}>
             <div className="feature">
               <Icon name="crown" size={32} />
               <div>
@@ -557,9 +607,9 @@ export function CrownsPanel({ world, kingdom, online, market, now }: { world: Wo
               value={sworn ? 'devriye' : kingdom.liege !== undefined && kingdom.liege !== null ? 'haraççı' : 'gelmez'}
               note={
                 sworn
-                  ? 'devriyesi eğlence merkezine uğrar, bahşiş bırakır'
+                  ? `devriyesi eğlence merkezine uğrar, bahşiş bırakır (${trait.tip === 1 ? 'hükümdarın huyu değiştirmez' : `huyu yüzünden ×${trait.tip.toFixed(2).replace('.', ',')}`})`
                   : kingdom.liege !== undefined && kingdom.liege !== null
-                    ? `${Math.round(tribute.everySeconds / 60)} dakikada bir hazinenin %${Math.round(tribute.share * 100)}'ini ister`
+                    ? `${Math.round(tribute.everySeconds / 60)} dakikada bir hazinenin %${(tribute.share * trait.tribute * 100).toFixed(1).replace('.', ',').replace(',0', '')}'ini ister (hükümdarın huyu: ${trait.name.toLocaleLowerCase('tr-TR')})`
                     : 'biat etmediğin için ne devriye ne haraççı gönderir'
               }
             />
@@ -583,9 +633,7 @@ export function CrownsPanel({ world, kingdom, online, market, now }: { world: Wo
             )}
           </Section>
         )
-      })}
-      <CrownRivalry world={world} online={online} />
-      <Stewardship world={world} kingdom={kingdom} now={now} />
+      })()}
     </>
   )
 }

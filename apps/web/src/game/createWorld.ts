@@ -31,6 +31,7 @@ import { openGate } from './wallSprites'
 import { Canvas, SPRITES, lightsOf, outlineOf, rgb, silhouetteOf } from './sprites'
 import { daylight, nightness, sunShadow } from './daylight'
 import { createShadows } from './shadows'
+import { createPacer } from './pacing'
 import { innLook } from './innSprites'
 import type { Sprite as Sprite_ } from './sprites'
 import { CHUNK_PAD } from './chunkPainter'
@@ -79,6 +80,15 @@ const TEXTURE_BUDGET_BYTES = 320 * 1024 * 1024
 const MAX_WORKERS = 4
 // Caravans are too small to make out below this zoom.
 const CARAVAN_MIN_ZOOM = 0.5
+// How often the camera's place is told to the interface while the map moves, in milliseconds.
+const CAMERA_REPORT_MS = 120
+
+// The canvas's pixels per screen point: the screen's own up to 2 (a phone's 3 would fill more than twice the pixels for
+// a picture that looks the same), and on a dense phone screen 1.5 while saving power (CLAUDE.md §12).
+export function canvasResolution(saver: boolean): number {
+  const dpr = window.devicePixelRatio || 1
+  return dpr > 2 ? (saver ? 1.5 : 2) : dpr
+}
 // Tiles around a building whose chunks show part of it (see SPRITE_MARGIN in chunkPainter).
 const STRUCTURE_REACH = 10
 const FLOAT_SECONDS = 1.6
@@ -201,6 +211,10 @@ export interface WorldView {
   centerOn(tile: Point): void
   // Detail animations (swaying trees close up) on or off; the chunks on screen are painted again.
   setDetail(on: boolean): void
+  // Power saving (CLAUDE.md §12): lower frame rates, no birds, clouds or night glow, a coarser canvas on dense screens.
+  setPowerSave(on: boolean): void
+  // Frames the map drew in the last second (for measuring).
+  fps(): number
   // Keeps the camera on whatever `target` says each frame (an army on the march), until null is given or the map is
   // dragged; `onStop` hears when a drag ended it.
   follow(target: (() => Point | null) | null, onStop?: () => void): void
@@ -269,7 +283,7 @@ interface Job {
 export async function createWorld(
   host: HTMLElement,
   seed: number,
-  { onHover, onCamera, onLoading, onTap, onStroke, onRightTap }: WorldHandlers,
+  { onHover: sendHover, onCamera: sendCamera, onLoading, onTap, onStroke, onRightTap }: WorldHandlers,
   // The shared game clock (server time), so every player sees the same hour, caravans and animals.
   clock: () => number = Date.now,
   // How the lobby's world is made from its seed (see WORLD_REV).
@@ -283,11 +297,46 @@ export async function createWorld(
     background: 0x10141a,
     antialias: false,
     roundPixels: true,
-    resolution: window.devicePixelRatio,
+    resolution: canvasResolution(false),
     autoDensity: true,
+    // Frames are stepped by the pacer (see pacing.ts), not by Pixi's own loop.
+    autoStart: false,
+    powerPreference: 'low-power',
   })
   app.canvas.style.imageRendering = 'pixelated'
   host.appendChild(app.canvas)
+  // Power saving (CLAUDE.md §12): lower frame rates, no birds, clouds or glow, a coarser canvas on dense phone screens.
+  let saver = false
+  const pacer = createPacer(app.ticker, () => camera.scale.x >= CARAVAN_MIN_ZOOM)
+  const wake = pacer.wake
+  // The pointer's hover is told only when what it is over changes (a mouse move inside one tile tells nothing new),
+  // so the interface is not drawn again for every move of the mouse.
+  let hoverKey = ''
+  const onHover = (hover: Hover | null) => {
+    const key = hover
+      ? [hover.tile.x, hover.tile.y, hover.building?.id, hover.building?.screen.x, hover.building?.screen.y, hover.inn?.index, hover.inn?.screen.x, hover.inn?.screen.y, hover.city?.index, hover.city?.screen.x, hover.city?.screen.y].join(',')
+      : ''
+    if (key === hoverKey) return
+    hoverKey = key
+    sendHover(hover)
+  }
+  // The camera's place is told at most this often while the map moves (and once more where it stops).
+  let cameraTimer = 0
+  let cameraNext: [Point, Point[]] | null = null
+  const onCamera = (center: Point, corners: Point[]) => {
+    cameraNext = [center, corners]
+    if (cameraTimer) return
+    const flush = () => {
+      if (!cameraNext) {
+        cameraTimer = 0
+        return
+      }
+      sendCamera(...cameraNext)
+      cameraNext = null
+      cameraTimer = window.setTimeout(flush, CAMERA_REPORT_MS)
+    }
+    flush()
+  }
 
   const world = generateWorld(seed, rev, keep)
   const chunkSize = balance.map.chunkSize
@@ -392,7 +441,8 @@ export async function createWorld(
   const glow = new Container()
   // A soft halo under the lit windows: the same lights again, blurred and added onto the night.
   const halo = new Container()
-  halo.filters = [new BlurFilter({ strength: 5, quality: 3 })]
+  // Blurred anyway, so drawn at no more than one pixel per screen point (a quarter of the work on a sharp screen).
+  halo.filters = [new BlurFilter({ strength: 5, quality: 3, resolution: 1 })]
   halo.blendMode = 'add'
   // Each light goes into both layers: crisp in `glow`, blurred in `halo`.
   const addLight = (texture: Texture, anchorX: number, anchorY: number, x: number, y: number) => {
@@ -553,6 +603,7 @@ export async function createWorld(
     if (nx === camera.x && ny === camera.y) return
     camera.x = nx
     camera.y = ny
+    wake()
     refresh()
   })
   app.ticker.add(() => {
@@ -562,7 +613,7 @@ export async function createWorld(
     glow.alpha = nightness(hour)
     glow.visible = glow.alpha > 0.02
     halo.alpha = glow.alpha * 0.85
-    halo.visible = glow.visible
+    halo.visible = glow.visible && !saver
     shadows.update(hour, caravans.layer)
     // Shadows painted into the ground follow the sun an hour at a time: each new hour paints the chunks again.
     const sunHour = Math.floor(hour)
@@ -841,6 +892,7 @@ export async function createWorld(
   }
 
   function centerOn(tile: Point) {
+    wake()
     const s = groundToScreen(world, tile)
     camera.x = Math.round(app.screen.width / 2 - s.x * camera.scale.x)
     camera.y = Math.round(app.screen.height / 2 - s.y * camera.scale.y)
@@ -1026,6 +1078,7 @@ export async function createWorld(
   const zoomTo = (index: number, at: Point) => {
     index = Math.min(ZOOMS.length - 1, Math.max(0, index))
     if (index === zoomIndex) return
+    wake()
     const factor = ZOOMS[index] / camera.scale.x
     zoomIndex = index
     camera.x = Math.round(at.x - (at.x - camera.x) * factor)
@@ -1185,6 +1238,7 @@ export async function createWorld(
   app.stage.eventMode = 'static'
   app.stage.hitArea = app.screen
   app.stage.on('pointerdown', (e) => {
+    wake()
     if (e.button === 2) {
       // Only on the map itself, not over a panel on top of it.
       rightPress = e.nativeEvent.target === app.canvas ? { x: e.global.x, y: e.global.y } : null
@@ -1252,6 +1306,8 @@ export async function createWorld(
   const noContextMenu = (e: MouseEvent) => e.preventDefault()
   app.canvas.addEventListener('contextmenu', noContextMenu)
   app.stage.on('pointermove', (e) => {
+    // Pixi replays a still pointer's last move now and then (untrusted): only a real move counts as the player's.
+    if ((e.nativeEvent as Event).isTrusted !== false && (e.nativeEvent.target === app.canvas || press || touches.size > 0)) wake()
     // Pixi hears the pointer over the whole page: over a window or panel on top of the map nothing on the map is
     // pointed at (no outline, no label), unless a drag on the map is under way.
     if (e.nativeEvent.target !== app.canvas && !press && !stroke && touches.size === 0) {
@@ -1299,6 +1355,7 @@ export async function createWorld(
   let lastStep = 0
   const onWheel = (e: WheelEvent) => {
     e.preventDefault()
+    wake()
     if (performance.now() - lastStep < WHEEL_COOLDOWN_MS) return
     wheel += e.deltaY
     if (Math.abs(wheel) < WHEEL_STEP) return
@@ -1309,7 +1366,10 @@ export async function createWorld(
     zoomTo(zoomIndex + step, { x: e.clientX - rect.left, y: e.clientY - rect.top })
   }
   app.canvas.addEventListener('wheel', onWheel, { passive: false })
-  app.renderer.on('resize', refresh)
+  app.renderer.on('resize', () => {
+    wake()
+    refresh()
+  })
 
   centerOn({ x: world.size / 2, y: world.size / 2 })
 
@@ -1932,6 +1992,19 @@ export async function createWorld(
   return {
     world,
     centerOn,
+    setPowerSave(on) {
+      if (on === saver) return
+      saver = on
+      pacer.setSaver(on)
+      ambient.setLite(on)
+      const resolution = canvasResolution(on)
+      if (app.renderer.resolution !== resolution) {
+        app.renderer.resolution = resolution
+        app.resize()
+      }
+      wake()
+    },
+    fps: () => pacer.fps(),
     setDetail(on) {
       if (on === detail) return
       detail = on
@@ -2038,10 +2111,13 @@ export async function createWorld(
     },
     float,
     markMove(at, color) {
+      wake()
       moveOrders.push({ at, color, born: performance.now() })
     },
     zoomBy: (step) => zoomTo(zoomIndex + step, { x: app.screen.width / 2, y: app.screen.height / 2 }),
     destroy() {
+      pacer.destroy()
+      clearTimeout(cameraTimer)
       app.canvas.removeEventListener('wheel', onWheel)
       app.canvas.removeEventListener('pointerleave', leaveMap)
       app.canvas.removeEventListener('contextmenu', noContextMenu)

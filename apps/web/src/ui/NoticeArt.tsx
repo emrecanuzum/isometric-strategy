@@ -289,7 +289,7 @@ function palaceGate(p: Paint, cx: number, base: number, open = true) {
 
 export type Family =
   | 'tribute' | 'tavern' | 'gift' | 'envoy' | 'alliance' | 'peace' | 'war' | 'insult' | 'spy' | 'sabotage' | 'revolt'
-  | 'kidnap' | 'raid' | 'naval' | 'siege' | 'battle'
+  | 'kidnap' | 'raid' | 'naval' | 'siege' | 'battle' | 'royal'
 
 interface Look {
   family: Family
@@ -1057,6 +1057,78 @@ function battleScene({ a, b, variant }: Look): Scene {
   }
 }
 
+// A crown's throne hall the day the crown passes (CLAUDE.md §7.8): on the left the late ruler lies in state on a bier
+// between candles, mourners kneeling; on the right the heir sits the throne under the crown's drapes and the crown is
+// lowered onto the new head, petals falling. `regent`: the heir is a child, a regent stands beside the throne.
+function royalScene({ a, variant }: Look): Scene {
+  const regent = variant === 'regent'
+  const candles: [number, number][] = [[30, 96], [96, 96]]
+  return {
+    draw(p) {
+      p.box(0, 0, W, 84, (x, y) => tone(STONE, 1.8 + (rnd(Math.floor(x / 10) + (Math.floor(y / 5) & 1) * 5, Math.floor(y / 5), 11) - 0.5) * 0.6 - ((y % 5 === 4 || (x + (Math.floor(y / 5) & 1) * 5) % 10 === 9) ? 0.8 : 0), x, y))
+      for (let y = 84; y < H; y++) {
+        const depth = y - 70
+        for (let x = 0; x < W; x++) {
+          const u = Math.floor(((x - 170) / depth) * 6)
+          const v = Math.floor(200 / depth)
+          p.set(x, y, tone((u + v) % 2 === 0 ? PLASTER : STONE, 2 + (y - 84) * 0.02, x, y))
+        }
+      }
+      // The crown's drapes behind the throne, a black one over the bier.
+      drape(p, 136, 6, 16, 52, a)
+      drape(p, 190, 6, 16, 52, a)
+      drape(p, 56, 10, 14, 40, ramp(0x08080c, 0x141418, 0x24242a, 0x3a3a42))
+      // The dais and the throne.
+      p.box(140, 92, 210, 98, (x, y) => tone(STONE, y === 92 ? 4.4 : 3, x, y))
+      p.box(132, 98, 218, 104, (x, y) => tone(STONE, y === 98 ? 4 : 2.6, x, y))
+      p.box(132, 98, 218, 100, (x, y) => tone(VELVET, 2.4, x, y))
+      p.box(164, 58, 186, 92, (x, y) => (y < 62 ? GOLD[x % 3 === 0 ? 3 : 2] : tone(VELVET, 2.6 - (x - 164) * 0.08, x, y)))
+      p.box(160, 74, 166, 92, (x, y) => tone(GOLD, 2.4 - (y - 74) * 0.04, x, y))
+      p.box(184, 74, 190, 92, (x, y) => tone(GOLD, 2, x, y))
+      // The bier: a velvet-draped slab on trestles, the late ruler on it, the crown on the breast.
+      p.box(38, 100, 90, 104, (x, y) => tone(WOOD, 2.6, x, y))
+      p.box(36, 94, 92, 101, (x, y) => tone(VELVET, 2.4 - (y - 94) * 0.15 + (x === 36 ? 0.6 : 0), x, y))
+      p.box(44, 90, 82, 95, (x, y) => tone(ROBE.black, 2.2 + (x - 44) * 0.02, x, y))
+      p.box(80, 89, 86, 94, (x, y) => tone(SKINS[0], 1.8, x, y))
+      for (let dx = 0; dx < 5; dx++) p.set(60 + dx, 88, GOLD[3])
+      for (const dx of [0, 2, 4]) p.set(60 + dx, 87, GOLD[4])
+      for (const [cx, cy] of candles) {
+        p.line(cx, cy, cx, cy + 14, IRON[2])
+        p.rect(cx - 1, cy - 4, 3, 5, PLASTER[4])
+      }
+    },
+    fx(p, t) {
+      const fr = Math.floor(t * 2)
+      for (const [cx, cy] of candles) {
+        const fl = 0.26 + 0.06 * Math.sin(t * 8 + cx)
+        glow(p, cx, cy - 6, 18, C(0xffb050), fl)
+        flames(p, cx - 1, cx + 1, cy - 4, 4, t + cx, cx)
+      }
+      // Mourners kneeling by the bier.
+      person(p, 48, 120, { robe: ROBE.black, hat: 'veil', hatColor: C(0x1a1a20), pose: 'pray', kneel: true, frame: fr })
+      person(p, 74, 122, { robe: ROBE.black, hat: 'hood', hatColor: C(0x16161c), pose: 'pray', kneel: true, frame: fr + 1, flip: true })
+      // The heir on the throne (small while a child), the crown coming down, the court bowing.
+      lord(p, 175, 92, a, { pose: 'stand', frame: 0 })
+      const drop = Math.max(0, 8 - ((t * 3) % 10))
+      for (let dx = -2; dx <= 2; dx++) p.set(175 + dx, 70 - drop, GOLD[3])
+      for (const dx of [-2, 0, 2]) p.set(175 + dx, 69 - drop, GOLD[4])
+      person(p, 160, 98, { robe: ROBE.white, hat: 'cap', hatColor: GOLD[2], pose: 'up', frame: fr, flip: false })
+      if (regent) person(p, 194, 98, { robe: ROBE.black, hat: 'veil', hatColor: C(0x2a2030), pose: 'stand', frame: fr, flip: true })
+      soldier(p, 138, 120, a, { frame: fr })
+      soldier(p, 214, 120, a, { frame: fr + 1, flip: true })
+      person(p, 156, 124, { robe: a, hat: 'cap', hatColor: GOLD[2], pose: 'hold', kneel: true, frame: fr })
+      person(p, 196, 124, { robe: a, hat: 'cap', hatColor: GOLD[2], pose: 'hold', kneel: true, frame: fr + 1, flip: true })
+      sparkle(p, t, [[173, 66], [178, 64], [175, 62]], 5)
+      // Petals drifting down over the throne.
+      for (let i = 0; i < 16; i++) {
+        const k = (t * 0.12 + rnd(i, 0, 13)) % 1
+        const x = 130 + rnd(i, 1, 13) * 100 + Math.sin(t * 2 + i) * 4
+        p.tint(x, k * 110, i % 3 === 0 ? GOLD[4] : a[3], 0.8 * Math.sin(k * Math.PI))
+      }
+    },
+  }
+}
+
 const FACTORIES: Record<Family, (look: Look) => Scene> = {
   tribute: tributeScene,
   tavern: tavernScene,
@@ -1074,6 +1146,7 @@ const FACTORIES: Record<Family, (look: Look) => Scene> = {
   naval: navalScene,
   siege: siegeScene,
   battle: battleScene,
+  royal: royalScene,
 }
 
 // ---- Which scene a notice gets ------------------------------------------------------------------------------------
@@ -1241,6 +1314,13 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
       return L('siege', null, 'good', 'held')
     case 'throne_lost':
       return L('siege', null, 'bad', 'taken')
+    // The crowns' houses and the lord's fealty (CLAUDE.md §7.8, §9.1.1).
+    case 'crown_succession':
+      return L('royal', crown, 'good', p.regent ? 'regent' : undefined)
+    case 'liege_switch':
+      return p.accept ? L('alliance', CROWN_COLORS[Number(p.to ?? 0) % CROWN_COLORS.length], 'good') : L('gift', CROWN_COLORS[Number(p.from ?? 0) % CROWN_COLORS.length], 'good')
+    case 'liege_changed':
+      return L('alliance', CROWN_COLORS[Number(p.to ?? 0) % CROWN_COLORS.length], 'good')
     default:
       return L('envoy', null, 'good')
   }
@@ -1339,6 +1419,12 @@ export function soundForNotice(n: Notice, online: Online): Cue {
       return 'victory'
     case 'throne_lost':
       return 'kingFell'
+    case 'crown_succession':
+      return p.regent ? 'death' : 'coronation'
+    case 'liege_switch':
+      return p.accept ? 'alliance' : 'gift'
+    case 'liege_changed':
+      return 'royal'
   }
   switch (look.family) {
     case 'tribute':
@@ -1373,6 +1459,8 @@ export function soundForNotice(n: Notice, online: Online): Cue {
       return 'siege'
     case 'battle':
       return 'battle'
+    case 'royal':
+      return 'coronation'
   }
 }
 

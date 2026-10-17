@@ -554,7 +554,10 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
     const names = [...new Set(fighters.map((f) => fighterName(online, f)))]
     const colors = [...new Set(fighters.map((f) => online.kingdoms.find((k) => k.id === f.kingdom)?.color))]
     const king = fighters.some((f) => f.king)
-    return { start, now, bonus, counter, faith, towers, keep, units, names, colors, king }
+    // Townsfolk and outlaws fight as a rabble (a pretender's men as soldiers), in plain colours.
+    const rabble = fighters.length > 0 && fighters.every((f) => (f.rebels && !f.pretender) || f.outlaws)
+    const plain = fighters.some((f) => f.outlaws) ? '#7a5a3a' : fighters.some((f) => f.pretender) ? '#5a4a6a' : fighters.some((f) => f.rebels) ? '#6a6258' : '#a8a4ac'
+    return { start, now, bonus, counter, faith, towers, keep, units, names, colors, king, rabble, plain }
   }
   const a = side('attackers')
   const d = side('defenders')
@@ -563,11 +566,14 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
   const sceneSide = (s: typeof a) => ({
     soldiers: s.now.soldiers,
     start: s.start.soldiers,
-    color: KINGDOM_COLORS[s.colors[0] as KingdomColor]?.swatch ?? '#a8a4ac',
+    color: KINGDOM_COLORS[s.colors[0] as KingdomColor]?.swatch ?? s.plain,
     archers: (s.units.archer ?? 0) > 0,
     catapults: (s.units.catapult ?? 0) > 0,
     king: s.king,
+    units: s.units,
+    rabble: s.rabble,
   })
+  const setting = battle.kind === 'siege' || battle.kind === 'usurp' ? 'castle' : battle.kind === 'revolt' ? 'town' : battle.kind === 'pretender' ? 'camp' : 'field'
   // A tense march under the battle while it is fought (the tavern tune steps aside).
   useEffect(() => {
     if (over) return
@@ -596,10 +602,11 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
         <BattleScene
           attackers={sceneSide(a)}
           defenders={sceneSide(d)}
-          siege={battle.kind === 'siege'}
+          setting={setting}
           round={shown}
           over={over}
           winner={battle.plan.winner}
+          seed={battle.id}
         />
         <div className="battle-sides">
           {[
@@ -728,9 +735,10 @@ export function TownSiegeView({ town, army, walled, online, now, onClose }: { to
           </button>
         </header>
         <BattleScene
-          attackers={{ soldiers: left ?? drawn - lostSoFar, start: drawn, color: swatch(besieger?.color, '#a8a4ac'), archers: (units?.archer ?? 0) > 0, catapults: (units?.catapult ?? 0) > 0, king: !!army?.royal }}
-          defenders={{ soldiers: Math.max(defenders, town.owner !== null ? 3 : 0), start: Math.max(garrison, town.owner !== null ? 3 : 0), color: swatch(holder?.color, '#b08a3c'), archers: true, catapults: false }}
-          siege
+          attackers={{ soldiers: left ?? drawn - lostSoFar, start: drawn, color: swatch(besieger?.color, '#a8a4ac'), archers: (units?.archer ?? 0) > 0, catapults: (units?.catapult ?? 0) > 0, king: !!army?.royal, units: units ?? undefined }}
+          defenders={{ soldiers: Math.max(defenders, town.owner !== null ? 3 : 0), start: Math.max(garrison, town.owner !== null ? 3 : 0), color: swatch(holder?.color, '#b08a3c'), archers: true, catapults: false, rabble: town.owner !== null }}
+          setting={walled ? 'palisade' : 'town'}
+          seed={town.id}
           round={done}
           over={over}
           winner={left === null || left > 0 ? 'attackers' : 'defenders'}

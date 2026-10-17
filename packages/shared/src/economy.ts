@@ -13,7 +13,7 @@ import type { SpanCache } from './span'
 import { cutOff, imprisoned } from './walls'
 import { dynastyEffects, dynastyStep, townKinBonus } from './dynasty'
 import type { Dynasty, DynastyEvent } from './dynasty'
-import type { Pretender } from './intrigue'
+import type { LiegeOffer, Pretender } from './intrigue'
 import { changeCrownRelation, driftCrownRelations, fealtyOpen, settleOrderTrips, stewardFactor } from './crowns'
 import type { OrderTrip, QuestTaken, RoyalAnswer } from './crowns'
 import { crisisDecideMs, crisisKey, crisisWarded, isCrisis, isDilemma, fortuneEffects, fortunesBegun, hasResearch, hospitalHeal, levelOf, researchEffects, sermonTaxFactor, templeHappiness } from './institutions'
@@ -257,6 +257,9 @@ export interface Kingdom {
   liege?: number
   // When fealty was sworn: no patrol or collectors call for a visit that came before it (absent in older saves).
   liegeAt?: number
+  // The liege crown backed a pretender who was beaten: the lord may go over to the rival crown, once, until then
+  // (CLAUDE.md §9.1.1; intrigue.ts → answerLiegeOffer).
+  liegeOffer?: LiegeOffer
   // The lord's house: ruler, lady and children (CLAUDE.md §9.1; dynasty.ts).
   dynasty?: Dynasty
   // The lord's standing with each crown kingdom, −100 to 100 (by capital index; crowns.ts). Missing: at rest.
@@ -514,8 +517,12 @@ function tooClose(building: Rect, wall: Rect) {
 }
 
 // Roads lie flat on the ground: they only take their own tile, and keep no clearance from walls (nor walls from them).
+// Watchtowers (balance.economy.wallClearance.exempt) are tall themselves, so no wall hides them: walls may stand right
+// against them, and a wall line can run on from a tower to the water.
+const unhidden = (kind: BuildingKind) => (balance.economy.wallClearance.exempt as readonly string[]).includes(kind)
 const clash = (b: Building, spot: Rect, gap: number, kind?: BuildingKind) => {
   if (!kind || kind === 'road' || b.kind === 'road' || wallish(kind) === wallish(b.kind)) return overlaps(b, spot, gap)
+  if (unhidden(kind) || unhidden(b.kind)) return overlaps(b, spot, 0)
   return wallish(kind) ? tooClose(b, spot) : tooClose(spot, b)
 }
 

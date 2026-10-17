@@ -58,6 +58,8 @@ export interface MinimapTown {
 export interface MinimapPatrol {
   at: Point
   color: string
+  // Bandits or pirates (CLAUDE.md §7.9, §8.5): a black, torn banner edged in blood red.
+  outlaw?: boolean
 }
 
 interface Props {
@@ -167,11 +169,25 @@ function drawHouse(ctx: CanvasRenderingContext2D, x: number, y: number, roof: st
 
 // A patrol: a mounted rider's pennant on a pole, small, in the crown's colour with a pale edge so it shows on any
 // ground.
-function drawPatrol(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {
+function drawPatrol(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, outlaw = false) {
   ctx.save()
   ctx.translate(x, y)
   ctx.rotate(-Math.PI / 4)
   ctx.scale(ICON, ICON * 2)
+  if (outlaw) {
+    // A black banner with a notch out of its fly, edged in red, on a pole.
+    ctx.fillStyle = '#b0201a'
+    ctx.fillRect(0, -10, 6, 5)
+    ctx.fillStyle = '#120d0b'
+    ctx.fillRect(1, -9, 4, 3)
+    ctx.fillRect(4, -8, 2, 1)
+    ctx.fillStyle = '#e8d8c0'
+    ctx.fillRect(2, -8, 1, 1)
+    ctx.fillStyle = '#120d0b'
+    ctx.fillRect(0, -10, 1, 11)
+    ctx.restore()
+    return
+  }
   ctx.fillStyle = '#f2e8cc'
   ctx.fillRect(-2, -4, 5, 5)
   ctx.fillStyle = color
@@ -220,7 +236,7 @@ export function Minimap({ world, center, corners, flags = [], towns = [], patrol
     const half = balance.cities.size / 2
     world.cities.forEach((c, i) => drawCastle(ctx, (c.x + half) * scale, (c.y + half) * scale, cityInfo(world, i).color))
     for (const t of towns) drawHouse(ctx, t.at.x * scale, t.at.y * scale, t.color ?? '#b08a3c')
-    for (const p of patrols) drawPatrol(ctx, p.at.x * scale, p.at.y * scale, p.color)
+    for (const p of patrols) drawPatrol(ctx, p.at.x * scale, p.at.y * scale, p.color, p.outlaw)
     // Back to front on screen (the screen's vertical is x + y), the player's own on top.
     const order = [...flags].sort((a, b) => Number(a.own) - Number(b.own) || a.site.x + a.site.y - (b.site.x + b.site.y))
     for (const flag of order) drawFlag(ctx, flag.site.x * scale, flag.site.y * scale, flag.color, flag.own)

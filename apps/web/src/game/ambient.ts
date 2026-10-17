@@ -268,6 +268,8 @@ export interface Ambient {
   setChimneys(points: { x: number; y: number; depth: number }[]): void
   // The lords' ships (CLAUDE.md §8.5; see fleetShips.ts).
   setFleets(ships: FleetShip[]): void
+  // Power saving (CLAUDE.md §12): no birds and no clouds.
+  setLite(on: boolean): void
   // The lord's ship drawn at this world point (screen space before the camera), if any: whose, and which fleet.
   pickShip(p: Point): { lord: number; fleet?: number } | null
   // The lords' ships drawn this frame.
@@ -814,6 +816,8 @@ export function createAmbient(world: World, actors: Container): Ambient {
   const cloudShadows = new Pool(shadowLayer)
   const cloudPool = new Pool(cloudLayer)
 
+  // Power saving: birds and clouds are left out.
+  let lite = false
   function updateClouds(seconds: number, view: View, alpha: number) {
     for (const cloud of clouds) {
       const sx = span.left + ((((cloud.x + seconds * cloud.drift) % span.width) + span.width) % span.width)
@@ -853,6 +857,9 @@ export function createAmbient(world: World, actors: Container): Ambient {
     setFleets(list) {
       fleets = list
     },
+    setLite(on) {
+      lite = on
+    },
     shipsDrawn: () => drawnShips,
     pickShip(p) {
       // The nearest ship whose drawn pixels are under the point (or within a pixel or two of them).
@@ -881,7 +888,10 @@ export function createAmbient(world: World, actors: Container): Ambient {
       else flowPool.finish()
       if (zoom >= LIFE_MIN_ZOOM) {
         updateLife(seconds, view)
-        updateBirds(seconds, view)
+        if (lite) {
+          birdPool.finish()
+          birdShadows.finish()
+        } else updateBirds(seconds, view)
         updateSmoke(seconds, view)
       } else {
         lifePool.finish()
@@ -889,7 +899,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
         birdPool.finish()
         birdShadows.finish()
       }
-      if (zoom <= CLOUD_MAX_ZOOM) updateClouds(seconds, view, zoom <= 0.125 ? CLOUD_ALPHA : CLOUD_ALPHA * 0.55)
+      if (zoom <= CLOUD_MAX_ZOOM && !lite) updateClouds(seconds, view, zoom <= 0.125 ? CLOUD_ALPHA : CLOUD_ALPHA * 0.55)
       else {
         cloudShadows.finish()
         cloudPool.finish()

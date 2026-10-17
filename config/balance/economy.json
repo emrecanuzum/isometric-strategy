@@ -749,7 +749,10 @@
   },
   "wallClearance": {
     "behind": 1,
-    "front": 2
+    "front": 2,
+    "exempt": [
+      "watchtower"
+    ]
   },
   "freeFirst": [
     "lumberCamp",

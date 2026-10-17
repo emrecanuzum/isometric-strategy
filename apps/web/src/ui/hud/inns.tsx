@@ -9,7 +9,7 @@ import { innLook, isCaravanserai } from '../../game/innSprites'
 import { Icon } from '../icons'
 import { RESOURCE_NAMES } from '../names'
 import type { KingdomInfo, Online } from './online'
-import { Placeholder, Section, SpriteView } from './primitives'
+import { Meter, Placeholder, Section, SpriteView, Stat } from './primitives'
 
 // The inns of the trade routes (CLAUDE.md §7.6): the talk of travellers about the lobby's trade, drawn from what every
 // player can know (prices, the rounded trade shares, wars, raided trade posts, armies on the road), and the trade
@@ -246,10 +246,13 @@ function InnBandits({ world, index, online, now }: { world: World; index: number
   if (robbers.roads === 0) return null
   return (
     <Section title="Yollardaki yağmacılar" icon="swords" aside={`${balance.outlaws.road.radiusTiles} karo çevre`}>
-      <div className="sign">
-        <span>Yağmacıların tuttuğu yol</span>
-        <b>%{Math.round(robbers.share * 100)}</b>
-      </div>
+      <Stat
+        label="Yağmacıların tuttuğu yol"
+        value={`%${Math.round(robbers.share * 100)}`}
+        tone={robbers.share > 0 ? 'down' : undefined}
+        note={robbers.share > 0 ? `${robbers.names.length} çete bu yolları tutuyor` : 'yollar temiz'}
+      />
+      <Meter value={robbers.share} tone={robbers.share > 0 ? 'down' : 'up'} label="Yağmacıların tuttuğu yol" />
       <p className="hint">
         {robbers.share > 0
           ? `Hancı anlatıyor: buradan geçen ticaret yollarının %${Math.round(robbers.share * 100)}'ini ${robbers.names.join(', ')} tutuyor. Bu yollardan geçen tüccarlar kazancının bir kısmını kaptırıyor. Çeteye tıkla, bir orduyla takip et.`

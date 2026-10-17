@@ -1,5 +1,5 @@
-import { Feature, Terrain, balance, cityCenter, cityHarbour, hash } from '@game/shared'
-import type { CitySide, Point, World } from '@game/shared'
+import { Feature, Terrain, balance, cityCenter, cityHarbour, crownRulerName, hash } from '@game/shared'
+import type { CitySide, CrownKey, Point, World } from '@game/shared'
 import type { KingdomColor, Structure, StructureLook } from './buildingSprites'
 import { squad } from './armies'
 import { palisade, pavilion, rack, tent } from './campSprites'
@@ -37,6 +37,17 @@ function rulerOf(world: World, index: number) {
   return index > 0 && own === pick(0) ? (own + 1) % RULERS.length : own
 }
 
+// The crowns' royal houses follow from the lobby's number, the season's start and the clock (crownHouse.ts); the app
+// sets them once the realm is known, so every ruler named anywhere is the one reigning now. Until then the old
+// seeded names stand in.
+let crownKey: CrownKey | null = null
+let crownClock = () => Date.now()
+export function setCrownClock(key: CrownKey | null, now: () => number) {
+  crownKey = key
+  crownClock = now
+}
+export const crownKeyNow = () => crownKey
+
 export function cityInfo(world: World, index: number): CityInfo {
   const start = Math.floor(hash(3, 4, world.seed + 2011) * NAMES.length)
   const capital = NAMES[(start + index * 3) % NAMES.length]
@@ -44,7 +55,7 @@ export function cityInfo(world: World, index: number): CityInfo {
     index,
     name: `${capital} Krallığı`,
     capital,
-    ruler: RULERS[rulerOf(world, index)],
+    ruler: crownKey ? crownRulerName(crownKey, index, crownClock()) : RULERS[rulerOf(world, index)],
     color: CROWN_COLORS[index % CROWN_COLORS.length],
     ink: CROWN_INKS[index % CROWN_INKS.length],
   }

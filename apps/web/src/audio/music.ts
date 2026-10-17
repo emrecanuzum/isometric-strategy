@@ -224,8 +224,10 @@ export function startMusic(muted: boolean, volume = 1): Music {
   const timer = setInterval(tick, TICK_MS)
   tick()
 
-  // Hidden tabs stay silent.
-  const onVisibility = () => void (document.hidden ? ctx.suspend() : ctx.resume())
+  // Hidden tabs stay silent. Muted music is not played at all (CLAUDE.md §12): the audio is held once it has faded out,
+  // rather than playing on at no volume.
+  let hold = 0
+  const onVisibility = () => void (document.hidden || muted ? ctx.suspend() : ctx.resume())
   document.addEventListener('visibilitychange', onVisibility)
 
   if (!muted) fadeTo(level, FADE_IN_S)
@@ -242,11 +244,20 @@ export function startMusic(muted: boolean, volume = 1): Music {
         unlocked = true
       }
       if (ctx.state !== 'running') void ctx.resume()
+      // Unlocked inside the gesture all the same, then held again while muted.
+      if (muted) {
+        clearTimeout(hold)
+        hold = window.setTimeout(() => muted && void ctx.suspend(), 600)
+        return true
+      }
       return ctx.state === 'running'
     },
     setMuted(value) {
       muted = value
+      clearTimeout(hold)
+      if (!value && !document.hidden && ctx.state !== 'running') void ctx.resume()
       fadeTo(value ? 0 : level, value ? 0.4 : 1.5)
+      if (value) hold = window.setTimeout(() => muted && void ctx.suspend(), 600)
     },
     setVolume(value) {
       level = VOLUME * Math.min(1, Math.max(0, value))
@@ -254,6 +265,7 @@ export function startMusic(muted: boolean, volume = 1): Music {
     },
     destroy() {
       clearInterval(timer)
+      clearTimeout(hold)
       document.removeEventListener('visibilitychange', onVisibility)
       for (const osc of [...droneOscs, breath]) osc.stop()
       ctx.close()

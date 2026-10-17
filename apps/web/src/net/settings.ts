@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { startMusic } from '../audio/music'
 import { setBattleMusicLevel, setSfx, unlockSfx } from '../audio/sfx'
 import type { Music } from '../audio/music'
+import type { PowerMode } from '../lib/power'
 import { supabase } from '../lib/supabase'
 
 // The player's settings, kept in their profile so they follow the account to any device.
@@ -15,9 +16,11 @@ export interface Settings {
   sfxVolume: number
   // Small motions on the map, such as trees swaying close up; off for slower machines or a calmer screen.
   detail: boolean
+  // Power saving (CLAUDE.md §12): 'auto' turns it on for phones, tablets and laptops on battery.
+  power: PowerMode
 }
 
-export const DEFAULT_SETTINGS: Settings = { music: true, musicVolume: 70, sfx: true, sfxVolume: 70, detail: true }
+export const DEFAULT_SETTINGS: Settings = { music: true, musicVolume: 70, sfx: true, sfxVolume: 70, detail: true, power: 'auto' }
 
 export interface Profile {
   username: string

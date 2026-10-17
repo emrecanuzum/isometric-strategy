@@ -51,6 +51,13 @@ function overreachNote(online: Online, more: number) {
   return ` ${more > 0 ? 'Alırsan' : 'Artık'} elinde ${held} kasaba ${more > 0 ? 'olur' : 'var'}: aşırı büyüme her kasabanın sadakatini ${o.loyalty}${o.loyaltyCap < 100 ? ` düşürür ve %${o.loyaltyCap}'in üstüne çıkmasına izin vermez` : ' düşürür'}, halkının mutluluğu ${o.happiness}, bakım ×${String(o.upkeepFactor).replace('.', ',')}.${last ? ' Bu kadar kasabada ayaklanmalar kesindir.' : ''}`
 }
 
+// A beaten pretender whose crown had backed him leaves the lord a choice (CLAUDE.md §9.1.1).
+function betrayalNote(offer: unknown, crown: (i: unknown) => string) {
+  const o = offer as { from?: number; to?: number } | null | undefined
+  if (!o || o.from === undefined) return ''
+  return ` Ama unutma: ${crown(o.from)} bu isyanda kardeşinin tarafını tuttu. ${balance.cities.crown.switch.offerMinutes} dakika içinde ${crown(o.to)} tarafına geçebilirsin.`
+}
+
 export function describe(n: Notice, online: Online): { icon: IconName; title: string; text: string } {
   const p = n.payload as Record<string, never>
   const kind = (k: unknown) => ENVOY_NAMES[k as EnvoyRow['kind']] ?? String(k)
@@ -414,13 +421,29 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         ? { icon: 'shield', title: `${crown(p.crown)} asker gönderdi`, text: `Tacın askerleri ${p.name}'in karargâhına baskın yaptı: ${p.troops} asi düştü. Taçla ilişkin ${balance.dynasty.intrigue.aid.relationCost} azaldı.` }
         : { icon: 'gold', title: `${crown(p.crown)} altın gönderdi`, text: `Taç isyana karşı hazinene ${p.gold} altın gönderdi. Taçla ilişkin ${balance.dynasty.intrigue.aid.relationCost} azaldı.` }
     case 'pretender_crushed':
-      return { icon: 'crown', title: 'İsyan bastırıldı', text: `Taht davacısı ${p.name}'in karargâhı dağıtıldı; ${p.name} savaşta öldü. Hanedan bir süre sakin kalacak.` }
+      return { icon: 'crown', title: 'İsyan bastırıldı', text: `Taht davacısı ${p.name}'in karargâhı dağıtıldı; ${p.name} savaşta öldü. Hanedan bir süre sakin kalacak.${betrayalNote(p.offer, crown)}` }
     case 'pretender_siege':
       return { icon: 'swords', title: `${p.name} sarayını kuşatıyor!`, text: `Karargâh zamanında dağıtılamadı: ${p.name} ${p.soldiers} asiyle sarayına yürüdü. Karşısında ${p.garrison} asker, kuleler ve surlar var. Kuşatmayı kaybedersen tahtı o alır.` }
     case 'throne_held':
-      return { icon: 'crown', title: 'Taht korundu', text: `Sarayın taht davacısı ${p.name}'in kuşatmasına dayandı; ${p.name} düştü, asileri dağıldı.` }
+      return { icon: 'crown', title: 'Taht korundu', text: `Sarayın taht davacısı ${p.name}'in kuşatmasına dayandı; ${p.name} düştü, asileri dağıldı.${betrayalNote(p.offer, crown)}` }
     case 'throne_lost':
       return { icon: 'unhappy', title: `Tahtı ${p.name} aldı`, text: `${p.name} sarayı ele geçirdi. Hükümdar ${p.old || '?'} tahttan indirildi ve öldü; kraliçesi saraydan gitti, çocukları artık yeni hükümdarın yeğenleri. Hanedan ${p.name} ile sürüyor: yeni bir kraliçe alman gerekecek.` }
+    // The crowns' houses and the lord's fealty (CLAUDE.md §7.8, §9.1.1).
+    case 'crown_succession': {
+      const regent = p.regent ? ` Yeni hükümdar henüz ${p.age} yaşında; reşit olana dek ${p.regent === true ? 'naipler meclisi' : `naip ${p.regent}`} yönetecek.` : ''
+      const kin = p.kinsman ? ' Ölen hükümdarın yaşayan çocuğu yoktu; taht hanedandan bir akrabaya geçti.' : ''
+      return {
+        icon: 'crown',
+        title: `${crown(p.crown)}: ${p.ruler} tahtta`,
+        text: `${crown(p.crown)} yasta: ${p.late} ${p.lateAge} yaşında öldü. Yeni hükümdar ${p.ruler} (huyu: ${String(p.trait).toLocaleLowerCase('tr-TR')}).${kin}${regent} Yeni hükümdarın huyu tacın haraççılarının istediğini ve devriyesinin bahşişini biraz değiştirebilir; Diplomasi → Krallık'ta ayrıntısı var.`,
+      }
+    }
+    case 'liege_switch':
+      return p.accept
+        ? { icon: 'banner', title: `Artık ${crown(p.to)} lordusun`, text: `${crown(p.from)} kardeşin ${p.name}'i sana karşı destekledi; sen de sancağını ${crown(p.to)} tarafına çevirdin. ${crown(p.to)} seni kollarını açarak karşıladı (ilişki en az +${balance.cities.crown.switch.newRelation}); ${crown(p.from)} bunu unutmayacak (ilişki en çok ${balance.cities.crown.switch.oldRelation}). Devriyeler ve haraççılar bundan sonra yeni bağlılığına göre gelir.` }
+        : { icon: 'gold', title: `${crown(p.from)} özür diledi`, text: `${crown(p.from)} hanesine sadık kalmana çok sevindi: davacıyı desteklediği için özür diledi${Number(p.gold) > 0 ? `, hazinene ${fmt(Number(p.gold))} altın gönderdi` : ''} ve ilişkin +${balance.cities.crown.switch.declineRelation} arttı.` }
+    case 'liege_changed':
+      return { icon: 'banner', title: `${p.by} taraf değiştirdi`, text: `${p.by}, kendisine karşı bir taht davacısını desteklediği için ${crown(p.from)} hanesinden ayrıldı ve ${crown(p.to)} tarafına geçti.` }
     default:
       // A kind this page does not know yet: the game was updated while it was open.
       return { icon: 'scroll', title: 'Elçiden haber', text: 'Oyun güncellendi; bu haberi okumak için sayfayı yenile.' }

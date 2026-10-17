@@ -1373,6 +1373,72 @@ small {
   outline: 2px solid #f2e8cc;
 }
 
+/* Choosing which army or fleet goes after a band of bandits or a pirate boat (outlaws.tsx). */
+.chase-picks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: calc(var(--px) * 3);
+}
+
+.chase-pick {
+  display: grid;
+  gap: var(--px);
+  align-content: start;
+  padding: calc(var(--px) * 4);
+  background: var(--parch);
+  color: var(--parch-ink);
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--bevel), var(--outline);
+}
+
+.chase-pick.active {
+  background: #f3dc9a;
+  box-shadow: inset 0 0 0 calc(var(--px) * 2) var(--gold-2), var(--bevel), var(--outline);
+}
+
+.chase-pick:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.chase-pick small {
+  font-size: 13px;
+  line-height: 1.3;
+  color: #6b5034;
+}
+
+.chase-pick small.up {
+  color: #3d6b2a;
+}
+
+.chase-pick small.down {
+  color: #9a2a1c;
+}
+
+.chase-on {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 3);
+  background: rgb(242 209 107 / 12%);
+  box-shadow: inset 0 0 0 var(--px) var(--gold-2);
+}
+
+/* Bandits and pirates on the world map: a black diamond edged in blood red. */
+.worldmap-patrol.outlaw {
+  border-color: #b0201a;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.worldmap-legend i.outlaw {
+  background: #1a0c0c;
+  outline: 2px solid #b0201a;
+}
+
 .worldmap-name {
   padding: 0 calc(var(--px) * 3);
   background: rgb(18 13 11 / 75%);
@@ -2348,11 +2414,12 @@ small {
   margin-top: 1px;
 }
 
-/* Drawn at twice the tiles' resolution and shown larger (CLAUDE.md §11): 320px square, a diamond once turned. */
+/* Drawn at twice the tiles' resolution and shown larger (CLAUDE.md §11): 320px square, a diamond once turned. Its
+   frame and the fittings at its tips are painted as pixel art in screen space (game/minimapFrame.ts). */
 .minimap {
   position: fixed;
-  right: 77px;
-  bottom: -36px;
+  right: 106px;
+  bottom: -25px;
   /* Rotated and squashed so the square tile grid lines up with the isometric view. */
   transform: scaleY(0.5) rotate(45deg);
   z-index: 2;
@@ -2364,87 +2431,133 @@ small {
   height: 320px;
   cursor: pointer;
   image-rendering: pixelated;
-  box-shadow:
-    0 0 0 3px var(--wood-3),
-    0 0 0 5px var(--wood-0),
-    0 0 0 7px var(--ink);
 }
 
-/* The shortcuts in the four empty corners around the diamond minimap (CLAUDE.md §11). The box is the turned
-   minimap's own bounding box (320px square turned 45° and squashed to half: 452 × 226), so each button sits in a
-   corner triangle. */
+/* The box is the turned map's bounding box (320px square turned 45° and squashed to half: 452 × 226), so the map's tips
+   touch its sides; the frame (canvas) spills out around it, the fittings sit over its tips. --mm-f (the frame's
+   thickness), --mm-w (a fitting's width) and --mm-icon come from MinimapCorners. */
 .mm-corners {
   position: fixed;
-  right: 11px;
-  bottom: 11px;
+  right: 40px;
+  bottom: 22px;
   width: 452px;
   height: 226px;
   pointer-events: none;
   z-index: 3;
-  --mm-btn: 30px;
-  --mm-in: 4px;
 }
 
+.mm-frame {
+  position: absolute;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+/* Each fitting's outer point on the frame's outer tip. */
+.mm-tip {
+  position: absolute;
+  width: var(--mm-w);
+  height: calc(var(--mm-w) / 2);
+}
+
+.mm-tip.top { left: calc(50% - var(--mm-w) / 2); top: calc(-1 * var(--mm-f)); }
+.mm-tip.bottom { left: calc(50% - var(--mm-w) / 2); bottom: calc(-1 * var(--mm-f)); }
+.mm-tip.left { left: calc(-2 * var(--mm-f)); top: calc(50% - var(--mm-w) / 4); }
+.mm-tip.right { right: calc(-2 * var(--mm-f)); top: calc(50% - var(--mm-w) / 4); }
+
+/* Only the diamond takes clicks. */
 .mm-corner {
   position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  width: var(--mm-btn);
-  height: var(--mm-btn);
   padding: 0;
   border: 0;
-  border-radius: 50%;
-  background: var(--wood-2);
-  box-shadow:
-    inset 0 2px 0 var(--wood-4),
-    inset 0 -2px 0 var(--wood-0),
-    0 0 0 2px var(--wood-0),
-    0 0 0 4px var(--ink);
+  background: none;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
   cursor: pointer;
   pointer-events: auto;
 }
 
-.mm-corner:hover:not(:disabled) {
-  background: var(--wood-3);
+.mm-cap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
 }
 
+.mm-cap.hover,
+.mm-cap.glow {
+  opacity: 0;
+}
+
+.mm-corner:hover:not(:disabled) .mm-cap.hover {
+  opacity: 1;
+}
+
+.mm-corner .icon {
+  position: relative;
+  width: var(--mm-icon);
+  height: var(--mm-icon);
+  vertical-align: 0;
+  filter: drop-shadow(1px 1px 0 rgba(18, 13, 11, 0.75));
+}
+
+.mm-corner:hover:not(:disabled) .icon {
+  transform: translateY(-1px);
+  filter: drop-shadow(1px 2px 0 rgba(18, 13, 11, 0.75));
+}
+
+/* Pressed: the fitting sinks a pixel and darkens, the icon with it. */
 .mm-corner:active:not(:disabled) {
   transform: translateY(1px);
+  filter: brightness(0.82);
+}
+
+.mm-corner:active:not(:disabled) .icon {
+  transform: none;
+  filter: none;
 }
 
 .mm-corner:disabled {
   cursor: default;
-  filter: grayscale(0.8) brightness(0.75);
+  filter: grayscale(0.85) brightness(0.7);
 }
 
-.mm-corner.tl { left: var(--mm-in); top: var(--mm-in); }
-.mm-corner.tr { right: var(--mm-in); top: var(--mm-in); }
-.mm-corner.bl { left: var(--mm-in); bottom: var(--mm-in); }
-.mm-corner.br { right: var(--mm-in); bottom: var(--mm-in); }
+.mm-corner:focus-visible {
+  outline: none;
+  filter: brightness(1.2);
+}
 
-.mm-corner b {
+/* The count on the fitting's upper right edge, clear of the icon. */
+.mm-tip b {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  min-width: 16px;
+  left: calc(50% + var(--mm-w) * 0.27 - 9px);
+  top: calc(var(--mm-w) * 0.11 - 9px);
+  min-width: 18px;
   padding: 0 3px;
-  border-radius: 2px;
   background: #a83a2a;
-  box-shadow: 0 0 0 2px var(--ink);
+  box-shadow:
+    inset 0 1px 0 #d8604a,
+    inset 0 -1px 0 #6a1c12,
+    0 0 0 1px #f2d16b,
+    0 0 0 2px var(--ink);
   color: #fff;
   font-size: 11px;
-  line-height: 16px;
+  line-height: 18px;
   text-align: center;
+  text-shadow: 1px 1px 0 var(--ink);
+  pointer-events: none;
 }
 
-/* Something hot going on: the button glows slowly. */
-.mm-corner.alarm {
-  animation: mm-alarm 1.6s steps(4) infinite;
+/* Something hot going on: the face turns to red enamel and back. */
+.mm-corner.alarm .mm-cap.glow {
+  animation: mm-alarm 1.6s steps(1) infinite;
 }
 
 @keyframes mm-alarm {
-  0%, 100% { background: var(--wood-2); }
-  50% { background: #8a3424; }
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
 }
 
 .mm-caption {
@@ -2584,6 +2697,41 @@ small {
   37.5% { opacity: 0.15; }
 }
 
+/* A button waiting for the server's answer to its command (lib/busyButtons.ts): three pixels blink in turn after
+   its label, and it takes no further clicks. */
+button[data-busy] {
+  cursor: progress !important;
+}
+
+button[data-busy]::after {
+  content: '';
+  flex: none;
+  display: inline-block;
+  width: calc(var(--px) * 2);
+  height: calc(var(--px) * 2);
+  margin: 0 calc(var(--px) * 7) 0 calc(var(--px) * 2);
+  vertical-align: middle;
+  background: currentColor;
+  --dim: color-mix(in srgb, currentColor 25%, transparent);
+  box-shadow: calc(var(--px) * 3) 0 0 var(--dim), calc(var(--px) * 6) 0 0 var(--dim);
+  animation: busy-dots 0.9s steps(1) infinite;
+}
+
+@keyframes busy-dots {
+  0% {
+    background: currentColor;
+    box-shadow: calc(var(--px) * 3) 0 0 var(--dim), calc(var(--px) * 6) 0 0 var(--dim);
+  }
+  33% {
+    background: var(--dim);
+    box-shadow: calc(var(--px) * 3) 0 0 currentColor, calc(var(--px) * 6) 0 0 var(--dim);
+  }
+  66% {
+    background: var(--dim);
+    box-shadow: calc(var(--px) * 3) 0 0 var(--dim), calc(var(--px) * 6) 0 0 currentColor;
+  }
+}
+
 /* While a tab is open on wide screens, the constructions show inside İnşa instead of under the stores. */
 :root[data-sheet='open'] .top .queue {
   display: none;
@@ -2593,8 +2741,8 @@ small {
 
 @media (max-width: 1100px) {
   .minimap {
-    right: 48px;
-    bottom: -20px;
+    right: 73px;
+    bottom: -12px;
   }
 
   .minimap canvas {
@@ -2604,12 +2752,10 @@ small {
 
   /* The smaller minimap's bounding box (200px turned: 283 × 141). */
   .mm-corners {
-    right: 7px;
-    bottom: 9px;
+    right: 32px;
+    bottom: 17px;
     width: 283px;
     height: 141px;
-    --mm-btn: 26px;
-    --mm-in: 3px;
   }
 
   .zoom {
@@ -2816,7 +2962,7 @@ small {
   }
 
   .chat-bar {
-    bottom: calc(var(--dock-h) + 124px + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + 132px + env(safe-area-inset-bottom));
   }
 
   .chat {
@@ -2828,9 +2974,9 @@ small {
   }
 
   .minimap {
-    left: 38px;
+    left: 54px;
     right: auto;
-    bottom: calc(var(--dock-h) - 1px + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + 3px + env(safe-area-inset-bottom));
   }
 
   .minimap canvas {
@@ -2840,21 +2986,20 @@ small {
 
   /* The phone's minimap on the left (132px turned: 187 × 93). */
   .mm-corners {
-    left: 11px;
+    left: 27px;
     right: auto;
-    bottom: calc(var(--dock-h) + 18px + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + 22px + env(safe-area-inset-bottom));
     width: 187px;
     height: 93px;
-    --mm-btn: 24px;
-    --mm-in: 1px;
   }
 
-  .mm-corner b {
+  .mm-tip b {
+    left: calc(50% + var(--mm-w) * 0.3 - 7px);
     top: -5px;
-    right: -5px;
-    min-width: 13px;
+    min-width: 14px;
+    padding: 0 2px;
     font-size: 10px;
-    line-height: 13px;
+    line-height: 14px;
   }
 
   .mm-caption {
@@ -4237,7 +4382,7 @@ kbd {
   display: block;
   width: calc(100% - var(--px) * 12);
   margin: 0 calc(var(--px) * 6);
-  aspect-ratio: 160 / 52;
+  aspect-ratio: 256 / 104;
   image-rendering: pixelated;
   box-shadow: var(--outline);
 }
@@ -4422,7 +4567,7 @@ kbd {
 /* Phones: the timers sit above the chat button (or the open chat), clear of the zoom buttons on the right. */
 @media (max-width: 719px) {
   .side-stack {
-    bottom: calc(var(--dock-h) + 124px + 44px + var(--px) * 4 + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + 132px + 44px + var(--px) * 4 + env(safe-area-inset-bottom));
     max-height: 45vh;
   }
 
@@ -4436,7 +4581,7 @@ kbd {
   }
 
   .chat-pop {
-    bottom: calc(var(--dock-h) + 124px + 44px + var(--px) * 4 + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + 132px + 44px + var(--px) * 4 + env(safe-area-inset-bottom));
     max-width: calc(100vw - var(--gap) * 2 - 56px);
   }
 }
@@ -4965,6 +5110,52 @@ kbd {
   color: var(--muted);
 }
 
+/* A crown's lords and the lord's standing with each (Diplomasi → Krallık; hud/crownHouse.tsx). */
+.crown-lords {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.crown-lords li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 calc(var(--px) * 3);
+  font-size: 13px;
+}
+
+.crown-lords li i {
+  grid-column: 1 / -1;
+  height: calc(var(--px) * 3);
+  min-width: calc(var(--px) * 2);
+}
+
+.crown-lords li button {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text, inherit);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.crown-lords li button:disabled {
+  cursor: default;
+}
+
+.crown-lords li.me button {
+  color: var(--gold, #f2d16b);
+}
+
+.crown-lords small {
+  color: var(--muted);
+}
+
 /* A crisis's answers (App.tsx → FortuneDialog). */
 .crisis {
   display: flex;
@@ -5103,17 +5294,118 @@ kbd {
   background: var(--panel-2, rgba(0, 0, 0, 0.15));
 }
 
-.kin-picker select.text,
-.house select.text {
+.kin-picker .pixel-select,
+.house .pixel-select {
   flex: 1;
   min-width: 0;
-  height: var(--control);
-  padding: 0 calc(var(--px) * 3);
-  border: 0;
-  background: var(--slot);
+}
+
+/* ---- The game's dropdown (ui/hud/PixelSelect.tsx), never the native <select> ---- */
+.pixel-select {
+  justify-content: space-between;
+  min-width: 0;
+  max-width: 100%;
   color: var(--gold);
-  font: inherit;
-  font-size: 14px;
+}
+
+.pixel-select-value {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.pixel-select-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pixel-select-note {
+  flex: none;
+  padding: 0 calc(var(--px) * 2);
+  background: var(--slot);
+  box-shadow: inset 0 0 0 var(--px) var(--panel-hi);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* A stepped pixel caret, drawn as a little downward triangle of whole art pixels. */
+.pixel-select-caret {
+  flex: none;
+  width: calc(var(--px) * 5);
+  height: calc(var(--px) * 3);
+  background: currentColor;
+  clip-path: polygon(0 0, 100% 0, 100% 33.34%, 80% 33.34%, 80% 66.67%, 60% 66.67%, 60% 100%, 40% 100%, 40% 66.67%, 20% 66.67%, 20% 33.34%, 0 33.34%);
+}
+
+.pixel-select.open .pixel-select-caret {
+  transform: scaleY(-1);
+}
+
+.pixel-select:disabled .pixel-select-caret {
+  opacity: 0.5;
+}
+
+.pixel-select-list {
+  position: fixed;
+  z-index: 9000;
+  margin: 0;
+  padding: calc(var(--px) * 2);
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  font-family: var(--font);
+  font-size: 15px;
+  color: var(--text);
+}
+
+.pixel-select-option {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  min-height: 36px;
+  padding: 0 calc(var(--px) * 4) 0 calc(var(--px) * 2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.pixel-select-option.active {
+  background: #5a4416;
+  box-shadow: inset 0 0 0 var(--px) var(--gold-2);
+  color: var(--gold);
+}
+
+.pixel-select-option.chosen {
+  color: var(--gold);
+}
+
+.pixel-select-option[aria-disabled='true'] {
+  color: var(--muted);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* A gold pixel diamond beside the chosen option. */
+.pixel-select-mark {
+  flex: none;
+  width: calc(var(--px) * 3);
+  height: calc(var(--px) * 3);
+}
+
+.pixel-select-option.chosen .pixel-select-mark {
+  background: var(--gold);
+  box-shadow: 0 0 0 var(--px) var(--gold-3);
+}
+
+@media (pointer: coarse) {
+  .pixel-select-option {
+    min-height: 44px;
+  }
 }
 
 /* The palace tab's parts: the level and the border, the lord's house, the buildings. */
@@ -5879,4 +6171,35 @@ input:not([type='range']):focus-visible {
 .closed-summary .away-lines {
   max-height: 40vh;
   overflow-y: auto;
+}
+
+/* A summary's lines are buttons: tapped, the news is read in full (DialogQueue.tsx → ClosedSummary). */
+.away-lines.summary-lines li {
+  display: block;
+  padding: 0;
+}
+
+.summary-line {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: calc(var(--px) * 4);
+  align-items: start;
+  width: 100%;
+  padding: calc(var(--px) * 3) calc(var(--px) * 4);
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.summary-line:hover,
+.summary-line:focus-visible {
+  background: var(--panel-hi);
+}
+
+.summary-more {
+  color: var(--gold);
 }

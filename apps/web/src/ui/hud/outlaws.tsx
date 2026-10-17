@@ -10,6 +10,7 @@ import {
   boatsOf,
   chaseBoatError,
   fleetAt,
+  leadsArmy,
   navyOf,
   outlawEffects,
   outlawUp,
@@ -20,6 +21,7 @@ import {
   territoryStage,
 } from '@game/shared'
 import type { Band, Boat, ChaseError, Kingdom, OutlawRow, Point, World } from '@game/shared'
+import { useState } from 'react'
 import { Icon } from '../icons'
 import { RESOURCE_NAMES } from '../names'
 import type { Online } from './online'
@@ -83,10 +85,10 @@ export function OutlawSheet({ world, pick, online, kingdom, now, onShow, onClose
 }) {
   if (pick.kind === 'band') {
     const band = lobbyBands(world, online.outlaws).find((b) => b.idx === pick.idx)
-    return band ? <BandSheet world={world} band={band} online={online} kingdom={kingdom} now={now} onShow={onShow} onClose={onClose} /> : null
+    return band ? <BandSheet key={`b${band.idx}`} world={world} band={band} online={online} kingdom={kingdom} now={now} onShow={onShow} onClose={onClose} /> : null
   }
   const boat = lobbyBoats(world, online.outlaws).find((b) => b.idx === pick.idx)
-  return boat ? <BoatSheet world={world} boat={boat} online={online} kingdom={kingdom} now={now} onShow={onShow} onClose={onClose} /> : null
+  return boat ? <BoatSheet key={`s${boat.idx}`} world={world} boat={boat} online={online} kingdom={kingdom} now={now} onShow={onShow} onClose={onClose} /> : null
 }
 
 function Head({ icon, title, sub, onShow, onClose }: { icon: 'swords' | 'ship'; title: string; sub: string; onShow(): void; onClose(): void }) {
@@ -124,6 +126,23 @@ function BandSheet({ world, band, online, kingdom, now, onShow, onClose }: { wor
   const land = territoryRect(kingdom.site, territoryStage(kingdom, now))
   const inside = (p: Point) => p.x >= land.x && p.y >= land.y && p.x < land.x + land.size && p.y < land.y + land.size
   const delay = Math.round((balance.time.messengerDelayGameDays * balance.time.gameDayMs) / 1000)
+  // Which army goes: always picked by the player, even when there is only one.
+  const [picked, setPicked] = useState<number | null>(null)
+  const pick = armies.find((a) => a.id === picked)
+  const far = (a: (typeof armies)[number]) => {
+    const at = armyAt(a, now)
+    return Math.round(Math.hypot(at.x - here.x, at.y - here.y))
+  }
+  const envoy = (a: (typeof armies)[number]) => !inside(armyAt(a, now)) && !(a.contact_until && Date.parse(a.contact_until) > now) && !leadsArmy(kingdom, a.led_by, now)
+  // After this band already, or the order to go after it still on its way with the envoy.
+  const waitingOf = (a: (typeof armies)[number]) => online.orders.find((o) => o.army_id === a.id && !o.applied_at && o.payload.kind === 'chase' && o.payload.band === band.idx && Date.parse(o.effective_at) > now)
+  const chasing = (a: (typeof armies)[number]) => (a.goal.kind === 'chase' && a.goal.band === band.idx) || !!waitingOf(a)
+  const chasers = armies.flatMap((a, i) => (chasing(a) ? [{ a, n: i + 1, waiting: waitingOf(a) }] : []))
+  // Giving up the chase: the army halts where it stands (by envoy outside its lands).
+  const halt = (a: (typeof armies)[number]) => {
+    const at = armyAt(a, now)
+    void online.act({ type: 'army', army: a.id, order: { kind: 'move', x: Math.round(at.x * 100) / 100, y: Math.round(at.y * 100) / 100 } })
+  }
   return (
     <section className="sheet frame" aria-labelledby="outlaw-title">
       <Head icon="swords" title={band.name} sub={up ? `Yağmacılar · yaklaşık ${rough} kişi` : 'Dağıtıldı'} onShow={() => onShow(here)} onClose={onClose} />
@@ -142,35 +161,51 @@ function BandSheet({ world, band, online, kingdom, now, onShow, onClose }: { wor
         {up && (
           <Section title="Takip et" icon="swords" aside={`${armies.length} ordu`}>
             <p className="hint">
-              Bir ordu seç ve peşine düş: ordu çetenin önünü keser, yakaladığı an savaş başlar. Hududun dışındaki orduya emir elçiyle gider ({delay} sn); peşindeki ordu çeteyi
+              Hangi orduyla gideceğini seç, sonra "Takip et": ordu çetenin önünü keser, yakaladığı an savaş başlar. Hududun dışındaki orduya emir elçiyle gider ({delay} sn); peşindeki ordu çeteyi
               {` ${Math.round(B.bands.chase.maxSeconds / 60)}`} dakikada yakalayamazsa takibi bırakır. Yenilen ordu eve çekilir.
             </p>
+            {chasers.map(({ a, n, waiting }) => (
+              <div key={a.id} className="chase-on">
+                <Icon name="swords" size={16} />
+                <span>
+                  <b>{n}. ordu {waiting ? 'yola çıkacak' : 'peşinde'}</b>
+                  <small className="hint">{waiting ? ` · elçi ${Math.max(1, Math.ceil((Date.parse(waiting.effective_at) - now) / 1000))} sn'de ulaşır` : ` · ${far(a)} karo geride`}</small>
+                </span>
+                {!waiting && (
+                  <button className="btn small" disabled={a.status === 'battle'} onClick={() => halt(a)}>
+                    Takibi bırak
+                  </button>
+                )}
+              </div>
+            ))}
             {armies.length === 0 ? (
               <p className="hint">Sahada ordun yok. Ordu sekmesinden garnizondan bir ordu çıkar.</p>
             ) : (
-              <ul className="list">
-                {armies.map((a) => {
-                  const at = armyAt(a, now)
-                  const chasing = a.goal.kind === 'chase' && a.goal.band === band.idx
-                  const far = Math.round(Math.hypot(at.x - here.x, at.y - here.y))
-                  const envoy = !inside(at) && !(a.contact_until && Date.parse(a.contact_until) > now)
-                  return (
-                    <li key={a.id} className="row">
-                      <span>
-                        <b>{fmt(a.soldiers ?? 0)} asker</b>
-                        <small className="hint"> · {far} karo uzakta{envoy ? ' · emir elçiyle' : ''}</small>
-                      </span>
-                      {chasing ? (
-                        <span className="chip">Peşinde</span>
-                      ) : (
-                        <button className="btn small" disabled={a.status === 'battle' || !!fighting} onClick={() => online.act({ type: 'army', army: a.id, order: { kind: 'chase', band: band.idx } })}>
-                          <Icon name="swords" size={16} /> Takip et
-                        </button>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
+              <>
+                <div className="chase-picks" role="radiogroup" aria-label="Takip edecek ordu">
+                  {armies.map((a, i) => {
+                    const busy = chasing(a) || a.status === 'battle'
+                    const soldiers = a.soldiers ?? 0
+                    return (
+                      <button key={a.id} role="radio" aria-checked={picked === a.id} className={picked === a.id ? 'chase-pick active' : 'chase-pick'} disabled={busy} onClick={() => setPicked(a.id)}>
+                        <b>
+                          {i + 1}. ordu · {fmt(soldiers)} asker
+                        </b>
+                        <small>
+                          {far(a)} karo uzakta · {envoy(a) ? `emir elçiyle (${delay} sn)` : 'emir hemen'}
+                        </small>
+                        <small className={soldiers >= band.soldiers + 2 ? 'up' : soldiers < band.soldiers - 2 ? 'down' : undefined}>
+                          güç {fmt(soldiers)} / ~{rough}
+                          {chasing(a) ? ' · zaten peşinde' : a.status === 'battle' ? ' · savaşta' : ''}
+                        </small>
+                      </button>
+                    )
+                  })}
+                </div>
+                <button className="btn primary wide" disabled={!pick || chasing(pick) || pick.status === 'battle' || !!fighting} onClick={() => pick && online.act({ type: 'army', army: pick.id, order: { kind: 'chase', band: band.idx } })}>
+                  <Icon name="swords" size={16} /> {pick ? `${armies.indexOf(pick) + 1}. orduyla takip et` : 'Önce bir ordu seç'}
+                </button>
+              </>
             )}
           </Section>
         )}
@@ -194,6 +229,13 @@ function BoatSheet({ world, boat, online, kingdom, now, onShow, onClose }: { wor
   const mine = dock ? seaHeld([boat], centre(dock), now) : null
   const fleets = navyOf(kingdom).fleets
   const might = boatMight(boat)
+  // Which fleet goes: always picked by the player, even when there is only one.
+  const [picked, setPicked] = useState<number | null>(null)
+  const pick = fleets.find((f) => f.id === picked)
+  const farOf = (f: (typeof fleets)[number]) => {
+    const at = fleetAt(world, kingdom, f, now)
+    return at ? Math.round(Math.hypot(at.x - here.x, at.y - here.y)) : null
+  }
   return (
     <section className="sheet frame" aria-labelledby="outlaw-title">
       <Head icon="ship" title={boat.name} sub={up ? `Korsanlar · ${boat.ships} tekne · güç ${dec(might)}` : 'Batırıldı'} onShow={() => onShow(here)} onClose={onClose} />
@@ -210,43 +252,54 @@ function BoatSheet({ world, boat, online, kingdom, now, onShow, onClose }: { wor
         {up && (
           <Section title="Takip et" icon="ship" aside={`${fleets.length} filo`}>
             <p className="hint">
-              Bir filo seç ve peşine düş: filo teknenin önünü keser, yakaladığı an deniz savaşı olur. Savaşta iki tarafın gücü gemilerinin toplam gücüdür (kadırga{' '}
+              Hangi filoyla gideceğini seç, sonra "Takip et": filo teknenin önünü keser, yakaladığı an deniz savaşı olur. Savaşta iki tarafın gücü gemilerinin toplam gücüdür (kadırga{' '}
               {dec(balance.navy.ships.galley.might)}, koka {dec(balance.navy.ships.cog.might)}, çektiri {dec(balance.navy.ships.corsair.might)}); korsanlar çektiri gibidir:
               kokaları yener, kadırgalara yenilir. Filoda en az bir savaş gemisi olmalı.
             </p>
+            {fleets.map((f, i) =>
+              f.chase?.boat === boat.idx ? (
+                <div key={f.id} className="chase-on">
+                  <Icon name="ship" size={16} />
+                  <span>
+                    <b>{i + 1}. filo peşinde</b>
+                    <small className="hint">{farOf(f) !== null && ` · ${farOf(f)} karo geride`} · emirler elçisiz, hemen</small>
+                  </span>
+                  <button className="btn small" onClick={() => online.act({ type: 'fleet', action: 'unchase', fleet: f.id })}>
+                    Takibi bırak
+                  </button>
+                </div>
+              ) : null,
+            )}
             {fleets.length === 0 ? (
               <p className="hint">Filon yok. Tersanede gemi yap, limandan filo çıkar.</p>
             ) : (
-              <ul className="list">
-                {fleets.map((f, i) => {
-                  const chasing = f.chase?.boat === boat.idx
-                  const why = chasing ? null : chaseBoatError(world, kingdom, f.id, boat, now)
-                  const at = fleetAt(world, kingdom, f, now)
-                  const far = at ? Math.round(Math.hypot(at.x - here.x, at.y - here.y)) : null
-                  const mightF = shipMight(f.ships)
-                  return (
-                    <li key={f.id} className="row">
-                      <span>
-                        <b>{i + 1}. filo</b> <ShipRow ships={f.ships} />
-                        <small className="hint">
-                          {' '}
-                          · güç {dec(mightF)} / {dec(might)}
-                          {far !== null && ` · ${far} karo`}
+              <>
+                <div className="chase-picks" role="radiogroup" aria-label="Takip edecek filo">
+                  {fleets.map((f, i) => {
+                    const chasing = f.chase?.boat === boat.idx
+                    const why = chasing ? null : chaseBoatError(world, kingdom, f.id, boat, now)
+                    const mightF = shipMight(f.ships)
+                    const far = farOf(f)
+                    return (
+                      <button key={f.id} role="radio" aria-checked={picked === f.id} className={picked === f.id ? 'chase-pick active' : 'chase-pick'} disabled={chasing || !!why} onClick={() => setPicked(f.id)}>
+                        <b>
+                          {i + 1}. filo <ShipRow ships={f.ships} />
+                        </b>
+                        <small>
+                          {far !== null ? `${far} karo uzakta` : 'yeri bilinmiyor'} · emir hemen
                         </small>
-                      </span>
-                      {chasing ? (
-                        <button className="btn small" onClick={() => online.act({ type: 'fleet', action: 'unchase', fleet: f.id })}>
-                          Takibi bırak
-                        </button>
-                      ) : (
-                        <button className="btn small" disabled={!!why} title={why ? CHASE_ERRORS[why] : undefined} onClick={() => online.act({ type: 'fleet', action: 'chase', fleet: f.id, boat: boat.idx })}>
-                          <Icon name="ship" size={16} /> {why ? CHASE_ERRORS[why] ?? 'olmaz' : 'Takip et'}
-                        </button>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
+                        <small className={mightF > might ? 'up' : 'down'}>
+                          güç {dec(mightF)} / {dec(might)}
+                          {chasing ? ' · zaten peşinde' : why ? ` · ${CHASE_ERRORS[why] ?? 'olmaz'}` : ''}
+                        </small>
+                      </button>
+                    )
+                  })}
+                </div>
+                <button className="btn primary wide" disabled={!pick || pick.chase?.boat === boat.idx || !!chaseBoatError(world, kingdom, pick.id, boat, now)} onClick={() => pick && online.act({ type: 'fleet', action: 'chase', fleet: pick.id, boat: boat.idx })}>
+                  <Icon name="ship" size={16} /> {pick ? `${fleets.indexOf(pick) + 1}. filoyla takip et` : 'Önce bir filo seç'}
+                </button>
+              </>
             )}
           </Section>
         )}

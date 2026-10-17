@@ -76,7 +76,8 @@ import type React from 'react'
 import { WorldMap } from './game/WorldMap'
 import { ConfirmBuild } from './ui/hud/ConfirmBuild'
 import { PlanBar } from './ui/hud/PlanBar'
-import { cityInfo } from './game/cities'
+import { cityInfo, setCrownClock } from './game/cities'
+import { BetrayalDialog, crownNews, liveOffer } from './ui/hud/crownHouse'
 import { townStructures, townTrails } from './game/towns'
 import { pretenderCampStructures } from './game/pretenderCamp'
 import { Minimap } from './game/Minimap'
@@ -97,7 +98,7 @@ import { CHAT_KEEP, CommandError, loadChat, loadMine, loadRivals, markSeen, post
 import type { ChatMessage, Command, IntelReport, Lobby, Mine, Notice, Rival } from './net/online'
 import { useLayer } from './net/layer'
 import type { MapArmy } from './game/armies'
-import { BANDIT_COLOR, REBEL_COLOR } from './game/armies'
+import { BANDIT_COLOR, REBEL_COLOR, roughSize } from './game/armies'
 import { OutlawSheet, lobbyBands, lobbyBoats } from './ui/hud/outlaws'
 import type { OutlawPick } from './ui/hud/outlaws'
 import { SHIP_LENGTHS } from './game/fleetShips'
@@ -107,6 +108,7 @@ import type { Spot } from './ui/MinimapCorners'
 import { play } from './audio/sfx'
 import type { Cue } from './audio/sfx'
 import { DetailSettings, SoundSettings } from './ui/home/SettingsPanel'
+import { usePowerSave } from './lib/power'
 import { WarTargets } from './ui/hud/WarTargets'
 import { EnvoyDialog, describe as describeNotice } from './ui/Envoy'
 import { Advisor, AdvisorSettings } from './ui/advisor/Advisor'
@@ -118,6 +120,7 @@ import { FortuneDialog } from './ui/FortuneDialog'
 import type { FortuneEvent } from './ui/FortuneDialog'
 import { HouseDialog, TITLES as HOUSE_TITLES, allKnown, houseNews, readKnown, writeKnown } from './ui/hud/dynasty'
 import { ClosedSummary, QueueContext } from './ui/DialogQueue'
+import type { SummaryItem } from './ui/DialogQueue'
 import { usePlaying } from './ui/hud/minigames/playing'
 import type { HouseNews } from './ui/hud/dynasty'
 import type { KingdomInfo, Online } from './ui/hud/online'
@@ -258,6 +261,7 @@ const REFUSALS: Record<string, string> = {
   townBesieged: 'Kasaba kuşatma altında; pazarı kapalı',
   // Bandits and pirates (CLAUDE.md §7.9, §8.5).
   outlaw: 'Bu çete dağıtılmış',
+  chasing: 'Zaten peşinde (ya da emri yolda)',
   boat: 'Bu korsan teknesi batırılmış',
   // The lord's house (CLAUDE.md §9.1.1).
   role_none: 'Bu hanedan üyesine görev verilemez',
@@ -568,8 +572,10 @@ function App({
   }, [seed])
 
   const muted = !settings.music
-  // Detail animations follow the setting.
-  useEffect(() => view?.setDetail(settings.detail), [view, settings.detail])
+  // Detail animations follow the setting; power saving (CLAUDE.md §12) turns them off with the rest.
+  const saving = usePowerSave(settings.power)
+  useEffect(() => view?.setPowerSave(saving), [view, saving])
+  useEffect(() => view?.setDetail(settings.detail && !saving), [view, settings.detail, saving])
   // The sound settings, opened from the corner button or the kingdom tab.
   const [settingsOpen, setSettingsOpen] = useState(false)
   // The phone menu (settings, main menu); a tap anywhere else closes it.
@@ -619,6 +625,9 @@ function App({
     const heard = serverNow()
     setHouseQueue((q) => [...q, ...news.map((n) => ({ ...n, at: n.at ?? heard }))])
   }, [dynasty, lobby.id, initial.id])
+  // The crowns' royal houses follow from the lobby's number and the season's start (CLAUDE.md §7.8): every ruler named
+  // anywhere is the one reigning now.
+  setCrownClock(kingdom && kingdom.lobbyKey !== undefined ? { lobbyKey: kingdom.lobbyKey, seasonStart: kingdom.seasonStart } : null, serverNow)
   const setKingdom = useCallback((next: Kingdom | null) => {
     kingdomRef.current = next
     setKingdomState(next)
@@ -916,9 +925,23 @@ function App({
         }
       }
     }
+    // Once a second, on the second (the interface's timers count whole seconds), and not at all while the tab is
+    // hidden: what came due meanwhile is settled at once when it shows again (CLAUDE.md §12).
+    let timer = 0
+    const next = () => {
+      timer = window.setTimeout(() => {
+        if (!document.hidden) tick()
+        next()
+      }, 1000 - (serverNow() % 1000) + 5)
+    }
+    const onShow = () => !document.hidden && tick()
     tick()
-    const id = setInterval(tick, 250)
-    return () => clearInterval(id)
+    next()
+    document.addEventListener('visibilitychange', onShow)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onShow)
+    }
   }, [view, founded, setKingdom, recordJournal])
 
   // Pretenders' camps (CLAUDE.md §9.1.1): the player's own and the other lords', painted again as one grows a tier.
@@ -1755,7 +1778,7 @@ function App({
           if (!route || route.length === 0) continue
           const back = t >= arrive + wait
           const [path, departAt, arriveAt] = back ? [[...route].reverse(), arrive + wait, arrive + wait + ride] : [route, arrive - ride, arrive]
-          out.push({ id: -(100000 + lord.id * 8 + crown), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 3, catapult: false, train: 2, size: 1.3, trainAhead: back })
+          out.push({ id: -(100000 + lord.id * 8 + crown), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 3, catapult: false, train: 2, size: 1.3, trainAhead: back, tag: `${cityInfo(view.world, crown).capital} haraççıları`, tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
         }
       }
     }
@@ -1775,7 +1798,7 @@ function App({
         // Through the stay the column stands halted along the road it came by, then rides back with its tail leading.
         const back = t >= times.leave
         const [path, departAt, arriveAt] = back ? [[...route].reverse(), times.leave, times.home] : [route, times.start, times.arrive]
-        out.push({ id: -(crown * 16 + p + 1), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 4, catapult: false, train: 5, size: 1.6, trainAhead: back })
+        out.push({ id: -(crown * 16 + p + 1), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 4, catapult: false, train: 5, size: 1.6, trainAhead: back, tag: `${cityInfo(view.world, crown).capital} devriyesi`, tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
       }
     })
     if (patrolRoutes.current.size > 256) patrolRoutes.current.clear()
@@ -1815,7 +1838,7 @@ function App({
         .map((t) => {
           const gate = townGate(t)
           const since = t.rebels!.since
-          return { id: -(100_000 + t.id), color: REBEL_COLOR, own: false, soldiers: null, path: [{ x: gate.x + 1.4, y: gate.y + 0.4 }], departAt: since, arriveAt: since, battle: !!t.rebels!.battle, selected: false, figures: Math.min(20, Math.max(2, Math.ceil(t.rebels!.count / 2))), catapult: false }
+          return { id: -(100_000 + t.id), color: REBEL_COLOR, own: false, soldiers: null, path: [{ x: gate.x + 1.4, y: gate.y + 0.4 }], departAt: since, arriveAt: since, battle: !!t.rebels!.battle, selected: false, figures: Math.min(20, Math.max(2, Math.ceil(t.rebels!.count / 2))), catapult: false, tag: `${t.name} asileri`, tagOutlaw: true }
         }),
     [layer.towns],
   )
@@ -1832,11 +1855,11 @@ function App({
       const figures = Math.min(20, Math.max(2, Math.ceil(b.soldiers / 2)))
       const fight = b.battle !== null ? layer.battles.find((x) => x.id === b.battle && !x.resolved) : undefined
       if (fight) {
-        out.push({ id: -(BAND_ID + b.idx), color: BANDIT_COLOR, own: false, soldiers: null, path: [{ x: fight.x + 0.8, y: fight.y + 0.4 }], departAt: t, arriveAt: t, battle: true, selected: false, figures, catapult: false })
+        out.push({ id: -(BAND_ID + b.idx), color: BANDIT_COLOR, own: false, soldiers: null, path: [{ x: fight.x + 0.8, y: fight.y + 0.4 }], departAt: t, arriveAt: t, battle: true, selected: false, figures, catapult: false, tag: `${b.name} · yağmacı`, tagOutlaw: true })
         continue
       }
       const leg = bandLeg(b, t)
-      out.push({ id: -(BAND_ID + b.idx), color: BANDIT_COLOR, own: false, soldiers: null, path: leg.path, departAt: leg.departAt, arriveAt: leg.arriveAt, battle: false, selected: false, figures, catapult: false })
+      out.push({ id: -(BAND_ID + b.idx), color: BANDIT_COLOR, own: false, soldiers: null, path: leg.path, departAt: leg.departAt, arriveAt: leg.arriveAt, battle: false, selected: false, figures, catapult: false, tag: `${b.name} · yağmacı`, tagOutlaw: true })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1892,6 +1915,7 @@ function App({
   useEffect(() => {
     if (!view) return
     const colors = new Map(kingdoms.map((k) => [k.id, k.color]))
+    const names = new Map(kingdoms.map((k) => [k.id, k.name]))
     view.setArmies(
       [...patrols, ...layer.armies.map((a): MapArmy => ({
         id: a.id,
@@ -1908,6 +1932,9 @@ function App({
         catapult: a.units ? (a.units.catapult ?? 0) > 0 : !!a.catapults,
         // The lord at its head (own armies: only while he lives and rules).
         royal: a.kingdom_id === mine.id ? !!kingdomRef.current && leadsArmy(kingdomRef.current, a.led_by, serverNow()) : !!a.royal,
+        // Whose it is and how many: exact for the player's own, roughly for the rest (CLAUDE.md §9.7).
+        tag: `${names.get(a.kingdom_id) ?? 'Bir lord'} · ${a.soldiers !== null ? a.soldiers : roughSize(a.figures ?? 3)}`,
+        tagColor: colorOf(colors.get(a.kingdom_id)),
       })), ...rebelSquads, ...banditSquads, ...campSquads],
       layer.battles
         .filter((b) => !b.resolved || Date.parse(b.ends_at) > serverNow())
@@ -2028,10 +2055,11 @@ function App({
   })
   // The dialogs in a line (CLAUDE.md §9.8): how many came since the line began, for the "2 / 5" on each, and closing
   // them all at once (those still waiting for an answer stay: a live tribute demand, a crisis or a choice still open).
+  const [crownQueue, setCrownQueue] = useState<Notice[]>([])
   const [lineSeen, setLineSeen] = useState(0)
-  const [closedTitles, setClosedTitles] = useState<string[] | null>(null)
+  const [closedTitles, setClosedTitles] = useState<SummaryItem[] | null>(null)
   const dueNotices = layer.notices.filter((n) => Date.parse(n.show_at) <= now)
-  const waiting = dueNotices.length + houseQueue.length + fortunes.length
+  const waiting = dueNotices.length + houseQueue.length + fortunes.length + crownQueue.length
   useEffect(() => {
     if (waiting === 0 && lineSeen !== 0) setLineSeen(0)
   }, [waiting, lineSeen])
@@ -2047,6 +2075,23 @@ function App({
     dropNotices([notice.id])
     stepLine()
   }
+  // A crown's ruler died and the heir is crowned (CLAUDE.md §7.8): told by the envoy once per reign in this browser
+  // (the reigns follow from the clock, so there is nothing to fetch), and written in the journal.
+  const crownTick = Math.floor(now / 5000)
+  useEffect(() => {
+    if (!view || !kingdom || kingdom.lobbyKey === undefined || view.world.cities.length === 0) return
+    const news = crownNews(lobby.id, mine.id, kingdom, view.world.cities.length, serverNow())
+    for (const n of news.journal) {
+      const { icon, title, text } = describeNotice(n, online)
+      noteJournal(n.id, Date.parse(n.show_at), { icon, title, text })
+    }
+    if (news.show.length > 0) setCrownQueue((q) => [...q, ...news.show])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crownTick, view, kingdom?.lobbyKey, kingdom?.seasonStart, lobby.id, mine.id])
+  // The liege crown backed a beaten pretender: the lord may go over to the rival crown (CLAUDE.md §9.1.1). "Sonra" puts
+  // the question off for this visit (it stays in Diplomasi → Krallık while it stands).
+  const [betrayalLater, setBetrayalLater] = useState<number | null>(null)
+  const betrayal = view && kingdom ? liveOffer(kingdom, view.world.cities.length, now) : null
   const watchedBattle = layer.battles.find((b) => b.id === watching) ?? null
   const watchedTown = layer.towns.find((t) => t.id === watchingTown) ?? null
 
@@ -2066,6 +2111,13 @@ function App({
   // A crisis or a choice still to be answered goes before the envoy's news: its time to decide runs out (a tribute
   // demand, which also runs out, is the one notice that stays ahead of it).
   const decisionFirst = !!kingdom && !!fortunes[0] && fortuneDecisionOpen(fortunes[0], kingdom, now) && notice?.kind !== 'patrol_tribute'
+  // The summaries' lines, each enough to read the news again (DialogQueue.tsx → ClosedSummary).
+  const noticeItem = (n: Notice): SummaryItem => describeNotice(n, online)
+  const houseItem = (h: HouseNews): SummaryItem => ({ icon: 'crown', title: HOUSE_TITLES[h.kind] ?? 'Hanedandan haber', text: `${HOUSE_TITLES[h.kind] ?? 'Hanedandan haber'}: ${h.person.name}${h.heir ? `; yerine ${h.heir.name}` : ''}. Ayrıntısı Saray → Hanedan'da.` })
+  const fortuneItem = (f: FortuneEvent): SummaryItem => {
+    const t = FORTUNE_TEXTS[f.fortune]
+    return { icon: t?.icon ?? 'star', title: t?.title ?? 'Bir olay', text: t?.text ?? '' }
+  }
   const closeAllDialogs = () => {
     if (!kingdom) return
     const liveDemand = (n: (typeof dueNotices)[number]) =>
@@ -2073,16 +2125,13 @@ function App({
       (n.kind === 'envoy_proposal' && online.envoys.some((e) => e.id === (n.payload as { envoy?: number }).envoy && e.status === 'pending'))
     const gone = dueNotices.filter((n) => !liveDemand(n))
     const keep = fortunes.filter((f) => fortuneDecisionOpen(f, kingdom, now))
-    const titles = [
-      ...houseQueue.map((h) => HOUSE_TITLES[h.kind] ?? 'Hanedandan haber'),
-      ...gone.map((n) => describeNotice(n, online).title),
-      ...fortunes.filter((f) => !keep.includes(f)).map((f) => FORTUNE_TEXTS[f.fortune]?.title ?? 'Bir olay'),
-    ]
+    const titles = [...houseQueue.map(houseItem), ...gone.map(noticeItem), ...crownQueue.map(noticeItem), ...fortunes.filter((f) => !keep.includes(f)).map(fortuneItem)]
     if (gone.length > 0) {
       markSeen(gone.map((n) => n.id))
       dropNotices(gone.map((n) => n.id))
     }
     setHouseQueue([])
+    setCrownQueue([])
     setFortunes(keep)
     setLineSeen(0)
     if (titles.length > 0) setClosedTitles(titles)
@@ -2094,7 +2143,7 @@ function App({
   // answer (a live tribute demand, a pending proposal, an open crisis or choice) never expires, nor does a dialog the
   // player has had on screen with the tab visible; nor does news while the player is going through the line (its age
   // counts from the last step on). While the away report is to show, it tells them; nothing is folded.
-  const [folded, setFolded] = useState<string[]>([])
+  const [folded, setFolded] = useState<SummaryItem[]>([])
   const onScreen = useRef(new Set<string>())
   const awayClosedAt = useRef(0)
   const fortuneKey = (f: FortuneEvent) => `f:${f.scope ?? 'kingdom'}:${f.start}:${f.fortune}`
@@ -2114,14 +2163,14 @@ function App({
     const answerable = (n: Notice) =>
       (n.kind === 'patrol_tribute' && Number((n.payload as { expiresAt?: number }).expiresAt) > now) ||
       (n.kind === 'envoy_proposal' && online.envoys.some((e) => e.id === (n.payload as { envoy?: number }).envoy && e.status === 'pending'))
-    const items: { key: string; at: number; important: boolean; title: () => string }[] = [
+    const items: { key: string; at: number; important: boolean; title: () => SummaryItem }[] = [
       ...dueNotices
         .filter((n) => !answerable(n))
-        .map((n) => ({ key: `n:${n.id}`, at: Date.parse(n.show_at), important: noticeHurts(n, kingdom.name) || WAR_NEWS.has(n.kind), title: () => describeNotice(n, online).title })),
-      ...houseQueue.map((h) => ({ key: `h:${h.key}`, at: h.at ?? now, important: h.kind === 'death' || h.kind === 'coronation' || h.kind === 'council', title: () => HOUSE_TITLES[h.kind] ?? 'Hanedandan haber' })),
+        .map((n) => ({ key: `n:${n.id}`, at: Date.parse(n.show_at), important: noticeHurts(n, kingdom.name) || WAR_NEWS.has(n.kind), title: () => noticeItem(n) })),
+      ...houseQueue.map((h) => ({ key: `h:${h.key}`, at: h.at ?? now, important: h.kind === 'death' || h.kind === 'coronation' || h.kind === 'council', title: () => houseItem(h) })),
       ...fortunes
         .filter((f) => !fortuneDecisionOpen(f, kingdom, now))
-        .map((f) => ({ key: fortuneKey(f), at: f.start ?? now, important: FORTUNE_TEXTS[f.fortune]?.tone === 'bad', title: () => FORTUNE_TEXTS[f.fortune]?.title ?? 'Bir olay' })),
+        .map((f) => ({ key: fortuneKey(f), at: f.start ?? now, important: FORTUNE_TEXTS[f.fortune]?.tone === 'bad', title: () => fortuneItem(f) })),
     ].filter((i) => !onScreen.current.has(i.key))
     const stale = new Set(items.filter((i) => now - Math.max(i.at, lastStep.current) > (i.important ? S.shelfSeconds.important : S.shelfSeconds.news) * 1000).map((i) => i.key))
     // A flood: the important ones and the newest stay, the rest are folded.
@@ -2239,14 +2288,21 @@ function App({
   // Where the crowns' patrols are now, for the minimap and the world map, moved on every couple of seconds.
   const [patrolDots, setPatrolDots] = useState<MinimapPatrol[]>([])
   useEffect(() => {
-    const place = () =>
-      setPatrolDots(
-        patrols.map((p) => ({ at: pointOnPath(p.path, p.departAt, p.arriveAt, serverNow()), color: hexOf(p.color) })),
-      )
+    // The crowns' patrols, and the bandits and pirates (black, torn banners edged in red) so they can be found.
+    const place = () => {
+      const t = serverNow()
+      setPatrolDots([
+        ...patrols.map((p) => ({ at: pointOnPath(p.path, p.departAt, p.arriveAt, t), color: hexOf(p.color) })),
+        ...(view ? bands.filter((b) => outlawUp(b, t)).map((b) => ({ at: bandAt(b, t), color: '#1a0c0c', outlaw: true })) : []),
+        ...(view ? lobbyBoats(view.world, layer.outlaws).filter((b) => outlawUp(b, t)).map((b) => ({ at: boatAt(b, t).at, color: '#1a0c0c', outlaw: true })) : []),
+      ])
+    }
     place()
-    const id = window.setInterval(place, 2000)
+    if (patrols.length === 0) return
+    // Not while the tab is hidden: nobody sees the minimap then.
+    const id = window.setInterval(() => !document.hidden && place(), 2000)
     return () => clearInterval(id)
-  }, [patrols])
+  }, [patrols, bands, view, layer.outlaws])
 
   return (
     <>
@@ -2775,11 +2831,11 @@ function App({
       {/* While a mini game is being played, the popups below wait (they would take its keys and taps). */}
       {!playing && (
         <QueueContext.Provider value={{ pos: lineSeen + 1, total: lineSeen + waiting, closeAll: closeAllDialogs }}>
-      {closedTitles && <ClosedSummary titles={closedTitles} onClose={() => setClosedTitles(null)} />}
+      {closedTitles && <ClosedSummary items={closedTitles} onClose={() => setClosedTitles(null)} />}
       {foldedShown && (
         <ClosedSummary
           folded
-          titles={folded}
+          items={folded}
           onClose={() => setFolded([])}
           onJournal={() => {
             setFolded([])
@@ -2794,6 +2850,12 @@ function App({
         <HouseDialog key={houseQueue[0].key} news={houseQueue[0]} kingdom={kingdom} now={now} online={online} onClose={() => (setHouseQueue((q) => q.slice(1)), stepLine())} />
       )}
       {notice && kingdom && !away && !houseQueue[0] && !decisionFirst && (introDone || kingdom.liege !== undefined || !fealtyOpen(kingdom, now)) && <EnvoyDialog notice={notice} online={online} onClose={closeNotice} />}
+      {!notice && !away && kingdom && !houseQueue[0] && !decisionFirst && crownQueue[0] && (
+        <EnvoyDialog key={crownQueue[0].id} notice={crownQueue[0]} online={online} onClose={() => (setCrownQueue((q) => q.slice(1)), stepLine())} />
+      )}
+      {!notice && !away && view && kingdom && !houseQueue[0] && !decisionFirst && !crownQueue[0] && betrayal && betrayalLater !== betrayal.at && (
+        <BetrayalDialog world={view.world} kingdom={kingdom} online={online} now={now} onLater={() => setBetrayalLater(betrayal.at)} />
+      )}
       {!notice && !away && kingdom && !fortunes[0] && returned && <ExpeditionReport expedition={returned} kingdom={kingdom} online={online} onClose={() => markExpeditionSeen(returned.id)} />}
       {/* A plain news of the day waits behind the away report (it is told there too); a crisis or a choice, timed, does not. */}
       {(!notice || decisionFirst) && kingdom && fortunes[0] && (!away || fortuneDecisionOpen(fortunes[0], kingdom, now)) && (

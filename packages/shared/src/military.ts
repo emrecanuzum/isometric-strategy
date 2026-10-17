@@ -57,7 +57,16 @@ export type Blocked = (x: number, y: number) => boolean
 type Holding = { id?: number; buildings?: { kind: string; x: number; y: number; size: number; broken?: boolean }[] }
 export function buildingBlocker(kingdoms: Holding[], mover?: number, breach?: number): Blocked {
   const taken = new Set<number>()
+  const seals: Seal[] = []
   for (const k of kingdoms) {
+    const seal: Seal = { walls: [], towers: new Set(), open: new Set() }
+    for (const b of k.buildings ?? []) {
+      if (b.kind === 'wall' && !b.broken) seal.walls.push({ x: b.x, y: b.y })
+      else if (b.kind === 'wall') seal.open.add(b.y * 65536 + b.x)
+      else if (b.kind === 'gate') for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) seal.open.add((b.y + dy) * 65536 + b.x + dx)
+      else if (b.kind === 'watchtower') for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) seal.towers.add(y * 65536 + x)
+    }
+    if (seal.walls.length) seals.push(seal)
     for (const b of k.buildings ?? []) {
       if (b.kind === 'farm' || b.kind === 'road') continue
       if ((b.kind === 'wall' || b.kind === 'gate') && k.id !== undefined && k.id === breach) continue
@@ -66,7 +75,68 @@ export function buildingBlocker(kingdoms: Holding[], mover?: number, breach?: nu
       for (let y = b.y; y < b.y + b.size; y++) for (let x = b.x; x < b.x + b.size; x++) taken.add(y * 65536 + x)
     }
   }
-  return (x, y) => taken.has(y * 65536 + x)
+  const blocked: Blocked = (x, y) => taken.has(y * 65536 + x)
+  if (seals.length) SEALS.set(blocked, seals)
+  return blocked
+}
+
+// A narrow gap between a standing wall and the water (or a mountain, or the lord's own watchtower) is shut to armies:
+// a wall line that stops a tile or two short of a lake leaves no way round its end (CLAUDE.md §9.7). A tile is sealed
+// when it lies on the straight line between a standing wall tile (or a watchtower in the wall line) and such an
+// obstacle at most balance.military.wall.sealTiles free tiles away. Gates are not walls here and the tiles round a
+// gate stay open (the way through stays theirs), broken stretches stay open, and the walls of a kingdom under siege
+// (`breach`) still seal their gaps, so the besieger halts at the walls rather than slipping round them. Worked out
+// from the ground, so findRoute and standingSpot apply it (see sealed).
+interface Seal {
+  walls: Point[]
+  towers: Set<number>
+  // Never sealed: broken stretches, and a gate with the tiles round it.
+  open: Set<number>
+}
+const SEALS = new WeakMap<Blocked, Seal[]>()
+const SEALED = new WeakMap<Blocked, { world: Ground; tiles: Set<number> }>()
+
+// `blocked` with the gaps beside its walls shut on `world` (unchanged if it holds no walls).
+export function sealed(world: Ground, blocked?: Blocked): Blocked | undefined {
+  if (!blocked) return blocked
+  const seals = SEALS.get(blocked)
+  if (!seals) return blocked
+  let known = SEALED.get(blocked)
+  if (!known || known.world !== world) {
+    const tiles = new Set<number>()
+    const reach = balance.military.wall.sealTiles + 1
+    for (const seal of seals) {
+      // A watchtower standing in the wall line (a wall within reach of it) seals its own gaps too.
+      const near = (t: Point) => seal.walls.some((w) => Math.max(Math.abs(w.x - t.x), Math.abs(w.y - t.y)) <= reach)
+      const towers = [...seal.towers].map((key) => ({ x: key % 65536, y: Math.floor(key / 65536) })).filter(near)
+      for (const w of [...seal.walls, ...towers]) {
+        for (let dy = -reach; dy <= reach; dy++) {
+          for (let dx = -reach; dx <= reach; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) < 2) continue
+            const ox = w.x + dx
+            const oy = w.y + dy
+            if (ox < 0 || oy < 0 || ox >= world.size || oy >= world.size) continue
+            if (passable(world, ox, oy) && !seal.towers.has(oy * 65536 + ox)) continue
+            const between: number[] = []
+            let clear = true
+            walkTiles({ x: w.x + 0.5, y: w.y + 0.5 }, { x: ox + 0.5, y: oy + 0.5 }, (x, y) => {
+              if ((x === w.x && y === w.y) || (x === ox && y === oy)) return true
+              const key = y * 65536 + x
+              // Only gaps of open ground: a line that crosses water or another tower first is not this gap.
+              if (!passable(world, x, y) || seal.towers.has(key)) return (clear = false)
+              if (!seal.open.has(key)) between.push(key)
+              return true
+            })
+            if (clear) for (const key of between) tiles.add(key)
+          }
+        }
+      }
+    }
+    known = { world, tiles }
+    SEALED.set(blocked, known)
+  }
+  const tiles = known.tiles
+  return (x, y) => blocked(x, y) || tiles.has(y * 65536 + x)
 }
 
 // The standing walls and gates of one kingdom, where a besieging army halts.
@@ -104,6 +174,7 @@ export function haltBefore(route: Point[], stop: Blocked): Point[] {
 
 // The nearest tile to `p` an army can stand on (not water, mountain or a building), searching outward a few tiles.
 export function standingSpot(world: Ground, p: Point, blocked?: Blocked): Point {
+  blocked = sealed(world, blocked)
   const ok = (x: number, y: number) => passable(world, x, y) && !blocked?.(x, y)
   const px = Math.floor(p.x)
   const py = Math.floor(p.y)
@@ -214,6 +285,7 @@ function heapOf() {
 // them, so a narrow bridge is found), then tile by tile inside the corridor of cells that search chose, and the tile
 // path is pulled straight wherever the ground allows.
 export function findRoute(world: Ground, from: Point, to: Point, blocked?: Blocked): Point[] | null {
+  blocked = sealed(world, blocked)
   const size = world.size
   const n = size / CELL
   const ok = (x: number, y: number) => passable(world, x, y) && !blocked?.(x, y)

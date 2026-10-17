@@ -114,8 +114,9 @@ export function unansweredTribute(amount: number, lastSeenAt: number | undefined
   return { afk, amount: afk ? Math.round(amount * t.afkFactor) : amount }
 }
 
-// The tribute demanded of a lord with `gold` in the treasury: a fixed share of it.
-export const tributeDemand = (gold: number) => Math.floor(Math.max(0, gold) * patrolSpec().tribute.share)
+// The tribute demanded of a lord with `gold` in the treasury: a fixed share of it, tilted by the asking crown's ruler
+// (`factor`: the reigning ruler's trait, crownHouse.ts → crownTraitAt).
+export const tributeDemand = (gold: number, factor = 1) => Math.floor(Math.max(0, gold) * patrolSpec().tribute.share * factor)
 
 // Where a crown's patrols ride out from: just outside the capital's front wall.
 export const capitalGate = (city: Point): Point => ({ x: city.x + balance.cities.size / 2, y: city.y + balance.cities.size + 1.5 })

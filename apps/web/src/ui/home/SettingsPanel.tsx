@@ -1,4 +1,6 @@
 import type { Profile, Settings } from '../../net/settings'
+import { usePowerSave } from '../../lib/power'
+import type { PowerMode } from '../../lib/power'
 import { Icon } from '../icons'
 
 // The player's settings and account.
@@ -70,14 +72,41 @@ export function SoundSettings({ settings, onChange }: { settings: Settings; onCh
   )
 }
 
-// Small motions on the map (swaying trees); turning them off repaints the map without them.
+const POWER_MODES: { mode: PowerMode; label: string }[] = [
+  { mode: 'auto', label: 'Otomatik' },
+  { mode: 'on', label: 'Açık' },
+  { mode: 'off', label: 'Kapalı' },
+]
+
+// Small motions on the map (swaying trees); turning them off repaints the map without them. Power saving (CLAUDE.md
+// §12) lowers the frame rate and leaves out the detail animations, birds, clouds and the night glow.
 export function DetailSettings({ settings, onChange }: { settings: Settings; onChange: (change: Partial<Settings>) => void }) {
+  const saving = usePowerSave(settings.power)
   return (
-    <div className="row spread">
-      <span>Detay animasyonları (sallanan ağaçlar)</span>
-      <button className="btn small" aria-pressed={settings.detail} onClick={() => onChange({ detail: !settings.detail })}>
-        {settings.detail ? 'Açık' : 'Kapalı'}
-      </button>
-    </div>
+    <>
+      <div className="row spread">
+        <span>Detay animasyonları (sallanan ağaçlar)</span>
+        <button className="btn small" aria-pressed={settings.detail} disabled={saving} onClick={() => onChange({ detail: !settings.detail })}>
+          {settings.detail && !saving ? 'Açık' : 'Kapalı'}
+        </button>
+      </div>
+      <div className="row spread">
+        <span>Güç tasarrufu</span>
+        <span className="row">
+          {POWER_MODES.map((p) => (
+            <button key={p.mode} className="btn small" aria-pressed={settings.power === p.mode} onClick={() => onChange({ power: p.mode })}>
+              {p.label}
+            </button>
+          ))}
+        </span>
+      </div>
+      <p className="hint">
+        {settings.power === 'auto'
+          ? `Telefonda, tablette ve pil ile çalışırken kendiliğinden açılır${saving ? ' (şu an açık)' : ' (şu an kapalı)'}.`
+          : saving
+            ? 'Açık: harita daha seyrek çizilir; detay animasyonları, kuşlar, bulutlar ve gece ışıltısı kapanır.'
+            : 'Kapalı: harita her zaman tam ayrıntıyla çizilir.'}
+      </p>
+    </>
   )
 }

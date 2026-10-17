@@ -513,6 +513,7 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
           // After a pirate boat (CLAUDE.md §8.5): to where it can meet it; the tick looks for the meeting.
           const { boats } = await outlawsIn(lobby, lobbyWorld)
           const boat = boats.find((b: { idx: number }) => b.idx === Number(cmd.boat))
+          if (game.fleetOf(k, id)?.chase?.boat === Number(cmd.boat)) refuse('chasing')
           const chased = game.chaseBoat(lobbyWorld.world, k, id, boat, now)
           if (chased === k) refuse(game.chaseBoatError(lobbyWorld.world, k, id, boat, now) ?? 'rejected')
           next = changed(chased)
@@ -1141,6 +1142,12 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         (order?.kind === 'merge' && isId(order.with)) ||
         (order?.kind === 'chase' && Number.isInteger(order.band) && order.band >= 0)
       if (!valid) refuse('rejected')
+      // Already after that band, or the order to go after it is still on its way: a repeat does nothing.
+      if (order.kind === 'chase') {
+        if (army!.goal?.kind === 'chase' && army!.goal.band === order.band) refuse('chasing')
+        const { data: waiting } = await admin.from('army_orders').select('payload').eq('army_id', army!.id).is('applied_at', null)
+        if ((waiting ?? []).some((o: { payload: Order }) => o.payload?.kind === 'chase' && o.payload.band === order.band)) refuse('chasing')
+      }
       // Inside its own lands the army hears the order at once, and so it does while an envoy that has just reached it
       // is still at its side; elsewhere the envoy has to ride to it (§8.2.1).
       const { here } = armyNow(army!, world, me.state, now)
@@ -1367,6 +1374,29 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         return out
       }
       return refuse('rejected')
+    }
+    case 'switchLiege': {
+      // A liege crown that backed the lord's pretender lost: the lord goes over to the rival crown, or stays and is
+      // made amends (CLAUDE.md §9.1.1). Offered once per betrayal, for a while.
+      const accept = cmd.accept === true
+      const { cities } = await worldOf(lobby)
+      let out: { from: number; to: number; name: string; gold: number } | null = null
+      await mutateKingdom(me.id, now, (k) => {
+        const why = game.liegeSwitchError(k, now, cities.length)
+        if (why) refuse(`switch_${why}`)
+        const o = k.liegeOffer!
+        const r = game.answerLiegeOffer(k, accept, now, game.goldCap(k, now) - k.stock.gold)
+        out = { from: o.from, to: o.to, name: o.name, gold: r.gold }
+        return r.kingdom
+      })
+      if (!out) return refuse('rejected')
+      const o = out as { from: number; to: number; name: string; gold: number }
+      await notify(lobby, [me.id], 'liege_switch', { accept, ...o }, now)
+      if (accept) {
+        const others = rows.filter((r) => r.id !== me.id && r.state).map((r) => r.id)
+        if (others.length > 0) await notify(lobby, others, 'liege_changed', { by: me.name, from: o.from, to: o.to }, now)
+      }
+      return { accept, ...o }
     }
     default:
       return refuse('unknown')

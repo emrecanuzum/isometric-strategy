@@ -18,7 +18,8 @@
     "battleRange": 8
   },
   "wall": {
-    "breakShare": 0.3
+    "breakShare": 0.3,
+    "sealTiles": 2
   },
   "siege": {
     "lootShare": 0.15,

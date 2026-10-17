@@ -9,8 +9,24 @@ import { serverNow } from '../net/clock'
 import { Icon } from './icons'
 import type { IconName } from './icons'
 import { MONTH_NAMES } from './names'
+import { frameMargin, paintCap, paintFrame } from '../game/minimapFrame'
 
-// The four shortcuts in the empty corners around the diamond minimap (CLAUDE.md §11): the world map, the player's own
+// The minimap's pixel-art frame, laid over the map's edge; clicks pass through it to the map.
+function Frame({ width, height, thick }: { width: number; height: number; thick: number }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => paintFrame(ref.current!.getContext('2d')!, { width, height, thick }), [width, height, thick])
+  const m = frameMargin(thick)
+  return <canvas ref={ref} className="mm-frame" style={{ left: -m.x, top: -m.y, width: width + m.x * 2, height: height + m.y * 2 }} aria-hidden />
+}
+
+// One of the tip fittings, painted once for its size and look.
+function Cap({ width, face, className }: { width: number; face: 'wood' | 'alarm' | 'hover'; className?: string }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => paintCap(ref.current!.getContext('2d')!, width, face), [width, face])
+  return <canvas ref={ref} className={`mm-cap${className ? ` ${className}` : ''}`} aria-hidden />
+}
+
+// The four shortcuts as diamond tiles in the diamond minimap's tips (CLAUDE.md §11): the world map, the player's own
 // armies and fleets one after another, the places that matter right now, and the photo mode.
 
 export interface Spot {
@@ -191,26 +207,43 @@ export function MinimapCorners({
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // The frame and the fittings are sized from the box the map's diamond takes on this screen.
+  const box = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(0)
+  useEffect(() => {
+    const el = box.current!
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth))
+    ro.observe(el)
+    setWidth(el.clientWidth)
+    return () => ro.disconnect()
+  }, [])
+  const size = width >= 400 ? { thick: 17, cap: 92, icon: 24 } : width >= 250 ? { thick: 12, cap: 68, icon: 16 } : { thick: 10, cap: 60, icon: 16 }
+
+  // A gilded fitting clamped over one of the frame's tips; the count rides on its upper edge, clear of the icon.
   const corner = (where: string, icon: IconName, title: string, onClick: () => void, count?: number, alarm = false) => (
-    <button
-      className={`mm-corner ${where}${alarm ? ' alarm' : ''}`}
-      onClick={onClick}
-      title={title}
-      aria-label={title}
-      disabled={count === 0}
-    >
-      <Icon name={icon} size={16} />
+    <span className={`mm-tip ${where}`}>
+      <button className={`mm-corner${alarm ? ' alarm' : ''}`} onClick={onClick} title={title} aria-label={title} disabled={count === 0}>
+        <Cap width={size.cap} face="wood" />
+        <Cap width={size.cap} face="hover" className="hover" />
+        {alarm && <Cap width={size.cap} face="alarm" className="glow" />}
+        <Icon name={icon} size={size.icon} />
+      </button>
       {count !== undefined && count > 0 && <b>{count}</b>}
-    </button>
+    </span>
   )
 
   return (
     <>
-      <div className="mm-corners">
-        {corner('tl', 'map', 'Dünya haritası (M)', openMap)}
-        {corner('tr', 'swords', spots.length ? `Sıcak noktalar (H): ${spots.map((s) => s.label).join(' · ')}` : 'Sıcak noktalar (H): şu an yok', nextSpot, spots.length, spots.length > 0)}
-        {corner('bl', 'banner', units.length ? 'Ordularım ve filolarım (Tab): sıradakine git' : 'Ordularım ve filolarım: sahada yok', nextUnit, units.length)}
-        {corner('br', 'camera', 'Fotoğraf modu (P)', () => (play('click'), setPhoto(true)))}
+      <div
+        className="mm-corners"
+        ref={box}
+        style={{ '--mm-f': `${size.thick}px`, '--mm-w': `${size.cap}px`, '--mm-icon': `${size.icon}px` } as React.CSSProperties}
+      >
+        {width > 0 && <Frame width={width} height={box.current?.clientHeight ?? width / 2} thick={size.thick} />}
+        {corner('top', 'map', 'Dünya haritası (M)', openMap)}
+        {corner('right', 'swords', spots.length ? `Sıcak noktalar (H): ${spots.map((s) => s.label).join(' · ')}` : 'Sıcak noktalar (H): şu an yok', nextSpot, spots.length, spots.length > 0)}
+        {corner('left', 'banner', units.length ? 'Ordularım ve filolarım (Tab): sıradakine git' : 'Ordularım ve filolarım: sahada yok', nextUnit, units.length)}
+        {corner('bottom', 'camera', 'Fotoğraf modu (P)', () => (play('click'), setPhoto(true)))}
         {caption && (
           <div className="mm-caption frame" key={caption.id} role="status">
             {caption.text}

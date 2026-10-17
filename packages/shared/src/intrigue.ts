@@ -347,6 +347,7 @@ export function raisePretender(k: Kingdom, id: number, at: number, camp: Point):
 }
 
 // The pretender beaten (at his camp or before the palace): he dies, his men scatter, the house is quiet for a while.
+// When the liege crown had backed him, the lord is offered to go over to the rival crown (see liegeOffer below).
 export function crushPretender(k: Kingdom, at: number): Kingdom {
   const p = k.pretender
   if (!p || !k.dynasty) return { ...k, pretender: undefined }
@@ -354,6 +355,7 @@ export function crushPretender(k: Kingdom, at: number): Kingdom {
   return {
     ...k,
     pretender: undefined,
+    ...(betrayalOf(k, at) && { liegeOffer: betrayalOf(k, at)! }),
     dynasty: { ...k.dynasty, dead: [dead, ...k.dynasty.dead].slice(0, balance.dynasty.keepDead), quietUntil: at + V().quietMinutes * 60_000 },
   }
 }
@@ -481,3 +483,55 @@ export const campTier = (soldiers: number) => (soldiers >= 50 ? 3 : soldiers >= 
 
 // Whether a point is at the camp (an army sent there attacks it).
 export const atCamp = (p: Pick<Pretender, 'at'>, q: Point, tiles = V().attackTiles) => Math.hypot(q.x - p.at.x, q.y - p.at.y) <= tiles
+
+// ---- Going over to the rival crown after a betrayal ---------------------------------------------------------------
+
+// A liege crown that backed the lord's pretender, and lost: the lord may answer by going over to the rival crown, once
+// for this betrayal and within a while (balance.cities.crown.switch). Fealty is otherwise for the whole season.
+export interface LiegeOffer {
+  // The crown that backed the pretender (the lord's liege) and the one he may go over to.
+  from: number
+  to: number
+  // The pretender beaten, when, and until when the offer stands.
+  name: string
+  at: number
+  until: number
+}
+
+const SW = () => balance.cities.crown.switch
+
+// The offer a beaten pretender leaves behind, if his crown backed him and the lord is still sworn to it (two crowns).
+function betrayalOf(k: Kingdom, at: number): LiegeOffer | null {
+  const p = k.pretender
+  if (!p?.backed || p.crown === undefined || k.liege !== p.crown) return null
+  return { from: p.crown, to: p.crown === 0 ? 1 : 0, name: p.person.name, at, until: at + SW().offerMinutes * 60_000 }
+}
+
+export type LiegeSwitchError = 'none' | 'expired' | 'liege' | 'rejected'
+
+export function liegeSwitchError(k: Pick<Kingdom, 'liege' | 'liegeOffer'>, at: number, crowns: number): LiegeSwitchError | null {
+  const o = k.liegeOffer
+  if (!o) return 'none'
+  if (at > o.until) return 'expired'
+  if (k.liege !== o.from) return 'liege'
+  if (!(o.to >= 0 && o.to < crowns)) return 'rejected'
+  return null
+}
+
+// The lord's answer. Going over: sworn to the other crown from now on (its patrols and its rival's collectors follow
+// the new fealty), the old crown cold, the new one warm. Staying: the old crown makes amends with goodwill and gold
+// (as far as the treasury holds it, `goldRoom`).
+export function answerLiegeOffer(k: Kingdom, accept: boolean, at: number, goldRoom: number): { kingdom: Kingdom; gold: number } {
+  const o = k.liegeOffer!
+  const s = SW()
+  const rest: Kingdom = { ...k, liegeOffer: undefined }
+  if (accept) {
+    const list = [0, 1].map((i) => crownRelation(k, i))
+    list[o.from] = Math.min(list[o.from], s.oldRelation)
+    list[o.to] = Math.max(list[o.to], s.newRelation)
+    return { kingdom: { ...rest, liege: o.to, liegeAt: at, crownRelations: list }, gold: 0 }
+  }
+  const gold = Math.max(0, Math.min(s.declineGold, Math.floor(goldRoom)))
+  const kept = changeCrownRelation({ ...rest, stock: { ...rest.stock, gold: rest.stock.gold + gold } }, o.from, s.declineRelation)
+  return { kingdom: kept, gold }
+}

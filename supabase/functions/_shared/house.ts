@@ -216,8 +216,8 @@ export async function settlePretender(battle: any, at: number) {
   const name = (battle.kind === 'usurp' ? battle.attackers[0] : battle.defenders[0])?.pretender ?? '?'
   if (battle.kind === 'pretender') {
     if (battle.plan.winner === 'attackers') {
-      await mutateKingdom(lord, at, (k) => (k.pretender?.battle === battle.id ? game.crushPretender(k, at) : null))
-      await notify(lobby, [lord], 'pretender_crushed', { name, where: 'camp' }, at)
+      const offer = await crush(lord, battle.id, at)
+      await notify(lobby, [lord], 'pretender_crushed', { name, where: 'camp', ...(offer && { offer }) }, at)
       return { name, crushed: true }
     }
     await mutateKingdom(lord, at, (k) => (k.pretender?.battle === battle.id ? game.pretenderLosses(k, battle.plan.defenderLosses?.[0] ?? 0) : null))
@@ -225,8 +225,8 @@ export async function settlePretender(battle: any, at: number) {
   }
   if (battle.kind === 'usurp') {
     if (battle.plan.winner === 'defenders') {
-      await mutateKingdom(lord, at, (k) => (k.pretender?.battle === battle.id ? game.crushPretender(k, at) : null))
-      await notify(lobby, [lord], 'throne_held', { name }, at)
+      const offer = await crush(lord, battle.id, at)
+      await notify(lobby, [lord], 'throne_held', { name, ...(offer && { offer }) }, at)
       return { name, crushed: true }
     }
     let old = ''
@@ -242,4 +242,17 @@ export async function settlePretender(battle: any, at: number) {
     return { name, crushed: false, usurped: true }
   }
   return null
+}
+
+// The pretender put down; when the liege crown had backed him, the offer to go over to the rival crown it leaves
+// (CLAUDE.md §9.1.1: told with the news, answered with the `switchLiege` command).
+async function crush(lord: number, battle: number, at: number) {
+  let offer: { from: number; to: number; until: number } | null = null
+  await mutateKingdom(lord, at, (k) => {
+    if (k.pretender?.battle !== battle) return null
+    const next = game.crushPretender(k, at)
+    offer = next.liegeOffer && next.liegeOffer.at === at ? { from: next.liegeOffer.from, to: next.liegeOffer.to, until: next.liegeOffer.until } : null
+    return next
+  })
+  return offer as { from: number; to: number; until: number } | null
 }

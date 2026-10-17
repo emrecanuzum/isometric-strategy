@@ -1,6 +1,7 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Icon } from './icons'
+import type { IconName } from './icons'
 
 // Dialogs coming one after another (the envoy's news, the house's news, the day's events; CLAUDE.md §9.8): each one
 // says where it stands in the line ("2 / 5"), offers to close them all at once, and keeps its forward button in the
@@ -46,40 +47,72 @@ export function DialogFoot({ children, onNext, label, disabled }: { children?: R
   )
 }
 
+// One piece of news in a summary: enough to read it again when tapped.
+export interface SummaryItem {
+  icon: IconName
+  title: string
+  text: string
+}
+
 // What "Tümünü kapat" closed, told in a few lines; also the news that waited past its shelf life (or came in a flood)
-// and was folded away instead of popping up one by one (CLAUDE.md §9.8: `folded`).
-export function ClosedSummary({ titles, onClose, folded, onJournal }: { titles: string[]; onClose: () => void; folded?: boolean; onJournal?: () => void }) {
-  const counts = new Map<string, number>()
-  for (const t of titles) counts.set(t, (counts.get(t) ?? 0) + 1)
+// and was folded away instead of popping up one by one (CLAUDE.md §9.8: `folded`). Each line can be tapped to read the
+// news in full (every one of them when it came more than once), with "Geri dön" back to the list.
+export function ClosedSummary({ items, onClose, folded, onJournal }: { items: SummaryItem[]; onClose: () => void; folded?: boolean; onJournal?: () => void }) {
+  const groups = new Map<string, SummaryItem[]>()
+  for (const i of items) groups.set(i.title, [...(groups.get(i.title) ?? []), i])
+  const [open, setOpen] = useState<string | null>(null)
+  const shown = open !== null ? groups.get(open) : undefined
   return (
     <div className="modal" role="dialog" aria-labelledby="closed-title" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <section className="dialog frame closed-summary">
         <header className="sheet-head">
-          <Icon name="scroll" size={32} />
+          <Icon name={shown ? shown[0].icon : 'scroll'} size={32} />
           <div>
             <small>{folded ? 'Sen bakmazken' : 'Tümünü kapattın'}</small>
-            <h2 id="closed-title">{folded ? `${titles.length} haber geldi` : `${titles.length} haber okundu sayıldı`}</h2>
+            <h2 id="closed-title">{shown ? open : folded ? `${items.length} haber geldi` : `${items.length} haber okundu sayıldı`}</h2>
           </div>
         </header>
-        <ul className="away-lines">
-          {[...counts].map(([t, n]) => (
-            <li key={t}>
-              <Icon name="scroll" size={16} />
-              <span>{n > 1 ? `${t} (${n} kez)` : t}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="hint">
-          {folded
-            ? 'Bunlar bekleyip bayatladığı ya da hepsi birden geldiği için tek tek açılmadı. Hepsi günlükte duruyor; cevap bekleyen haberler (haraç, teklif, kriz, seçim) yine açılır.'
-            : 'Hepsi günlükte duruyor; cevap bekleyen haberler (haraç, kriz, seçim) kapatılmadı.'}
-        </p>
+        {shown ? (
+          <ul className="away-lines">
+            {shown.map((i, n) => (
+              <li key={n}>
+                <Icon name={i.icon} size={16} />
+                <span>{i.text || i.title}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <>
+            <ul className="away-lines summary-lines">
+              {[...groups].map(([t, list]) => (
+                <li key={t}>
+                  <button className="summary-line" onClick={() => setOpen(t)}>
+                    <Icon name={list[0].icon} size={16} />
+                    <span>{list.length > 1 ? `${t} (${list.length} kez)` : t}</span>
+                    <span className="summary-more" aria-hidden>›</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="hint">
+              {folded
+                ? 'Bunlar bekleyip bayatladığı ya da hepsi birden geldiği için tek tek açılmadı; okumak için birine dokun. Hepsi günlükte duruyor; cevap bekleyen haberler (haraç, teklif, kriz, seçim) yine açılır.'
+                : 'Okumak için birine dokun. Hepsi günlükte duruyor; cevap bekleyen haberler (haraç, teklif, kriz, seçim) kapatılmadı.'}
+            </p>
+          </>
+        )}
         <div className="dialog-foot">
           <div className="dialog-foot-left">
-            {onJournal && (
-              <button className="btn small" onClick={onJournal}>
-                Günlüğü aç
+            {shown ? (
+              <button className="btn small" onClick={() => setOpen(null)}>
+                Geri dön
               </button>
+            ) : (
+              onJournal && (
+                <button className="btn small" onClick={onJournal}>
+                  Günlüğü aç
+                </button>
+              )
             )}
           </div>
           <span />

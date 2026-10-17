@@ -195,7 +195,7 @@ export function WorldMap({
             </span>
           ))}
           {patrols.map((p, i) => (
-            <span key={`patrol${i}`} className="worldmap-patrol" style={{ ...marker(p.at), background: p.color }} aria-hidden />
+            <span key={`patrol${i}`} className={p.outlaw ? 'worldmap-patrol outlaw' : 'worldmap-patrol'} style={{ ...marker(p.at), background: p.color }} aria-hidden />
           ))}
           {world.cities.map((c, index) => (
             <span key={`city${index}`} className="worldmap-name city" style={marker(cityCenter(c))}>
@@ -242,6 +242,9 @@ export function WorldMap({
         </span>
         <span>
           <i className="patrol" /> Taç devriyesi
+        </span>
+        <span>
+          <i className="outlaw" /> Yağmacı / korsan
         </span>
         <span>
           <i className="here" /> Bakılan yer

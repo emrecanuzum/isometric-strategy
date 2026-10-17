@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { Scene, picture } from '../AwayReport'
 import { Icon } from '../icons'
 import { Meter, Section, Stat, fmt, signed } from './primitives'
+import { Subtabs, usePart } from './Subtabs'
 
 // A whole number of gold with its sign, grouped (the books run into the thousands).
 const sum = (v: number) => `${v >= 0 ? '+' : '−'}${fmt(Math.abs(v))}`
@@ -85,47 +86,63 @@ export function TreasuryPanel({ building, data }: { building: Building; data: Hu
   const treasuries = kingdom.buildings.filter((b) => b.kind === 'treasury')
   const scene = useMemo(() => picture('treasury', kingdom.color ?? undefined, undefined), [kingdom.color])
   const full = cap - gold < 1
+  // Split in parts like the other long menus (CLAUDE.md §6.4): the room, the round's flows, the season's books.
+  const [part, setPart] = usePart('treasury', ['room', 'flow', 'books'] as const, 'room')
   return (
     <>
       <div className="sheet-scene">
         <Scene items={scene} mood="treasury" />
       </div>
-      <Section title="Hazine" icon="gold" aside={`${fmt(gold)} / ${fmt(cap)}`}>
-        <Meter value={cap ? gold / cap : 0} tone={full ? 'down' : gold >= cap * 0.85 ? 'gold' : 'up'} label="Hazinenin doluluğu" segments={20} />
-        {full && (
-          <p className="alert">
-            <Icon name="warn" size={16} /> Hazine dolu: gelen altın boşa gidiyor ve tüccar mal götürmeden bekliyor. Harca, haraç öde ya da bu hazineyi yükselt.
-          </p>
-        )}
-        <Stat label={`Saray (${palace}. seviye)`} value={`+${fmt(fromPalace)}`} />
-        {treasuries.map((t) => {
-          // A treasury being raised keeps the room of the level below until the work is done.
-          const lv = t.doneAt <= now || t.moving ? (t.level ?? 1) : (t.level ?? 1) - 1
-          return (
-            <Stat
-              key={t.id}
-              label={`${t.id === building.id ? 'Bu hazine' : 'Hazine'} (${t.level ?? 1}. seviye)`}
-              value={lv >= 1 ? `+${fmt(levelSpec('treasury', lv).gold ?? 0)}` : 'inşaatta'}
-              note={t.doneAt > now ? 'yükseltiliyor' : undefined}
-            />
-          )
-        })}
-        <Stat label="Toplam altın yeri" value={fmt(cap)} />
-      </Section>
-      <Section title="Seviyelere göre" icon="crown" aside={`${level} / ${maxLevel('treasury')}`}>
-        <ul className="pop-lines">
-          {Array.from({ length: maxLevel('treasury') }, (_, i) => (
-            <li key={i}>
-              <span className={i + 1 === level ? 'up' : undefined}>
-                {i + 1}. seviye{i + 1 === level ? ' (şimdi)' : ''}
-              </span>
-              <b>+{fmt(levelSpec('treasury', i + 1).gold ?? 0)} altın yeri</b>
-            </li>
-          ))}
-        </ul>
-      </Section>
-      <IncomeSection kingdom={kingdom} now={now} online={online} />
-      <SeasonBooks kingdom={kingdom} />
+      <Subtabs
+        label="Hazine"
+        parts={[
+          { id: 'room', name: 'Hazine', icon: 'chest', dot: full },
+          { id: 'flow', name: 'Gelir-gider', icon: 'gold' },
+          { id: 'books', name: 'Defter', icon: 'scroll' },
+        ]}
+        part={part}
+        onPart={setPart}
+      />
+      {part === 'room' && (
+        <>
+          <Section title="Hazine" icon="gold" aside={`${fmt(gold)} / ${fmt(cap)}`}>
+            <Meter value={cap ? gold / cap : 0} tone={full ? 'down' : gold >= cap * 0.85 ? 'gold' : 'up'} label="Hazinenin doluluğu" segments={20} />
+            {full && (
+              <p className="alert">
+                <Icon name="warn" size={16} /> Hazine dolu: gelen altın boşa gidiyor ve tüccar mal götürmeden bekliyor. Harca, haraç öde ya da bu hazineyi yükselt.
+              </p>
+            )}
+            <Stat label={`Saray (${palace}. seviye)`} value={`+${fmt(fromPalace)}`} />
+            {treasuries.map((t) => {
+              // A treasury being raised keeps the room of the level below until the work is done.
+              const lv = t.doneAt <= now || t.moving ? (t.level ?? 1) : (t.level ?? 1) - 1
+              return (
+                <Stat
+                  key={t.id}
+                  label={`${t.id === building.id ? 'Bu hazine' : 'Hazine'} (${t.level ?? 1}. seviye)`}
+                  value={lv >= 1 ? `+${fmt(levelSpec('treasury', lv).gold ?? 0)}` : 'inşaatta'}
+                  note={t.doneAt > now ? 'yükseltiliyor' : undefined}
+                />
+              )
+            })}
+            <Stat label="Toplam altın yeri" value={fmt(cap)} />
+          </Section>
+          <Section title="Seviyelere göre" icon="crown" aside={`${level} / ${maxLevel('treasury')}`}>
+            <ul className="pop-lines">
+              {Array.from({ length: maxLevel('treasury') }, (_, i) => (
+                <li key={i}>
+                  <span className={i + 1 === level ? 'up' : undefined}>
+                    {i + 1}. seviye{i + 1 === level ? ' (şimdi)' : ''}
+                  </span>
+                  <b>+{fmt(levelSpec('treasury', i + 1).gold ?? 0)} altın yeri</b>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        </>
+      )}
+      {part === 'flow' && <IncomeSection kingdom={kingdom} now={now} online={online} />}
+      {part === 'books' && <SeasonBooks kingdom={kingdom} />}
     </>
   )
 }

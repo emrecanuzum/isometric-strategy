@@ -1,5 +1,6 @@
 import type { AidKind, KinRoleKind, OutlawRow, PlanStep, Good, TradeLedger, Town, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, RiverKeep, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units, Ship, Ships, MissionOrder, NavyLook, Blockade, ArcadeGame } from '@game/shared'
 import { supabase } from '../lib/supabase'
+import { busyWhile } from '../lib/busyButtons'
 
 // The lobby as the client sees it: the player's own kingdom in full, the others only as they show on the map, and the
 // chat. Every change goes through the `command` Edge Function; the lobby's broadcast topic says when to look again.
@@ -244,16 +245,36 @@ export type Command =
   | { type: 'house'; action: 'gift'; id: number }
   | { type: 'house'; action: 'marry'; id: number; to: { kind: 'crown' } | { kind: 'town'; town: number } | { kind: 'lord'; id: number } }
   | { type: 'house'; action: 'aid'; kind: AidKind }
+  // Going over to the rival crown after the liege backed a pretender, or staying (CLAUDE.md §9.1.1).
+  | { type: 'switchLiege'; accept: boolean }
 
 export class CommandError extends Error {}
 
-async function invoke(body: object) {
+type Answer = { lobby: string; kingdom: Mine; result?: unknown }
+
+// Commands on their way to the server, by their exact payload: the same command clicked again before its answer
+// comes is not sent twice, the second caller waits for the first answer (CLAUDE.md §11).
+const inFlight = new Map<string, Promise<Answer>>()
+
+function invoke(body: { type?: string; [key: string]: unknown }): Promise<Answer> {
+  const key = JSON.stringify(body)
+  const pending = inFlight.get(key)
+  if (pending) return pending
+  const call = request(body)
+  inFlight.set(key, call)
+  const forget = () => inFlight.delete(key)
+  call.then(forget, forget)
+  // The quiet "still here" ping is never a button's doing.
+  return body.type === 'seen' ? call : busyWhile(call)
+}
+
+async function request(body: object): Promise<Answer> {
   const { data, error } = await supabase.functions.invoke('command', { body })
   if (error) {
     const answer = await (error as { context?: Response }).context?.json?.().catch(() => null)
     throw new CommandError(answer?.error ?? 'server')
   }
-  return data as { lobby: string; kingdom: Mine; result?: unknown }
+  return data as Answer
 }
 
 export async function send(lobby: string, command: Command): Promise<Mine> {

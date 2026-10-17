@@ -40,6 +40,7 @@ import type { KingdomInfo, Online } from './online'
 import { kingdomName, lastSeen, relationTermsIn } from './online'
 import { CrownBanner, CrownsPanel } from './cities'
 import { Meter, Placeholder, Section, SpriteView, Stat, fmt } from './primitives'
+import { PixelSelect } from './PixelSelect'
 
 // The diplomacy tab (CLAUDE.md §9.7): the kingdoms of the lobby and the player's standing with each, a kingdom
 // looked at closely (EU4-like: its relations, alliances and wars, and what the spies can tell), and the spies.
@@ -689,13 +690,7 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                       {noTown ? ' · elinde kasaba yok' : ''}
                     </small>
                     {op === 'townRevolt' && theirTowns.length > 1 && (
-                      <select value={picked?.id} onChange={(e) => setTownPick(Number(e.target.value))} aria-label="Kışkırtılacak kasaba">
-                        {theirTowns.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
+                      <PixelSelect small value={picked?.id} onChange={setTownPick} options={theirTowns.map((t) => ({ value: t.id, label: t.name }))} aria-label="Kışkırtılacak kasaba" />
                     )}
                     {op === 'townRevolt' && theirTowns.length === 1 && <small>Kasaba: {picked!.name}</small>}
                     <small className={intel?.chances && best >= spec.minStrength ? (intel.chances[op] >= 50 ? 'up' : 'down') : undefined}>

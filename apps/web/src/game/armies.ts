@@ -34,6 +34,33 @@ export interface MapArmy {
   size?: number
   // A column riding back the way it came: the squads that halted behind its first lead the way home.
   trainAhead?: boolean
+  // The tag over it ("Ulupınar Beyliği · 24"): on a plate in its lord's colour (`tagColor`), or dark with a blood-red
+  // edge for outlaws (bandits, rebels). Rivals' sizes come only roughly ("birkaç / orta / büyük").
+  tag?: string
+  tagColor?: number
+  tagOutlaw?: boolean
+}
+
+// A rival army's size as everyone sees it, from the figures drawn (about one for every two soldiers).
+export const roughSize = (figures: number) => (figures <= 4 ? 'birkaç' : figures <= 10 ? 'orta' : 'büyük')
+
+// A tag over a squad or a fleet on the map: a dark-edged plate in the lord's colour with the text in white, or (for
+// outlaws) near black with a blood-red edge and red text. Drawn in screen pixels; scale it by 1 / the camera's zoom.
+export function mapTag(text: string, color: number, outlaw = false) {
+  const box = new Container()
+  const back = new Graphics()
+  const label = new Text({
+    text,
+    resolution: window.devicePixelRatio * 2,
+    anchor: { x: 0.5, y: 0.5 },
+    style: { fontFamily: "'Digits', 'Pixelify Sans', ui-monospace, monospace", fontSize: 13, fill: outlaw ? 0xff7a62 : 0xffffff, stroke: { color: 0x120d0b, width: 3, join: 'round' } },
+  })
+  const w = label.width + 10
+  const h = label.height + 4
+  if (outlaw) back.roundRect(-w / 2, -h / 2, w, h, 3).fill({ color: 0x1a0c0c, alpha: 0.92 }).stroke({ width: 2, color: 0x9a1c14 })
+  else back.roundRect(-w / 2, -h / 2, w, h, 3).fill({ color, alpha: 0.9 }).stroke({ width: 1.5, color: 0x120d0b })
+  box.addChild(back, label)
+  return box
 }
 
 // The point `d` tiles along a path (clamped to its ends).
@@ -226,7 +253,7 @@ interface Shown {
   army: MapArmy
   body: PixiSprite
   ring: Graphics
-  label: Text | null
+  label: { box: Container; key: string } | null
   // The catapult rolling behind, and the way the army last faced (tile space).
   cart: PixiSprite | null
   facing: Point
@@ -252,7 +279,7 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
       if (ids.has(id)) continue
       s.body.destroy()
       s.ring.destroy()
-      s.label?.destroy()
+      s.label?.box.destroy({ children: true })
       s.cart?.destroy()
       for (const f of s.followers) f.destroy()
       shown.delete(id)
@@ -289,16 +316,15 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
         s.cart.destroy()
         s.cart = null
       }
-      if (army.soldiers !== null && !s.label) {
-        s.label = new Text({
-          text: '',
-          resolution: window.devicePixelRatio * 2,
-          anchor: { x: 0.5, y: 1 },
-          style: { fontFamily: "'Digits', 'Pixelify Sans', ui-monospace, monospace", fontSize: 13, fill: 0xf3e6c8, stroke: { color: 0x120d0b, width: 3 } },
-        })
-        labels.addChild(s.label)
+      const key = army.tag ? `${army.tag}:${army.tagColor ?? 0}:${army.tagOutlaw ? 1 : 0}` : ''
+      if (s.label && s.label.key !== key) {
+        s.label.box.destroy({ children: true })
+        s.label = null
       }
-      if (s.label) s.label.text = `${army.soldiers}`
+      if (army.tag && !s.label) {
+        s.label = { box: mapTag(army.tag, army.tagColor ?? 0xf2d16b, army.tagOutlaw), key }
+        labels.addChild(s.label.box)
+      }
     }
     for (const b of battles) b.sprite.destroy()
     battles = fights.map((battle) => {
@@ -389,8 +415,9 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
         ring.zIndex = screen.y - 1
       }
       if (label) {
-        label.position.set(screen.x, screen.y - 44 * Math.max(1, 0.6 / scale))
-        label.scale.set(1 / scale)
+        // Over the banner's top; tags are placed (and the crowded ones left out) after every army has moved.
+        label.box.position.set(screen.x, screen.y - (look.anchorY + 4) * size - 6 / scale)
+        label.box.scale.set(1 / scale)
       }
       // The road still ahead of the player's own armies.
       if (army.own && moving) {
@@ -409,6 +436,7 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
         routes.circle(end.x, end.y, 5 / scale).fill({ color, alpha: 0.6 })
       }
     }
+    placeTags(scale)
     for (const { battle, sprite } of battles) {
       const on = time >= battle.startedAt && time < battle.endsAt
       sprite.visible = on
@@ -416,6 +444,27 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
       const screen = groundToScreen(world, battle.at)
       sprite.position.set(screen.x, screen.y - 30 - Math.abs(Math.sin(time / 250)) * 4)
       sprite.scale.set(Math.max(1, 0.6 / scale))
+    }
+  }
+
+  // Tags that would overlap give way: the player's own first (the picked one before all), then outlaws, then the
+  // crowns' columns, then the rest. Zoomed all the way out only the player's own and the outlaws keep theirs.
+  function placeTags(scale: number) {
+    const rank = (a: MapArmy) => (a.selected ? 0 : a.own ? 1 : a.tagOutlaw ? 2 : a.train ? 3 : 4)
+    const tagged = [...shown.values()].filter((s) => s.label).sort((a, b) => rank(a.army) - rank(b.army))
+    const placed: { l: number; t: number; r: number; b: number }[] = []
+    for (const s of tagged) {
+      const box = s.label!.box
+      if (scale < 0.2 && rank(s.army) > 2) {
+        box.visible = false
+        continue
+      }
+      const w = box.width / 2 + 2 / scale
+      const h = box.height / 2 + 1 / scale
+      const rect = { l: box.x - w, t: box.y - h, r: box.x + w, b: box.y + h }
+      const clash = placed.some((p) => rect.l < p.r && rect.r > p.l && rect.t < p.b && rect.b > p.t)
+      box.visible = !clash
+      if (!clash) placed.push(rect)
     }
   }
 
