@@ -587,6 +587,17 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
           `Hanlarda tek konu yağmacılar: ${p.bands} çete ticaret noktanın çevresindeki yolun %${Math.round(Number(p.share) * 100)}'ini kesmiş.`,
         ])} Tüccarının altınının %${Math.round(Number(p.cut) * 100)}'ini kesiyorlar ve halk tedirgin. Haritada çeteye tıkla, bir ordu seç ve "Takip et".`,
       }
+    case 'inn_lost':
+      return {
+        icon: 'warn',
+        title: 'Han kapılarını kapattı',
+        text: `${vary(n, [
+          'Tüccarının gittiği hanın hancısı onu artık tanımıyor: o hanın pastasında payın kalmadı denecek kadar azaldı.',
+          'Kötü haber, lordum: tüccarımız handa yüz bulamadı. Başkaları oraya daha yakın, bizim payımız eridi.',
+          'Han başka lordların kervanlarıyla doldu; bizim tüccara yer yok dediler. Payımız neredeyse sıfır.',
+          'Hancı kapıda karşıladı ve geri çevirdi: o yöredeki gücümüz yetmiyor artık.',
+        ])} Tüccar lobi pazarına döndü. O hanı geri istiyorsan yakınındaki bir kasabayı al.`,
+      }
     case 'outlaw_road_clear':
       return {
         icon: 'shield',

@@ -9,7 +9,8 @@ import { balance } from './balance'
 export type MarketGood = 'food' | 'materials' | 'arms'
 // foodDemand: how much dearer food is as the world's people grow (set by the server; missing: 1, see foodDemandFor).
 // priceRev: the revision of the base prices the stored prices follow (migrations move them with it).
-export type Market = Record<MarketGood, { price: number; at: number }> & { foodDemand?: number; priceRev?: number }
+// inns: each inn's own price per good (keyed by innKey) (a factor on the lobby's, see inns.ts) and when it was set.
+export type Market = Record<MarketGood, { price: number; at: number }> & { foodDemand?: number; priceRev?: number; inns?: Record<string, Partial<Record<MarketGood, { f: number; at: number }>>> }
 
 const GOODS: MarketGood[] = ['food', 'materials', 'arms']
 export const basePrice = (good: MarketGood, market?: Market | null) =>

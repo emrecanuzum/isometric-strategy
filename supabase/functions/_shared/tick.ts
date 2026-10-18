@@ -8,7 +8,8 @@ import * as game from './game.js'
 import { applyOrder, armiesOf, armyNow, doorOf, march, standing, unitsOf } from './armies.ts'
 import type { ArmyRow, Order } from './armies.ts'
 import { answer, arrive, settleTributes } from './diplomacy.ts'
-import { ensureTowns, settleQuell, settleTowns } from './towns.ts'
+import { ensureTowns, settleQuell, settleTowns, townsOf } from './towns.ts'
+import { settleInnShares } from './inns.ts'
 import { settlePatrols } from './patrols.ts'
 import { settleNavy } from './navy.ts'
 import { settleOutlawBattle, settleOutlaws } from './outlaws.ts'
@@ -142,6 +143,12 @@ export async function tick(lobby: string, simAt: number, now: number) {
   await settleTributes(lobby, await pactsOf(lobby), now)
   await syncWarFlags(lobby, now)
   await settleFoodDemand(lobby, (rows = await freshKingdoms(lobby, rows)), now)
+  // The lords' slices of the inns their merchants sell at, as palaces rise and towns change hands (CLAUDE.md §7.6).
+  try {
+    await settleInnShares(lobby, (rows = await freshKingdoms(lobby, rows)), await townsOf(lobby), now)
+  } catch (e) {
+    console.error('settleInnShares', e)
+  }
 }
 
 // A siege at a lord's palace has begun: a share of the people flee at once, and while it lasts more leave (the lord's

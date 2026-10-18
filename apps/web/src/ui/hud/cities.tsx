@@ -10,6 +10,9 @@ import type { Online } from './online'
 import { usePart } from './Subtabs'
 import { BetrayalCard, CrownCourt, CrownRivalryPanel, RoyalFamily, STANCE_NAMES, crownKeyOf, pctText, tipPreview, tributeShareNow, waysText } from './crownHouse'
 import { Portrait } from '../DynastyArt'
+import { innReach, innUnitPrice, tradeInnIndex } from './inns'
+import { innInfo } from '../../game/innInfo'
+import { isCaravanserai } from '../../game/innSprites'
 
 // The free cities (CLAUDE.md §4.2, §7.6): what they are, and the merchant's choice between the lobby's market and a
 // free city's.
@@ -18,15 +21,18 @@ const seconds = (ms: number) => Math.round(ms / 1000)
 const price = (n: number) => n.toFixed(2).replace('.', ',')
 
 // Where the merchant takes the goods: the lobby's market from the trade post, or one of the free cities.
-export function TradeDestination({ world, kingdom, market, now, onCity }: {
+export function TradeDestination({ world, kingdom, market, now, online, onCity, onInn }: {
   world: World
   kingdom: Kingdom
   market?: Market | null
   now: number
+  online?: Online | null
   onCity(city: number | null): void
+  onInn?(inn: Point): void
 }) {
   if (world.cities.length === 0) return null
-  const current = kingdom.trade.city?.index ?? null
+  const innAt = tradeInnIndex(world, kingdom)
+  const current = innAt >= 0 ? -1 : (kingdom.trade.city?.index ?? null)
   const wait = Math.max(0, Math.ceil((tradeCityReadyAt(kingdom) - now) / 1000))
   const { loadFactor, changeCooldownSeconds } = balance.cities.trade
   const premium = Math.round((balance.cities.trade.priceFactor - 1) * 100)
@@ -57,11 +63,62 @@ export function TradeDestination({ world, kingdom, market, now, onCity }: {
           )
         })}
       </div>
+      {online && <InnChoices world={world} kingdom={kingdom} market={market} now={now} online={online} current={innAt} wait={wait} onInn={onInn} />}
       <p className="hint">
         Taç başkenti {loadFactor} kat yük alır ve {premium === 0 ? 'lobinin o anki fiyatından öder' : `lobinin o anki fiyatının %${Math.abs(premium)} ${premium > 0 ? 'fazlasını' : 'eksiğini'} öder`}; bu satış lobi fiyatlarını da düşürür (lobi pazarındaki etkinin %{impact} kadarı). Ama yol uzundur: sefer başkentin uzaklığıyla uzar.
         Değiştirince tüccar yeni sefere başlar; {Math.round(changeCooldownSeconds / 60)} dakika yeniden değiştiremezsin.
       </p>
     </Section>
+  )
+}
+
+// The inns the merchant may sell at: those where the lord's slice of the pie is big enough (or the one he sells at),
+// best paying first for the good he sells (CLAUDE.md §7.6).
+function InnChoices({ world, kingdom, market, now, online, current, wait, onInn }: {
+  world: World
+  kingdom: Kingdom
+  market?: Market | null
+  now: number
+  online: Online
+  current: number
+  wait: number
+  onInn?(inn: Point): void
+}) {
+  const spec = balance.economy.trade.inns
+  const good = kingdom.trade.good
+  const low = kingdom.trade.level < spec.minLevel
+  const open = world.inns
+    .map((inn, index) => ({ inn, index, share: innReach(world, index, online).find((p) => p.k.id === online.me)?.share ?? 0 }))
+    .filter((x) => x.share >= spec.minShare || x.index === current)
+    .map((x) => ({ ...x, unit: good ? innUnitPrice(world, x.index, kingdom, x.share, good, market, now) : 0 }))
+    .sort((a, b) => b.unit - a.unit || b.share - a.share)
+  return (
+    <>
+      <h4 className="sub-head">Hanlar</h4>
+      {open.length === 0 ? (
+        <p className="hint">Hiçbir hanın pastasında yeterli payın yok (en az %{Math.round(spec.minShare * 100)}). Bir hanın {spec.reachTiles} karo yakınında bir kasaba al; hana tıklayıp fiyatlarına bak.</p>
+      ) : (
+        <div className="goods choices" role="radiogroup" aria-label="Tüccarın gideceği han">
+          {open.map(({ inn, index, share, unit }) => (
+            <button
+              key={index}
+              role="radio"
+              aria-checked={current === index}
+              className={current === index ? 'good active' : 'good'}
+              disabled={low || (wait > 0 && current !== index)}
+              data-why={low ? `Ticaret noktan ${spec.minLevel + 1}. seviye olmalı` : `Hedef az önce değişti; ${wait} sn sonra yeniden değişir`}
+              onClick={() => onInn?.({ x: inn.x, y: inn.y })}
+            >
+              <Icon name="inn" size={24} />
+              <b>{innInfo(world, index, isCaravanserai(world, inn)).name}</b>
+              <small>payın %{Math.round(share * 100)}</small>
+              <small>{seconds(lobbyTripMs(kingdom.buildings))} sn sefer</small>
+              {good && <small>birimi {price(unit)} altın</small>}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   )
 }
 

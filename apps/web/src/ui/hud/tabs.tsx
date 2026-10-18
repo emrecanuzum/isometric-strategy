@@ -631,14 +631,14 @@ function TradePost(data: HudData) {
       <Section title="Satılacak mal" icon="chest">
         <GoodChoice kingdom={kingdom} selected={trade.good} onGood={onGood} market={online?.market} now={now} />
       </Section>
-      <TradeDestination world={world} kingdom={kingdom} market={online?.market} now={now} onCity={(city) => online?.act({ type: 'tradeCity', city })} />
+      <TradeDestination world={world} kingdom={kingdom} market={online?.market} now={now} online={online} onCity={(city) => online?.act({ type: 'tradeCity', city })} onInn={(inn) => online?.act({ type: 'tradeInn', x: inn.x, y: inn.y })} />
       <div className="feature">
         <SpriteView sprite={thumb('tradePost')} scale={0.5} />
         <div>
           <b>Ticaret noktası · Seviye {trade.level + 1}</b>
           <p className="hint">
             Tüccar her {Math.round(tripMs / 1000)} saniyede {tradeLoad(kingdom)} birim mal götürüp{' '}
-            {trade.city ? 'taç başkentinde lobinin o anki fiyatından' : 'lobinin o anki fiyatından'} altına çevirir
+            {trade.city ? 'taç başkentinde lobinin o anki fiyatından' : trade.inn ? 'handa, hancının verdiği fiyattan' : 'lobinin o anki fiyatından'} altına çevirir
             {kingdom.trade.good ? ` (şu an birimi ${tradePrice(kingdom, kingdom.trade.good, online?.market, now).toFixed(2).replace('.', ',')} altın)` : ''}.
           </p>
           <button className="btn small" onClick={() => onShow(center(post))}>

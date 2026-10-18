@@ -3,6 +3,7 @@ import { calendarAt, seasonEffect, yearMs } from './clock'
 import type { Season } from './clock'
 import type { Point } from './iso'
 import { priceAt } from './market'
+import { canTradeAt, innSaturation, innShareFactor, innSpec } from './inns'
 import type { Market } from './market'
 import { happinessStep, happinessTarget, isNightAt, popCapFor, recruitTerms, taxSpec } from './society'
 import { overreachFor, townUpkeep, townYield, townsRound } from './towns'
@@ -209,6 +210,9 @@ export interface Kingdom {
     // long a trip there and back takes; when the destination was last changed.
     city?: { index: number; tripMs: number }
     cityAt?: number
+    // Sent to an inn of the trade roads instead (CLAUDE.md §7.6): which one (its back corner, see innKey), what it pays
+    // for each good against the lobby's price, and the lord's slice of its pie (kept fresh by the server).
+    inn?: TradeInn
   }
   nextProductionAt: number
   // Everything up to here has been settled by `advance`.
@@ -434,7 +438,7 @@ export type FisherEntry =
 
 export type EconomyEvent =
   | DynastyEvent
-  | { kind: 'trade'; good: Good; sold: number; gold: number; walledIn?: boolean; damaged?: boolean; city?: number; full?: boolean; robbed?: number }
+  | { kind: 'trade'; good: Good; sold: number; gold: number; walledIn?: boolean; damaged?: boolean; city?: number; inn?: Point; full?: boolean; robbed?: number }
   | { kind: 'built'; building: Building }
   | { kind: 'produced'; delta: Partial<Stock>; weapons?: Partial<Armory> }
   | { kind: 'trained'; count: number }
@@ -1419,7 +1423,18 @@ export const tradeTripMs = (kingdom: Kingdom) => kingdom.trade.city?.tripMs ?? l
 export const tradeLoad = (kingdom: Kingdom) => tradeUnits(kingdom) * (kingdom.trade.city ? balance.cities.trade.loadFactor : 1)
 // The crown watching over the good pays more to a lord it favours, less to one it does not (crowns.ts).
 export const tradePrice = (kingdom: Kingdom, good: Good, market: Market | null | undefined, at: number) =>
-  (kingdom.trade.city ? cityPrice(good, market, at) : priceAt(market, good, at)) * stewardFactor(kingdom, good, at)
+  (kingdom.trade.city ? cityPrice(good, market, at) : kingdom.trade.inn ? innPrice(kingdom.trade.inn, good, market, at) : priceAt(market, good, at)) * stewardFactor(kingdom, good, at)
+
+// What an inn pays the lord for one unit: the lobby's price × the inn's own factor for the good × its own price of the
+// moment × the lord's slice of its pie (CLAUDE.md §7.6).
+export interface TradeInn {
+  x: number
+  y: number
+  stats: Record<Good, number>
+  share: number
+}
+export const innPrice = (inn: TradeInn, good: Good, market: Market | null | undefined, at: number) =>
+  priceAt(market, good, at) * inn.stats[good] * innSaturation(market, inn, good, at) * innShareFactor(inn.share)
 
 // Trips the merchant makes in one production round.
 export const tradeTripsPerRound = (kingdom: Kingdom) => (balance.economy.productionSeconds * 1000) / tradeTripMs(kingdom)
@@ -1439,15 +1454,46 @@ export const tradeCityReadyAt = (kingdom: Kingdom) => (kingdom.trade.cityAt ?? -
 // Sends the merchant to a free city (its index in world.cities), or back to the lobby's market with null. A changed
 // destination starts a fresh trip.
 export function setTradeCity(kingdom: Kingdom, cities: Point[], index: number | null, now: number): Kingdom {
-  if (!hasTradePost(kingdom) || now < tradeCityReadyAt(kingdom) || (kingdom.trade.city?.index ?? null) === index) return kingdom
+  if (!hasTradePost(kingdom) || now < tradeCityReadyAt(kingdom) || ((kingdom.trade.city?.index ?? null) === index && !kingdom.trade.inn)) return kingdom
   if (index === null) {
-    const { city: _, ...trade } = kingdom.trade
+    const { city: _, inn: __, ...trade } = kingdom.trade
     return { ...kingdom, trade: { ...trade, cityAt: now, departedAt: now } }
   }
   const city = cities[index]
   const tripMs = city && cityTripMs(kingdom, city)
   if (!tripMs) return kingdom
-  return { ...kingdom, trade: { ...kingdom.trade, city: { index, tripMs }, cityAt: now, departedAt: now } }
+  const { inn: _, ...trade } = kingdom.trade
+  return { ...kingdom, trade: { ...trade, city: { index, tripMs }, cityAt: now, departedAt: now } }
+}
+
+// Why the merchant cannot be sent to an inn: no trade post or one too low, the destination changed a short while ago,
+// or the lord's slice of the inn's pie is too thin (CLAUDE.md §7.6).
+export function tradeInnError(kingdom: Kingdom, share: number, now: number): 'innPost' | 'innLevel' | 'innWait' | 'innFar' | null {
+  if (!hasTradePost(kingdom)) return 'innPost'
+  if (kingdom.trade.level < innSpec().minLevel) return 'innLevel'
+  if (now < tradeCityReadyAt(kingdom)) return 'innWait'
+  if (!canTradeAt(share)) return 'innFar'
+  return null
+}
+
+// Sends the merchant to an inn (where it stands), at the lord's slice of its pie. A changed destination starts a fresh
+// trip, which is as long as the lobby market's.
+export function setTradeInn(kingdom: Kingdom, inn: Point, stats: Record<Good, number>, share: number, now: number): Kingdom {
+  if (tradeInnError(kingdom, share, now) || (kingdom.trade.inn?.x === inn.x && kingdom.trade.inn?.y === inn.y)) return kingdom
+  const { city: _, ...trade } = kingdom.trade
+  return { ...kingdom, trade: { ...trade, inn: { x: inn.x, y: inn.y, stats, share }, cityAt: now, departedAt: now } }
+}
+
+// The lord's slice of its inn's pie anew (the server, as palaces rise and towns change hands); too thin a slice sends
+// the merchant back to the lobby's market.
+export function refreshInnShare(kingdom: Kingdom, share: number): Kingdom {
+  const inn = kingdom.trade.inn
+  if (!inn) return kingdom
+  if (!canTradeAt(share)) {
+    const { inn: _, ...trade } = kingdom.trade
+    return { ...kingdom, trade }
+  }
+  return { ...kingdom, trade: { ...kingdom.trade, inn: { ...inn, share } } }
 }
 
 // A trade post wrecked by raiders stands again for this.
@@ -1483,9 +1529,11 @@ export function spyCapacity(kingdom: Kingdom, at: number) {
 
 // Settles everything due by `now`, in the order it happened. Returns the same object when nothing was due. The
 // merchant sells at the lobby's price (`market`); `sold` says how much went, for the lobby's prices.
-export function advance(kingdom: Kingdom, now: number, market?: Market | null): { kingdom: Kingdom; events: EconomyEvent[]; sold: Partial<Record<Good, number>> } {
+export function advance(kingdom: Kingdom, now: number, market?: Market | null): { kingdom: Kingdom; events: EconomyEvent[]; sold: Partial<Record<Good, number>>; innSold?: { inn: Point; good: Good; units: number; at: number }[] } {
   const events: EconomyEvent[] = []
   const soldTotal: Partial<Record<Good, number>> = {}
+  // Sales at inns, each moving that inn's own price (CLAUDE.md §7.6).
+  const innSold: { inn: Point; good: Good; units: number; at: number }[] = []
   let k = kingdom
   const edit = () =>
     k === kingdom
@@ -1795,7 +1843,9 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       const gold = earned - robbed
       if (robbed > 0) k.books!.outlaws = (k.books!.outlaws ?? 0) + robbed
       // A crown city's trade moves the lobby's prices too, if less than the lobby's market (CLAUDE.md §7.7).
-      if (sold > 0) soldTotal[good] = (soldTotal[good] ?? 0) + sold * (city ? balance.cities.trade.marketImpact : 1)
+      const inn = k.trade.inn
+      if (sold > 0) soldTotal[good] = (soldTotal[good] ?? 0) + sold * (city ? balance.cities.trade.marketImpact : inn ? innSpec().marketImpact : 1)
+      if (inn && sold > 0) innSold.push({ inn: { x: inn.x, y: inn.y }, good, units: sold, at: next })
       k.stock[good] -= sold
       k.stock.gold += gold
       k.books!.trade += gold
@@ -1808,7 +1858,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
         const ledger = k.trade.ledger ?? { food: 0, materials: 0, arms: 0, gold: 0 }
         k.trade.ledger = { ...ledger, [good]: ledger[good] + sold, gold: ledger.gold + gold }
       }
-      events.push({ kind: 'trade', good, sold, gold, ...(walledIn && { walledIn }), ...(damaged && { damaged }), ...(city && { city: city.index }), ...(full && { full }), ...(robbed > 0 && { robbed }) })
+      events.push({ kind: 'trade', good, sold, gold, ...(walledIn && { walledIn }), ...(damaged && { damaged }), ...(city && { city: city.index }), ...(inn && { inn: { x: inn.x, y: inn.y } }), ...(full && { full }), ...(robbed > 0 && { robbed }) })
     }
   }
   for (const building of finishing) events.push({ kind: 'built', building })
@@ -1844,7 +1894,7 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
     for (const g of reached.reached) events.push({ kind: 'goal', ...g })
   }
   if (k !== kingdom) k.settledAt = now
-  return { kingdom: k, events, sold: soldTotal }
+  return { kingdom: k, events, sold: soldTotal, innSold }
 }
 
 // Where the people's mood is heading at `at`.

@@ -300,6 +300,15 @@ export function narrate(c: Cmd, k?: Kingdom | null): string | null {
         'Kervan kapıdan çıktı, lordum. Yolda yağmacılar varsa onlara benim adımı söyleyecekler; pek işe yarar mı, bilmem.',
         'Siparişi gönderdik, lordum. Tacın kâtibi defterine bir satır daha yazacak: "Bu lord sözünün eri."',
       ])
+    case 'tradeInn':
+      return any([
+        'Tüccar artık hana gidiyor, lordum. Hancı fiyatını söyledi; pazarlık ettim, biraz da kızdı.',
+        'Kervan hanın yolunu tuttu, lordum. Sefer pazar kadar kısa; fiyatı hancının keyfine ve bizim oradaki gücümüze bağlı.',
+        'Han kapısı tüccarımıza açıldı, lordum. Oradaki payımız büyüdükçe hancı bize daha cömert davranır.',
+        'Tüccar hana yerleşti, lordum. Yalnız dikkat: çok satarsak hancının o mala verdiği fiyat düşer.',
+        'Hancıyla el sıkıştık, lordum. O yöredeki kasabalarımız elimizde kaldıkça kapısı bize açık.',
+        'Tüccarımız handa, lordum. Lobi pazarına dokunmadan satıyoruz; fiyatları biz düşürmüyoruz, yalnız hanınkini.',
+      ])
     case 'tradeCity':
       return c.city === null || c.city === undefined
         ? any([

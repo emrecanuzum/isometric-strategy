@@ -8,6 +8,10 @@ import type { BuildingKind, Kingdom, World } from '@game/shared'
 import type { IconName } from '../icons'
 import type { TabId } from '../hud/Hud'
 import type { Online } from '../hud/online'
+import { innReach, innUnitPrice, tradeInnIndex } from '../hud/inns'
+import { innInfo } from '../../game/innInfo'
+import { isCaravanserai } from '../../game/innSprites'
+import { innStats, tradePrice } from '@game/shared'
 
 // What the envoy says (CLAUDE.md §9.8): his advice, picked from what the lord lacks or could do better; the steps of
 // the tutorial for a new lord; and the topics he explains when asked. Only words and the checks that pick them live
@@ -113,6 +117,42 @@ const count = (k: Kingdom, kind: BuildingKind) => buildingCount(k, kind)
 const unlocked = (c: AdvisorCtx, kind: BuildingKind) => (BUILDINGS[kind].requiresPalace ?? 0) <= palaceLevel(c.kingdom, c.now)
 const palaceOf = (k: Kingdom) => k.buildings.find((b) => b.kind === 'palace')
 const tab = (t: TabId, key?: string, part?: string): AdvisorAction => ({ kind: 'tab', tab: t, ...(key && part ? { part: { key, part } } : {}) })
+
+// The inn that would pay the merchant best for what he sells, if it beats where he sells now by a fair margin
+// (CLAUDE.md §7.6); null when there is none or he cannot go to the inns yet.
+function betterInn({ kingdom: k, online, world, now }: AdvisorCtx) {
+  const good = k.trade.good
+  if (!good || k.trade.idle || k.trade.city || k.trade.level < balance.economy.trade.inns.minLevel) return null
+  const here = tradePrice(k, good, online.market, now)
+  const at = tradeInnIndex(world, k)
+  let best: { index: number; unit: number; name: string } | null = null
+  world.inns.forEach((inn, index) => {
+    if (index === at) return
+    const share = innReach(world, index, online).find((p) => p.k.id === online.me)?.share ?? 0
+    if (share < balance.economy.trade.inns.minShare) return
+    const unit = innUnitPrice(world, index, k, share, good, online.market, now)
+    if (unit >= here * 1.15 && (!best || unit > best.unit)) best = { index, unit, name: innInfo(world, index, isCaravanserai(world, inn)).name }
+  })
+  return best as { index: number; unit: number; name: string } | null
+}
+
+// A rich inn the lord has no slice of, near enough that a town by it would win him one.
+function richInnOutOfReach({ kingdom: k, online, world }: AdvisorCtx) {
+  if (!hasTradePost(k) || k.trade.level < balance.economy.trade.inns.minLevel) return null
+  const spec = balance.economy.trade.inns
+  for (const [index, inn] of world.inns.entries()) {
+    const stats = innStats(world.seed, inn)
+    const rich = (stats.food + stats.materials + stats.arms) / 3
+    if (rich < 1.15) continue
+    const share = innReach(world, index, online).find((p) => p.k.id === online.me)?.share ?? 0
+    if (share >= spec.minShare) continue
+    const d = Math.hypot(inn.x + 1 - k.site.x, inn.y + 1 - k.site.y)
+    if (d > spec.reachTiles * 2) continue
+    const town = online.towns.find((t) => t.owner !== online.me && Math.hypot(t.x + 4 - inn.x - 1, t.y + 4 - inn.y - 1) < spec.reachTiles * 0.6)
+    if (town) return { name: innInfo(world, index, isCaravanserai(world, inn)).name, town: town.name }
+  }
+  return null
+}
 const build = (building: BuildingKind): AdvisorAction => ({ kind: 'build', building })
 const open = (building: BuildingKind): AdvisorAction => ({ kind: 'open', building })
 
@@ -228,6 +268,47 @@ export const TIPS: Tip[] = [
       ['Elçiyi satsın', 'Beni mi, lordum? Alan çıkmaz; çok konuşuyorum diye iade ederler.'],
       ['Deveyi satsın', 'Deve satılırsa tüccar malı sırtında taşır, lordum; bir sefer sonra o da satılığa çıkar.'],
       ['Söz satsın', 'Söz satmayı ben denedim, lordum, kırk yıl. Zengin olsaydım burada olmazdım.'],
+    ],
+  },
+  {
+    id: 'innBetter',
+    when: (c) => betterInn(c) !== null,
+    say: (c) => {
+      const b = betterInn(c)!
+      const good = c.kingdom.trade.good!
+      const here = tradePrice(c.kingdom, good, c.online.market, c.now)
+      const gain = pct(b.unit / Math.max(0.0001, here) - 1)
+      const p = b.unit.toFixed(2).replace('.', ',')
+      return [
+        `Lordum, ${b.name} malımıza birimi ${p} altın veriyor; şimdiki yerimizden ${gain} fazla. Tüccarı oraya çevirsek?`,
+        `Hanlarda kulağıma çalındı: ${b.name} bizim sattığımız mala iyi para veriyor, ${gain} fazlası. Sefer de aynı kısa yol.`,
+        `${b.name} hancısı bize göz kırpıyor, lordum: birimi ${p} altın. Bu kadar parayı lobi pazarına bırakmak yazık.`,
+        `Tüccarımız yanlış kapıya gidiyor gibi, lordum. ${b.name} ${gain} fazla ödüyor; oradaki payımız da yetiyor.`,
+      ]
+    },
+    go: { label: 'Tüccarın yoluna bak', act: tab('trade', 'trade', 'merchant') },
+    jokes: [
+      ['Hancılara güvenmem', 'Haklısınız, lordum; ben de birine güvendim, şarabı suydu. Ama fiyatı yazılı verdi.'],
+      ['Lobi pazarı alışkanlık', 'Alışkanlık da bir vergidir, lordum; üstelik en pahalısı.'],
+      ['Sonra bakarız', 'Bakarız, lordum. Hancı da bekler; ama fiyatı beklemez.'],
+    ],
+  },
+  {
+    id: 'innReach',
+    when: (c) => richInnOutOfReach(c) !== null,
+    say: (c) => {
+      const r = richInnOutOfReach(c)!
+      return [
+        `Lordum, ${r.name} cömert bir han; ama oraya uzağız, hancı bizi tanımıyor. Yakınındaki ${r.town} kasabasını alırsak pastasından pay alırız.`,
+        `${r.name} her mala iyi para veriyor, lordum. Elimizde yakınında bir kasaba olsa tüccarımız da oraya gidebilirdi: ${r.town} uygun duruyor.`,
+        `Hanlarda konuşulan bir şey var: ${r.name} cömert. Biz orada yokuz; ${r.town} kasabası bizim olsa olurduk.`,
+        `Uzak bir han, iyi fiyat, lordum: ${r.name}. Payımız yok, çünkü yakınında ne sarayımız ne kasabamız var. ${r.town} bu işi çözer.`,
+      ]
+    },
+    go: { label: 'Ticarete bak', act: tab('trade', 'trade', 'merchant') },
+    jokes: [
+      ['Kasaba almak zahmet', 'Zahmet, lordum; ama hancılar zahmet çekmeyenlere iskonto yapmıyor.'],
+      ['Uzak han, yorgun deve', 'Sefer uzamaz, lordum; deve yalnız hancının kim olduğunu bilmek ister.'],
     ],
   },
   {
@@ -1754,6 +1835,7 @@ export const TOPICS: Topic[] = [
         `Tüccar her seferde seçtiğiniz maldan götürür: ticaret noktasının seviyesine göre ${t.levels.map((l) => l.units).join(' / ')} birim. Sefer ${t.tripSeconds} saniyedir, ticaret noktası saraydan uzaksa uzar. ${k.trade.good === null ? 'Sizin tüccarınız şu an eli kolu bağlı oturuyor, lordum; ona bir mal verin.' : 'Tüccarınız yolda; iyi bir adamdır, biraz konuşkan ama.'}`,
         `Lobideki bütün lordlar aynı fiyat tablosunu paylaşır: satılan mal ucuzlar, alınan pahalanır, zamanla olağan fiyata döner. Fiyat olağanın ${pct(balance.market.minFactor)} kadarının altına inmez. Taçlar da her yirmi dakikada bir malı piyasadan toplar; dipteki fiyatı onlar kaldırır.`,
         `Tüccarı bir taç başkentine de gönderebilirsiniz: ${balance.cities.trade.loadFactor} kat yük götürür, lobi fiyatından satar ama sefer uzar. Taç siparişleri malı lobi fiyatının ${dec(o.payFactor)} katına alır (kendi tacınız biraz fazlasını verir); ödeme kervan dönünce gelir.`,
+        `Bir de hanlar var, lordum. Ticaret noktası ${balance.economy.trade.inns.minLevel + 1}. seviyeye çıkınca tüccarı bir hana gönderebilirsiniz; sefer lobi pazarınınki kadardır. Her han her mala kendi fiyatını verir: kimi cömerttir, kimi ölü fiyat. Ama hancı yalnız yakınındaki lordlarla iş yapar: sarayınız ya da kasabanız ona ${balance.economy.trade.inns.reachTiles} karodan yakın olmalı ve pastasında en az ${pct(balance.economy.trade.inns.minShare)} payınız bulunmalı. Payınız büyüdükçe fiyat iyileşir; uzak bir hanı istiyorsanız yakınındaki kasabayı alın. Hana tıklayınca fiyatlarını görürsünüz.`,
         `Pazar binası eksik malı altınla almanıza yarar. Bir kasabanın pazarından da alınır, ama kapısında ordunuz durmalı ve asker başına ${balance.towns.market.carryPerSoldier} birim taşınır. Bir de yollardaki yağmacılar var: tüccarın kazancından pay keserler. O ayrı bir dert, "Yağmacılar"da anlatırım.`,
       ]
     },

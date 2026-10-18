@@ -16,6 +16,8 @@ export interface KingdomInfo {
   color: string | null
   username: string | null
   site: Point
+  // The middle of its palace when the buildings are not at hand (the player's own).
+  palaceAt?: Point
   queen: boolean
   // Palace level as seen from outside.
   palace: number

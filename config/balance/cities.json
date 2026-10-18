@@ -8,9 +8,9 @@
     "requiredForPalaceLevel": 2,
     "patrol": {
       "perCrown": 1,
-      "slotSeconds": 900,
-      "out": 0.4,
-      "stay": 0.15,
+      "slotSeconds": 1800,
+      "out": 0.2,
+      "stay": 0.075,
       "answerSeconds": 300,
       "tribute": {
         "everySeconds": 1800,
@@ -32,7 +32,7 @@
         }
       },
       "refuseRelation": -8,
-      "tip": 30
+      "tip": 25
     },
     "relation": {
       "restSworn": 15,
@@ -48,28 +48,28 @@
       {
         "at": 30,
         "name": "Teşekkür sepeti",
-        "gold": 15,
+        "gold": 8,
         "goods": {
-          "food": 15
+          "food": 8
         }
       },
       {
         "at": 60,
         "name": "Saray armağanı",
-        "gold": 35,
+        "gold": 18,
         "goods": {
-          "food": 25,
-          "materials": 25
+          "food": 12,
+          "materials": 12
         }
       },
       {
         "at": 85,
         "name": "Hükümdarın lütfu",
-        "gold": 70,
+        "gold": 35,
         "goods": {
-          "food": 40,
-          "materials": 40,
-          "arms": 30
+          "food": 20,
+          "materials": 20,
+          "arms": 15
         }
       }
     ],

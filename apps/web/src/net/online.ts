@@ -214,6 +214,7 @@ export type Command =
   | { type: 'plan'; steps: PlanStep[] }
   | { type: 'tradeAmount'; units: number }
   | { type: 'tradeCity'; city: number | null }
+  | { type: 'tradeInn'; x: number; y: number }
   | { type: 'swear'; city: number }
   | { type: 'repairWalls' }
   | { type: 'envoy'; to: number; kind: Envoy['kind']; gold?: number; terms?: PeaceTerms }

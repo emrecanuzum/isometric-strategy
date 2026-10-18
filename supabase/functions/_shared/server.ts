@@ -118,11 +118,13 @@ export async function lobbyMarket(lobby: string) {
 }
 
 // The merchant's sales move the lobby's prices.
-export async function applySold(lobby: string, sold: Record<string, number>, at: number) {
+// Sales at inns move those inns' own prices too (CLAUDE.md §7.6).
+export async function applySold(lobby: string, sold: Record<string, number>, at: number, innSold: { inn: Point; good: string; units: number; at: number }[] = []) {
   const goods = Object.entries(sold).filter(([, n]) => n !== 0)
-  if (goods.length === 0) return
+  if (goods.length === 0 && innSold.length === 0) return
   let market = await lobbyMarket(lobby)
   for (const [good, units] of goods) market = game.afterTrade(market, good, units, at)
+  for (const s of innSold) market = game.afterInnSale(market ?? game.freshMarket(at), s.inn, s.good, s.units, s.at)
   await admin.from('lobbies').update({ market }).eq('id', lobby)
 }
 
@@ -150,7 +152,7 @@ export async function mutateKingdom(
       .select()
       .maybeSingle()
     if (written) {
-      await applySold(row.lobby_id, settled.sold, at)
+      await applySold(row.lobby_id, settled.sold, at, settled.innSold)
       return written as Row
     }
   }

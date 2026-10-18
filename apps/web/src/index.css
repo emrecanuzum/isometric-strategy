@@ -4765,6 +4765,29 @@ kbd {
   font-size: 13px;
 }
 
+.inn-prices {
+  display: grid;
+  gap: calc(var(--px) * 2);
+  margin: 0 0 calc(var(--px) * 3);
+  padding: 0;
+  list-style: none;
+}
+.inn-prices li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0 calc(var(--px) * 3);
+}
+.inn-prices li small {
+  grid-column: 2 / 4;
+  opacity: 0.75;
+}
+.inn-prices b.up {
+  color: var(--up);
+}
+.inn-prices b.down {
+  color: var(--down);
+}
 .rumours {
   display: grid;
   gap: calc(var(--px) * 3);

@@ -1292,6 +1292,8 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
       return L('siege', BANDIT_HEX, 'good', 'taken')
     case 'outlaw_road':
       return L('raid', BANDIT_HEX, 'bad')
+    case 'inn_lost':
+      return L('envoy', own, 'bad', 'lost')
     case 'outlaw_road_clear':
     case 'outlaw_gone':
       return L('raid', BANDIT_HEX, 'good', 'repelled')
@@ -1417,6 +1419,8 @@ export function soundForNotice(n: Notice, online: Online): Cue {
       return 'lost'
     case 'clan_destroyed':
       return 'victory'
+    case 'inn_lost':
+      return 'refused'
     case 'outlaw_road':
       return 'raid'
     case 'outlaw_road_clear':

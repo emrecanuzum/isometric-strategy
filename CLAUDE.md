@@ -1204,7 +1204,7 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   `advance` ve kurallarla doğrulanır; istemci sonucu beklerken komutu
   yerelde uygular, reddedilirse sunucunun durumuna döner.
 - **Başka krallıklar:** Lobideki diğer krallıkların hududu kendi
-  renginde kesikli çizgiyle, binaları haritada görünür (tıklanamaz);
+  renginde kesikli çizgiyle, binaları haritada görünür (tıklanınca o lord Diplomasi'de açılır);
   depoları gizlidir. Başka bir krallığın binasının üstüne gelince bina o
   krallığın renginde dış hatla vurgulanır, etikette krallığın adı (kendi
   renginde), binanın adı ve seviyesi yazar. Yıkım/taşıma modunda
@@ -1364,8 +1364,45 @@ fiyatı düşer, çok alınanın artar; zamanla dengeye döner.
   grafik: kazanca (altın) ya da tek bir malın birimine göre her krallığın
   payı, krallık renginde; altında yüzde ve yaklaşık miktar.
 - **Han paneli:** Hanın üstüne gelince adı ve işi yazar; tıklanınca
-  panel açılır: hancı, hanın işi, uzaklık, **ticaret söylentileri** ve
-  ticaret payları. Söylentiler herkesin bilebileceği gerçek bilgilerden
+  panel açılır: hancı, hanın işi, uzaklık, **ticaret söylentileri**,
+  **hanın fiyatları**, **han kiminle ticarette** pastası ve ticaret payları.
+  "En yakın saray" söylentisi oyuncunun kendi sarayını da sayar (önce
+  sayamıyordu, sonradan kurulan yakın lord kendini göremiyordu).
+- **Hanlarla ticaret** (`economy.json` → `trade.inns`; mantık
+  `packages/shared/src/inns.ts`, `economy.ts` → `innPrice`, `setTradeInn`,
+  `tradeInnError`, `refreshInnShare`; sunucu `_shared/inns.ts`, `tradeInn`
+  komutu; arayüz `inns.tsx` → `InnMarket`, `InnReach`, `cities.tsx` →
+  `InnChoices`): her han bir pazardır.
+  - **Statlar:** her hanın her mala kendi çarpanı vardır (lobi tohumu ve hanın
+    yerinden: hana bir eğilim ±0,22, mala bir sapma ±0,32, 0,05'e yuvarlı,
+    ×0,55–×1,5). Hanların ~%21'i **cömert** (ortalama ≥ ×1,15), ~%18'i **ölü
+    fiyat** verir (≤ ×0,85). Han paneli her malın çarpanını, hanın kendi fiyat
+    düşüşünü ve sana birim fiyatını yazar.
+  - **Yakınlık pastası:** her lordun hana çekimi sarayından (1 − uzaklık /
+    220 karo) ve elindeki her kasabadan bunun yarısıdır; çekimlerin payı
+    pastadır (lord kendi renginde). 220 karodan uzak olan pay almaz.
+    **Pastada en az %8 payı olmayan lordun tüccarı o hana gidemez:** uzak bir
+    cömert hanı isteyen yakınındaki kasabayı almalıdır.
+  - **Fiyat:** lobi fiyatı × hanın o mal çarpanı × hanın kendi fiyatı × payın
+    (%8 payda ×0,85, bütün pastada ×1,15) × tacın pazar etkisi. Hanın kendi
+    fiyatı satılan her birimle %0,04 düşer (en az ×0,6), 15 dakikada yarı
+    yolunu toplar; hanlar arası rekabet budur: çok lord aynı hana satarsa
+    han ölür. Sunucu bunu lobinin pazarında saklar (`Market.inns`, hanın
+    yerine göre `innKey`). Hana satış lobi fiyatlarını lobi pazarının %15'i
+    kadar düşürür. **Sefer lobi pazarınınki kadardır**, yük 1 kat.
+  - **Seçim:** ticaret noktası **2. seviye** olmalı. Ticaret sekmesinde "Tüccar
+    nereye gitsin"in altında payın yeten hanlar en iyi ödeyen başta listelenir;
+    han panelindeki "Tüccarı bu hana gönder" de aynı işi yapar. Hedef değişince
+    2 dakika yeniden değişmez (taç başkentiyle ortak). Tüccar hana gidiyorsa
+    `trade.inn` (yeri, çarpanları ve pay) saklanır.
+  - **Pay değişir:** sunucu her tick'te hanlarda satan lordların payını
+    yeniden hesaplar (yeni saraylar, el değiştiren kasabalar); pay %8'in altına
+    inerse tüccar lobi pazarına döner ve elçi "Han kapılarını kapattı" haberini
+    getirir (`inn_lost`).
+  - **Elçi:** daha iyi ödeyen (en az %15 fazla) bir handa payı varsa söyler
+    (`innBetter`), cömert bir hanın yakınındaki kasabayı almayı önerir
+    (`innReach`), tüccarı hana gönderince söz düşer, "Ticaret" konusunda
+    hanları anlatır. Söylentiler herkesin bilebileceği gerçek bilgilerden
   kurulur (lobi fiyatları, yuvarlanmış satış payları, kim şu an ne
   satıyor, yağmalanmış ticaret noktaları, savaşlar, yoldaki ordular, hana
   en yakın saray) ve her oyun saati değişir. Hanın işi neyi duyduğunu
@@ -1636,9 +1673,12 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
 - **Devriyeler** (`cities.json` → `crown.patrol`; mantık
   `packages/shared/src/patrols.ts`, sunucu `supabase/functions/_shared/patrols.ts`,
   `patrol_visits` tablosu): her taç krallığı başkentinden **tek, büyük bir
-  devriye** çıkarır (`perCrown` = 1). Her 15 dakikalık turda devriye,
-  tohumdan seçilen **kendi lordlarından birinin** sarayına gider (turun %40'ı),
-  orada biraz kalır (%15) ve geri döner.
+  devriye** çıkarır (`perCrown` = 1). Her 30 dakikalık turda devriye,
+  tohumdan seçilen **kendi lordlarından birinin** sarayına gider (turun %20'si,
+  ~6 dk), orada biraz kalır (%7,5) ve geri döner; turun geri kalanında
+  başkentte dinlenir. Böylece tacında tek başına olan lord da devriyeyi en çok
+  haraççılar kadar sık (saatte 2) görür (önce tur 15 dakikaydı: tek lordun
+  kapısına devriye haraççının iki katı geliyordu).
   Devriye **ticaret yollarından** gider: başkentin surundaki bir yol ucundan
   (böylece iç ve dış surun kapılarından) çıkar, yol ağında lorda en yakın
   noktaya kadar yolu izler, son parçayı araziden yürür. Yol iki katından
@@ -1664,7 +1704,7 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   hesaplanır. Ordu sancakları gölge düşürmez (yüksekten düşen uzun gölge
   bölüğü havadaymış gibi gösteriyordu; `sprites.ts` → `NO_SHADOW`).
   - **Kendi tacının devriyesi** lordun **eğlence merkezine** uğrar, içer,
-    eğlenir ve **30 altın bahşiş** bırakır (lordun bir kardeşi devriyenin
+    eğlenir ve **25 altın bahşiş** bırakır (lordun bir kardeşi devriyenin
     başındaysa daha fazla; §9.1.1). Eğlence merkezi yoksa sarayın
     önüne gelip geçer, bahşiş bırakmaz; ama elçi "Taç devriyesi uğradı"
     haberini getirir (`patrol_visit`), lord kapısındaki askerleri sessizce
@@ -1685,11 +1725,14 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     istemci aynı anı bulur. Haraççı **hazinenin %8'ini, en az 150 altın**
     ister (`share`, `min`; 7000 altında 560, 1000 altında 150; hazinede daha az
     varsa hepsini); ilişki ve güç bunu değiştirmez. **Taçlar lorda kazandırmaz,
-    kaybettirir:** kendi tacının saatte 4 devriyesi bahşiş ve armağanla en çok
-    ~200–400 altın bırakır, rakip tacın saatte 2 haraççısı ise en az 300 altın
+    kaybettirir:** kendi tacının saatte en çok 2 devriyesi bahşiş ve armağanla en
+    çok ~100–160 altın ve ~100 birim mal bırakır, rakip tacın saatte 2 haraççısı ise en az 300 altın
     (7.000'lik hazinede ~1.100) götürür. Lord parasını tüccarla, kasabalarla,
     seferlerle ve ganimetle kazanır. (Önce bahşiş 120, armağanlar 60/150/300
-    altın, haraç %5'ti; orta hazineli bir lord taçtan haraçtan fazla alıyordu.)
+    altın, haraç %5'ti; orta hazineli bir lord taçtan haraçtan fazla alıyordu.
+    Sonra bahşiş 30, armağanlar 15/35/70 altın ve devriye saatte 4 kez geliyordu:
+    tek lord 21 uğrayışta ~2.600 altın ve ~2.750 mal alırken 11 haraçta ~730
+    altın ödüyordu.)
     Elçi diyaloğunda **"Öde"**, **"Reddet"** ya da **"Konuş"**. Reddedilirse o tacın
     bütün lordlarıyla ilişki **−8** düşer. 5 dakika içinde cevap
     verilmezse haraç **kendiliğinden ödenir** (hazinede ne kadar varsa),
@@ -1759,9 +1802,9 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   haracını ödemek (+4). Azaltanlar: haracı reddetmek (−10). Cevapsız kalan
   haraç kendiliğinden ödenir, ilişkiyi değiştirmez.
 - **Armağanlar:** Kendi tacının devriyesi her uğrayışta ilişki baremine
-  göre armağan getirir: 30+ "Teşekkür sepeti" (15 altın, 15 yemek), 60+
-  "Saray armağanı" (35 altın, 25 yemek, 25 yapı malzemesi), 85+ "Hükümdarın
-  lütfu" (70 altın, 40 yemek, 40 yapı, 30 savaş malzemesi; `crown.gifts`).
+  göre armağan getirir: 30+ "Teşekkür sepeti" (8 altın, 8 yemek), 60+
+  "Saray armağanı" (18 altın, 12 yemek, 12 yapı malzemesi), 85+ "Hükümdarın
+  lütfu" (35 altın, 20 yemek, 20 yapı, 15 savaş malzemesi; `crown.gifts`).
 - **Taçların pazarı** (`crown.stewardship`): Her taç saatte bir değişen
   bir malın ticaretini yönetir (iki taç farklı mallar; lobi tohumu ve
   saatten). Lord o malı sattığında (lobi pazarında da şehirde de) fiyatı o
@@ -3731,13 +3774,13 @@ krallıkta birer tane olur ve 3 seviyelidir.
   Yağmacı ve korsan haberleri de birkaç söylenişle gelir.
   Panel sade tutulur: söze verilen cevaplar düğmedir; **"Bana oyunu
   anlat"** kapatma düğmesinin yanında bir kitap simgesidir; yan sorular
-  ("Malımızı nasıl değerlendirelim?", sohbet sorusu) cevapların altında
+  ("Dolu ambarları ve hazineyi ne yapalım?", sohbet sorusu) cevapların altında
   küçük, soluk bağlantılardır (`Reply.quiet`).
   Cevaplar: işe girişmek (ilgili sekmeyi ya da alt bölümü açar, yapıyı
   yerleştirmeye başlar ya da binanın menüsünü açıp kamerayı oraya götürür),
   "Sonra" (konuyu bir süre ertelemek) ya da bir şaka (şakayla karşılık
   verir). Depolardan biri %60'ı ya da hazine %70'i geçmişse elçi çağrıldığında
-  bir cevap da **"Malımızı nasıl değerlendirelim?"** olur (`lines.ts` →
+  bir cevap da **"Dolu ambarları ve hazineyi ne yapalım?"** olur (`lines.ts` →
   `wellStocked`, `wealthAdvice`): büyük işler açıksa "Lordum, biraz büyük
   şeyler yapmanın vakti gelmedi mi sizce de?" diye Projeler'e, 3. seviye sarayda
   şenliğe ve taca bağışa, daha önce tüccara, taç siparişlerine ve kraliyet

@@ -353,7 +353,7 @@ export function Advisor({
     if (step) return setSpeech(stepSpeech(step, stepIndex, c, pick))
     const tip = tipFor(c, {})
     // With stores filling up, the lord may ask what to do with them.
-    const wealth: Reply | null = wellStocked(c) ? { label: 'Malımızı nasıl değerlendirelim?', say: wealthAdvice(c, pick), quiet: true } : null
+    const wealth: Reply | null = wellStocked(c) ? { label: 'Dolu ambarları ve hazineyi ne yapalım?', say: wealthAdvice(c, pick), quiet: true } : null
     if (tip) {
       const said = tipSpeech(tip, c, pick)
       return setSpeech({ ...said, replies: [...said.replies.slice(0, 2), ...(wealth ? [wealth] : []), { label: 'Bana oyunu anlat', topic: '' }] })

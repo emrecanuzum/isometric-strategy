@@ -211,7 +211,8 @@ export interface WorldHandlers {
   onLoading(loading: boolean): void
   // A tap or click that did not drag the map, and the player's building or the army drawn under it, if any; or a
   // lord's ship (whose, and its fleet).
-  onTap(tile: Point, building?: number, army?: number, inn?: number, city?: number, ship?: { lord: number; fleet?: number }): void
+  // `lord` is set when the tap fell on another lord's building.
+  onTap(tile: Point, building?: number, army?: number, inn?: number, city?: number, ship?: { lord: number; fleet?: number }, lord?: number): void
   // A row of footprints drawn by dragging while placing a stroke kind (see Placement.stroke).
   onStroke?(spots: Point[]): void
   // A right click that did not drag: the tile under it (a selected army or fleet is sent there).
@@ -1221,6 +1222,7 @@ export async function createWorld(
     clearCursor()
     highlight.visible = false
     pickedBuilding = undefined
+    pickedLord = undefined
     pickedInn = undefined
     pickedCity = undefined
     if (!inside) {
@@ -1284,6 +1286,7 @@ export async function createWorld(
         return tile
       }
       if (!hit.owner) pickedBuilding = hit.id
+      else pickedLord = hit.owner.kingdom
       const building = { id: hit.id, screen: top, ...(hit.owner && { owner: hit.owner.kingdom }) }
       onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y), building })
       return tile
@@ -1370,6 +1373,7 @@ export async function createWorld(
     return spots
   }
   let pickedBuilding: number | undefined
+  let pickedLord: number | undefined
   let pickedInn: number | undefined
   let pickedCity: number | undefined
   let lastPointer: Point | null = null
@@ -1433,7 +1437,7 @@ export async function createWorld(
       const army = placement ? undefined : armies.pick(at)
       // A ship is picked only off the buildings and armies (it lies on the water, under nothing else of the player's).
       const ship = placement || army !== undefined || pickedBuilding !== undefined ? null : ambient.pickShip(at)
-      if (tile) onTap(tile, army === undefined ? pickedBuilding : undefined, army, army === undefined ? pickedInn : undefined, army === undefined ? pickedCity : undefined, ship ?? undefined)
+      if (tile) onTap(tile, army === undefined ? pickedBuilding : undefined, army, army === undefined ? pickedInn : undefined, army === undefined ? pickedCity : undefined, ship ?? undefined, army === undefined ? pickedLord : undefined)
     }
     press = null
   }

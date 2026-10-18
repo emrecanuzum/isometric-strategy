@@ -214,6 +214,10 @@ const REFUSALS: Record<string, string> = {
   king_none: 'Bu ordunun başında kral yok',
   step: 'Bu miktar seçilemez',
   tradeWait: 'Satış miktarı az önce değişti; biraz bekle',
+  innPost: 'Önce bir ticaret noktası kur',
+  innLevel: 'Hana tüccar göndermek için ticaret noktası 2. seviye olmalı',
+  innWait: 'Tüccarın yolu az önce değişti; biraz bekle',
+  innFar: 'Bu hanın pastasında payın yok denecek kadar az; yakınında bir kasaba al',
   full: 'Lobide yer kalmadı',
   taken: 'Bu yer artık başka bir lordluğa yakın; yeni yer keşfet',
   color: 'Bu renk başka bir lordun; başka bir renk seç',
@@ -554,7 +558,7 @@ function App({
   // The first view is held back until the ground around the kingdom (or the sites to choose from) is painted: the
   // camera has moved there and no chunk on screen is missing for a moment.
   const [ready, setReady] = useState(false)
-  const tapRef = useRef<(tile: Point, building?: number, army?: number, inn?: number, city?: number, ship?: { lord: number; fleet?: number }) => void>(() => {})
+  const tapRef = useRef<(tile: Point, building?: number, army?: number, inn?: number, city?: number, ship?: { lord: number; fleet?: number }, lord?: number) => void>(() => {})
   const strokeRef = useRef<(spots: Point[]) => void>(() => {})
   const rightTapRef = useRef<(tile: Point) => void>(() => {})
 
@@ -571,7 +575,7 @@ function App({
           setCameraCorners(corners)
         },
         onLoading: setLoading,
-        onTap: (tile, building, army, inn, city, ship) => tapRef.current(tile, building, army, inn, city, ship),
+        onTap: (tile, building, army, inn, city, ship, lord) => tapRef.current(tile, building, army, inn, city, ship, lord),
         onStroke: (spots) => strokeRef.current(spots),
         onRightTap: (tile) => rightTapRef.current(tile),
       },
@@ -1365,7 +1369,7 @@ function App({
     sendArmy(army.id, snap?.point ?? tile)
   }
 
-  tapRef.current = (tile, building, picked, inn, city, ship) => {
+  tapRef.current = (tile, building, picked, inn, city, ship, lord) => {
     let army = picked
     const current = kingdomRef.current
     // Sending a fleet: onto water only, and water that joins where it is.
@@ -1436,6 +1440,17 @@ function App({
         setFocus(ship.lord)
         setPanel('diplomacy')
       }
+      return
+    }
+    // Another lord's building: that lord in diplomacy.
+    if (lord !== undefined && lord !== mine.id && aiming === null && !tool && !placingKind) {
+      setInnOpen(null)
+      setCityOpen(null)
+      setTownOpen(null)
+      setSelected(null)
+      play('click')
+      setFocus(lord)
+      setPanel('diplomacy')
       return
     }
     if (aiming === null && !tool && !placingKind) setInnOpen(inn ?? null)
@@ -1747,10 +1762,15 @@ function App({
     const p = buildings.find((b) => b.kind === 'palace')
     return p ? Math.max(1, (p.level ?? 1) - (p.doneAt > now ? 1 : 0)) : 0
   }
+  // The middle of the player's palace (the inns measure how near it is, CLAUDE.md §7.6).
+  const palaceCenter = (buildings: Kingdom['buildings']) => {
+    const p = buildings.find((b) => b.kind === 'palace')
+    return p ? { x: p.x + p.size / 2, y: p.y + p.size / 2 } : undefined
+  }
   const kingdoms: KingdomInfo[] = useMemo(
     () => [
       ...(kingdom
-        ? [{ id: mine.id, name: kingdom.name ?? 'Lordluğun', color: kingdom.color ?? null, username: null, site: kingdom.site, queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null, score: scoreOf(kingdom, now), tradeGood: kingdom.trade.idle ? null : kingdom.trade.good, tradeLedger: kingdom.trade.ledger ?? null, tradeDamaged: !!kingdom.trade.damaged, liege: kingdom.liege ?? null, blockade: kingdom.blockade ?? null }]
+        ? [{ id: mine.id, name: kingdom.name ?? 'Lordluğun', color: kingdom.color ?? null, username: null, site: kingdom.site, palaceAt: palaceCenter(kingdom.buildings), queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null, score: scoreOf(kingdom, now), tradeGood: kingdom.trade.idle ? null : kingdom.trade.good, tradeLedger: kingdom.trade.ledger ?? null, tradeDamaged: !!kingdom.trade.damaged, liege: kingdom.liege ?? null, blockade: kingdom.blockade ?? null }]
         : []),
       ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings, shieldUntil: r.shield_until, score: r.score ?? null, tradeGood: r.trade_good ?? null, tradeLedger: r.trade_ledger ?? null, tradeDamaged: !!r.trade_damaged, liege: r.liege ?? null, navy: r.navy ?? null, blockade: r.blockade ?? null })),
     ],
@@ -2714,7 +2734,7 @@ function App({
         <OutlawSheet world={view.world} pick={outlawOpen} online={online} kingdom={kingdom} now={now} onShow={(at) => view.centerOn({ x: Math.floor(at.x), y: Math.floor(at.y) })} onClose={closeTab} />
       )}
       {view && kingdom && !holding && innOpen !== null && !panel && !selectedBuilding && (
-        <InnSheet world={view.world} index={innOpen} online={online} now={now} home={kingdom.site} onShow={(tile) => view.centerOn(tile)} onClose={closeTab} />
+        <InnSheet world={view.world} index={innOpen} online={online} kingdom={kingdom} now={now} home={kingdom.site} onInn={(inn) => (inn ? online.act({ type: 'tradeInn', x: inn.x, y: inn.y }) : online.act({ type: 'tradeCity', city: null }))} onShow={(tile) => view.centerOn(tile)} onClose={closeTab} />
       )}
       {view && kingdom && !holding && hover?.building?.owner !== undefined && (() => {
         const owner = rivals.find((r) => r.id === hover.building!.owner)

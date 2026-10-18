@@ -1,5 +1,5 @@
-import { balance, bandsOf, basePrice, boatsOf, hash, outlawUp, priceAt, roadHeld } from '@game/shared'
-import type { Good, Market, Point, World } from '@game/shared'
+import { balance, bandsOf, basePrice, boatsOf, canTradeAt, hash, innPrice, innPulls, innSaturation, innShareFactor, innSpec, innStats, outlawUp, priceAt, roadHeld, stewardFactor, tradeCityReadyAt, tradeInnError } from '@game/shared'
+import type { Good, Kingdom, Market, Point, World } from '@game/shared'
 import { useState } from 'react'
 import { KINGDOM_COLORS } from '../../game/buildingSprites'
 import type { KingdomColor } from '../../game/buildingSprites'
@@ -45,6 +45,42 @@ export function innBandits(world: World, index: number, online: Online, now: num
   return { share: held.share, names: near.map((b) => b.name), roads: held.roadTiles }
 }
 
+// Where a lord's palace stands (its site until the palace is placed).
+function palaceOf(k: KingdomInfo): Point {
+  if (k.palaceAt) return k.palaceAt
+  const p = k.buildings?.find((b) => b.kind === 'palace')
+  return p ? { x: p.x + p.size / 2, y: p.y + p.size / 2 } : k.site
+}
+
+// Who trades at an inn (CLAUDE.md §7.6): each lord's pull from its palace and the towns it holds, nearer pulling more.
+export function innReach(world: World, index: number, online: Online) {
+  const half = balance.towns.size / 2
+  const pulls = innPulls(
+    world.inns[index],
+    online.kingdoms.map((k) => ({ id: k.id, palace: palaceOf(k) })),
+    online.towns.map((t) => ({ owner: t.owner, at: { x: t.x + half, y: t.y + half } })),
+  )
+  return pulls.flatMap((p) => {
+    const k = online.kingdoms.find((x) => x.id === p.id)
+    return k ? [{ ...p, k }] : []
+  })
+}
+
+// The player's slice of an inn's pie.
+export const myInnShare = (world: World, index: number, online: Online) => innReach(world, index, online).find((p) => p.k.id === online.me)?.share ?? 0
+
+// The index in world.inns of the inn the merchant sells at, if any.
+export const tradeInnIndex = (world: World, kingdom: Kingdom) => {
+  const at = kingdom.trade.inn
+  return at ? world.inns.findIndex((p) => p.x === at.x && p.y === at.y) : -1
+}
+
+// What the inn would pay the player for one unit of a good now.
+export const innUnitPrice = (world: World, index: number, kingdom: Kingdom, share: number, good: Good, market: Market | null | undefined, now: number) => {
+  const inn = world.inns[index]
+  return innPrice({ x: inn.x, y: inn.y, stats: innStats(world.seed, inn), share }, good, market, now) * stewardFactor(kingdom, good, now)
+}
+
 // The talk at an inn now: a few things true of the lobby, chosen by the inn's trade and changing with the game hour.
 export function rumoursAt(world: World, index: number, kind: InnKind, online: Online, now: number): Rumour[] {
   const market: Market | null = online.market
@@ -79,10 +115,11 @@ export function rumoursAt(world: World, index: number, kind: InnKind, online: On
   for (const a of online.armies) if (a.status !== 'idle') marching.set(a.kingdom_id, (marching.get(a.kingdom_id) ?? 0) + 1)
   const roads = [...marching].filter(([id]) => id !== online.me).map(([id, n]) => `${named(id)} lordunun ${n > 1 ? `${n} ordusu` : 'bir ordusu'} yolda.`)
   const near = kingdoms
-    .filter((k) => k.id !== online.me)
-    .map((k) => ({ k, d: Math.round(Math.hypot(k.site.x - inn.x, k.site.y - inn.y)) }))
+    .map((k) => ({ k, d: Math.round(Math.hypot(palaceOf(k).x - inn.x, palaceOf(k).y - inn.y)) }))
     .sort((a, b) => a.d - b.d)[0]
-  const local = near ? [`Buraya en yakın saray ${near.k.name} sarayı, ${near.d} karo ötede; ${near.k.palace}. seviye.`] : []
+  const local = near
+    ? [near.k.id === online.me ? `Buraya en yakın saray senin sarayın, ${near.d} karo ötede.` : `Buraya en yakın saray ${near.k.name} sarayı, ${near.d} karo ötede; ${near.k.palace}. seviye.`]
+    : []
   // The bandits on the roads round the inn, and on the player's own road; the pirates on the water.
   const robbers = innBandits(world, index, online, now)
   const mine = kingdoms.find((k) => k.id === online.me)
@@ -119,6 +156,121 @@ export function rumoursAt(world: World, index: number, kind: InnKind, online: On
   return told
 }
 
+// A pie of shares in the kingdoms' colours.
+function Pie({ slices, label }: { slices: { id: number; color: string | null; value: number }[]; label: string }) {
+  const total = slices.reduce((sum, s) => sum + s.value, 0)
+  let turn = -0.25
+  return (
+    <svg viewBox="-1.1 -1.1 2.2 2.2" className="pie" role="img" aria-label={label}>
+      {slices.length === 1 ? (
+        <circle r="1" fill={swatchOf(slices[0].color)} />
+      ) : (
+        slices.map(({ id, color, value }) => {
+          const from = turn
+          turn += value / total
+          const a0 = from * Math.PI * 2
+          const a1 = turn * Math.PI * 2
+          const large = a1 - a0 > Math.PI ? 1 : 0
+          const d = `M0 0 L${Math.cos(a0)} ${Math.sin(a0)} A1 1 0 ${large} 1 ${Math.cos(a1)} ${Math.sin(a1)} Z`
+          return <path key={id} d={d} fill={swatchOf(color)} stroke="var(--ink)" strokeWidth="0.03" />
+        })
+      )}
+    </svg>
+  )
+}
+
+const times = (f: number) => `×${f.toFixed(2).replace('.', ',')}`
+
+// What the inn pays for each good, how full its market is, and sending the merchant there (CLAUDE.md §7.6).
+function InnMarket({ world, index, online, kingdom, now, onInn }: { world: World; index: number; online: Online; kingdom: Kingdom | null; now: number; onInn(inn: Point | null): void }) {
+  const inn = world.inns[index]
+  const stats = innStats(world.seed, inn)
+  const market = online.market
+  const share = myInnShare(world, index, online)
+  const here = !!kingdom && tradeInnIndex(world, kingdom) === index
+  const error = kingdom ? tradeInnError(kingdom, share, now) : 'innPost'
+  const wait = kingdom ? Math.max(0, Math.ceil((tradeCityReadyAt(kingdom) - now) / 1000)) : 0
+  const s = innSpec()
+  const why: Record<string, string> = {
+    innPost: 'Önce bir ticaret noktası kur',
+    innLevel: `Ticaret noktan ${s.minLevel + 1}. seviye olmalı`,
+    innWait: `Tüccarın yolu az önce değişti; ${wait} sn sonra`,
+    innFar: `Bu hanın pastasında payın %${Math.round(s.minShare * 100)}'ten az; yakınında bir kasaba al`,
+  }
+  const rich = (Object.values(stats) as number[]).reduce((a, b) => a + b, 0) / 3
+  return (
+    <Section title="Hanın fiyatları" icon="gold" aside={rich >= 1.15 ? 'cömert han' : rich <= 0.85 ? 'ölü han' : 'olağan han'}>
+      <ul className="inn-prices">
+        {GOODS.map((good) => {
+          const sat = innSaturation(market, inn, good, now)
+          return (
+            <li key={good}>
+              <Icon name={good} size={16} />
+              <span>{RESOURCE_NAMES[good]}</span>
+              <b className={stats[good] >= 1.1 ? 'up' : stats[good] <= 0.9 ? 'down' : undefined}>{times(stats[good])}</b>
+              <small>
+                {sat < 0.98 ? `satıldıkça düştü ${times(sat)}` : 'pazarı taze'}
+                {kingdom && canTradeAt(share) && ` · sana birimi ${innUnitPrice(world, index, kingdom, share, good, market, now).toFixed(2).replace('.', ',')} altın`}
+              </small>
+            </li>
+          )
+        })}
+      </ul>
+      <Stat
+        label="Senin payın"
+        value={`%${Math.round(share * 100)}`}
+        tone={canTradeAt(share) ? 'up' : 'down'}
+        note={canTradeAt(share) ? `fiyata ${times(innShareFactor(share))}` : `en az %${Math.round(s.minShare * 100)} gerekir`}
+      />
+      {here ? (
+        <button className="btn" disabled={wait > 0} data-why={why.innWait} onClick={() => onInn(null)}>
+          Tüccar burada · lobi pazarına döndür
+        </button>
+      ) : (
+        <button className="btn" disabled={!!error} data-why={error ? why[error] : undefined} onClick={() => onInn({ x: inn.x, y: inn.y })}>
+          Tüccarı bu hana gönder
+        </button>
+      )}
+      <p className="hint">
+        Hancı anlatıyor: her han her mala kendi fiyatını verir (lobi fiyatı × hanın çarpanı). Payın büyüdükçe sana daha iyi davranır
+        ({times(s.shareLow)} ile {times(s.shareHigh)} arası). Çok satılan malın burada fiyatı düşer, zamanla toparlanır. Sefer lobi pazarınınki kadar sürer.
+      </p>
+    </Section>
+  )
+}
+
+// The lords this inn trades with, by how near their palaces and towns are (CLAUDE.md §7.6).
+function InnReach({ world, index, online }: { world: World; index: number; online: Online }) {
+  const slices = innReach(world, index, online)
+  const total = slices.reduce((sum, s) => sum + s.value, 0)
+  return (
+    <Section title="Han kiminle ticarette" icon="trade" aside={`${innSpec().reachTiles} karo çevre`}>
+      {total === 0 ? (
+        <p className="hint">Hiçbir lordun sarayı ya da kasabası bu hana yakın değil; kervanlar yalnızca gelip geçiyor. Yakınında bir kasaba alan lord burada ticaret yapabilir.</p>
+      ) : (
+        <>
+          <div className="shares">
+            <Pie slices={slices.map(({ k, value }) => ({ id: k.id, color: k.color, value }))} label="Hana yakınlık payları" />
+            <ul className="legend">
+              {slices.map(({ k, value, towns, distance: d }) => (
+                <li key={k.id}>
+                  <i style={{ background: swatchOf(k.color) }} />
+                  <span>{k.id === online.me ? `${k.name} (sen)` : k.name}</span>
+                  <b>%{Math.round((value / total) * 100)}</b>
+                  <small>
+                    saray {d} karo{towns > 0 && ` · ${towns} kasaba`}
+                  </small>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <p className="hint">Hancı anlatıyor: buraya kimin sarayı ve kasabaları yakınsa kervanları onunla alışveriş eder. Yakın kasabalar da lordun payına katılır; payı küçük olan lordun tüccarı burada iş yapamaz.</p>
+        </>
+      )}
+    </Section>
+  )
+}
+
 // A pie of who rules the lobby's trade: each kingdom's share of the gold its merchant brought home (or of the units of
 // one good it sold), with a legend.
 export function TradeShares({ online }: { online: Online }) {
@@ -128,7 +280,6 @@ export function TradeShares({ online }: { online: Online }) {
     .filter((s) => s.value > 0)
     .sort((a, b) => b.value - a.value)
   const total = slices.reduce((sum, s) => sum + s.value, 0)
-  let turn = -0.25
   return (
     <Section title="Ticaretin hâkimleri" icon="trade" aside="başkalarınınki yaklaşık">
       <div className="measure-row" role="radiogroup" aria-label="Neye göre">
@@ -145,21 +296,7 @@ export function TradeShares({ online }: { online: Online }) {
         </Placeholder>
       ) : (
         <div className="shares">
-          <svg viewBox="-1.1 -1.1 2.2 2.2" className="pie" role="img" aria-label="Ticaret payları">
-            {slices.length === 1 ? (
-              <circle r="1" fill={swatchOf(slices[0].k.color)} />
-            ) : (
-              slices.map(({ k, value }) => {
-                const from = turn
-                turn += value / total
-                const a0 = from * Math.PI * 2
-                const a1 = turn * Math.PI * 2
-                const large = a1 - a0 > Math.PI ? 1 : 0
-                const d = `M0 0 L${Math.cos(a0)} ${Math.sin(a0)} A1 1 0 ${large} 1 ${Math.cos(a1)} ${Math.sin(a1)} Z`
-                return <path key={k.id} d={d} fill={swatchOf(k.color)} stroke="var(--ink)" strokeWidth="0.03" />
-              })
-            )}
-          </svg>
+          <Pie slices={slices.map(({ k, value }) => ({ id: k.id, color: k.color, value }))} label="Ticaret payları" />
           <ul className="legend">
             {slices.map(({ k, value }) => (
               <li key={k.id}>
@@ -179,11 +316,13 @@ export function TradeShares({ online }: { online: Online }) {
   )
 }
 
-export function InnSheet({ world, index, online, now, home, onShow, onClose }: {
+export function InnSheet({ world, index, online, kingdom, now, home, onShow, onInn, onClose }: {
   world: World
   index: number
   online: Online
+  kingdom: Kingdom | null
   now: number
+  onInn(inn: Point | null): void
   // The player's palace, for how far the inn is.
   home: Point | null
   onShow(tile: Point): void
@@ -233,6 +372,8 @@ export function InnSheet({ world, index, online, now, home, onShow, onClose }: {
             </ul>
           )}
         </Section>
+        <InnMarket world={world} index={index} online={online} kingdom={kingdom} now={now} onInn={onInn} />
+        <InnReach world={world} index={index} online={online} />
         <InnBandits world={world} index={index} online={online} now={now} />
         <TradeShares online={online} />
       </div>

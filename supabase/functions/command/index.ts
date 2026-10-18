@@ -41,6 +41,7 @@ import type { TownRow } from '../_shared/towns.ts'
 import { refuseDemand } from '../_shared/patrols.ts'
 import type { VisitRow } from '../_shared/patrols.ts'
 import { outlawsIn, setHavenHold } from '../_shared/outlaws.ts'
+import { innLords, innTowns } from '../_shared/inns.ts'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -250,6 +251,22 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
       const index = cmd.city === null ? null : Number.isInteger(cmd.city) && cmd.city >= 0 && cmd.city < cities.length ? cmd.city : refuse('rejected')
       if (now < game.tradeCityReadyAt(k)) refuse('tradeWait')
       next = changed(game.setTradeCity(k, cities, index, now))
+      break
+    }
+    case 'tradeInn': {
+      // The merchant to an inn of the trade roads (where it stands), at the lord's slice of its pie (CLAUDE.md §7.6).
+      const k = need()
+      const x = whole(cmd.x, 0, 100000)
+      const y = whole(cmd.y, 0, 100000)
+      const { world, inns } = await worldOf(lobby)
+      if (!inns.some((p) => p.x === x && p.y === y) || world.feature[y * world.size + x] !== game.Feature.Inn) refuse('rejected')
+      const { data: info } = await admin.from('lobbies').select('seed').eq('id', lobby).single()
+      const rows = await loadKingdoms(lobby)
+      const towns = await townsOf(lobby)
+      const share = Number(game.innShareOf(game.innPulls({ x, y }, innLords(rows.map((r) => (r.id === row.id ? { ...r, state: k } : r))), innTowns(towns)), row.id).toFixed(3))
+      const error = game.tradeInnError(k, share, now)
+      if (error) refuse(error)
+      next = changed(game.setTradeInn(k, { x, y }, game.innStats(info!.seed, { x, y }), share, now))
       break
     }
     case 'tradeAmount': {
@@ -655,7 +672,7 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
   if (error?.code === '23505') refuse('color')
   if (error) throw error
   if (!data) refuse('conflict')
-  if (settled) await applySold(lobby, settled.sold, now)
+  if (settled) await applySold(lobby, settled.sold, now, settled.innSold)
   if (bought) await applySold(lobby, { [bought.good]: -bought.units }, now)
   return data as Row
 }
@@ -1460,7 +1477,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
   }
 }
 
-const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'townUpkeep', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'nameChild', 'educate', 'crisis', 'choose', 'seen', 'reset', 'ships', 'fleet', 'order', 'quest', 'royal', 'releaseTown', 'expedition', 'steward', 'project'])
+const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'tradeInn', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'townUpkeep', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'nameChild', 'educate', 'crisis', 'choose', 'seen', 'reset', 'ships', 'fleet', 'order', 'quest', 'royal', 'releaseTown', 'expedition', 'steward', 'project'])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
