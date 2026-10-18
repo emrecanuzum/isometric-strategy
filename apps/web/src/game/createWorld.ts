@@ -698,7 +698,7 @@ export async function createWorld(
     glow.visible = glow.alpha > 0.02
     halo.alpha = glow.alpha * 0.85
     halo.visible = glow.visible && video.glow
-    shadows.update(hour, caravans.layer)
+    shadows.update(hour, caravans.layer, viewArea)
     // Shadows painted into the ground follow the sun an hour at a time: each new hour paints the chunks again.
     // So does the snow lying on the ground, roofs and trees (weather.ts → snowCover): a few times an hour in winter.
     const sunHour = Math.floor(hour)

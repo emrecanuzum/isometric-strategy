@@ -5,17 +5,21 @@ import type { Sprite } from './sprites'
 // broke Pixi's batches every 16 textures: hundreds of draw calls a frame, each a command to the GPU process, which is
 // most of what the map cost the battery. On shared pages a frame is drawn in a few dozen calls.
 
-// Side of a page, in pixels. Sprites larger than a page keep a texture of their own.
+// Side of a page, in pixels. Sprites larger than a page keep a texture of their own. The shade falling on buildings
+// (`cast`) is made one overlay at a time over many frames: its pages are small, so each new overlay uploads a little.
 const PAGE = 2048
+const CAST_PAGE = 512
+const sideOf = (pool: Pool) => (pool === 'cast' ? CAST_PAGE : PAGE)
 // Transparent gap around each sprite on a page, so nearest sampling at a fractional zoom (or a swaying tree's skew)
 // never picks a neighbour's pixel.
 const PAD = 2
 
 // Which pages a sprite goes on. Sprites freed again soon (shadows, recast at every step of the sun; masked copies) are
 // kept apart from those that live as long as the map, so their pages empty out whole and are filled again.
-// `own` keeps a texture of its own: for a sprite made one at a time over many frames (the shade falling on one building),
-// where each would otherwise upload a whole page.
-export type Pool = 'main' | 'shade' | 'masked' | 'own'
+// `cast` holds the shade falling on buildings (small pages, see CAST_PAGE); `own` keeps a texture of its own. Each own
+// texture is a canvas and a GPU texture of its own: thousands of them (one per building on the map) ran phones out of
+// canvas memory and the tab crashed, so nothing made in bulk goes there.
+export type Pool = 'main' | 'shade' | 'masked' | 'cast' | 'own'
 
 interface Page {
   canvas: HTMLCanvasElement
@@ -39,10 +43,10 @@ const looks = new WeakMap<Texture, Sprite>()
 const pools = new Map<Pool, Page[]>()
 const dirty = new Set<Page>()
 
-function newPage(): Page {
+function newPage(side: number): Page {
   const canvas = document.createElement('canvas')
-  canvas.width = PAGE
-  canvas.height = PAGE
+  canvas.width = side
+  canvas.height = side
   const ctx = canvas.getContext('2d', { willReadFrequently: false })!
   const source = new CanvasSource({ resource: canvas, scaleMode: 'nearest' })
   return { canvas, ctx, source, x: 0, y: 0, shelf: 0, live: 0 }
@@ -50,6 +54,7 @@ function newPage(): Page {
 
 // Room for a w×h box on a page of the pool: the first page whose shelf it fits, or a new one.
 function place(pool: Pool, w: number, h: number): { page: Page; x: number; y: number } {
+  const side = sideOf(pool)
   let pages = pools.get(pool)
   if (!pages) pools.set(pool, (pages = []))
   for (const page of pages) {
@@ -58,18 +63,18 @@ function place(pool: Pool, w: number, h: number): { page: Page; x: number; y: nu
       page.y = 0
       page.shelf = 0
     }
-    if (page.x + w > PAGE) {
+    if (page.x + w > side) {
       page.x = 0
       page.y += page.shelf
       page.shelf = 0
     }
-    if (page.y + h > PAGE) continue
+    if (page.y + h > side) continue
     const at = { page, x: page.x, y: page.y }
     page.x += w
     page.shelf = Math.max(page.shelf, h)
     return at
   }
-  const page = newPage()
+  const page = newPage(side)
   pages.push(page)
   page.x = w
   page.shelf = h
@@ -84,7 +89,7 @@ export function textureOf(sprite: Sprite, pool: Pool = 'main'): Texture {
   const h = sprite.height + PAD * 2
   const image = new ImageData(new Uint8ClampedArray(sprite.pixels.slice().buffer), sprite.width, sprite.height)
   let entry: Entry
-  if (pool === 'own' || w > PAGE || h > PAGE) {
+  if (pool === 'own' || w > sideOf(pool) || h > sideOf(pool)) {
     const canvas = document.createElement('canvas')
     canvas.width = sprite.width
     canvas.height = sprite.height
@@ -127,4 +132,13 @@ export function freeTexture(sprite: Sprite) {
   }
   entry.texture.destroy(false)
   entry.page.live--
+}
+
+// Development only: the atlas's pages and live sprites, to watch its memory.
+if (import.meta.env.DEV) {
+  ;(globalThis as { __atlas?: () => unknown }).__atlas = () => ({
+    cached: cache.size,
+    own: [...cache.values()].filter((e) => !e.page).length,
+    pools: Object.fromEntries([...pools].map(([k, v]) => [k, v.map((p) => p.live)])),
+  })
 }

@@ -24,10 +24,23 @@ export interface Shadows {
   // base and itself) share a `group` and throw no shade on one another; a `low` part (a stone base) throws none on any
   // building, only on the ground.
   setFootprint(caster: Container, size: number, raise?: number, group?: object, low?: boolean): void
-  update(hour: number, casters: Container): void
+  // `view`: the part of the world on screen; only the buildings around it are shaded (see REGION).
+  update(hour: number, casters: Container, view?: View): void
   // Live shadows on or off (Ayarlar → Görüntü). Off, none is cast or drawn; the shadows painted into the ground stay.
   setEnabled(on: boolean): void
 }
+
+export interface View {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+// Buildings are shaded only in a region around the screen, snapped to a grid of this many world pixels (and one cell
+// of margin) so panning changes it seldom; overlays of buildings that leave it are freed. Shading every building on the
+// map (two thousand and more in a full lobby) kept as many overlays alive and ran phones out of memory.
+const REGION = 1024
 
 export function createShadows(): Shadows {
   // Its own render group (CLAUDE.md §12): the walkers' layer is sorted anew most frames (whatever walks changes its
@@ -70,16 +83,30 @@ export function createShadows(): Shadows {
 
   // A building's pixel is in shade when the line from it toward the sun passes through another building's solids.
   // Walls do not shade walls: a run of wall is lit as one model already.
-  function shadeBuildings(casters: Container, sunMoved: boolean, alpha: number) {
-    const buildings = casters.children.filter((c): c is PixiSprite => c instanceof PixiSprite && c.label === 'occluder' && !!lookOf(c.texture))
+  let region = ''
+  function shadeBuildings(casters: Container, sunMoved: boolean, alpha: number, view?: View) {
+    let near = (_: PixiSprite) => true
+    let key = ''
+    if (view) {
+      const left = (Math.floor(view.x / REGION) - 1) * REGION
+      const top = (Math.floor(view.y / REGION) - 1) * REGION
+      const right = (Math.ceil((view.x + view.width) / REGION) + 1) * REGION
+      const bottom = (Math.ceil((view.y + view.height) / REGION) + 1) * REGION
+      key = `${left}:${top}:${right}:${bottom}`
+      near = (b) => b.x >= left && b.x <= right && b.y >= top && b.y <= bottom
+    }
+    const panned = key !== region
+    region = key
+    const buildings = casters.children.filter((c): c is PixiSprite => c instanceof PixiSprite && c.label === 'occluder' && !!lookOf(c.texture) && near(c))
     // Whether the buildings (or where they stand) changed since they were last shaded; compared in place, without
     // building a string of every building each frame.
     let moved = buildings.length * 2 !== built.length
     for (let i = 0; !moved && i < buildings.length; i++) moved = built[i * 2] !== buildings[i].x || built[i * 2 + 1] !== buildings[i].y
     if (sunMoved || moved) {
       built = buildings.flatMap((b) => [b.x, b.y])
-      queue = buildings.slice()
-      job = null
+      // Only the screen moved on: the buildings already shaded stay as they are, the newcomers are shaded.
+      queue = panned && !sunMoved ? buildings.filter((b) => !shaded.has(b)) : buildings.slice()
+      if (sunMoved || !panned || (job && !near(job.target))) job = null
       const standing = new Set(buildings)
       for (const [building, entry] of shaded) {
         if (standing.has(building)) continue
@@ -129,7 +156,7 @@ export function createShadows(): Shadows {
       return
     }
     const overlay = old?.overlay ?? new PixiSprite()
-    overlay.texture = textureOf(cast, 'own')
+    overlay.texture = textureOf(cast, 'cast')
     overlay.anchor.set(cast.anchorX / cast.width, cast.anchorY / cast.height)
     overlay.position.copyFrom(target.position)
     overlay.zIndex = target.zIndex + 0.01
@@ -157,7 +184,7 @@ export function createShadows(): Shadows {
       for (const entry of shaded.values()) if (entry.overlay) entry.overlay.visible = on
       for (const entry of onBase.values()) entry.overlay.visible = on && !!entry.cast
     },
-    update(hour, casters) {
+    update(hour, casters, view) {
       if (!enabled) return
       filter.alpha = sunShadow(hour).alpha
       frame++
@@ -278,7 +305,7 @@ export function createShadows(): Shadows {
           if (entry?.cast) freeTexture(entry.cast)
           const overlay = entry?.overlay ?? new PixiSprite()
           if (cast) {
-            overlay.texture = textureOf(cast, 'own')
+            overlay.texture = textureOf(cast, 'cast')
             overlay.anchor.set(cast.anchorX / cast.width, cast.anchorY / cast.height)
           }
           overlay.visible = !!cast
@@ -307,7 +334,7 @@ export function createShadows(): Shadows {
         entry.shade.destroy()
         shades.delete(child)
       }
-      shadeBuildings(casters, now !== step || old !== null, filter.alpha)
+      shadeBuildings(casters, now !== step || old !== null, filter.alpha, view)
       if (old) for (const byLook of old.values()) for (const shadow of byLook.values()) freeTexture(shadow)
     },
   }

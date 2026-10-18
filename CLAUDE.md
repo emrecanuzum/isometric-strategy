@@ -4355,8 +4355,15 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
   (`flushTextures`). Her güneş adımında yeniden dökülen gölgeler ayrı bir
   havuzdadır (`'shade'`; sayfadaki bütün dokular serbest kalınca sayfa yeniden
   doldurulur), maskeli pencere ışıkları da (`'masked'`). Kare kare birer birer
-  üretilen bina gölge kaplamaları atlasa girmez (`'own'`): her biri bütün
-  sayfayı yeniden yüklerdi.
+  üretilen bina gölge kaplamaları (bir binaya düşen gölge) kendi küçük
+  havuzundadır (`'cast'`, 512² sayfalar; her yeni kaplama küçük bir sayfa
+  yükler). Önce her biri ayrı bir tuval ve GPU dokusuydu (`'own'`) ve
+  haritadaki **bütün** binalar gölgeleniyordu: dolu bir lobide 2.400 bina,
+  1.500'ü aşkın ayrı tuval; telefonlar (iOS) bir süre sonra tuval belleğini
+  aşıp sekmeyi çökertiyordu. Şimdi yalnızca ekranın çevresindeki binalar
+  gölgelenir (`shadows.ts` → `REGION`: 1024 dünya pikseline yuvarlanmış
+  görüş alanı ve bir hücre pay; kaydırınca yalnızca yeni gelenler
+  gölgelenir, alandan çıkanların kaplaması serbest kalır).
 - **Filtreler:** gölge katmanının saydamlık filtresi ve gece ışıltısının
   bulanıklığı ekranın gördüğü alanla sınırlıdır (`filterArea`, her kare kamera
   koordinatında): her karede bütün ışıkların ve gölgelerin sınırları
