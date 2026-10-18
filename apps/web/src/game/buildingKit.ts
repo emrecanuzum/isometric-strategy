@@ -156,7 +156,9 @@ export class Model {
   }
   // A flat top at height z over a rectangle; paint(u, v).
   flat(u0: number, v0: number, u1: number, v1: number, z: number, paint: Paint, bias = 0) {
+    this.canvas.facing = 255
     for (let u = u0; u <= u1 + 1e-6; u += 0.5) for (let v = v0; v <= v1 + 1e-6; v += 0.5) this.put(u, v, z, paint(u, v, this.sx(u, v), this.sy(u, v, z)), bias)
+    this.canvas.facing = 0
   }
   // A box: its lit front (+v), its shaded side (+u) and its top, each with its own paint.
   box(u0: number, v0: number, u1: number, v1: number, z0: number, z1: number, p: { front: Paint; side: Paint; top?: Paint }, solid = true) {
@@ -176,9 +178,12 @@ export class Model {
         const zv = height(u, v + 0.5) ?? z
         const low = Math.min(z, zu, zv)
         const c = paint(u, v, z, this.sx(u, v), this.sy(u, v, z))
+        // How much it faces up, from its slope (a roof's pitch): snow settles on the gentler slopes.
+        this.canvas.facing = Math.max(1, Math.round(255 / Math.hypot(1, (zu - z) * 2, (zv - z) * 2)))
         for (let zz = z; zz >= low - 0.01; zz -= 0.5) this.put(u, v, zz, c, bias)
       }
     }
+    this.canvas.facing = 0
   }
   // A cylinder standing on (cu, cv); paint(angle, z, lit, x, y). Only its near half is drawn.
   cylinder(cu: number, cv: number, r: number, z0: number, z1: number, paint: (a: number, z: number, l: number, x: number, y: number) => number, solid = true) {
@@ -199,7 +204,9 @@ export class Model {
   }
   // A disc at height z (the top of a tower, a barrel's lid).
   disc(cu: number, cv: number, r: number, z: number, paint: (u: number, v: number, x: number, y: number) => number) {
+    this.canvas.facing = 255
     for (let u = -r; u <= r; u += 0.5) for (let v = -r; v <= r; v += 0.5) if (u * u + v * v <= r * r) this.put(cu + u, cv + v, z, paint(u, v, this.sx(cu + u, cv + v), this.sy(cu + u, cv + v, z)))
+    this.canvas.facing = 0
   }
   // A cone (a tower's roof): from radius r at z0 to its tip `tall` above.
   cone(cu: number, cv: number, r: number, z0: number, tall: number, paint: (a: number, f: number, l: number, x: number, y: number) => number, solid = true, bulge = 0) {
@@ -218,9 +225,11 @@ export class Model {
         const u = cu + c * rr
         const v = cv + s * rr
         const z = z0 + f * tall
+        this.canvas.facing = Math.max(1, Math.round((255 * r) / Math.hypot(r, tall)))
         this.put(u, v, z, paint(a, f, l, this.sx(u, v), this.sy(u, v, z)))
       }
     }
+    this.canvas.facing = 0
     if (solid) this.solidRound(cu, cv, r, z0, z0 + tall, true)
   }
   // A ball (a dome's half, a haystack, a heap of sacks); `squash` flattens it.
@@ -234,10 +243,12 @@ export class Model {
           const nz = (sign * h) / r
           const z = cz + sign * h * squash
           const l = lum(a / r, b / r, nz)
+          this.canvas.facing = nz > 0 ? Math.max(1, Math.round(nz * 255)) : 0
           this.put(cu + a, cv + b, z, paint(l, this.sx(cu + a, cv + b), this.sy(cu + a, cv + b, z), nz))
         }
       }
     }
+    this.canvas.facing = 0
   }
   // A line between two model points.
   line(a: [number, number, number], b: [number, number, number], color: number | ((f: number) => number), bias = 0) {

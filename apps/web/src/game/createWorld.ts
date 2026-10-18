@@ -15,6 +15,7 @@ import {
   screenToTile,
   tileRule,
   caveSpots,
+  snowCover,
 } from '@game/shared'
 import type { Point, Rect, RiverKeep, World } from '@game/shared'
 import { Application, BlurFilter, Container, Graphics, ImageSource, Sprite, Text, Texture } from 'pixi.js'
@@ -33,7 +34,7 @@ import { openGate } from './wallSprites'
 import { caveLook } from './caveSprites'
 import { handCursor } from '../lib/cursors'
 import type { IconName } from '../ui/icons'
-import { Canvas, SPRITES, lightsOf, outlineOf, rgb, silhouetteOf } from './sprites'
+import { Canvas, SPRITES, lightsOf, outlineOf, rgb, silhouetteOf, snowOf } from './sprites'
 import { daylight, nightness, sunShadow } from './daylight'
 import { createShadows } from './shadows'
 import { createWeather } from './weather'
@@ -89,11 +90,15 @@ const CARAVAN_MIN_ZOOM = 0.5
 // How often the camera's place is told to the interface while the map moves, in milliseconds.
 const CAMERA_REPORT_MS = 120
 
-// The canvas's pixels per screen point: the screen's own up to 2 (a phone's 3 would fill more than twice the pixels for
-// a picture that looks the same), and on a dense phone screen 1.5 while saving power (CLAUDE.md §12).
-export function canvasResolution(saver: boolean): number {
+// The canvas's pixels per screen point (CLAUDE.md §12). The map is pixel art drawn at whole zooms (1×, 2×, 3×) and
+// shown with nearest-neighbour scaling, so at those zooms a canvas of one pixel per point looks the same as a dense
+// one while filling a quarter of the pixels on a 2× screen (a laptop's or phone's battery goes on filling pixels).
+// Zoomed out, where a building is drawn smaller than its art, the screen's own density (up to 2) keeps its detail;
+// power saving draws one pixel per point at every zoom.
+export function canvasResolution(saver: boolean, zoom = 1): number {
   const dpr = window.devicePixelRatio || 1
-  return dpr > 2 ? (saver ? 1.5 : 2) : dpr
+  if (saver || zoom >= 1) return 1
+  return Math.min(2, dpr)
 }
 // Tiles around a building whose chunks show part of it (see SPRITE_MARGIN in chunkPainter).
 const STRUCTURE_REACH = 10
@@ -346,7 +351,7 @@ export async function createWorld(
     background: 0x10141a,
     antialias: false,
     roundPixels: true,
-    resolution: canvasResolution(false),
+    resolution: canvasResolution(false, ZOOMS[DEFAULT_ZOOM_INDEX]),
     autoDensity: true,
     // Frames are stepped by the pacer (see pacing.ts), not by Pixi's own loop.
     autoStart: false,
@@ -542,6 +547,12 @@ export async function createWorld(
   }
   let lightColor = -1
   let paintedSunHour = Math.floor(gameTime(clock(), 0).hour)
+  // The snow the buildings in view and the chunks were last drawn with (see snowCover); ?snow=1..3 forces it while
+  // developing.
+  const forcedSnow = import.meta.env.DEV ? new URLSearchParams(location.search).get('snow') : null
+  const coverAt = (t: number) => (forcedSnow ? Math.min(3, Math.max(0, Number(forcedSnow) || 0)) : snowCover(t))
+  let paintedSnow = coverAt(clock())
+  let chunkSnow = paintedSnow
   // Trees sway in the wind close up: each leans a little to and fro about its foot, out of step with its neighbours.
   let detail = true
   app.ticker.add(() => {
@@ -677,9 +688,16 @@ export async function createWorld(
     halo.visible = glow.visible && !saver
     shadows.update(hour, caravans.layer)
     // Shadows painted into the ground follow the sun an hour at a time: each new hour paints the chunks again.
+    // So does the snow lying on the ground, roofs and trees (weather.ts → snowCover): a few times an hour in winter.
     const sunHour = Math.floor(hour)
-    if (sunHour !== paintedSunHour) {
+    const snow = coverAt(clock())
+    if (snow !== paintedSnow) {
+      paintedSnow = snow
+      snowStructures()
+    }
+    if (sunHour !== paintedSunHour || snow !== chunkSnow) {
       paintedSunHour = sunHour
+      chunkSnow = snow
       version++
       for (const key of chunks.keys()) staleSince.set(key, version)
       refresh()
@@ -848,7 +866,7 @@ export async function createWorld(
       const liftedNear = nearOf(key, lod)
       jobs.set(id, { key, lod, version, lift, near: String(liftedNear) })
       const sun = sunShadow(paintedSunHour + 0.5)
-      const request: PaintRequest = { id, cx: key % chunkCount, cy: Math.floor(key / chunkCount), lod, lift, sun, liftedNear }
+      const request: PaintRequest = { id, cx: key % chunkCount, cy: Math.floor(key / chunkCount), lod, lift, sun, liftedNear, snow: chunkSnow }
       idle.pop()!.postMessage(request)
     }
   }
@@ -868,7 +886,7 @@ export async function createWorld(
     textureBytes += bytes
     const treeRect = treeView()
     const trees = (lifted ?? []).map((t) => {
-      const look = SPRITES[t.set][t.index]
+      const look = snowOf(SPRITES[t.set][t.index], chunkSnow)
       const tree = new Sprite(textureOf(look))
       tree.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
       const at = groundToScreen(world, { x: t.tx, y: t.ty })
@@ -1155,6 +1173,13 @@ export async function createWorld(
   }
 
   // Steps to a zoom level, keeping the ground under the given screen point fixed.
+  // The canvas's density follows the zoom and power saving (see canvasResolution).
+  const fitResolution = () => {
+    const resolution = canvasResolution(saver, camera.scale.x)
+    if (app.renderer.resolution === resolution) return
+    app.renderer.resolution = resolution
+    app.resize()
+  }
   const zoomTo = (index: number, at: Point) => {
     index = Math.min(ZOOMS.length - 1, Math.max(0, index))
     if (index === zoomIndex) return
@@ -1164,6 +1189,7 @@ export async function createWorld(
     camera.x = Math.round(at.x - (at.x - camera.x) * factor)
     camera.y = Math.round(at.y - (at.y - camera.y) * factor)
     camera.scale.set(ZOOMS[index])
+    fitResolution()
     clearCursor()
     highlight.visible = false
     onHover(null)
@@ -1506,6 +1532,10 @@ export async function createWorld(
     gate?: { closed: Sprite_; open: Sprite_ }
   }
   let occluders: Occluder[] = []
+  // The buildings in view take the snow lying now (their snowy looks are made once each; see sprites.ts → snowOf).
+  function snowStructures() {
+    for (const o of occluders) o.sprite.texture = textureOf(snowOf(o.look, paintedSnow))
+  }
   // Window lights cut to what the buildings in front leave visible, made anew with the buildings.
   let masked: Sprite_[] = []
   const solid = new Set<number>()
@@ -1586,7 +1616,7 @@ export async function createWorld(
       const main = solidParts[solidParts.length - 1]
       return solidParts.map((part) => {
         const look = part.sprite
-        const sprite = new Sprite(textureOf(look))
+        const sprite = new Sprite(textureOf(snowOf(look, paintedSnow)))
         sprite.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
         sprite.label = 'occluder'
         shadows.setFootprint(sprite, s.size, part.z - heightAt(world, part.fx, part.fy), s, part !== main && !part.stands)
@@ -1815,7 +1845,7 @@ export async function createWorld(
       const look = open ? o.gate.open : o.gate.closed
       if (o.look !== look) {
         o.look = look
-        o.sprite.texture = textureOf(look)
+        o.sprite.texture = textureOf(snowOf(look, paintedSnow))
       }
     }
     for (const child of caravans.layer.children) {
@@ -2122,11 +2152,7 @@ export async function createWorld(
       pacer.setSaver(on)
       ambient.setLite(on)
       weather.setSaver(on)
-      const resolution = canvasResolution(on)
-      if (app.renderer.resolution !== resolution) {
-        app.renderer.resolution = resolution
-        app.resize()
-      }
+      fitResolution()
       wake()
     },
     fps: () => pacer.fps(),

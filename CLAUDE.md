@@ -251,8 +251,9 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   hesap güneşin her adımında birkaç binada bir, karelere yayılarak yapılır. Binalar, surlar, kuleler, sallanan ağaçlar,
   yürüyenler, hayvanlar ve ordular gölgelerini ayrı bir katmana çizer
   (`shadows.ts`). Katman tek seferde saydamlaştırıldığı için üst üste
-  binen gölgeler iki kat koyulaşmaz; gölgelerin yönü oyunun 10 dakikada
-  bir değişir. Zemine boyanmış ağaçların, kayaların ve hanların gölgesi
+  binen gölgeler iki kat koyulaşmaz; gölgelerin yönü oyunun yarım saatinde
+  bir değişir (önce 10 dakikaydı; her adım bütün gölgeleri yeniden döktüğü
+  için pil yiyordu). Zemine boyanmış ağaçların, kayaların ve hanların gölgesi
   zeminle birlikte boyanır; bunlar oyun saati başına bir kez yeniden
   boyanır.
 - **Surlar komşularına bağlanır** (`apps/web/src/game/wallSprites.ts`):
@@ -383,8 +384,16 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
     sel, dolu fırtınası ve soğuk dalgası (§9.8) sürerken yağmur yağar
     (fırtına en sert, şimşekli; dolu ve soğuk dalgası soluk, yavaş düşen
     sulu kar). Bunların dışında da lobi tohumundan ara sıra geçici
-    sağanaklar olur (20 dakikalık pencerelerin ~%30'unda 2,5–7 dk);
-    kuraklık, dolunay, kutup ışıkları, tutulma, gökkuşağı ve kuyruklu
+    sağanaklar olur: 10 dakikalık her pencerede, pencerenin ortasındaki
+    mevsime göre bir olasılıkla 2,5–7 dk (`showers.seasons`: ilkbahar %30,
+    yaz %3, sonbahar %60, kış %45). Sağanakların bir kısmı **şimşekli
+    fırtınadır** (ilkbahar %25, yaz %60, sonbahar %40; daha sert yağmur,
+    daha koyu gök, şimşek ve gök gürültüsü). Ölçülen (lobi olaylarıyla
+    birlikte, zamanın yüzdesi): yaz %12,5 (çoğu lobi olaylarından),
+    ilkbahar %20, kış %30 (kar), sonbahar %32; şimşekli fırtına sonbaharda
+    %9, ilkbaharda %5, yazın %4. **Kışın** (`snowSeasons`) yağan her şey
+    **kardır**: beyaz, yavaş, salınarak düşen taneler (1–3 piksel), sıçrama
+    ve ses yok, şimşek yok, grilik açık soğuk bir pus. Kuraklık, dolunay, kutup ışıkları, tutulma, gökkuşağı ve kuyruklu
     yıldız sürerken sağanak olmaz. Hava lobi anahtarından (`lobbyKeyOf`)
     ve saatten hesaplanır, saklanmaz; herkes aynı gökyüzünü görür.
     Bulutlar yağmurdan 45 sn önce toplanır, yağmur 30 sn'de başlayıp
@@ -402,7 +411,25 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
     (sentezlenmiş gürültü, efekt sesine bağlı; sekme gizliyken susar).
     Güç tasarrufunda yalnız grilik ve seyrek çizgiler kalır (bulut
     gölgesi, sıçrama ve ses yok). Geliştirmede `?rain=1` / `storm` /
-    `sleet` / `shower` havayı zorlar (yalnız `bun run dev`).
+    `sleet` / `shower` / `snow` havayı, `?snow=1..3` kar örtüsünü zorlar
+    (yalnız `bun run dev`).
+  - **Kar örtüsü** (`weather.ts` → `snowCover`, `weather.json` →
+    `snowCover`): takvimden hesaplanır, saklanmaz. Kışın ilk %12'sinde
+    hafif (1), %30'una dek yamalı (2), sonra beyaz örtü (3); ilkbaharın ilk
+    %12'sinde 2, %28'ine dek 1, sonra erir. Gerçekte saatin ~19 dakikası
+    karlıdır. Örtü **kare başına hiçbir maliyet getirmez**: zemin zaten her
+    oyun saatinde güneş gölgesi için yeniden boyanır, örtü değişince de
+    aynı yol kullanılır. Zeminde açık arazi beyazlar (yamalı seviyelerde
+    gürültüyle), yol ve patikalar yarı yarıya (karsız kalan yeri çamurlu
+    kardır), kum az, su hiç; ışığa göre mavi-gri gölgeli kar tonları. 2 ve
+    üstünde çimen tutamları, kır çiçekleri ve çakıllar gömülür. Binalar,
+    ağaçlar, kayalar ve hanlar karlı hâllerini bir kez üretip saklar
+    (`sprites.ts` → `snowOf`): modelle çizilen binaların her pikseli ne
+    kadar yukarı baktığını bilir (`Sprite.up`; `buildingKit` düz üst,
+    çatı eğimi, külah ve kubbeden yazar), kar önce düz üstlere ve yatık
+    çatılara, derinleştikçe dik çatılara oturur, duvarlara hiç; öbür
+    sprite'lar şekillerinin üst kenarından kar tutar. Kar pikselin
+    ışığını korur (gölgedeki çatı mavi-gri, ışıktaki beyaz).
 - **Su** derinliğe göre bantlı renk değiştirir, kıyıda köpük ve kumsal
   (kumsal kıyı boyunca genişleyip daralır, bazı kesimlerde hiç yoktur ve
   çim suya iner),
@@ -1688,7 +1715,9 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     Reddet / Öde düğmeleri durur. Sunucuya cevaplar eskisi gibi konuşma
     bitince tek komutla gider.
   - Biat etmemiş lordlara ne devriye ne haraççı gelir.
-  - **Tıklayınca:** devriyeye ya da haraççılara tıklamak küçük bir pencere açar
+  - **Tıklayınca:** devriyeye ya da haraççılara (kolun herhangi bir
+    bölüğüne; imlecin kılıç simgesi de her bölükte çıkar, `armies.ts` →
+    `pick`) tıklamak küçük bir pencere açar
     (`ui/hud/crownColumn.tsx`): kimin adamları (tacın adı, tahttaki hükümdar ve
     huyu, seninle ilişkisi, senin tacın mı rakip mi), ne iş yaptıkları ve şu an
     nereye gittikleri (sana geliyorlarsa bırakacakları bahşiş ya da şimdiki
@@ -2622,11 +2651,13 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   ortadan farkının yarısı hükümdarınkine eklenir.
 - **Kraliçe ve doğumlar:** Kraliçe alınınca (Halk sekmesi) hanedana katılır
   ("Kraliçe saraya geldi"). Kraliçe saraydayken (kaçırılmamışken) ilk çocuk
-  0,4–1 yıl içinde, sonrakiler 1,2–2,5 yılda bir doğar; bir hükümdar ile
-  kraliçesinin **en çok 2 oğlu ve 1 kızı** olur (`births.maxSons`,
-  `maxDaughters`; `Dynasty.sons`, `daughters`, yeni çiftte sıfırdan sayılır),
-  kraliçe 44 yaşına kadar. %55 oğlan; oğul kotası dolmuşsa kız, kız kotası
-  dolmuşsa oğlan doğar (`birthsLeft`). Doğan çocuğun babası ve annesi
+  0,4–1 yıl içinde, sonrakiler 1,2–2,5 yılda bir doğar, kraliçe 44 yaşına
+  kadar. Bir çiftin **en çok iki çocuğu** olur; kraliçe gelince ailenin
+  planı tohumdan çekilir (`births.plans`, `Dynasty.plan`): **iki oğul**
+  (%45), **tek oğul** (%25) ya da **bir oğul ve bir kız** (%30); iki kız
+  olmaz. Her doğumda %55 oğlan çekilir, plan o cinsten çocuk bırakmamışsa öbürü
+  doğar (`birthsLeft`); ilk çocuk kız da olabilir. Eski
+  kayıtlarda plan ilk ilerletmede çekilir (`Dynasty.rev` 3). Doğan çocuğun babası ve annesi
   (`father`, `mother`) saklanır. Çocuğun yetenekleri %60 anne-baba
   ortalaması, %40 yeni çekiliştir. **Sarayı 3. seviyeye yükseltmek için
   kraliçe şarttır** (`'queen'` hatası).
@@ -2671,6 +2702,27 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   hanedandan bir **akraba** (26–38 yaşında, yeni yetenekler) tahta çağrılır
   (`Dynasty.kinsmanAt`); hanedan bitmez, yeni hükümdar kendi kraliçesini alır. Eski kraliçe
   kraliçe ana olur: yeni hükümdar kendi kraliçesini almalıdır.
+- **Kardeşler genç ölür:** Tahta geçmeyen kardeşler (hükümdarın kardeşleri)
+  genç yaşta bir hastalıktan ölür: 18–30 yaşında, kardeş olduklarında bu
+  yaşı geçmişlerse 0,5–3 yıl içinde (`siblingFate`; `cause: 'sickness'`).
+  Kardeşlerden biri tahta çıkarsa doğumda çekilen ömrüne döner (`fullLife`).
+  Böylece hükümdar ölünce saray birkaç yıl içinde kalabalıktan kurtulur.
+- **Salgın hanedanı ve halkı öldürür** (`dynasty.json` → `sickness`;
+  `sicknessStrikes`, `economy.ts` üretim turu): her üretim turunda hasta payı
+  kadar bir olasılıkla (pay × 0,001) hanedandan biri (hükümdar, çocuklar,
+  kardeşler, akrabalar, kraliçe ana; kraliçe değil) hastalıktan ölür; bir
+  turda en fazla biri. **Ardılı olmayan hükümdar** (heirOf boş) hastalıktan
+  ölmez (zaten ordunun başına da geçemez). Hastaların küçük bir payı da ölür:
+  tur başına köylü × hasta payı × 0,0006 (100 köylü, %10 hasta: saatte ~2).
+- **Kraliçe tek başına** (`Dynasty.regnant`): hükümdar ölür, ne oğlu ne reşit
+  kardeşi kalmaz ama kraliçe saraydaysa (kaçırılmamışsa) lordluğu **kraliçe
+  yönetir**, kendi yetenekleriyle (naip yok, `rulerSkills`). Onu
+  **evlendirmek şarttır**: elçi bunu bir pencereyle haber verir ("Kraliçe tek
+  başına"; "Kraliçeyi evlendir" / "Sonra"), Saray → Hanedan'da da aynı düğme
+  durur (`house` komutu, `wedQueen`). Lord evlendirmezse konsey 3 yıl sonra
+  (`kinsmanAt`) kendisi bir eş bulur. Eş hanedandan 26–38 yaşında bir beydir,
+  tahta çıkar; kraliçe onun kraliçesi olur, yeni bir aile planı çekilir.
+  Kraliçe evlenmeden ölürse naipler yönetir, 3 yıl sonra bir akraba çağrılır.
 - **Haberler:** doğum, reşit olma (çocuklar ve kardeşler), ölüm, hanedandan
   birinin ölümü, tahta çıkış, naipler konseyi ve kraliçenin gelişi, oyundaki
   olay pencereleri gibi çizimli birer pencereyle duyurulur. Haberler hanedanın
@@ -3429,7 +3481,13 @@ krallıkta birer tane olur ve 3 seviyelidir.
   düğmeleri ve (arkada başka pencere varsa) **"Tümünü kapat"**, ortada
   sıradaki yeri ("2 / 5"; sıra boşalınca sayaç sıfırlanır), sağ uçta hep
   aynı yerde ileri düğmesi (arkada pencere varsa **"İleri"**, sonuncuda
-  "Tamam"). "Tümünü kapat" yalnızca bir şey bildiren pencereleri kapatır
+  "Tamam"). Bu pencerelerin hepsi (olaylar, krizler ve seçimler, elçi ve
+  hanedan haberleri, "Sen yokken", sefer raporu, özetler) **aynı boydadır**
+  (600 piksel genişlik, ekrana sığdığınca 700 piksel yükseklik; düğmeler hep
+  en altta), sıradaki tam öncekinin yerine gelir. Arkada bekleyen pencere
+  varsa, masaüstündeki üst üste pencereler gibi en çok üçü sol üste doğru
+  çapraz kayarak öndekinin arkasından görünür (`index.css` →
+  `.dialog-stack`, `data-behind`). "Tümünü kapat" yalnızca bir şey bildiren pencereleri kapatır
   (süresi işleyen haraç isteği, cevap bekleyen elçi teklifi, kriz ve seçim kalır) ve kapattıklarını
   kısa bir pencerede başlık başlık (tekrarlananlar "×N") özetler. Özetteki her satıra dokununca o haber (birden çok geldiyse hepsi)
   tam metniyle açılır; "Geri dön" listeye döndürür. Raf ömrü özeti de
@@ -3574,6 +3632,10 @@ krallıkta birer tane olur ve 3 seviyelidir.
   hasta halk, dolu ambarlar varken büyük işler (Saray → Projeler), tacın
   görevi, alınabilecek kasaba, oynanabilir mini oyun, rakip
   taca geçme teklifi, taç savaşı, haraççıları çok isteyen rakip hükümdar…).
+  Panel sade tutulur: söze verilen cevaplar düğmedir; **"Bana oyunu
+  anlat"** kapatma düğmesinin yanında bir kitap simgesidir; yan sorular
+  ("Malımızı nasıl değerlendirelim?", sohbet sorusu) cevapların altında
+  küçük, soluk bağlantılardır (`Reply.quiet`).
   Cevaplar: işe girişmek (ilgili sekmeyi ya da alt bölümü açar, yapıyı
   yerleştirmeye başlar ya da binanın menüsünü açıp kamerayı oraya götürür),
   "Sonra" (konuyu bir süre ertelemek) ya da bir şaka (şakayla karşılık
@@ -4083,14 +4145,26 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
   - Oyuncu haritayı sürüklerken, yakınlaştırırken, tekerlekte, fareyi
     haritada gezdirirken, kamera bir şeyi takip ederken ve bunlardan sonraki
     1,5 saniye **60 kare/sn** (120 Hz ekranda da 60).
-  - Duruyorken yakında (½× ve üstü, yürüyenler görünür) **30**, uzakta
-    **20**; 90 saniye hiç dokunulmazsa **15**. Bir pencere (`.modal`) haritayı
-    örtüyorsa **10**. Sekme gizliyse hiç çizilmez.
+  - Duruyorken yakında (½× ve üstü, yürüyenler görünür) **24**, uzakta
+    **15**; 45 saniye hiç dokunulmazsa **10**. Bir pencere (`.modal`) haritayı
+    örtüyorsa **8**. Sekme gizliyse hiç çizilmez.
   - Pixi'nin durgun imleç için tekrarladığı sahte fare hareketleri haritayı
     "etkin" saymaz.
-  - Tuval çözünürlüğü ekranın piksel oranıdır, en fazla 2 (telefonun 3'ü iki
-    katından fazla piksel boyardı); gece ışıltısının bulanıklığı ekran noktası
-    başına bir pikselde çizilir. WebGL düşük güç tercihiyle açılır.
+  - Tuval çözünürlüğü (`canvasResolution`): harita piksel sanatıdır ve tam
+    sayı yakınlıklarda (1×, 2×, 3×) en yakın komşuyla büyütülür; bu
+    yakınlıklarda tuval **ekran noktası başına 1 piksel** çizilir, görüntü
+    aynıdır ama Retina'da 4 kat az piksel boyanır (dizüstü ve telefonun pili
+    piksel boyamaya gider). Uzaklaştırınca (½× ve altı) binalar sanatlarından
+    küçük çizildiği için ekranın kendi yoğunluğu (en fazla 2) kullanılır;
+    güç tasarrufunda her yakınlıkta 1. Yakınlık değişince tuval yeniden
+    boyutlanır. Gece ışıltısının bulanıklığı ekran noktası başına bir
+    pikselde çizilir. WebGL düşük güç tercihiyle açılır.
+  - Arayüzün ikonları (`icons.tsx` → `Icon`) piksel başına bir `<rect>`
+    yerine renk başına tek `<path>` ile çizilir ve `memo`'dur: arayüz her
+    saniye yeniden çizilirken yüzlerce ikon artık yeniden kurulmaz.
+  - Ölçüm (bu düzeltmelerle; geliştirme sürümü, 1440×900, DPR 1, boşta ana
+    iş parçacığı): %31 → ~%21; kalanın çoğu Pixi'nin kendi çizimi. Retina'da
+    ekran kartı tarafındaki kazanç (4 kat az piksel) buna dahil değildir.
   - Arayüzün saati (`now`) saniyede bir, saniyenin başında ilerler (önce 250
     ms'de bir bütün arayüzü yeniden çiziyordu); sekme gizliyken durur, dönünce
     hemen yetişir. Haritanın üstündeki imleç bilgisi yalnızca altındaki karo ya
@@ -4101,10 +4175,10 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
   `power`, varsayılan Otomatik; `apps/web/src/lib/power.ts`): Otomatik, dokunmatik
   ve faresiz cihazlarda (telefon, tablet), hareketi azalt tercihinde ve
   dizüstü pilde çalışırken (tarayıcı söylüyorsa) açılır. Açıkken kare hızları
-  düşer (etkin 30, yakında 20, uzakta 12, uzun süre dokunulmazsa 10, pencere
-  altında 6), detay animasyonları (sallanan ağaçlar, hareketli binalar),
-  kuşlar, bulutlar ve gece ışıltısı kapanır; piksel oranı 2'den büyük
-  ekranlarda tuval 1,5 ile çizilir.
+  düşer (etkin 30, yakında 15, uzakta 10, uzun süre dokunulmazsa 8, pencere
+  altında 5), detay animasyonları (sallanan ağaçlar, hareketli binalar),
+  kuşlar, bulutlar ve gece ışıltısı kapanır; tuval her yakınlıkta ekran
+  noktası başına 1 piksel çizilir.
 - **Çizim yükü (şu an uygulanan; ölçüm: 1440×900, 1× yakınlık, ormanlık bir
   yer, ana iş parçacığının dolu payı):** duruyorken %31 → %16, sürüklerken
   %76 → %35, fırtınada duruyorken %12 (yağmur kendisi ölçülemeyecek kadar

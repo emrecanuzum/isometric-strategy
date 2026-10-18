@@ -65,6 +65,21 @@ function streakTexture(length: number, lean: number, sleet: boolean) {
   return t
 }
 
+// A snowflake: a single bright pixel, or a small cross with a soft rim for the nearer ones.
+const flakes = [
+  canvasTexture(1, 1, (put) => put(0, 0, 0xffffff, 0.95)),
+  canvasTexture(2, 2, (put) => {
+    put(0, 0, 0xffffff, 0.95)
+    put(1, 0, 0xf0f6ff, 0.6)
+    put(0, 1, 0xf0f6ff, 0.6)
+    put(1, 1, 0xdde8f4, 0.4)
+  }),
+  canvasTexture(3, 3, (put) => {
+    put(1, 1, 0xffffff, 1)
+    for (const [x, y] of [[1, 0], [0, 1], [2, 1], [1, 2]]) put(x, y, 0xf4f8ff, 0.7)
+  }),
+]
+
 // The frames of a splash on land: a drop, a little crown, droplets flying out and falling back.
 const CROWN = [
   ['.......', '.......', '.......', '...O...', '.......'],
@@ -157,15 +172,16 @@ function cloudShadeTexture(seed: number) {
 
 const luma = (c: number) => ((c >> 16) & 0xff) * 0.3 + ((c >> 8) & 0xff) * 0.59 + (c & 0xff) * 0.11
 
-// The weather forced in development: ?rain=1 (rain), ?rain=storm, ?rain=sleet, ?rain=shower.
+// The weather forced in development: ?rain=1 (rain), ?rain=storm, ?rain=sleet, ?rain=shower, ?rain=snow.
 function forcedWeather(): Weather | null {
   if (!import.meta.env.DEV) return null
   const v = new URLSearchParams(location.search).get('rain')
   if (!v) return null
-  if (v === 'storm') return { rain: 1, grey: 0.9, wind: 0.55, sleet: false, lightning: true }
-  if (v === 'sleet') return { rain: 0.5, grey: 0.6, wind: 0.2, sleet: true, lightning: false }
-  if (v === 'shower') return { rain: 0.35, grey: 0.5, wind: 0.2, sleet: false, lightning: false }
-  return { rain: 0.6, grey: 0.65, wind: 0.25, sleet: false, lightning: false }
+  if (v === 'storm') return { rain: 1, grey: 0.9, wind: 0.55, sleet: false, lightning: true, snow: false }
+  if (v === 'sleet') return { rain: 0.5, grey: 0.6, wind: 0.2, sleet: true, lightning: false, snow: false }
+  if (v === 'shower') return { rain: 0.35, grey: 0.5, wind: 0.2, sleet: false, lightning: false, snow: false }
+  if (v === 'snow') return { rain: 0.6, grey: 0.65, wind: 0.15, sleet: false, lightning: false, snow: true }
+  return { rain: 0.6, grey: 0.65, wind: 0.25, sleet: false, lightning: false, snow: false }
 }
 
 interface Drop {
@@ -175,6 +191,9 @@ interface Drop {
   vy: number
   end: number
   length: number
+  // A snowflake's sway: its phase and how wide it swings.
+  phase: number
+  sway: number
 }
 
 interface Splash {
@@ -210,6 +229,7 @@ export function createWeather(world: World): WeatherLayer {
   let thunderSlot = -1
   let soundAt = 0
   let splashBudget = 0
+  let wasSnow = false
   const crowns = crownFrames(false)
   const sleetCrowns = crownFrames(true)
   const rings = ringFrames()
@@ -227,6 +247,21 @@ export function createWeather(world: World): WeatherLayer {
 
   const resetDrop = (d: Drop, width: number, height: number, unit: number, fill: boolean) => {
     const w = weather
+    if (w.snow) {
+      // Flakes drift down slowly, swaying, and melt into the ground somewhere on screen.
+      d.vy = 28 + rnd() * 46
+      d.end = rnd() * (height + 30)
+      const fall = 60 + rnd() * 300
+      d.y = fill ? d.end - rnd() * fall : d.end - fall
+      d.x = rnd() * (width + 80) - 40 - w.wind * (d.end - d.y)
+      d.length = 0
+      d.phase = rnd() * Math.PI * 2
+      d.sway = 4 + rnd() * 10
+      d.sprite.texture = flakes[d.vy > 62 ? 2 : d.vy > 44 ? 1 : 0]
+      d.sprite.scale.set(unit)
+      d.sprite.alpha = 0.6 + rnd() * 0.4
+      return
+    }
     d.vy = w.sleet ? 200 + rnd() * 120 : 760 + rnd() * 340
     // The drop ends where it meets the ground somewhere on screen, after falling a short way into sight.
     d.end = rnd() * (height + 30)
@@ -282,7 +317,7 @@ export function createWeather(world: World): WeatherLayer {
       const l = luma(color)
       // Cool grey of the same brightness, mixed in by half the greyness, then darkened.
       const grey = [l * 0.9, l * 0.95, l * 1.06]
-      const dark = 1 - D.darken * g
+      const dark = 1 - D.darken * g * (weather.snow ? 0.4 : 1)
       const ch = (shift: number, k: number) => Math.min(255, Math.round((((color >> shift) & 0xff) * (1 - g * 0.5) + grey[k] * g * 0.5) * dark))
       return (ch(16, 0) << 16) | (ch(8, 1) << 8) | ch(0, 2)
     },
@@ -296,17 +331,19 @@ export function createWeather(world: World): WeatherLayer {
         weather = forced ?? weatherAt(key, time)
       }
       const w = weather
-      const sound = !saver && !document.hidden ? w.rain * (w.sleet ? 0.5 : 1) : 0
+      // Snow falls without a sound.
+      const sound = !saver && !document.hidden && !w.snow ? w.rain * (w.sleet ? 0.5 : 1) : 0
       if (now - soundAt > 500) {
         soundAt = now
         setRainSound(sound)
       }
       // The grey wash: the ground's colours drawn toward a cool grey.
-      const wk = `${Math.round(w.grey * 100)}:${width}:${height}`
+      const wk = `${Math.round(w.grey * 100)}:${w.snow}:${width}:${height}`
       if (wk !== washKey) {
         washKey = wk
         wash.clear()
-        if (w.grey > 0.005) wash.rect(0, 0, width, height).fill({ color: 0x7c8794, alpha: D.greyWash * w.grey })
+        // Snow clouds are paler: a light, cold haze rather than the rain's grey.
+        if (w.grey > 0.005) wash.rect(0, 0, width, height).fill({ color: w.snow ? 0xc4cedb : 0x7c8794, alpha: D.greyWash * w.grey })
       }
       // Cloud shadows drift with the wind, held to the ground as the map is dragged (a little behind it, as if high).
       shades.visible = !saver && w.grey > 0.02
@@ -327,19 +364,30 @@ export function createWeather(world: World): WeatherLayer {
         const sprite = new Sprite()
         sprite.anchor.set(0, 1)
         rainLayer.addChild(sprite)
-        const d: Drop = { sprite, x: 0, y: 0, vy: 0, end: 0, length: 0 }
+        const d: Drop = { sprite, x: 0, y: 0, vy: 0, end: 0, length: 0, phase: 0, sway: 0 }
         resetDrop(d, width, height, unit, true)
         drops.push(d)
       }
       while (drops.length > want) drops.pop()!.sprite.destroy()
-      const splashing = !saver && cam.scale >= D.splashZoom
+      const splashing = !saver && !w.snow && cam.scale >= D.splashZoom
       splashBudget = Math.min(SPLASHES_PER_SECOND / 4, splashBudget + dt * SPLASHES_PER_SECOND)
       // Drops end (and maybe splash) about this many times a second; splashes are rationed among them.
       const hits = drops.length > 0 ? drops.reduce((n, d) => n + d.vy, 0) / drops.length / 300 * drops.length : 0
       const share = hits > 0 ? SPLASHES_PER_SECOND / hits : 0
+      // A change between rain and snow sends every drop round again in the new form.
+      if (w.snow !== wasSnow) {
+        wasSnow = w.snow
+        for (const d of drops) resetDrop(d, width, height, unit, true)
+      }
+      const t = time / 1000
       for (const d of drops) {
         d.y += d.vy * dt
         d.x += w.wind * d.vy * dt
+        if (w.snow) {
+          d.sprite.position.set(Math.round(d.x + Math.sin(t * 1.3 + d.phase) * d.sway), Math.round(d.y))
+          if (d.y >= d.end) resetDrop(d, width, height, unit, false)
+          continue
+        }
         if (d.y >= d.end) {
           if (splashing && splashBudget >= 1 && rnd() < share) {
             splashBudget--

@@ -366,6 +366,15 @@ export function narrate(c: Cmd, k?: Kingdom | null): string | null {
               'Gelin alayı uğurlandı, lordum. Zurna, davul, bir de benim veda konuşmam; konuşma biraz uzun sürdü.',
             ])
       }
+      if (c.action === 'wedQueen')
+        return any([
+          'Kraliçemiz evlendi, lordum! Soylu bir bey tahta çıktı; hanedan yeniden bir hükümdara kavuştu.',
+          'Düğün davulları çaldı, lordum. Kraliçe artık yalnız değil, taht da boş değil.',
+          'Konseyle oturup en uygun beyi seçtik, lordum. Kraliçe razı oldu; ben de mendilimi çıkardım.',
+          'Yeni hükümdarımız taç giydi, lordum. Kraliçenin yanında yakışıyor; halk şimdiden çocuk bekliyor.',
+          'Evlilik sözleşmesi mühürlendi, lordum. Hanedanın sürmesi için daha iyi bir haber olamazdı.',
+          'Saray bayram yerine döndü, lordum. Yalnız hüküm süren kraliçenin günleri bitti.',
+        ])
       if (c.action === 'aid')
         return c.kind === 'troops'
           ? any([

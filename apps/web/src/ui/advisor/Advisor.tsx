@@ -340,7 +340,7 @@ export function Advisor({
     if (step) return setSpeech(stepSpeech(step, stepIndex, c, pick))
     const tip = tipFor(c, {})
     // With stores filling up, the lord may ask what to do with them.
-    const wealth: Reply | null = wellStocked(c) ? { label: 'Malımızı nasıl değerlendirelim?', say: wealthAdvice(c, pick) } : null
+    const wealth: Reply | null = wellStocked(c) ? { label: 'Malımızı nasıl değerlendirelim?', say: wealthAdvice(c, pick), quiet: true } : null
     if (tip) {
       const said = tipSpeech(tip, c, pick)
       return setSpeech({ ...said, replies: [...said.replies.slice(0, 2), ...(wealth ? [wealth] : []), { label: 'Bana oyunu anlat', topic: '' }] })
@@ -348,7 +348,7 @@ export function Advisor({
     const talk = pick('smallTalk', SMALL_TALK)
     setSpeech({
       text: pick('idle', IDLE_LINES),
-      replies: [...(wealth ? [wealth] : []), { label: 'Bana oyunu anlat', topic: '' }, { label: talk.label, answer: pick(`talk:${talk.label}`, talk.answers) }, { label: 'Bir şey yok, sağ ol', answer: '' }],
+      replies: [...(wealth ? [wealth] : []), { label: 'Bana oyunu anlat', topic: '' }, { label: talk.label, answer: pick(`talk:${talk.label}`, talk.answers), quiet: true }, { label: 'Bir şey yok, sağ ol', answer: '' }],
     })
     // Only the button calls him.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -443,6 +443,11 @@ function Panel({
   const last = !page || page.index >= page.pages.length - 1
   // A tap on the parchment shows the whole page, and once it is all there, turns to the next one.
   const tap = () => (!done ? typing.finish() : !last && page ? onPage(page.index + 1) : undefined)
+  // Kept plain: the answers to what he said as buttons; "Bana oyunu anlat" a book by the close button; side questions
+  // (what to do with full stores, a word of small talk) small links under the answers.
+  const guide = speech.replies.find((r) => r.topic === '')
+  const asides = speech.replies.filter((r) => r.quiet && r !== guide)
+  const answers = speech.replies.filter((r) => !r.quiet && r !== guide)
   return (
     <section className="advisor frame" role="dialog" aria-label="Elçi" aria-live="polite">
       <div className="advisor-face">
@@ -462,9 +467,16 @@ function Panel({
           ) : (
             <small>Elçinin sözü</small>
           )}
-          <button className="btn icon-only" onClick={onClose} aria-label="Kapat" title="Kapat">
-            <Icon name="close" size={16} />
-          </button>
+          <span className="advisor-tools">
+            {guide && (
+              <button className="btn icon-only" onClick={() => onReply(guide)} aria-label={guide.label} title={guide.label}>
+                <Icon name="book" size={16} />
+              </button>
+            )}
+            <button className="btn icon-only" onClick={onClose} aria-label="Kapat" title="Kapat">
+              <Icon name="close" size={16} />
+            </button>
+          </span>
         </header>
         <div className="advisor-bubble" ref={bubble} onClick={tap}>
           {paragraphs.map((p, i) => (
@@ -505,16 +517,25 @@ function Panel({
               </button>
             </div>
           )}
-          {speech.replies.map((r, i) => (
+          {answers.map((r, i) => (
             <button
               key={`${r.label}${i}`}
-              className={last && i === 0 && (r.act || speech.replies.length === 1) ? 'btn small primary' : 'btn small'}
+              className={last && i === 0 && (r.act || answers.length === 1) ? 'btn small primary' : 'btn small'}
               onClick={() => onReply(r)}
             >
               {r.label}
             </button>
           ))}
         </div>
+        {asides.length > 0 && (
+          <div className="advisor-asides">
+            {asides.map((r, i) => (
+              <button key={`${r.label}${i}`} className="advisor-aside" onClick={() => onReply(r)}>
+                {r.label} ›
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )

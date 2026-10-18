@@ -11,7 +11,7 @@ import { freeTexture, lookOf, textureOf } from './textures'
 // A deep blue-black: shade is cooler than the light.
 const TINT = 0x0c1226
 // The sun's direction moves in steps of this many game hours; every shadow is cast anew at each step.
-const STEP = 1 / 6
+const STEP = 1 / 2
 // Sprites in the walkers' layer that throw no shadow.
 const NONE = new Set(['smoke', 'shade', 'inn', 'anim'])
 // Shadows falling on buildings are worked out a few buildings at a time, this many milliseconds a frame.

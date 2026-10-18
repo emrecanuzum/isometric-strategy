@@ -10,18 +10,18 @@ const RATES = {
   // Being dragged or zoomed, or just after.
   active: [60, 30],
   // Still, close enough that walkers and animals are drawn (½× and nearer).
-  near: [30, 20],
+  near: [24, 15],
   // Still and zoomed far out: clouds, ships and armies drift slowly.
-  far: [20, 12],
+  far: [15, 10],
   // No input for a long while.
-  deep: [15, 10],
+  deep: [10, 8],
   // A window covers the map.
-  covered: [10, 6],
+  covered: [8, 5],
 } as const
 // How long after the last input the map stays at the full rate.
 const ACTIVE_MS = 1500
 // How long without input before the map slows to the deep idle rate.
-const DEEP_MS = 90_000
+const DEEP_MS = 45_000
 // Slack for the display's own frames: half a 120 Hz frame, so a 60 Hz screen steps every frame at 60 fps and every
 // other one at 30.
 const SLACK_MS = 4

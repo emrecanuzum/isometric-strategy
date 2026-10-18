@@ -1,8 +1,11 @@
 import { balance } from './balance'
 import { fortuneIn } from './institutions'
+import { MONTH_DAYS, calendarAt, yearMs } from './clock'
+import type { Season } from './clock'
 
 // The weather over the map (CLAUDE.md §4.2.1), only to be seen: rain falls while the lobby's rain, storm, flood, hail
-// or cold snap is under way (§9.8), and now and then a passing shower besides. It follows from the lobby's key and the
+// or cold snap is under way (§9.8), and now and then a passing shower besides, as often as the season brings them (few
+// in summer, most in autumn), some of them thunderstorms. In winter it snows instead. It follows from the lobby's key and the
 // time alone, so every screen shows the same sky and nothing is stored. Values in config/balance/weather.json.
 
 const W = balance.weather
@@ -18,9 +21,11 @@ export interface Weather {
   sleet: boolean
   // A storm: lightning flashes now and then.
   lightning: boolean
+  // Snow (in winter): white flakes drifting down instead of rain.
+  snow: boolean
 }
 
-export const CLEAR_WEATHER: Weather = { rain: 0, grey: 0, wind: 0, sleet: false, lightning: false }
+export const CLEAR_WEATHER: Weather = { rain: 0, grey: 0, wind: 0, sleet: false, lightning: false, snow: false }
 
 interface FortuneWeather {
   rain: number
@@ -74,16 +79,46 @@ function fortuneWeather(lobbyKey: number, at: number) {
   return { clear, best }
 }
 
-// A passing shower in window `index`, if one falls then.
+// The season (from the calendar: the hour of the year it is) at `at`.
+export const weatherSeason = (at: number): Season => calendarAt(at, 0).season
+const snowsIn = (season: Season) => (W.snowSeasons as string[]).includes(season)
+
+const FIRST_MONTH: Record<Season, number> = { spring: 2, summer: 5, autumn: 8, winter: 11 }
+// How far into its season `at` is, 0..1.
+export function seasonProgress(at: number): number {
+  const { season, seasonEndsAt } = calendarAt(at, 0)
+  const days = [0, 1, 2].reduce((n, i) => n + MONTH_DAYS[(FIRST_MONTH[season] + i) % 12], 0)
+  const length = (days / 365) * yearMs()
+  return Math.min(1, Math.max(0, 1 - (seasonEndsAt - at) / length))
+}
+
+// How deep the snow lies on the ground, roofs and trees (CLAUDE.md §4.2.1): 0 none, 1 a dusting, 2 patchy, 3 a white
+// blanket. It comes from the calendar alone (balance.weather.snowCover: steps through winter, melting early in
+// spring), so every screen shows the same and nothing is stored; the map repaints its ground when it changes.
+export function snowCover(at: number): number {
+  const steps = (W.snowCover as Record<string, number[][]>)[calendarAt(at, 0).season]
+  if (!steps) return 0
+  const p = seasonProgress(at)
+  let level = 0
+  for (const [from, to] of steps) if (p >= from) level = to
+  return level
+}
+
+// A passing shower in window `index`, if one falls then: as likely as the season of the window's middle makes it,
+// and sometimes a thunderstorm.
 function showerIn(lobbyKey: number, index: number) {
   const s = W.showers
-  if (mix(lobbyKey, index, 11) >= s.chance) return null
   const windowMs = s.windowSeconds * 1000
+  const season = weatherSeason(index * windowMs + windowMs / 2)
+  const odds = s.seasons[season]
+  if (mix(lobbyKey, index, 11) >= odds.chance) return null
   const length = (s.minSeconds + mix(lobbyKey, index, 12) * (s.maxSeconds - s.minSeconds)) * 1000
   const lead = W.gatherSeconds * 1000
   const start = index * windowMs + lead + Math.floor(mix(lobbyKey, index, 13) * (windowMs - length - 2 * lead))
-  const rain = s.minRain + mix(lobbyKey, index, 14) * (s.maxRain - s.minRain)
-  return { start, end: start + length, rain }
+  const storm = mix(lobbyKey, index, 15) < odds.storm
+  const [min, max] = storm ? [s.storm.minRain, s.storm.maxRain] : [s.minRain, s.maxRain]
+  const rain = min + mix(lobbyKey, index, 14) * (max - min)
+  return { start, end: start + length, rain, storm }
 }
 
 // The wind's lean this quarter of an hour: the same way for everyone, changing now and then.
@@ -105,22 +140,27 @@ export function weatherAt(lobbyKey: number | undefined, at: number): Weather {
       wind: Math.sign(lean) * Math.max(Math.abs(lean), best.w.wind),
       sleet: !!best.w.sleet,
       lightning: !!best.w.lightning && best.rain > 0.6,
+      snow: false,
     }
   }
-  if (clear) return out
+  if (clear) return winterize(out, at)
   const index = Math.floor(at / (W.showers.windowSeconds * 1000))
   for (const i of [index - 1, index, index + 1]) {
     const s = showerIn(lobbyKey, i)
     if (!s) continue
     const e = envelope(s.start, s.end, at)
     const rain = s.rain * e.rain
-    const grey = Math.min(0.75, s.rain + 0.15) * e.grey
+    const grey = (s.storm ? W.showers.storm.grey : Math.min(0.75, s.rain + 0.15)) * e.grey
     if (grey > out.grey || rain > out.rain) {
-      out = { rain: Math.max(rain, out.rain), grey: Math.max(grey, out.grey), wind: out.wind || lean, sleet: out.sleet, lightning: out.lightning }
+      const wind = s.storm ? Math.sign(lean || 1) * Math.max(Math.abs(lean), W.showers.storm.wind) : out.wind || lean
+      out = { rain: Math.max(rain, out.rain), grey: Math.max(grey, out.grey), wind, sleet: out.sleet, lightning: out.lightning || (s.storm && e.rain > 0.6), snow: false }
     }
   }
-  return out
+  return winterize(out, at)
 }
+
+// In winter whatever falls is snow: no thunder, and it drifts more than it leans.
+const winterize = (w: Weather, at: number): Weather => (w.grey > 0 && snowsIn(weatherSeason(at)) ? { ...w, snow: true, sleet: false, lightning: false, wind: w.wind * 0.6 } : w)
 
 // Whether a lightning flash lights the sky at `at` during a storm, and how bright (1 at the strike, fading out).
 export function lightningAt(lobbyKey: number, at: number): number {

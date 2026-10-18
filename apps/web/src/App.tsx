@@ -2267,7 +2267,7 @@ function App({
       ...dueNotices
         .filter((n) => !answerable(n))
         .map((n) => ({ key: `n:${n.id}`, at: Date.parse(n.show_at), important: noticeHurts(n, kingdom.name) || WAR_NEWS.has(n.kind), title: () => noticeItem(n) })),
-      ...houseQueue.map((h) => ({ key: `h:${h.key}`, at: h.at ?? now, important: h.kind === 'death' || h.kind === 'coronation' || h.kind === 'council', title: () => houseItem(h) })),
+      ...houseQueue.map((h) => ({ key: `h:${h.key}`, at: h.at ?? now, important: h.kind === 'death' || h.kind === 'coronation' || h.kind === 'council' || h.kind === 'regnant', title: () => houseItem(h) })),
       ...fortunes
         .filter((f) => !fortuneDecisionOpen(f, kingdom, now))
         .map((f) => ({ key: fortuneKey(f), at: f.start ?? now, important: FORTUNE_TEXTS[f.fortune]?.tone === 'bad', title: () => fortuneItem(f) })),
@@ -2943,6 +2943,8 @@ function App({
       {/* While a mini game is being played, the popups below wait (they would take its keys and taps). */}
       {!playing && (
         <QueueContext.Provider value={{ pos: lineSeen + 1, total: lineSeen + waiting, closeAll: closeAllDialogs }}>
+      {/* The ones still waiting peek out behind the dialog, up to three (index.css → .dialog-stack). */}
+      <div className="dialog-stack" data-behind={waiting > 1 ? Math.min(3, waiting - 1) : undefined}>
       {closedTitles && <ClosedSummary items={closedTitles} onClose={() => setClosedTitles(null)} />}
       {foldedShown && (
         <ClosedSummary
@@ -2983,6 +2985,7 @@ function App({
       {view && kingdom && royalLive && royalShown && (
         <RoyalDialog world={view.world} kingdom={kingdom} req={royalLive.req} online={online} onClose={() => seeRoyal(royalLive.req.n)} />
       )}
+      </div>
         </QueueContext.Provider>
       )}
       {view && kingdom && <EnvoyNote quiet={advisorBlocked} />}

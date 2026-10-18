@@ -249,6 +249,7 @@ export type Command =
   | { type: 'house'; action: 'gift'; id: number }
   | { type: 'house'; action: 'marry'; id: number; to: { kind: 'crown' } | { kind: 'town'; town: number } | { kind: 'lord'; id: number } }
   | { type: 'house'; action: 'aid'; kind: AidKind }
+  | { type: 'house'; action: 'wedQueen' }
   // Going over to the rival crown after the liege backed a pretender, or staying (CLAUDE.md §9.1.1).
   | { type: 'switchLiege'; accept: boolean }
 

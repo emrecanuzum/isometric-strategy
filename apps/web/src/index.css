@@ -6622,3 +6622,121 @@ input:not([type='range']):focus-visible {
 .project-give > span:first-child {
   white-space: nowrap;
 }
+
+/* The dialogs that come one after another (the away report, the house's and the envoy's news, the day's events, the
+   summaries; CLAUDE.md §9.8) are all one size, so the next one takes exactly the place of the last. While more wait
+   behind, up to three of them peek out up and to the left like windows stacked on a desktop (App.tsx → .dialog-stack). */
+.modal .dialog.fortune-dialog,
+.modal .dialog.away,
+.modal .dialog.closed-summary {
+  width: min(600px, calc(100vw - var(--gap) * 2 - var(--stack-room, 0px)));
+  height: min(700px, calc(100vh - 120px - var(--stack-room, 0px)));
+  max-height: none;
+  transform: translate(calc(-50% + var(--stack-shift, 0px)), calc(-50% + var(--stack-shift, 0px)));
+}
+
+.modal .dialog.fortune-dialog .fortune-body {
+  flex: 1 0 auto;
+}
+
+.modal .dialog.fortune-dialog .fortune-body > :last-child:not(:first-child),
+.modal .dialog.away > .dialog-foot,
+.modal .dialog.away > .away-nav,
+.modal .dialog.closed-summary > .dialog-foot {
+  margin-top: auto;
+}
+
+.modal .dialog.closed-summary {
+  overflow: hidden;
+}
+
+.modal .dialog.closed-summary .away-lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.dialog-stack {
+  display: contents;
+  --step: calc(var(--px) * 10);
+}
+
+.dialog-stack[data-behind='1'] {
+  --stack-shift: calc(var(--step) / 2);
+  --stack-room: var(--step);
+  --stack: var(--ghost1);
+}
+
+.dialog-stack[data-behind='2'] {
+  --stack-shift: var(--step);
+  --stack-room: calc(var(--step) * 2);
+  --stack: var(--ghost1), var(--ghost2);
+}
+
+.dialog-stack[data-behind='3'] {
+  --stack-shift: calc(var(--step) * 1.5);
+  --stack-room: calc(var(--step) * 3);
+  --stack: var(--ghost1), var(--ghost2), var(--ghost3);
+}
+
+.dialog-stack[data-behind] {
+  --ghost1:
+    calc(var(--step) * -1) calc(var(--step) * -1) 0 calc(var(--px) * -4) var(--panel-2),
+    calc(var(--step) * -1) calc(var(--step) * -1) 0 calc(var(--px) * -2) var(--panel-hi),
+    calc(var(--step) * -1) calc(var(--step) * -1) 0 0 var(--ink);
+  --ghost2:
+    calc(var(--step) * -2) calc(var(--step) * -2) 0 calc(var(--px) * -4) var(--panel),
+    calc(var(--step) * -2) calc(var(--step) * -2) 0 calc(var(--px) * -2) var(--panel-hi),
+    calc(var(--step) * -2) calc(var(--step) * -2) 0 0 var(--ink);
+  --ghost3:
+    calc(var(--step) * -3) calc(var(--step) * -3) 0 calc(var(--px) * -4) var(--panel-lo),
+    calc(var(--step) * -3) calc(var(--step) * -3) 0 calc(var(--px) * -2) var(--panel-hi),
+    calc(var(--step) * -3) calc(var(--step) * -3) 0 0 var(--ink);
+}
+
+.dialog-stack[data-behind] .modal .dialog.away,
+.dialog-stack[data-behind] .modal .dialog.closed-summary {
+  box-shadow:
+    var(--bevel),
+    var(--outline),
+    var(--stack),
+    0 calc(var(--px) * 3) 0 0 rgb(0 0 0 / 35%);
+}
+
+.dialog-stack[data-behind] .modal .dialog.fortune-dialog {
+  box-shadow:
+    var(--outline),
+    var(--stack),
+    0 calc(var(--px) * 3) 0 0 rgb(0 0 0 / 35%);
+}
+
+/* The envoy's panel kept plain (Advisor.tsx → Panel): the book for "Bana oyunu anlat" by the close button, side
+   questions as small links under the answers. */
+.advisor-tools {
+  display: flex;
+  gap: calc(var(--px) * 3);
+}
+
+.advisor-asides {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: calc(var(--px) * 2) calc(var(--px) * 8);
+}
+
+.advisor-aside {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.advisor-aside:hover,
+.advisor-aside:focus-visible {
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

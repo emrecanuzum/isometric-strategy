@@ -28,9 +28,10 @@ export interface Person {
   // Whether the lord has named the child (a name is drawn until then), and whether its coming of age was told.
   named?: boolean
   grown?: boolean
-  // How a dead member of the house died: of old age, of grief, in battle, put down as a rebel (CLAUDE.md §9.1.1), or
-  // thrown off the throne by a pretender.
-  cause?: 'age' | 'grief' | 'battle' | 'rebel' | 'deposed'
+  // How a dead member of the house died: of old age, of grief, in battle, put down as a rebel (CLAUDE.md §9.1.1),
+  // thrown off the throne by a pretender, or of sickness (set ahead on the living: a brother or sister who will not
+  // reign, or one the plague strikes).
+  cause?: 'age' | 'grief' | 'battle' | 'rebel' | 'deposed' | 'sickness'
   diedAt?: number
   // Whether a dead member of the house ruled it (older saves kept only rulers among the dead: absent means yes).
   ruled?: boolean
@@ -92,9 +93,14 @@ export interface Dynasty {
   mother?: Person | null
   married?: Person[]
   brides?: Bride[]
-  // Sons and daughters the ruler and his lady have had (at most balance.dynasty.births.maxSons / maxDaughters).
+  // Sons and daughters the ruler and his lady have had, and the family they will have (drawn when she comes to court
+  // from balance.dynasty.births.plans: two sons, one son, or a son and a daughter).
   sons?: number
   daughters?: number
+  plan?: { sons: number; daughters: number }
+  // The widowed lady rules alone (no lord, no heir, no brother): she must be married, by the lord's word or, when
+  // `kinsmanAt` comes, by the council's (CLAUDE.md §9.1).
+  regnant?: boolean
   // The layout of the house (2: siblings apart from children); older saves are brought to it once.
   rev?: number
   // No pretender rises before then (a revolt just put down), and the last revolt check (its slot) that found someone
@@ -126,6 +132,9 @@ export type DynastyEvent =
   | { kind: 'dynasty'; what: 'ofAge'; person: Person }
   | { kind: 'dynasty'; what: 'coronation'; person: Person }
   | { kind: 'dynasty'; what: 'wedding'; person: Person }
+  // The widowed lady rules alone and must be wed; then the lord she is wed to.
+  | { kind: 'dynasty'; what: 'regnant'; person: Person }
+  | { kind: 'dynasty'; what: 'consort'; person: Person }
 
 export const ageOf = (p: Pick<Person, 'bornAt'>, at: number) => Math.max(0, (at - p.bornAt) / yearMs())
 export const ofAge = (p: Pick<Person, 'bornAt'>, at: number) => ageOf(p, at) >= D().comingOfAge
@@ -201,13 +210,38 @@ export function foundDynasty(k: Pick<Kingdom, 'site' | 'foundedAt' | 'queen'>, a
 function wed(k: Pick<Kingdom, 'site' | 'foundedAt'>, d: Dynasty, at: number): Dynasty {
   const id = d.seq
   const queen = person(k, id, 'f', at - between(roll(k, id, 2), D().queen.age) * yearMs(), drawnSkills(k, id), names(d))
-  return { ...d, seq: id + 1, queen, born: 0, sons: 0, daughters: 0, nextBirthAt: at + between(roll(k, id, 3), D().births.firstYears) * yearMs() }
+  return { ...d, seq: id + 1, queen, born: 0, sons: 0, daughters: 0, plan: familyPlan(k, id), nextBirthAt: at + between(roll(k, id, 3), D().births.firstYears) * yearMs() }
+}
+
+// The family a couple will have (CLAUDE.md §9.1): at most two children, a son always among them; most often two sons,
+// else one son, or a son and a daughter. Drawn from the lady (her id).
+function familyPlan(k: Pick<Kingdom, 'site' | 'foundedAt'>, lady: number) {
+  const plans = D().births.plans
+  let r = roll(k, lady, 6) * plans.reduce((n, p) => n + p.weight, 0)
+  for (const p of plans) {
+    if ((r -= p.weight) < 0) return { sons: p.sons, daughters: p.daughters }
+  }
+  return { sons: plans[0].sons, daughters: plans[0].daughters }
 }
 
 // How many more sons and daughters the ruler and his lady may still have.
 export function birthsLeft(d: Dynasty) {
-  const b = D().births
-  return { sons: Math.max(0, b.maxSons - (d.sons ?? 0)), daughters: Math.max(0, b.maxDaughters - (d.daughters ?? 0)) }
+  const plan = d.plan ?? { sons: D().births.maxSons, daughters: D().births.maxDaughters }
+  return { sons: Math.max(0, plan.sons - (d.sons ?? 0)), daughters: Math.max(0, plan.daughters - (d.daughters ?? 0)) }
+}
+
+// A brother or sister of the ruler who will not reign dies young, of a sickness (CLAUDE.md §9.1): at the age drawn for
+// it, or soon after now if older already. A sibling who comes to the throne gets back the life drawn at birth.
+function fadeYoung(k: Pick<Kingdom, 'site' | 'foundedAt'>, p: Person, at: number): Person {
+  const f = D().siblingFate
+  const Y = yearMs()
+  const young = Math.max(at + between(roll(k, p.id, 91), f.soonestYears) * Y, p.bornAt + between(roll(k, p.id, 92), f.age) * Y)
+  return young < p.deathAt ? { ...p, deathAt: young, cause: 'sickness' } : p
+}
+function fullLife(k: Pick<Kingdom, 'site' | 'foundedAt'>, p: Person): Person {
+  if (p.cause !== 'sickness') return p
+  const { cause: _cause, ...rest } = p
+  return { ...rest, deathAt: p.bornAt + between(roll(k, p.id, 13) ** 0.8, D().death.atAge) * yearMs() }
 }
 
 // A child: its gifts drawn half from its parents, half anew; a son or a daughter as the draw falls, unless the couple
@@ -215,6 +249,7 @@ export function birthsLeft(d: Dynasty) {
 function bear(k: Pick<Kingdom, 'site' | 'foundedAt'>, d: Dynasty, at: number): Person {
   const id = d.seq
   const left = birthsLeft(d)
+  // A son or a daughter as the draw falls, as long as the plan still has one of that kind (never two daughters).
   const drawn = roll(k, id, 4) < D().births.son ? 'm' : 'f'
   const sex = drawn === 'm' && left.sons <= 0 ? 'f' : drawn === 'f' && left.daughters <= 0 ? 'm' : drawn
   const fresh = drawnSkills(k, id)
@@ -227,8 +262,10 @@ function bear(k: Pick<Kingdom, 'site' | 'foundedAt'>, d: Dynasty, at: number): P
 // The house's layout as it is now kept: older saves kept the late lord's children with the ruler's own after a
 // succession. Those born before the ruler could have had children of his own (before he came of age) are his brothers
 // and sisters.
-const HOUSE_REV = 2
-function normalizeHouse(d: Dynasty): Dynasty {
+const HOUSE_REV = 3
+function normalizeHouse(k: Pick<Kingdom, 'site' | 'foundedAt'>, d: Dynasty, at: number): Dynasty {
+  // 3: a couple has a family plan (no third child), and the ruler's brothers and sisters fade young.
+  if (d.rev === 2) return { ...d, rev: HOUSE_REV, ...(d.queen && !d.plan && { plan: familyPlan(k, d.queen.id) }), siblings: siblingsOf(d).map((p) => fadeYoung(k, p, at)) }
   if ((d.rev ?? 1) >= HOUSE_REV) return d
   const king = d.king
   const cut = king && d.generation > 1 ? king.bornAt + D().comingOfAge * yearMs() : -Infinity
@@ -238,15 +275,17 @@ function normalizeHouse(d: Dynasty): Dynasty {
     ...d,
     rev: HOUSE_REV,
     children,
-    siblings: [...siblingsOf(d), ...siblings],
+    siblings: [...siblingsOf(d), ...siblings].map((p) => fadeYoung(k, p, at)),
     kin: kinOf(d),
     sons: children.filter((c) => c.sex === 'm').length,
     daughters: children.filter((c) => c.sex === 'f').length,
+    ...(d.queen && !d.plan && { plan: familyPlan(k, d.queen.id) }),
   }
 }
 
 // Who would follow the ruler: his eldest son; with none, his eldest grown brother (CLAUDE.md §9.1).
 export function heirOf(d: Dynasty, at: number): Person | null {
+  if (d.regnant) return null
   const son = byAge(d.children.filter((c) => c.sex === 'm'))[0]
   if (son) return son
   if (!D().succession.brotherInherits) return null
@@ -256,6 +295,8 @@ export function heirOf(d: Dynasty, at: number): Person | null {
 // What the realm's ruler brings: the lord's gifts (with half the lady's above or below the middle), or the council's.
 export function rulerSkills(k: Pick<Kingdom, 'dynasty'>): Skills & { council: boolean } {
   const d = k.dynasty
+  // A widowed lady ruling alone rules with her own gifts.
+  if (d?.regnant && d.queen) return { ...d.queen.skills, council: false }
   if (!d || d.council || !d.king) return { finance: D().council.finance, people: D().council.people, military: D().council.military, council: true }
   const c = D().skills.center
   const w = D().skills.queenWeight
@@ -338,7 +379,7 @@ const crowned = (p: Person): Person => {
 // realm's `queen` flag is the lady at court (away when carried off).
 export function dynastyStep(k: Kingdom, to: number): { kingdom: Kingdom; events: DynastyEvent[] } {
   const events: DynastyEvent[] = []
-  let d = normalizeHouse(rescaleYears(k.dynasty ?? foundDynasty(k, to), to))
+  let d = normalizeHouse(k, rescaleYears(k.dynasty ?? foundDynasty(k, to), to), to)
   let queen = !!k.queen
   // A lady newly come to court (the realm took a queen): she joins the house.
   if (queen && !d.queen && !k.queenHeldBy) {
@@ -359,8 +400,10 @@ export function dynastyStep(k: Kingdom, to: number): { kingdom: Kingdom; events:
     const young = d.council && d.regentFor !== undefined && d.king?.id === d.regentFor ? d.king : null
     const regentEnds = young ? young.bornAt + D().comingOfAge * Y : Infinity
     // With no heir at all, the council rules for a few years and then crowns a kinsman (the house does not end).
-    const kinsman = d.council && !d.king ? (d.kinsmanAt ?? (d.dead[0]?.diedAt ?? to) + D().council.kinsmanYears * Y) : Infinity
-    const next = Math.min(births, death, regentEnds, comingOfAge, kinsman, passing)
+    // A widowed lady ruling alone is wed by then (sooner if the lord says so); she may die before it.
+    const kinsman = (d.council && !d.king) || d.regnant ? (d.kinsmanAt ?? (d.dead[0]?.diedAt ?? to) + D().council.kinsmanYears * Y) : Infinity
+    const ladyDies = d.regnant && d.queen ? d.queen.deathAt : Infinity
+    const next = Math.min(births, death, regentEnds, comingOfAge, kinsman, passing, ladyDies)
     if (next > to) break
     if (next === death && d.king) {
       // The lord dies: the eldest son follows (a council rules until he is of age); with no son, his eldest grown
@@ -378,7 +421,7 @@ export function dynastyStep(k: Kingdom, to: number): { kingdom: Kingdom; events:
           ...base,
           king: crowned(heir),
           children: [],
-          siblings: d.children.filter((c) => c.id !== heir.id).map((c) => soured(c, next)),
+          siblings: d.children.filter((c) => c.id !== heir.id).map((c) => fadeYoung(k, soured(c, next), next)),
           kin: [...kinOf(d), ...siblingsOf(d)],
           mother: d.queen ?? null,
           council,
@@ -390,7 +433,7 @@ export function dynastyStep(k: Kingdom, to: number): { kingdom: Kingdom; events:
         // A brother takes the throne: the late lord's children are his nephews and nieces; the late lord's lady leaves.
         d = {
           ...base,
-          king: crowned(heir),
+          king: crowned(fullLife(k, heir)),
           children: [],
           siblings: siblingsOf(d).filter((c) => c.id !== heir.id).map((c) => soured(c, next)),
           kin: [...kinOf(d), ...d.children],
@@ -399,6 +442,12 @@ export function dynastyStep(k: Kingdom, to: number): { kingdom: Kingdom; events:
           kinsmanAt: undefined,
           generation: d.generation + 1,
         }
+      } else if (d.queen && queen) {
+        // No heir, but his lady at court: she rules alone until she is wed (CLAUDE.md §9.1); she keeps the realm's queen.
+        d = { ...base, king: null, queen: d.queen, regnant: true, council: false, regentFor: undefined, kinsmanAt: next + D().council.kinsmanYears * Y }
+        events.push({ kind: 'dynasty', what: 'death', person: dead, heir: null, council: false })
+        events.push({ kind: 'dynasty', what: 'regnant', person: d.queen! })
+        continue
       } else {
         // No heir: the late lord's children stay with the council until a kinsman is called; his lady is the dowager.
         d = { ...base, king: null, mother: d.queen ?? d.mother ?? null, council: true, regentFor: undefined, kinsmanAt: next + D().council.kinsmanYears * Y }
@@ -408,10 +457,39 @@ export function dynastyStep(k: Kingdom, to: number): { kingdom: Kingdom; events:
       events.push({ kind: 'dynasty', what: 'death', person: dead, heir, council })
       continue
     }
+    if (next === ladyDies && d.queen) {
+      // The lady ruling alone dies unwed: the council rules until a kinsman is called.
+      const dead: Person = { ...crowned(d.queen), diedAt: next, cause: d.queen.cause ?? 'age', ruled: true }
+      d = { ...d, queen: null, regnant: false, council: true, dead: [dead, ...d.dead].slice(0, D().keepDead), kinsmanAt: next + D().council.kinsmanYears * Y }
+      queen = false
+      events.push({ kind: 'dynasty', what: 'death', person: dead, heir: null, council: true })
+      continue
+    }
     if (next === regentEnds && young) {
       // The young lord comes of age: the regents step down.
       d = { ...d, council: false, regentFor: undefined, king: grow(young) }
       events.push({ kind: 'dynasty', what: 'coronation', person: d.king! })
+      continue
+    }
+    if (next === kinsman && d.regnant && d.queen) {
+      // The lady ruling alone is wed to a lord of the house's choosing (or the lord's word brought the day forward): he
+      // reigns, she is his queen, and their children count from none.
+      const lord = person(k, d.seq, 'm', next - between(roll(k, d.seq, 1), D().king.age) * Y, drawnSkills(k, d.seq), names(d))
+      d = {
+        ...d,
+        seq: d.seq + 1,
+        king: lord,
+        regnant: false,
+        council: false,
+        kinsmanAt: undefined,
+        generation: d.generation + 1,
+        born: 0,
+        sons: 0,
+        daughters: 0,
+        plan: familyPlan(k, d.queen.id * 31 + d.seq),
+        nextBirthAt: next + between(roll(k, d.seq, 3), D().births.firstYears) * Y,
+      }
+      events.push({ kind: 'dynasty', what: 'consort', person: lord })
       continue
     }
     if (next === kinsman) {
@@ -443,7 +521,7 @@ export function dynastyStep(k: Kingdom, to: number): { kingdom: Kingdom; events:
     }
     if (next === passing) {
       const gone = elders.find((p) => p.deathAt === next)!
-      const dead: Person = { ...crowned(gone), diedAt: next, cause: 'age', ruled: false }
+      const dead: Person = { ...crowned(gone), diedAt: next, cause: gone.cause ?? 'age', ruled: false }
       const drop = (list: Person[]) => list.filter((p) => p.id !== gone.id)
       d = {
         ...d,
@@ -567,6 +645,31 @@ export function educate(k: Kingdom, id: number, focus: Skill, at: number): Kingd
 }
 
 // A lord dies of grief after a lost battle, now and then (from the battle and the realm, so it is decided once).
+// Sickness in the realm (CLAUDE.md §9.1): each round a member of the house may catch it and die, as likely as the
+// share of the people who are sick (balance.dynasty.sickness.royalPerShare a round per share sick). The lady is
+// spared (she is the ruler's), and so is a ruler with nobody to follow him. One at a time; dynastyStep then lays the
+// dead to rest and crowns the heir at that moment.
+export function sicknessStrikes(k: Kingdom, at: number, round: number): Kingdom {
+  const d = k.dynasty
+  const share = k.sickness ?? 0
+  if (!d || share <= 0) return k
+  const chance = share * D().sickness.royalPerShare
+  const ruler = d.king && !d.council && heirOf(d, at) ? [d.king] : []
+  const exposed = [...ruler, ...d.children, ...siblingsOf(d), ...kinOf(d), ...(d.mother ? [d.mother] : [])]
+  const struck = exposed.find((p) => p.deathAt > at && roll(k, round, p.id, 95) < chance)
+  if (!struck) return k
+  return { ...k, dynasty: mapHouse(d, (p) => (p.id === struck.id ? { ...p, deathAt: at, cause: 'sickness' } : p)) }
+}
+
+// The lord marries off the widowed lady who rules alone (CLAUDE.md §9.1): the council's day is brought to now.
+export function wedQueenError(k: Pick<Kingdom, 'dynasty'>): 'none' | null {
+  return k.dynasty?.regnant && k.dynasty.queen ? null : 'none'
+}
+export function wedQueen(k: Kingdom, at: number): Kingdom {
+  if (wedQueenError(k)) return k
+  return dynastyStep({ ...k, dynasty: { ...k.dynasty!, kinsmanAt: at } }, at).kingdom
+}
+
 export function griefStrikes(k: Pick<Kingdom, 'site' | 'foundedAt' | 'dynasty'>, battle: number) {
   return !!k.dynasty?.king && !k.dynasty.council && roll(k, battle, 77) < D().grief
 }

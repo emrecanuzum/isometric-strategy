@@ -48,35 +48,37 @@ export function CrownColumnSheet({ world, kingdom, column, online, now, onCrown,
           <Icon name="close" size={16} />
         </button>
       </header>
-      <Section title="Kimin adamları" icon="crown">
-        <p className="hint">
-          {column.kind === 'patrol'
-            ? `${info.name}'nın tek büyük devriyesi: her ${Math.round(balance.cities.crown.patrol.slotSeconds / 60)} dakikada bir, tacın lordlarından birinin sarayına uğrar, orada biraz kalıp başkente döner.`
-            : `${info.name}'nın haraççıları: öbür taca bağlı lordların kapısına ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelir, hazineden ${pctText(tributeShareNow(key, column.crown, now))} pay (en az ${balance.cities.crown.patrol.tribute.min} altın) ister.`}
-        </p>
-        <Stat label="Tahtta" value={`${info.ruler} · ${trait.name.toLocaleLowerCase('tr-TR')}`} />
-        <Stat label="Seninle ilişkisi" value={`${relation > 0 ? '+' : ''}${relation}`} />
-        <Stat label="Senin için" value={mine ? 'biat ettiğin taç' : kingdom.liege === undefined ? 'henüz biat etmedin' : 'rakip taç'} />
-      </Section>
-      <Section title="Şimdi nereye" icon="map">
-        {column.lordName ? (
+      <div className="sheet-body">
+        <Section title="Kimin adamları" icon="crown">
           <p className="hint">
-            {toMe ? 'Senin sarayına' : `${column.lordName} sarayına`} gidiyorlar.{' '}
             {column.kind === 'patrol'
-              ? toMe
-                ? `Eğlence merkezin varsa içip eğlenir, yaklaşık ${fmt(tipPreview(kingdom, column.crown, online, now))} altın bahşiş bırakırlar${waysText(key, column.crown, now, 'tip') ? ` (${waysText(key, column.crown, now, 'tip')})` : ''}.`
-                : 'Orada içer, eğlenir, lorda bahşiş bırakırlar.'
-              : toMe
-                ? `Kapına gelince hazinenin payını isteyecekler: şimdiki hazinenle yaklaşık ${fmt(tributeDemand(kingdom.stock.gold, ways.tribute))} altın. Öde, reddet ya da konuş.`
-                : 'Kapıda haraç isteyecek, cevabı bekleyecekler.'}
+              ? `${info.name}'nın tek büyük devriyesi: her ${Math.round(balance.cities.crown.patrol.slotSeconds / 60)} dakikada bir, tacın lordlarından birinin sarayına uğrar, orada biraz kalıp başkente döner.`
+              : `${info.name}'nın haraççıları: öbür taca bağlı lordların kapısına ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelir, hazineden ${pctText(tributeShareNow(key, column.crown, now))} pay (en az ${balance.cities.crown.patrol.tribute.min} altın) ister.`}
           </p>
-        ) : (
-          <p className="hint">Başkente dönüyorlar.</p>
-        )}
-      </Section>
-      <button className="btn small primary" onClick={() => onCrown(column.crown)}>
-        <Icon name="crown" size={16} /> {info.name} sayfasını aç
-      </button>
+          <Stat label="Tahtta" value={`${info.ruler} · ${trait.name.toLocaleLowerCase('tr-TR')}`} />
+          <Stat label="Seninle ilişkisi" value={`${relation > 0 ? '+' : ''}${relation}`} />
+          <Stat label="Senin için" value={mine ? 'biat ettiğin taç' : kingdom.liege === undefined ? 'henüz biat etmedin' : 'rakip taç'} />
+        </Section>
+        <Section title="Şimdi nereye" icon="map">
+          {column.lordName ? (
+            <p className="hint">
+              {toMe ? 'Senin sarayına' : `${column.lordName} sarayına`} gidiyorlar.{' '}
+              {column.kind === 'patrol'
+                ? toMe
+                  ? `Eğlence merkezin varsa içip eğlenir, yaklaşık ${fmt(tipPreview(kingdom, column.crown, online, now))} altın bahşiş bırakırlar${waysText(key, column.crown, now, 'tip') ? ` (${waysText(key, column.crown, now, 'tip')})` : ''}.`
+                  : 'Orada içer, eğlenir, lorda bahşiş bırakırlar.'
+                : toMe
+                  ? `Kapına gelince hazinenin payını isteyecekler: şimdiki hazinenle yaklaşık ${fmt(tributeDemand(kingdom.stock.gold, ways.tribute))} altın. Öde, reddet ya da konuş.`
+                  : 'Kapıda haraç isteyecek, cevabı bekleyecekler.'}
+            </p>
+          ) : (
+            <p className="hint">Başkente dönüyorlar.</p>
+          )}
+        </Section>
+        <button className="btn primary wide" onClick={() => onCrown(column.crown)}>
+          <Icon name="crown" size={16} /> {info.name} sayfasını aç
+        </button>
+      </div>
     </section>
   )
 }

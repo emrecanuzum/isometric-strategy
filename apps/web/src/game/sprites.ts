@@ -21,6 +21,8 @@ export interface Sprite {
   flat?: Uint8Array
   // The building's shape as a few solids, when it was drawn from them (see Solid): its shadow is cast from these.
   solids?: Solid[]
+  // Per pixel, how much the surface faces up (0 a wall, 255 a flat top), when drawn from a model: snow settles there.
+  up?: Uint8Array
 }
 
 // A solid of a building's shape, in the sprite's own pixels: a prism standing on a convex base, or a pyramid tapering
@@ -369,6 +371,9 @@ export class Canvas {
   // While set, what is drawn lies flat on the ground (see Sprite.flat); drawing anything else over it lifts it again.
   paving = false
   flat: Uint8Array | null = null
+  // While set (0..255), how much what is drawn faces up (see Sprite.up).
+  facing = 0
+  up: Uint8Array | null = null
   constructor(width: number, height: number) {
     this.width = width
     this.height = height
@@ -382,6 +387,8 @@ export class Canvas {
     this.pixels[i] = color
     if (this.paving) (this.flat ??= new Uint8Array(this.pixels.length))[i] = 1
     else if (this.flat) this.flat[i] = 0
+    if (this.facing) (this.up ??= new Uint8Array(this.pixels.length))[i] = this.facing
+    else if (this.up) this.up[i] = 0
   }
   // Records a solid of the shape being drawn (see Solid).
   solid(base: number[], z0: number, z1: number, apex?: [number, number]) {
@@ -401,8 +408,57 @@ export class Canvas {
     for (const i of edge) this.pixels[i] = color
   }
   sprite(anchorX: number, anchorY: number, shadow: number): Sprite {
-    return { width: this.width, height: this.height, anchorX, anchorY, pixels: this.pixels, shadow, ...(this.flat && { flat: this.flat }), ...(this.solids.length > 0 && { solids: this.solids }) }
+    return { width: this.width, height: this.height, anchorX, anchorY, pixels: this.pixels, shadow, ...(this.flat && { flat: this.flat }), ...(this.up && { up: this.up }), ...(this.solids.length > 0 && { solids: this.solids }) }
   }
+}
+
+// Snow on a sprite (CLAUDE.md §4.2.1), `level` 1 (a dusting) to 3 (a white blanket), worked out once per sprite and
+// level. A model's pixels carry how much they face up (Sprite.up): the snow settles on its flat tops and gentle roof
+// slopes first, steeper ones as it deepens, never on walls. Other sprites (trees, rocks) take it on the top edge of
+// each of their shapes. Snow keeps the light the pixel had: a shaded roof turns to blue-grey snow, a lit one to white.
+const SNOW_TONES = [0x7f93bd, 0xa9bad8, 0xcbd7ea, 0xe6edf7, 0xffffff].map(rgb)
+const SNOW_DITHER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16)
+const SNOW_STEPS = [
+  { up: 2, cover: 0, depth: 0 },
+  { up: 0.82, cover: 0.45, depth: 1 },
+  { up: 0.6, cover: 0.8, depth: 2 },
+  { up: 0.4, cover: 1, depth: 3 },
+]
+const snowy = new WeakMap<Sprite, Sprite[]>()
+export function snowOf(sprite: Sprite, level: number): Sprite {
+  if (level <= 0) return sprite
+  let cached = snowy.get(sprite)
+  if (!cached) snowy.set(sprite, (cached = []))
+  if (cached[level]) return cached[level]
+  const step = SNOW_STEPS[Math.min(3, level)]
+  const { width, height, up } = sprite
+  const pixels = sprite.pixels.slice()
+  const snowAt = (i: number, x: number, y: number) => {
+    const c = pixels[i]
+    // Luminance of the pixel (ABGR), mapped onto the snow's own ramp.
+    const l = ((c & 0xff) * 0.3 + ((c >> 8) & 0xff) * 0.59 + ((c >> 16) & 0xff) * 0.11) / 255
+    const d = SNOW_DITHER[(x & 3) | ((y & 3) << 2)]
+    pixels[i] = SNOW_TONES[Math.max(0, Math.min(4, Math.floor(l * 4.2 + 1 + d * 0.8)))]
+  }
+  for (let x = 0; x < width; x++) {
+    // Rows since the shape's top edge in this column (0: the outline itself, which stays).
+    let since = -1
+    for (let y = 0; y < height; y++) {
+      const i = y * width + x
+      if (pixels[i] >>> 24 !== 0xff) {
+        since = -1
+        continue
+      }
+      since++
+      const d = SNOW_DITHER[(x & 3) | ((y & 3) << 2)]
+      if (up) {
+        if (up[i] / 255 >= step.up && d < step.cover + (up[i] / 255 - step.up)) snowAt(i, x, y)
+      } else if (since >= 1 && since <= step.depth && d < step.cover + 0.2) snowAt(i, x, y)
+    }
+  }
+  const out = { ...sprite, pixels }
+  cached[level] = out
+  return out
 }
 
 // A sprite's silhouette: every solid pixel in white (tint it), anchored like the sprite.

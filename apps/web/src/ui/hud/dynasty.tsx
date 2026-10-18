@@ -1,3 +1,4 @@
+import { EnvoyPortrait } from '../advisor/EnvoyPortrait'
 import {
   SKILLS,
   aidError,
@@ -457,8 +458,21 @@ export function DynastySection({ kingdom, now, online, onShow }: { kingdom: King
             </ul>
           </>
         )}
+        {d.regnant && d.queen && (
+          <div className="person regnant">
+            <Portrait seed={d.queen.id * 977 + kingdom.site.y} sex="f" age={ageOf(d.queen, now)} role="queen" size={84} />
+            <div>
+              <b>Hükümdar Kraliçe {d.queen.name}</b>
+              <small>{regnantText(d.queen.name, d.kinsmanAt, now)}</small>
+              <SkillBars skills={d.queen.skills} />
+              <button className="btn small primary" onClick={() => online?.act({ type: 'house', action: 'wedQueen' })}>
+                Kraliçeyi evlendir
+              </button>
+            </div>
+          </div>
+        )}
         <div className="house">
-          {council ? (
+          {d.regnant ? null : council ? (
             <div className="person">
               <Portrait seed={kingdom.site.x * 31 + kingdom.site.y} sex="m" age={62} role="regent" size={84} />
               <div>
@@ -481,7 +495,7 @@ export function DynastySection({ kingdom, now, online, onShow }: { kingdom: King
               </div>
             )
           )}
-          {d.queen ? (
+          {d.regnant ? null : d.queen ? (
             <div className="person">
               <Portrait seed={d.queen.id * 977 + kingdom.site.y} sex="f" age={ageOf(d.queen, now)} role="queen" size={84} />
               <div>
@@ -511,8 +525,9 @@ export function DynastySection({ kingdom, now, online, onShow }: { kingdom: King
           <ul className="children">{children.map((p) => card(p, 'child'))}</ul>
         )}
         <p className="hint">
-          Hükümdar ile kraliçesinin en çok {balance.dynasty.births.maxSons} oğlu ve {balance.dynasty.births.maxDaughters} kızı olur
-          {d.queen ? ` (daha ${left.sons} oğul, ${left.daughters} kız doğabilir)` : ''}. Çocuklar yeteneklerinin bir kısmını anne babadan alır; reşit olmayan çocuk ve kardeşlerin eğitimini
+          Hükümdar ile kraliçesinin en çok iki çocuğu olur: çoğu zaman iki oğul, ya da tek oğul, ya da bir oğul ve bir kız
+          {d.queen && !d.regnant ? ` (daha ${left.sons} oğul, ${left.daughters} kız doğabilir)` : ''}. Tahta geçmeyen kardeşler genç yaşta hastalıktan ölür; salgın
+          da arada bir hanedandan birini götürür (ardılı olmayan hükümdarı değil). Varis kalmazsa ve kraliçe saraydaysa kraliçe yönetir ve evlendirilmesi şarttır. Çocuklar yeteneklerinin bir kısmını anne babadan alır; reşit olmayan çocuk ve kardeşlerin eğitimini
           seçebilirsin (reşit olunca +{balance.dynasty.skills.education}). Hükümdar ölünce en büyük oğlu, oğlu yoksa en büyük reşit kardeşi geçer; ikisi de yoksa naipler konseyi yönetir.{' '}
           {I.roles.minAge} yaşını geçen çocuk ve kardeşlere görev verebilir, prensesleri evlendirebilirsin. Reşit erkeklerin hükümdara bir bakışı vardır: kardeşlerden biri iyice
           hoşnutsuz olursa ({I.revolt.below} altı) isyan edip taht davacısı olabilir.
@@ -601,7 +616,7 @@ export function houseWaiting(d: Dynasty | undefined, now: number, pretender: boo
 
 export interface HouseNews {
   key: string
-  kind: 'birth' | 'death' | 'coronation' | 'council' | 'ofAge' | 'wedding' | 'passing'
+  kind: 'birth' | 'death' | 'coronation' | 'council' | 'ofAge' | 'wedding' | 'passing' | 'regnant'
   person: Person
   heir?: Person | null
   // When it happened (a birth, a death), or when this browser first heard of it: how old the news is, for its shelf
@@ -647,6 +662,8 @@ export function houseNews(d: Dynasty, known: Set<string>, at: number): HouseNews
   }
   if (d.king && !d.council && d.generation > 1 && !known.has(`crown:${d.king.id}`)) news.push({ key: `crown:${d.king.id}`, kind: 'coronation', person: d.king })
   if (d.council && !known.has(`council:${d.dead[0]?.id ?? 0}`)) news.push({ key: `council:${d.dead[0]?.id ?? 0}`, kind: 'council', person: d.king ?? d.dead[0] })
+  // The widowed lady left to rule alone: the envoy tells the lord she must be wed (CLAUDE.md §9.1).
+  if (d.regnant && d.queen && !known.has(`regnant:${d.queen.id}:${d.dead[0]?.id ?? 0}`)) news.push({ key: `regnant:${d.queen.id}:${d.dead[0]?.id ?? 0}`, kind: 'regnant', person: d.queen })
   return news.filter((n) => n.person)
 }
 
@@ -661,6 +678,7 @@ export function allKnown(d: Dynasty) {
   for (const p of d.dead) known.add(`death:${p.id}`)
   if (d.king) known.add(`crown:${d.king.id}`)
   if (d.council) known.add(`council:${d.dead[0]?.id ?? 0}`)
+  if (d.regnant && d.queen) known.add(`regnant:${d.queen.id}:${d.dead[0]?.id ?? 0}`)
   return known
 }
 
@@ -672,16 +690,17 @@ export const TITLES: Record<HouseNews['kind'], string> = {
   ofAge: 'Reşit oldu',
   wedding: 'Kraliçe saraya geldi',
   passing: 'Hanedandan bir ölüm',
+  regnant: 'Kraliçe tek başına',
 }
 
-const HOUSE_CUES = { birth: 'birth', death: 'death', coronation: 'coronation', council: 'council', ofAge: 'ofAge', wedding: 'wedding', passing: 'death' } as const
+const HOUSE_CUES = { birth: 'birth', death: 'death', coronation: 'coronation', council: 'council', ofAge: 'ofAge', wedding: 'wedding', passing: 'death', regnant: 'council' } as const
 
 export function HouseDialog({ news, kingdom, now, online, onClose }: { news: HouseNews; kingdom: Kingdom; now: number; online?: Online | null; onClose(): void }) {
   const p = news.person
   // The house's news, each with its own sound: a lullaby, the funeral bell, a coronation fanfare…
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => playOnce(`house:${news.key}`, HOUSE_CUES[news.kind]), [news.key])
-  const role = news.kind === 'wedding' ? 'queen' : news.kind === 'death' || news.kind === 'coronation' ? 'king' : roleOfPortrait(p)
+  const role = news.kind === 'wedding' || news.kind === 'regnant' ? 'queen' : news.kind === 'death' || news.kind === 'coronation' ? 'king' : roleOfPortrait(p)
   const d = kingdom.dynasty
   const sibling = !!d && siblingsOf(d).some((c) => c.id === p.id)
   // Followed by his son (or, with none, his brother).
@@ -690,13 +709,15 @@ export function HouseDialog({ news, kingdom, now, online, onClose }: { news: Hou
     news.kind === 'birth'
       ? `Kraliçe ${d?.queen?.name ?? ''} bir ${p.sex === 'm' ? 'oğlan' : 'kız'} doğurdu! Halk sevinçle kutluyor. Ona bir ad koy; hükümdar yaşadıkça eğitimini Saray sekmesinin Hanedan bölümünden seçebilirsin.`
       : news.kind === 'death'
-        ? `Hükümdar ${p.name}, ${Math.floor(ageOf(p, p.diedAt ?? now))} yaşında ${p.cause === 'battle' ? 'ordusunun başında savaşırken' : p.cause === 'grief' ? 'kaybedilen savaşın kahrından' : 'yaşlılıktan'} öldü. ${
-            news.heir && !d?.council
+        ? `Hükümdar ${p.name}, ${Math.floor(ageOf(p, p.diedAt ?? now))} yaşında ${p.cause === 'battle' ? 'ordusunun başında savaşırken' : p.cause === 'grief' ? 'kaybedilen savaşın kahrından' : p.cause === 'sickness' ? 'salgına yakalanıp hastalıktan' : 'yaşlılıktan'} öldü. ${
+            d?.regnant && d.queen
+              ? `Ne oğlu ne kardeşi kaldı; lordluğu şimdilik Kraliçe ${d.queen.name} yönetiyor, ama evlenmesi şart.`
+              : news.heir && !d?.council
               ? `Yerine ${son ? 'oğlu' : 'kardeşi'} ${news.heir.name} geçti${son ? `; ${p.name} hükümdarın öbür çocukları artık yeni hükümdarın kardeşleri` : ''}.`
               : news.heir
                 ? `Oğlu ${news.heir.name} reşit olana kadar naipler konseyi yönetecek.`
                 : `Varisi olmadığı için lordluğu naipler konseyi yönetecek; ${balance.dynasty.council.kinsmanYears} yıl sonra hanedandan bir akraba tahta çağrılacak.`
-          } Kraliçe artık kraliçe ana; yeni hükümdarın kendi kraliçesini alması gerekecek.`
+          }${d?.regnant ? '' : ' Kraliçe artık kraliçe ana; yeni hükümdarın kendi kraliçesini alması gerekecek.'}`
         : news.kind === 'coronation'
           ? `${p.name} tahta çıktı. Hanedanın ${d?.generation ?? 1}. hükümdarı o.`
           : news.kind === 'council'
@@ -704,19 +725,21 @@ export function HouseDialog({ news, kingdom, now, online, onClose }: { news: Hou
             : news.kind === 'ofAge'
               ? `${titleOf(p)} ${p.name}${sibling ? ', hükümdarın kardeşi,' : ''} ${balance.dynasty.comingOfAge} yaşına girdi ve reşit oldu.${p.education ? ` Hocalarının emeği karşılığını verdi: ${SKILL_NAMES[p.education].toLowerCase()} yeteneği arttı.` : ''}${p.sex === 'f' ? ' Artık evlendirilebilir.' : ''}`
               : news.kind === 'passing'
-                ? `${titleOf(p)} ${p.name}, ${Math.floor(ageOf(p, p.diedAt ?? now))} yaşında yaşlılıktan öldü. Hanedan yasta.`
-                : `Kraliçe ${p.name} saraya geldi. Halk düğünü günlerce kutladı; hükümdarın çocukları onunla doğacak.`
+                ? `${titleOf(p)} ${p.name}, ${Math.floor(ageOf(p, p.diedAt ?? now))} yaşında ${p.cause === 'sickness' ? 'hastalıktan' : 'yaşlılıktan'} öldü. Hanedan yasta.`
+                : news.kind === 'regnant'
+                  ? regnantText(p.name, d?.kinsmanAt, now)
+                  : `Kraliçe ${p.name} saraya geldi. Halk düğünü günlerce kutladı; hükümdarın çocukları onunla doğacak.`
   return (
     <div className="modal" role="dialog" aria-labelledby="house-title">
       <section className="dialog frame away house-dialog">
         <header className="sheet-head">
-          <Icon name="crown" size={32} />
+          {news.kind === 'regnant' ? <EnvoyPortrait size={40} /> : <Icon name="crown" size={32} />}
           <div>
-            <small>Hanedandan haber</small>
+            <small>{news.kind === 'regnant' ? 'Elçi haber getirdi' : 'Hanedandan haber'}</small>
             <h2 id="house-title">{TITLES[news.kind]}</h2>
           </div>
         </header>
-        <DynastyArt kind={news.kind === 'passing' ? 'death' : news.kind} seed={p.id} />
+        <DynastyArt kind={news.kind === 'passing' ? 'death' : news.kind === 'regnant' ? 'coronation' : news.kind} seed={p.id} />
         <div className="person">
           <Portrait
             seed={p.id * 977 + (role === 'queen' ? kingdom.site.y : kingdom.site.x)}
@@ -743,10 +766,23 @@ export function HouseDialog({ news, kingdom, now, online, onClose }: { news: Hou
               onClose()
             }}
           />
+        ) : news.kind === 'regnant' && d?.regnant ? (
+          <DialogFoot label="Kraliçeyi evlendir" onNext={() => (online?.act({ type: 'house', action: 'wedQueen' }), onClose())}>
+            <button className="btn small" onClick={onClose}>
+              Sonra
+            </button>
+          </DialogFoot>
         ) : (
           <DialogFoot onNext={onClose} />
         )}
       </section>
     </div>
   )
+}
+
+// The envoy on the widowed lady left to rule alone (CLAUDE.md §9.1): she rules for now, but she must be wed, by the
+// lord's word or, when the time runs out, by the council's.
+export function regnantText(name: string, by: number | undefined, now: number) {
+  const left = by === undefined ? null : Math.max(0, Math.ceil((by - now) / 60_000))
+  return `Lordum, hanedanda tahta geçecek kimse kalmadı: ne bir oğul ne bir kardeş. Lordluğu şimdilik Kraliçe ${name} yönetiyor; kendi yetenekleriyle, naipsiz. Ama bir kraliçenin tek başına hüküm sürmesini ne halk ne taç uzun süre kabul eder. Onu evlendirmeliyiz; seçeceğimiz soylu bey tahta çıkar, çocukları hanedanı sürdürür.${left !== null ? ` Biz karar vermezsek ${left} dakika içinde konsey kendisi bir eş bulacak.` : ''}`
 }

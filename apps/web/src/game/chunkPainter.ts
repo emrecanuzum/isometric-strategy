@@ -4,7 +4,7 @@ import { structureParts } from './buildingSprites'
 import type { Structure } from './buildingSprites'
 import { innLook } from './innSprites'
 import { caveLook } from './caveSprites'
-import { BAYER, SPRITES, castShadow, ramp } from './sprites'
+import { BAYER, SPRITES, castShadow, ramp, snowOf } from './sprites'
 import type { Sprite } from './sprites'
 import type { SunShadow } from './daylight'
 
@@ -276,6 +276,10 @@ const GRASS = ramp(0x16382c, 0x1c4433, 0x24523a, 0x2f663d, 0x3d7c40, 0x4f9142, 0
 const SAND = ramp(0x8a6844, 0xa98250, 0xc39b5e, 0xd6b471, 0xe4c988, 0xefdba3, 0xf7eac0)
 const ROCK = ramp(0x2e2c3d, 0x423f50, 0x595563, 0x726d78, 0x8c878c, 0xa6a19f, 0xbfbab1, 0xd8d3c5)
 const SNOW = ramp(0x7f93bd, 0xa7b8d8, 0xc9d6ea, 0xe6edf7, 0xffffff)
+// The low growth and stones the snow buries (see paintChunk's `snow`).
+const BURIED = new Set<Sprite>([...SPRITES.tallGrass, ...SPRITES.wildflowers.flat(), ...SPRITES.tuft, ...SPRITES.pebbles])
+// How much of the open ground the snow covers at each depth (see paintChunk's `snow`).
+const SNOW_COVER = [0, 0.32, 0.7, 0.94]
 const WATER = ramp(0x8fd6dc, 0x6cc0d4, 0x4fa6cc, 0x3c8cc0, 0x2f73b0, 0x275c9c, 0x214884, 0x1b376b)
 const FOAM = ramp(0xeaf8fa)
 const SWAMP = ramp(0x2a3b36, 0x36493c, 0x445a43, 0x556c4a, 0x687e52, 0x7c905c)
@@ -944,7 +948,9 @@ function shadowOf(sprite: Sprite, foot: number, sun: SunShadow) {
 // `lift`: leave the trees out and hand back where they stand instead (see ChunkImage.trees). `liftedNear`: the chunks
 // round it whose trees are lifted too ('all' when every chunk's are), so the trees of theirs reaching into this one are
 // left to them, and those of the others painted here.
-export function paintChunk(context: PaintContext, cx: number, cy: number, k: number, lift = false, sun: SunShadow = NOON, liftedNear: number[] | 'all' = 'all'): ChunkImage {
+// `snow`: how deep the snow lies (weather.ts → snowCover, 0..3): it whitens the open ground (less on roads, paths and
+// sand, none on water) and the trees, rocks, inns and buildings painted in (sprites.ts → snowOf).
+export function paintChunk(context: PaintContext, cx: number, cy: number, k: number, lift = false, sun: SunShadow = NOON, liftedNear: number[] | 'all' = 'all', snow = 0): ChunkImage {
   const { world, lit, patch, road, bridges, structures, occupied, footprint, trail, trailNear, lane, laneNear } = context
   const { size, seed, elevation, moisture, height, levels } = world
   const S = balance.map.chunkSize
@@ -1167,6 +1173,17 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
         if (wear > 0 && colors !== ROAD && colors !== LANE && colors !== WATER && colors !== FOAM && colors !== POOL) {
           const step = Math.floor((wear / TRAIL_ALPHA) * 3 + d) / 3
           if (step > 0) color = mix(color, ROAD[Math.max(0, Math.min(ROAD.length - 1, Math.round(1.6 + broad * 1.2 + light * 6)))], Math.min(1, step) * TRAIL_ALPHA)
+        }
+        // Snow over the open ground, patchy until it lies deep; trodden thin on roads and paths, thin on sand.
+        if (snow > 0 && colors !== WATER && colors !== FOAM && colors !== POOL && colors !== SNOW) {
+          const lies = SNOW_COVER[snow] * (colors === ROAD || colors === LANE ? 0.5 : colors === SAND ? 0.4 : 1) * (1 - (wear / TRAIL_ALPHA) * 0.6)
+          if (valueNoise(wx * 0.6, wy * 0.6, seed + 301) * 0.6 + (d + 0.5) * 0.4 < lies) {
+            const t = Math.floor(2.6 + light * 6 + d * 0.7)
+            color = SNOW[t < 0 ? 0 : t >= SNOW.length ? SNOW.length - 1 : t]
+          } else if (wear > 0.02 || colors === ROAD || colors === LANE) {
+            // Where it is trodden through: grey slush over the earth, not green grass.
+            color = mix(ROAD[Math.max(0, Math.min(ROAD.length - 1, Math.round(1.4 + light * 5)))], SNOW[1], snow * 0.12)
+          }
         }
         out[yy * width + px] = color
         depth[yy * width + px] = row
@@ -1474,7 +1491,7 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
   const dark = [1 - sun.alpha, 1 - sun.alpha * 0.82, 1 - sun.alpha * 0.6]
   const reach = 6 + 10 * k
   for (const { sprite, x, y, row, foot } of placed) {
-    if (foot < 0) continue
+    if (foot < 0 || (snow >= 2 && BURIED.has(sprite))) continue
     const shadow = shadowOf(sprite, foot, sun)
     const w = Math.ceil(shadow.width * k)
     const h = Math.ceil(shadow.height * k)
@@ -1501,7 +1518,11 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
   // Marks pixels outside this chunk's ground that one of its own sprites covered.
   const covered = shaded.fill(0)
   const step = 1 / k
-  for (const { sprite, x, y, row, own } of placed) {
+  // Grass tufts, wildflowers and pebbles are buried once the snow lies patchy or deeper.
+  const buried = snow >= 2 ? BURIED : null
+  for (const { sprite: drawn, x, y, row, own } of placed) {
+    if (buried?.has(drawn)) continue
+    const sprite = snowOf(drawn, snow)
     const w = Math.ceil(sprite.width * k)
     const h = Math.ceil(sprite.height * k)
     const left = x - Math.round(sprite.anchorX * k)

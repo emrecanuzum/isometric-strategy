@@ -34,6 +34,11 @@
     ],
     "maxSons": 2,
     "maxDaughters": 1,
+    "plans": [
+      { "sons": 2, "daughters": 0, "weight": 0.45 },
+      { "sons": 1, "daughters": 0, "weight": 0.25 },
+      { "sons": 1, "daughters": 1, "weight": 0.3 }
+    ],
     "son": 0.55,
     "queenMaxAge": 44
   },
@@ -64,6 +69,14 @@
   },
   "succession": {
     "brotherInherits": true
+  },
+  "siblingFate": {
+    "age": [18, 30],
+    "soonestYears": [0.5, 3]
+  },
+  "sickness": {
+    "royalPerShare": 0.001,
+    "peoplePerSick": 0.0006
   },
   "queenForPalaceLevel": 3,
   "keepDead": 12,

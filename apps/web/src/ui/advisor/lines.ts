@@ -39,6 +39,8 @@ export interface Reply {
   snooze?: number
   // Opens one of the help topics ('' for the list of them).
   topic?: string
+  // A side question, shown as a small link under the answers rather than a button among them.
+  quiet?: boolean
   // The tip it puts off, and a change to the tutorial.
   id?: string
   tutorial?: 'on' | 'off'
@@ -1601,7 +1603,7 @@ export const TOPICS: Topic[] = [
         `Yangın, sel, deprem, çekirge, kurt… Bir kriz gelince üç yol sunarım: köylüleri seferber et (${min(c.villagers.seconds)} dakika iş gücü ${pct(-c.villagers.work)} düşer), orduyu seferber et (bir iki asker ölür, ordu ${min(c.army.lockSeconds)} dakika sefere çıkamaz) ya da bir şey yapma. Karar için ${c.decideSeconds} saniye var; susarsanız bir şey yapılmamış sayılır.`,
         `Kriz nasıl karşılanırsa karşılansın depodan bir pay götürür: köylüler kaybı ${pct(toll.choice.villagers)} kadarına, ordu ${pct(toll.choice.army)} kadarına indirir. Örneğin orman yangını yapı malzemesinin ${pct(toll.kinds.forestFire.materials)} kadarını yakar. Depo ${pct(toll.fullAt)} doluluğu geçtikçe pay büyür, tam doluyken iki katıdır; ama ${toll.floor} birimin altı sayılmaz ve bir afet bir maldan ${pct(toll.maxShare)} kadarından fazlasını almaz.`,
         `Bir de sessiz düşmanlar vardır: her yarım saatte bir, ambarın ${pct(hoard.fullAt)} kadarından dolu bir mal varsa fareler yemeği, rutubet yapı malzemesini, pas savaş malzemesini yer (${pct(hoard.minShare)}–${pct(hoard.maxShare)}). Seçim yok, lordum; tek çare ambarı ağzına kadar doldurmamak.`,
-        `Kâhya tutarsanız cevapsız kalan krizde köylüleri o seferber eder, her seferinde ${c.steward.fee.gold} altın alır.${k.steward ? ' Sizin kâhyanız görevde; iyi adamdır, biraz cimri ama.' : ' Çevrimdışı lordun en iyi dostudur.'}\n\nHavaya gelince: yağmur, fırtına, sel ve dolu haritayı grileştirir; ayrıca her yirmi dakikada bir ${pct(sh.chance)} ihtimalle kısa bir sağanak geçer. Fırtınada denizde korsan saldırısı ${dec(balance.navy.seaWeather.storm)} kat sıklaşır, sis ise korsanları şaşırtır.`,
+        `Kâhya tutarsanız cevapsız kalan krizde köylüleri o seferber eder, her seferinde ${c.steward.fee.gold} altın alır.${k.steward ? ' Sizin kâhyanız görevde; iyi adamdır, biraz cimri ama.' : ' Çevrimdışı lordun en iyi dostudur.'}\n\nHavaya gelince: yağmur, fırtına, sel ve dolu haritayı grileştirir; ayrıca on dakikada bir kısa bir sağanak geçebilir: yazın ${pct(sh.seasons.summer.chance)}, ilkbaharda ${pct(sh.seasons.spring.chance)}, sonbaharda ${pct(sh.seasons.autumn.chance)} ihtimalle; bazıları şimşekli fırtınadır. Kışın yağan kardır. Fırtınada denizde korsan saldırısı ${dec(balance.navy.seaWeather.storm)} kat sıklaşır, sis ise korsanları şaşırtır.`,
       ]
     },
     go: { label: 'Sağlık ve kâhya', act: tab('people', 'people', 'mood') },
@@ -1723,8 +1725,8 @@ export const TOPICS: Topic[] = [
       return [
         `Lordluğunuzun bir hanedanı vardır: hükümdar, kraliçe, çocuklar, kardeşler ve akrabalar. Bir yıl bir gerçek saattir. ${king ? `${king.name} şu an ${ageOf(king.bornAt, now)} yaşında; Allah uzun ömür versin, ama ${d.death.atAge[0]}–${d.death.atAge[1]} arası bir yaşta hepimiz gideriz.` : 'Henüz tahtta kimse yok; naipler idare ediyor.'}`,
         'Yetenekler üçtür: maliye vergiyi ve ticareti, halk mutluluğu ve iş gücünü, askerlik zarı ve maaşı etkiler. Kraliçenin yeteneklerinin yarısı hükümdarınkine eklenir. Beşten yukarısı iyidir, lordum; ben de gençken beşin üstündeydim.',
-        `Kraliçe sarayda oldukça çocuk doğar: bir çiftin en çok ${d.births.maxSons} oğlu, ${d.births.maxDaughters} kızı olur. Adlarını siz koyarsınız (bir kez!), eğitimlerini seçersiniz; ${d.comingOfAge} yaşında reşit olunca o yetenek artar. Sarayın ${d.queenForPalaceLevel}. seviyesi için kraliçe şarttır.`,
-        `Hükümdar ölünce en büyük oğul geçer; oğul küçükse naipler konseyi yönetir. Oğul yoksa reşit bir erkek kardeş, o da yoksa ${d.council.kinsmanYears} yıl sonra hanedandan bir akraba çağrılır. Hanedan bitmez, lordum; yalnızca karışır. Kardeşlerin hırsı ve taht kavgaları "Entrika" konusunda.`,
+        `Kraliçe sarayda oldukça çocuk doğar: bir çiftin en çok iki çocuğu olur: çoğu zaman iki oğul, bazen tek oğul, bazen bir oğul ve bir kız. Adlarını siz koyarsınız (bir kez!), eğitimlerini seçersiniz; ${d.comingOfAge} yaşında reşit olunca o yetenek artar. Sarayın ${d.queenForPalaceLevel}. seviyesi için kraliçe şarttır.`,
+        `Hükümdar ölünce en büyük oğul geçer; oğul küçükse naipler konseyi yönetir. Oğul yoksa reşit bir erkek kardeş geçer. Tahta geçmeyen kardeşler çoğu zaman genç yaşta bir hastalıktan ölür; salgın günlerinde hanedandan biri de gidebilir (ardılı olmayan hükümdar hariç). Kimse kalmazsa kraliçe yönetir, ama onu evlendirmek şarttır: siz seçmezseniz ${d.council.kinsmanYears} yıl içinde konsey bir eş bulur. Kraliçe de yoksa naipler yönetir, ${d.council.kinsmanYears} yıl sonra bir akraba çağrılır. Hanedan bitmez, lordum; yalnızca karışır. Kardeşlerin hırsı ve taht kavgaları "Entrika" konusunda.`,
       ]
     },
     go: { label: 'Hanedan bölümü', act: tab('kingdom', 'palace', 'house') },

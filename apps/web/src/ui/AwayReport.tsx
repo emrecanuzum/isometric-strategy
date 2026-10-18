@@ -1095,7 +1095,7 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
       for (const c of d.children) if (c.bornAt > since) house.push({ icon: 'happy', text: `${c.sex === 'm' ? 'Bir oğlun' : 'Bir kızın'} oldu: ${c.name}.`, tone: 'up' })
       for (const p of d.dead) if ((p.diedAt ?? 0) > since) house.push({ icon: 'unhappy', text: `${p.ruled === false ? (p.sex === 'm' ? 'Prens' : 'Prenses') : 'Hükümdar'} ${p.name} ${p.cause === 'battle' ? 'ordusunun başında savaşırken' : p.cause === 'grief' ? 'kaybedilen savaşın kahrından' : p.cause === 'rebel' ? 'isyanı bastırılırken' : p.cause === 'deposed' ? 'tahttan indirilerek' : 'yaşlılıktan'} öldü.`, tone: 'down' })
       for (const c of d.children) if (c.grown && c.bornAt + balance.dynasty.comingOfAge * yearMs() > since) house.push({ icon: 'crown', text: `${c.name} reşit oldu.` })
-      if (house.length > 0) house.push({ icon: 'crown', text: d.council || !d.king ? 'Lordluğu şimdi naipler konseyi yönetiyor.' : `Şimdi hükümdar ${d.king.name}.` })
+      if (house.length > 0) house.push({ icon: 'crown', text: d.regnant && d.queen ? `Lordluğu şimdi Kraliçe ${d.queen.name} yönetiyor; evlendirilmesi gerek.` : d.council || !d.king ? 'Lordluğu şimdi naipler konseyi yönetiyor.' : `Şimdi hükümdar ${d.king.name}.` })
     }
     if (house.length > 0) out.push({ title: 'Hanedan', picture: 'house', lines: house })
 

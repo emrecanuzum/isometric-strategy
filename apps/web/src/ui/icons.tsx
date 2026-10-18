@@ -1,3 +1,4 @@
+import { memo } from 'react'
 // Small pixel icons for the interface, drawn from 8×8 character maps so they match the pixel art of the map.
 // They are always drawn at a whole multiple of 8 pixels, so every art pixel stays square.
 
@@ -82,14 +83,28 @@ export const MAPS = {
 
 export type IconName = keyof typeof MAPS
 
-export function Icon({ name, size = 16, slash = false }: { name: IconName; size?: number; slash?: boolean }) {
-  const rows = MAPS[name]
+// One path per colour (a handful per icon, instead of a rect per pixel): the interface draws hundreds of icons and
+// re-renders every second, so each one is worked out once and the component skips the render while its props hold
+// (CLAUDE.md §12).
+const PATHS = new Map<IconName, [string, string][]>()
+function pathsOf(name: IconName) {
+  let out = PATHS.get(name)
+  if (!out) {
+    const byColor = new Map<string, string>()
+    MAPS[name].forEach((row, y) => [...row].forEach((ch, x) => PALETTE[ch] && byColor.set(PALETTE[ch], `${byColor.get(PALETTE[ch]) ?? ''}M${x} ${y}h1v1h-1z`)))
+    PATHS.set(name, (out = [...byColor]))
+  }
+  return out
+}
+const SLASH = Array.from({ length: 8 }, (_, i) => `M${7 - i} ${i}h1v1h-1z`).join('')
+
+export const Icon = memo(function Icon({ name, size = 16, slash = false }: { name: IconName; size?: number; slash?: boolean }) {
   return (
     <svg className="icon" width={size} height={size} viewBox="0 0 8 8" shapeRendering="crispEdges" aria-hidden>
-      {rows.flatMap((row, y) =>
-        [...row].map((ch, x) => (PALETTE[ch] ? <rect key={`${x},${y}`} x={x} y={y} width={1} height={1} fill={PALETTE[ch]} /> : null)),
-      )}
-      {slash && Array.from({ length: 8 }, (_, i) => <rect key={`s${i}`} x={7 - i} y={i} width={1} height={1} fill={PALETTE.R} />)}
+      {pathsOf(name).map(([fill, d]) => (
+        <path key={fill} d={d} fill={fill} />
+      ))}
+      {slash && <path d={SLASH} fill={PALETTE.R} />}
     </svg>
   )
-}
+})

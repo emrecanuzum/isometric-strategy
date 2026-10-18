@@ -1381,6 +1381,14 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         }
         return refuse('rejected')
       }
+      if (action === 'wedQueen') {
+        // The widowed lady ruling alone is wed to a lord of the house's choosing (CLAUDE.md §9.1).
+        await mutateKingdom(me.id, now, (k) => {
+          if (game.wedQueenError(k)) refuse('rejected')
+          return game.wedQueen(k, now)
+        })
+        return null
+      }
       if (action === 'aid') {
         const kind = cmd.kind === 'gold' ? 'gold' : 'troops'
         let out: { granted: boolean; why?: string; troops?: number; gold?: number } = { granted: false }

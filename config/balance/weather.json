@@ -8,12 +8,23 @@
   },
   "clearKinds": ["drought", "fullMoon", "aurora", "eclipse", "rainbow", "comet"],
   "showers": {
-    "windowSeconds": 1200,
-    "chance": 0.3,
+    "windowSeconds": 600,
     "minSeconds": 150,
     "maxSeconds": 420,
     "minRain": 0.25,
-    "maxRain": 0.6
+    "maxRain": 0.6,
+    "seasons": {
+      "spring": { "chance": 0.3, "storm": 0.25 },
+      "summer": { "chance": 0.03, "storm": 0.6 },
+      "autumn": { "chance": 0.6, "storm": 0.4 },
+      "winter": { "chance": 0.45, "storm": 0 }
+    },
+    "storm": { "minRain": 0.75, "maxRain": 1, "grey": 0.9, "wind": 0.5 }
+  },
+  "snowSeasons": ["winter"],
+  "snowCover": {
+    "winter": [[0, 1], [0.12, 2], [0.3, 3]],
+    "spring": [[0, 2], [0.12, 1], [0.28, 0]]
   },
   "gatherSeconds": 45,
   "fadeSeconds": 30,

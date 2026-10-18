@@ -11,7 +11,7 @@ import { addUnits, countOf, garrisonOf, unitSpec } from './units'
 import { perSpan } from './span'
 import type { SpanCache } from './span'
 import { cutOff, imprisoned } from './walls'
-import { dynastyEffects, dynastyStep, townKinBonus } from './dynasty'
+import { dynastyEffects, dynastyStep, sicknessStrikes, townKinBonus } from './dynasty'
 import type { Dynasty, DynastyEvent } from './dynasty'
 import type { LiegeOffer, Pretender } from './intrigue'
 import { changeCrownRelation, driftCrownRelations, fealtyOpen, settleOrderTrips, stewardFactor } from './crowns'
@@ -1717,6 +1717,11 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
         k.people = Math.max(0, Math.min(grown.room, grown.people + grown.perRound))
       }
       k.sickness = sicknessStep(k, next)
+      // A few of the sick die (CLAUDE.md §9.1), and now and then the sickness reaches the lord's house.
+      if ((k.sickness ?? 0) > 0) {
+        if (k.people !== undefined) k.people = Math.max(0, k.people - k.people * k.sickness! * balance.dynasty.sickness.peoplePerSick)
+        if (k.dynasty) k.dynasty = sicknessStrikes(k, next, Math.floor(next / productionMs())).dynasty
+      }
       // The people's mood drifts toward what the taxes, the queen, the granary, the temple and the day make of it.
       const n = balance.society.night
       k.happiness = happinessStep(happinessOf(k), happinessFor(k, next))

@@ -490,11 +490,15 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
   function pick(at: Point): number | undefined {
     let best: number | undefined
     let bestD = 22
-    for (const { army, body } of shown.values()) {
-      const d = Math.hypot(body.x - at.x, body.y - 14 - at.y)
-      if (d < bestD) {
-        bestD = d
-        best = army.id
+    // Every squad of a column counts (a crown's patrol is five of them), not only the one at its head.
+    for (const { army, body, followers } of shown.values()) {
+      for (const s of [body, ...followers]) {
+        if (!s.visible) continue
+        const d = Math.hypot(s.x - at.x, s.y - 14 * s.scale.y - at.y)
+        if (d < bestD) {
+          bestD = d
+          best = army.id
+        }
       }
     }
     return best
