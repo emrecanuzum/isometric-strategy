@@ -260,11 +260,20 @@ type Answer = { lobby: string; kingdom: Mine; result?: unknown }
 // comes is not sent twice, the second caller waits for the first answer (CLAUDE.md §11).
 const inFlight = new Map<string, Promise<Answer>>()
 
+// Who hears of a command the server took (the envoy's word on what the lord just did; ui/advisor/EnvoyNote.tsx).
+type Done = (command: { type?: string; [key: string]: unknown }, answer: Answer) => void
+const doneListeners = new Set<Done>()
+export function onCommandDone(listener: Done): () => void {
+  doneListeners.add(listener)
+  return () => doneListeners.delete(listener)
+}
+
 function invoke(body: { type?: string; [key: string]: unknown }): Promise<Answer> {
   const key = JSON.stringify(body)
   const pending = inFlight.get(key)
   if (pending) return pending
   const call = request(body)
+  call.then((answer) => doneListeners.forEach((l) => l(body, answer)), () => {})
   inFlight.set(key, call)
   const forget = () => inFlight.delete(key)
   call.then(forget, forget)

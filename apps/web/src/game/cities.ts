@@ -1,4 +1,4 @@
-import { Feature, Terrain, balance, cityCenter, cityHarbour, crownRulerName, hash } from '@game/shared'
+import { Feature, Terrain, balance, cityCenter, cityHarbour, crownRulerName, hash, heightAt } from '@game/shared'
 import type { CitySide, CrownKey, Point, World } from '@game/shared'
 import type { KingdomColor, Structure, StructureLook } from './buildingSprites'
 import { squad } from './armies'
@@ -542,12 +542,165 @@ function warCamp(world: World, index: number): Structure[] {
   return parts
 }
 
+// The suburbs round a crown capital (CLAUDE.md §7.7; drawn only): unwalled hamlets outside the outer wall, roadside
+// rows of houses with an inn, a forge or a chapel by the roads out of the gates, and farther off farmsteads with a red
+// barn, fields and a woodcutter's yard. They are thick by the wall and the roads and thin out toward the edge of the
+// ground no lord may hold (cities.json → kingdomGapTiles keeps every lord's fully grown lands some 33 tiles off the
+// walled core; the suburbs reach SUBURB tiles past the outer wall, to 30). A worn lane runs from each hamlet to the
+// nearest road, or to the hamlet before it. The ground knows nothing of them, like the outer town.
+const SUBURB = 20
+const SUBURB_STEP = 6
+interface Suburbs {
+  structures: Structure[]
+  lanes: Point[][]
+}
+const suburbsMade = new WeakMap<World, Suburbs[]>()
+function suburbsOf(world: World, index: number): Suburbs {
+  let list = suburbsMade.get(world)
+  if (!list) {
+    list = world.cities.map((_, i) => suburbs(world, i))
+    suburbsMade.set(world, list)
+  }
+  return list[index]
+}
+function suburbs(world: World, index: number): Suburbs {
+  const S = balance.cities.size
+  const c = world.cities[index]
+  const { size, terrain, feature } = world
+  const out: Structure[] = []
+  const lanes: Point[][] = []
+  const at = (x: number, y: number) => y * size + x
+  const inMap = (x: number, y: number) => x >= 2 && y >= 2 && x < size - 2 && y < size - 2
+  const water = (x: number, y: number) => {
+    const t = terrain[at(x, y)]
+    return t === Terrain.Lake || t === Terrain.River
+  }
+  const road = (x: number, y: number) => feature[at(x, y)] === Feature.Road || feature[at(x, y)] === Feature.Bridge
+  // How far a tile lies outside the walled core (the outer wall stands at RING).
+  const reach = (x: number, y: number) => Math.max(x < c.x ? c.x - x : x >= c.x + S ? x - (c.x + S - 1) : 0, y < c.y ? c.y - y : y >= c.y + S ? y - (c.y + S - 1) : 0)
+  const lo = RING + 3
+  const hi = RING + SUBURB
+  // The war camp and the harbour keep their ground, with a margin round it.
+  const kept = new Set<number>()
+  const keep = (x0: number, y0: number, w: number, h: number, m: number) => {
+    for (let y = y0 - m; y < y0 + h + m; y++) for (let x = x0 - m; x < x0 + w + m; x++) kept.add(at(x, y))
+  }
+  for (const st of warCamp(world, index)) keep(st.x, st.y, st.size, st.size, 2)
+  for (const st of harbourOf(world, index)?.structures ?? []) {
+    const rect = st.pier ?? { x: st.x, y: st.y, w: st.size, h: st.size }
+    keep(rect.x, rect.y, rect.w, rect.h, 2)
+  }
+  const lane = new Set<number>()
+  const taken = new Set<number>()
+  // Houses may stand wall to wall; everything else keeps a tile apart.
+  const houses = new Set<number>()
+  const corners = (x: number, y: number, n: number) => [heightAt(world, x, y), heightAt(world, x + n, y), heightAt(world, x, y + n), heightAt(world, x + n, y + n)]
+  const fits = (x: number, y: number, n: number, packed = false) => {
+    for (let yy = y - 2; yy < y + n + 2; yy++) {
+      for (let xx = x - 2; xx < x + n + 2; xx++) {
+        if (!inMap(xx, yy)) return false
+        const i = at(xx, yy)
+        const own = xx >= x && yy >= y && xx < x + n && yy < y + n
+        const ring = xx >= x - 1 && yy >= y - 1 && xx < x + n + 1 && yy < y + n + 1
+        // Off the water, the inns and the cities by two tiles, off the roads and the other buildings by one.
+        if (water(xx, yy) || feature[i] === Feature.Inn || feature[i] === Feature.City) return false
+        if (ring && (road(xx, yy) || (taken.has(i) && !(packed && houses.has(i))) || terrain[i] === Terrain.Mountain)) return false
+        if (own && (feature[i] !== Feature.None || taken.has(i) || kept.has(i) || lane.has(i) || reach(xx, yy) < lo || reach(xx, yy) > hi)) return false
+      }
+    }
+    // Not on a steep slope (a low base is fine).
+    const h = corners(x, y, n)
+    return Math.max(...h) - Math.min(...h) <= 10
+  }
+  const nearest = (x: number, y: number, r: number, hit: (x: number, y: number) => boolean): Point | null => {
+    let best: Point | null = null
+    let bestD = Infinity
+    for (let yy = y - r; yy <= y + r; yy++) {
+      for (let xx = x - r; xx <= x + r; xx++) {
+        const d = Math.hypot(xx - x, yy - y)
+        if (d < bestD && d <= r && inMap(xx, yy) && hit(xx, yy)) {
+          best = { x: xx, y: yy }
+          bestD = d
+        }
+      }
+    }
+    return best
+  }
+  // A straight lane, if it keeps to dry land clear of buildings.
+  const along = (a: Point, b: Point, each: (x: number, y: number) => boolean) => {
+    const steps = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 3)
+    for (let k = 0; k <= steps; k++) if (!each(Math.floor(a.x + ((b.x - a.x) * k) / steps), Math.floor(a.y + ((b.y - a.y) * k) / steps))) return false
+    return true
+  }
+  const roll = (x: number, y: number, n: number) => hash(x * 29 + n, y * 11 + index, world.seed + 2053)
+  const centers: Point[] = []
+  const x0 = c.x - hi
+  const y0 = c.y - hi
+  const span = S + hi * 2
+  for (let gy = 0; gy < span; gy += SUBURB_STEP) {
+    for (let gx = 0; gx < span; gx += SUBURB_STEP) {
+      const x = x0 + gx + Math.floor(roll(gx, gy, 1) * 5) - 2
+      const y = y0 + gy + Math.floor(roll(gx, gy, 2) * 5) - 2
+      const d = reach(x, y)
+      if (d < lo + 1 || d > hi - 1 || !inMap(x, y) || water(x, y) || feature[at(x, y)] !== Feature.None || terrain[at(x, y)] === Terrain.Mountain || kept.has(at(x, y)) || taken.has(at(x, y))) continue
+      const t = (d - lo) / (hi - lo)
+      const byRoad = nearest(x, y, 6, road)
+      // Thick by the wall and the roads out of the gates, thin toward the edge.
+      if (roll(x, y, 3) > (byRoad ? 1.1 : 0.95) - 0.65 * t) continue
+      const yard = { x: x + 0.5, y: y + 0.5 }
+      // The lane first, so the buildings keep off it: to the nearest road, else to the nearest hamlet before.
+      const to = nearest(x, y, 12, road) ?? centers.filter((p) => Math.hypot(p.x - x, p.y - y) < 15).sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0]
+      if (to) {
+        const end = { x: to.x + 0.5, y: to.y + 0.5 }
+        const clear = (xx: number, yy: number) => inMap(xx, yy) && !water(xx, yy) && terrain[at(xx, yy)] !== Terrain.Mountain && (!taken.has(at(xx, yy)) || (xx === to.x && yy === to.y)) && !kept.has(at(xx, yy)) && feature[at(xx, yy)] !== Feature.City && feature[at(xx, yy)] !== Feature.Inn
+        if (along(yard, end, clear)) {
+          along(yard, end, (xx, yy) => (lane.add(at(xx, yy)), true))
+          lanes.push([yard, end])
+        }
+      }
+      taken.add(at(x, y))
+      centers.push({ x, y })
+      // What the hamlet is made of: by the wall and the roads a row of houses round an inn, a forge, a store or a
+      // chapel; farther off a farmstead with a barn, fields and a woodcutter's yard by the forest.
+      const r = (n: number) => roll(x, y, 10 + n)
+      const plan: { look: StructureLook; size: number; level: number }[] = []
+      const forest = nearest(x, y, 6, (xx, yy) => terrain[at(xx, yy)] === Terrain.Forest) !== null
+      const row = t < 0.5 || (byRoad && r(0) < 0.6)
+      if (row) {
+        const BIG: StructureLook[] = ['tavern', 'forge', 'warehouse', 'market', 'tavern', 'temple']
+        if (r(1) < 0.55) plan.push({ look: BIG[Math.floor(r(2) * BIG.length)], size: 2, level: r(3) < 0.5 ? 1 : 2 })
+        if (r(4) < 0.3) plan.push({ look: 'farm', size: 2, level: 1 + Math.floor(r(5) * 3) })
+        for (let k = 0, n = 6 + Math.floor(r(6) * 7 * (1 - t / 2)); k < n; k++) plan.push({ look: 'house', size: 1, level: r(20 + k) < 0.4 ? 1 : r(20 + k) < 0.85 ? 2 : 3 })
+      } else {
+        if (r(1) < 0.7) plan.push({ look: 'warehouse', size: 2, level: r(2) < 0.6 ? 1 : 2 })
+        if (forest && r(3) < 0.5) plan.push({ look: 'lumberCamp', size: 2, level: 1 + Math.floor(r(4) * 2) })
+        for (let k = 0, n = 1 + Math.floor(r(5) * 3); k < n; k++) plan.push({ look: 'farm', size: 2, level: 1 + Math.floor(r(30 + k) * 3) })
+        if (r(6) < 0.06) plan.push({ look: 'watchtower', size: 1, level: 1 })
+        for (let k = 0, n = 2 + Math.floor(r(7) * 3); k < n; k++) plan.push({ look: 'house', size: 1, level: r(40 + k) < 0.6 ? 1 : 2 })
+      }
+      // Each tries the spots round the yard, nearest first with a little shuffle.
+      const spots: { x: number; y: number; k: number }[] = []
+      for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) spots.push({ x: x + dx, y: y + dy, k: Math.hypot(dx, dy) + roll(x + dx, y + dy, 50) * 2.5 })
+      spots.sort((a, b) => a.k - b.k)
+      plan.forEach((p, n) => {
+        const packed = p.look === 'house'
+        const spot = spots.find((s) => fits(s.x, s.y, p.size, packed))
+        if (!spot) return
+        out.push({ x: spot.x, y: spot.y, size: p.size, look: p.look, level: p.level, variant: Math.floor(roll(spot.x, spot.y, 60 + n) * 97), city: index, suburb: true })
+        for (let yy = spot.y; yy < spot.y + p.size; yy++) for (let xx = spot.x; xx < spot.x + p.size; xx++) taken.add(at(xx, yy))
+        if (packed) houses.add(at(spot.x, spot.y))
+      })
+    }
+  }
+  return { structures: out, lanes }
+}
+
 // Every free city's buildings, made once per world.
 const made = new WeakMap<World, Structure[]>()
 export function cityStructures(world: World): Structure[] {
   let found = made.get(world)
   if (!found) {
-    found = world.cities.flatMap((_, index) => [...layout(world, index), ...outskirts(world, index), ...warCamp(world, index), ...(harbourOf(world, index)?.structures ?? [])])
+    found = world.cities.flatMap((_, index) => [...layout(world, index), ...outskirts(world, index), ...warCamp(world, index), ...(harbourOf(world, index)?.structures ?? []), ...suburbsOf(world, index).structures])
     made.set(world, found)
   }
   return found
@@ -575,7 +728,7 @@ export function cityTrails(world: World): Point[][] {
         return [gate, hall]
       })
       const harbour = harbourOf(world, world.cities.indexOf(c))
-      return [ring, ...streets, ...(harbour ? [harbour.lane] : [])]
+      return [ring, ...streets, ...(harbour ? [harbour.lane] : []), ...suburbsOf(world, world.cities.indexOf(c)).lanes]
     })
     lanes.set(world, found)
   }

@@ -43,13 +43,73 @@ export function awaySince(state: Kingdom | null | undefined, now: number): { sin
 const W = 320
 const H = 128
 const GROUND = 84
-// The pictures are laid out on a 240 × 96 plan and spread over the wider canvas, so the sprites stand smaller in it.
-const SPREAD = W / 240
+// The meadow is a true isometric ground, seen as the map sees it at ½× (CLAUDE.md §4.2.1): a tile is 32 × 16 pixels
+// and the map's sprites are drawn at half their size, so a 3 × 3 palace, its 2 × 2 market and a field sit side by side
+// on it without running into each other. Tile (0, 0) lies at the meadow's far edge in the middle of the picture; x
+// runs to the lower right, y to the lower left; the front row (x + y = 7) is the picture's bottom.
+const ISO_X = W / 2
+const ISO_Y = 72
+const HALF_W = 16
+const HALF_H = 8
 
+// A sprite placed on the picture's ground: `x`, `y` are the tile point its anchor stands on (a building's front
+// corner, i.e. its footprint's origin plus its size; a walker's or a tree's feet).
 export interface Placed {
   sprite: Sprite
   x: number
   y: number
+}
+
+const toScreen = (x: number, y: number) => ({ x: ISO_X + (x - y) * HALF_W, y: ISO_Y + (x + y) * HALF_H })
+const toTile = (sx: number, sy: number) => {
+  const u = (sx - ISO_X) / HALF_W
+  const v = (sy - ISO_Y) / HALF_H
+  return { x: (u + v) / 2, y: (v - u) / 2 }
+}
+
+// A sprite at half size, as the map draws it at ½×: each 2 × 2 block keeps its commonest solid colour (the darker on a
+// tie, so outlines hold), or its shade when it is mostly shade.
+const halves = new WeakMap<Sprite, Sprite>()
+function halfOf(sprite: Sprite): Sprite {
+  const kept = halves.get(sprite)
+  if (kept) return kept
+  const w = Math.ceil(sprite.width / 2)
+  const h = Math.ceil(sprite.height / 2)
+  const pixels = new Uint32Array(w * h)
+  const luma = (c: number) => (c & 255) + ((c >>> 8) & 255) + ((c >>> 16) & 255)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const solid: number[] = []
+      const shade: number[] = []
+      for (let dy = 0; dy < 2; dy++)
+        for (let dx = 0; dx < 2; dx++) {
+          const sx = x * 2 + dx
+          const sy = y * 2 + dy
+          if (sx >= sprite.width || sy >= sprite.height) continue
+          const c = sprite.pixels[sy * sprite.width + sx]
+          const a = c >>> 24
+          if (a >= 128) solid.push(c)
+          else if (a > 0) shade.push(c)
+        }
+      let c = 0
+      if (solid.length >= 2) {
+        let best = solid[0]
+        let most = 0
+        for (const s of solid) {
+          const n = solid.filter((t) => t === s).length
+          if (n > most || (n === most && luma(s) < luma(best))) {
+            best = s
+            most = n
+          }
+        }
+        c = best
+      } else if (shade.length + solid.length >= 2) c = shade[0] ?? solid[0]
+      pixels[y * w + x] = c
+    }
+  }
+  const half: Sprite = { ...sprite, width: w, height: h, anchorX: Math.round(sprite.anchorX / 2), anchorY: Math.round(sprite.anchorY / 2), pixels }
+  halves.set(sprite, half)
+  return half
 }
 
 // The weather and hour a picture is painted in: each report page has its own, the crowns' pages a plain bright day.
@@ -291,7 +351,7 @@ interface Backdrop {
   smoke: { x: number; y: number; dir: number }[]
 }
 
-function backdrop(mood: Mood, items: Placed[]): Backdrop {
+function backdrop(mood: Mood, items: Placed[], road?: number, scale: 0.5 | 1 = 0.5): Backdrop {
   const look = LOOKS[mood]
   let seed = 0x9e3779b9
   for (let i = 0; i < mood.length; i++) seed = Math.imul(seed ^ mood.charCodeAt(i), 0x01000193) >>> 0
@@ -460,12 +520,13 @@ function backdrop(mood: Mood, items: Placed[]): Backdrop {
   }
 
   // The meadow: patches of light and dark grass, hazy where it meets the far country, a path winding off, tufts and
-  // flowers, and stands of trees along its far edge.
-  const pathEnd = 90 + rand() * 140
-  const pathStart = pathEnd + (rand() < 0.5 ? -1 : 1) * (40 + rand() * 50)
-  const pathAt = (y: number) => {
-    const t = Math.max(0, (y - 66) / (H - 66))
-    return { x: pathEnd + (pathStart - pathEnd) * t + Math.sin(t * 5 + seed) * 10 * t, half: 0.6 + t * 6.5 }
+  // flowers, and stands of trees along its far edge. The ground is isometric like the map's, not a landscape seen
+  // from the side: the path runs along a tile axis (to the upper right) and keeps its width all the way, tufts and
+  // flowers are the same size near and far.
+  const column = road ?? 0.5 + Math.floor(rand() * 3)
+  const pathOff = (sx: number, sy: number) => {
+    const t = toTile(sx, sy)
+    return Math.abs(t.x - column - Math.sin(t.y * 0.7 + seed) * 0.22) * 2 * HALF_W
   }
   for (let x = 0; x < W; x++) {
     const top = horizon(x)
@@ -475,33 +536,26 @@ function backdrop(mood: Mood, items: Placed[]): Backdrop {
       let c = look.grass[Math.max(0, Math.min(2, Math.floor(v + d - 0.5)))]
       const fade = (y - top) / 7
       if (fade < 1 && d > fade) c = lerp(c, look.haze, 0.25)
-      const p = pathAt(y)
-      const off = Math.abs(x - p.x)
-      if (y > top + 1 && off < p.half + (d - 0.5)) c = off < p.half * 0.45 ? look.path[1] : look.path[0]
+      const off = pathOff(x, y)
+      if (y > top + 1 && off < 5 + (d - 0.5) * 1.5) c = off < 2.2 ? look.path[1] : look.path[0]
       near[y * W + x] = pix(c)
     }
   }
   for (let k = 0; k < 170; k++) {
     const x = Math.floor(rand() * W)
     const y = horizon(x) + 4 + Math.floor(Math.pow(rand(), 0.7) * (H - horizon(x) - 4))
-    const p = pathAt(y)
-    if (Math.abs(x - p.x) < p.half + 1) continue
+    if (pathOff(x, y) < 6) continue
     put(near, x, y, look.grass[0])
     put(near, x - 1, y - 1, look.grass[2])
     put(near, x + 1, y - 1, look.grass[2])
-    if (y > 100) put(near, x, y - 2, look.grass[2])
   }
   for (let k = 0; k < 60; k++) {
     const x = Math.floor(rand() * W)
     const y = horizon(x) + 6 + Math.floor(rand() * (H - horizon(x) - 6))
-    const p = pathAt(y)
-    if (Math.abs(x - p.x) < p.half + 1) continue
+    if (pathOff(x, y) < 6) continue
     const c = look.flowers[Math.floor(rand() * look.flowers.length)]
     put(near, x, y, c)
-    if (y > 104) {
-      put(near, x + 1, y, c)
-      put(near, x, y + 1, look.grass[0])
-    }
+    put(near, x, y + 1, look.grass[0])
   }
   const treeDark = lerp(look.tree[0], look.haze, 0.1)
   const treeLit = lerp(look.tree[1], look.haze, 0.1)
@@ -509,8 +563,7 @@ function backdrop(mood: Mood, items: Placed[]): Backdrop {
     const x0 = Math.floor(rand() * W)
     const len = 14 + Math.floor(rand() * 40)
     for (let x = x0; x < x0 + len; x += 2 + Math.floor(rand() * 2)) {
-      const p = pathAt(horizon(x) + 1)
-      if (Math.abs(x - p.x) < 4) continue
+      if (pathOff(x, horizon(x) + 1) < 8) continue
       const base = horizon(x) + 1
       const h = 4 + Math.floor(rand() * 5)
       const round = rand() < 0.35
@@ -522,10 +575,13 @@ function backdrop(mood: Mood, items: Placed[]): Backdrop {
     }
   }
 
-  // The sprites, back to front; their translucent shade pixels darken what is under them.
-  for (const { sprite, x, y } of [...items].sort((a, b) => a.y - b.y)) {
-    const ox = Math.round(x * SPREAD - sprite.anchorX)
-    const oy = Math.round(GROUND + (y - 64) * SPREAD + 8 - sprite.anchorY)
+  // The sprites (at half size unless the picture has no buildings), back to front by their front corner as on the
+  // map; their translucent shade pixels darken what is under them.
+  for (const placed of [...items].sort((a, b) => a.x + a.y - (b.x + b.y) || a.x - b.x)) {
+    const sprite = scale === 1 ? placed.sprite : halfOf(placed.sprite)
+    const at = toScreen(placed.x, placed.y)
+    const ox = Math.round(at.x - sprite.anchorX)
+    const oy = Math.round(at.y - sprite.anchorY)
     for (let sy = 0; sy < sprite.height; sy++) {
       for (let sx = 0; sx < sprite.width; sx++) {
         const c = sprite.pixels[sy * sprite.width + sx]
@@ -640,12 +696,14 @@ function paint(b: Backdrop, t: number, out: Uint32Array) {
 
 // A little picture: mountains, hills and a meadow under a sky with weather of the mood's own, the sprites stood on
 // the meadow. The clouds, birds, smoke and stars move a little, unless the player asks for less motion.
-export function Scene({ items, mood = 'day' }: { items: Placed[]; mood?: Mood }) {
+// `scale` 1 draws the sprites at full size: only for pictures without buildings (a party, beasts, trees), where no
+// footprint has to fit the tile grid and half-size figures would be specks.
+export function Scene({ items, mood = 'day', road, scale = 0.5 }: { items: Placed[]; mood?: Mood; road?: number; scale?: 0.5 | 1 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const ctx = canvas.current?.getContext('2d')
     if (!ctx) return
-    const b = backdrop(mood, items)
+    const b = backdrop(mood, items, road, scale)
     const image = ctx.createImageData(W, H)
     const out = new Uint32Array(image.data.buffer)
     const draw = (t: number) => {
@@ -668,7 +726,7 @@ export function Scene({ items, mood = 'day' }: { items: Placed[]; mood?: Mood })
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  }, [items, mood])
+  }, [items, mood, road, scale])
   return <canvas ref={canvas} className="away-scene" width={W} height={H} aria-hidden />
 }
 
@@ -698,55 +756,56 @@ export function coins(n: number): Sprite {
 
 export type Picture = 'treasury' | 'battle' | 'tribute' | 'intrigue' | 'world' | 'house'
 
+// The report's pictures, each laid on the meadow's tile grid (x, y: a building's front corner; see `Placed`).
 export function picture(kind: Picture, own: string | undefined, foe: string | undefined): Placed[] {
   const color = (c: string | undefined) => (c ?? 'emerald') as KingdomColor
   const S = STRUCTURE_SPRITES
   switch (kind) {
     case 'treasury':
       return [
-        { sprite: S.treasury[0], x: 64, y: 84 },
-        { sprite: S.market[1], x: 176, y: 86 },
-        { sprite: coins(26), x: 120, y: 82 },
-        { sprite: S.warehouse[0], x: 214, y: 70 },
+        { sprite: S.treasury[0], x: -1, y: 5 },
+        { sprite: coins(26), x: 1, y: 5 },
+        { sprite: S.market[1], x: 3, y: 4 },
+        { sprite: S.warehouse[0], x: 6, y: 1 },
       ]
     case 'battle':
       return [
-        { sprite: palaceIn(own, 2), x: 40, y: 82 },
-        { sprite: squad(own ?? null, 0, 12), x: 104, y: 88 },
-        { sprite: squad(own ?? null, 2, 8), x: 92, y: 74 },
-        { sprite: squad(foe ?? 'coal', 1, 12), x: 168, y: 88 },
-        { sprite: squad(foe ?? 'coal', 3, 8), x: 184, y: 74 },
-        { sprite: tent(color(foe ?? 'coal'), 0), x: 222, y: 72 },
+        { sprite: palaceIn(own, 2), x: 0, y: 4 },
+        { sprite: squad(own ?? null, 2, 8), x: 1.2, y: 3.6 },
+        { sprite: squad(own ?? null, 0, 12), x: 1.2, y: 5.4 },
+        { sprite: squad(foe ?? 'coal', 3, 8), x: 3.6, y: 1.6 },
+        { sprite: squad(foe ?? 'coal', 1, 12), x: 4, y: 2.6 },
+        { sprite: tent(color(foe ?? 'coal'), 0), x: 6.4, y: 0 },
       ]
     case 'tribute':
       return [
-        { sprite: palaceIn(own, 2), x: 60, y: 84 },
-        { sprite: squad('crimson', 0, 6), x: 140, y: 88 },
-        { sprite: squad('crimson', 2, 6), x: 166, y: 82 },
-        { sprite: squad('royal', 1, 6), x: 196, y: 76 },
-        { sprite: coins(14), x: 108, y: 84 },
+        { sprite: palaceIn(own, 2), x: 0, y: 4 },
+        { sprite: coins(14), x: 1, y: 5.2 },
+        { sprite: squad('crimson', 0, 6), x: 2.4, y: 4 },
+        { sprite: squad('crimson', 2, 6), x: 3.4, y: 2.8 },
+        { sprite: squad('royal', 1, 6), x: 4.6, y: 1.6 },
       ]
     case 'intrigue':
       return [
-        { sprite: S.spyHouse[0], x: 70, y: 84 },
-        { sprite: S.prison[0], x: 170, y: 84 },
-        { sprite: S.house[2], x: 120, y: 72 },
+        { sprite: S.house[2], x: 2, y: 1 },
+        { sprite: S.spyHouse[0], x: 0, y: 5 },
+        { sprite: S.prison[0], x: 6, y: 1 },
       ]
     case 'house':
       return [
-        { sprite: palaceIn(own, 3), x: 120, y: 84 },
-        { sprite: S.house[3], x: 40, y: 82 },
-        { sprite: S.temple[0], x: 206, y: 82 },
+        { sprite: S.house[3], x: -2, y: 5 },
+        { sprite: palaceIn(own, 3), x: 4, y: 3 },
+        { sprite: S.temple[0], x: 6, y: 0 },
       ]
     case 'world':
       return [
-        { sprite: S.house[0], x: 40, y: 84 },
-        { sprite: S.house[1], x: 66, y: 76 },
-        { sprite: S.market[0], x: 96, y: 88 },
-        { sprite: tent(color(foe ?? 'violet'), 0), x: 172, y: 76 },
-        { sprite: tent(color(foe ?? 'violet'), 1), x: 196, y: 70 },
-        { sprite: tent(color(own), 1), x: 206, y: 88 },
-        { sprite: squad(own ?? null, 1, 8), x: 140, y: 92 },
+        { sprite: S.house[1], x: -1.5, y: 2.5 },
+        { sprite: S.house[0], x: -3, y: 4 },
+        { sprite: S.market[0], x: 0, y: 5 },
+        { sprite: tent(color(foe ?? 'violet'), 0), x: 4, y: 1 },
+        { sprite: tent(color(foe ?? 'violet'), 1), x: 6, y: -0.5 },
+        { sprite: tent(color(own), 1), x: 4.8, y: 2 },
+        { sprite: squad(own ?? null, 1, 8), x: 2.4, y: 4.2 },
       ]
   }
 }

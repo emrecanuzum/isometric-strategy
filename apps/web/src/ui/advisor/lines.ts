@@ -44,6 +44,8 @@ export interface Reply {
   tutorial?: 'on' | 'off'
   // Skips this tutorial step (a lord who does not want that building).
   skip?: string
+  // What the envoy says next, with replies of its own (a question that leads on).
+  say?: { text: string; replies: Reply[] }
 }
 
 export interface Tip {
@@ -74,13 +76,26 @@ export interface Step {
   cheers: string[]
 }
 
+// A part of the game he explains when asked ("Bana oyunu anlat"): a short talk told page by page, each page a few
+// sentences ('\n\n' splits a page into paragraphs), listed under one of the groups below.
 export interface Topic {
   id: string
   name: string
   icon: IconName
-  text: (c: AdvisorCtx) => string[]
+  group: TopicGroup
+  pages: (c: AdvisorCtx) => string[]
   go?: { label: string; act: AdvisorAction }
 }
+
+// The groups his topics are listed under, in order (the menu would be a wall of buttons otherwise).
+export type TopicGroup = 'basics' | 'war' | 'court' | 'wilds' | 'pursuits'
+export const TOPIC_GROUPS: { id: TopicGroup; name: string }[] = [
+  { id: 'basics', name: 'Lordluğun temelleri' },
+  { id: 'war', name: 'Ordu ve savaş' },
+  { id: 'court', name: 'Taçlar, saray ve entrika' },
+  { id: 'wilds', name: 'Yolların ve suların belası' },
+  { id: 'pursuits', name: 'Uğraşlar ve şan' },
+]
 
 // How often he comes on his own while the lord plays (minutes of play), and how long "later" lasts.
 export const ADVISOR_EVERY_MINUTES = 4
@@ -834,6 +849,7 @@ export const TOPICS_ASK = [
   'Hangi köşesini anlatayım, lordum? Kısa anlatacağım, söz. Kısa derken, elçi kısası.',
   'Sorun, lordum; kırk yılda öğrendiğimi beş dakikada anlatırım. Belki altı.',
   'Konuyu siz seçin, lordum, anlatmayı bana bırakın.',
+  'Bir konu seçin, lordum; sayfa sayfa anlatırım, sıkılırsanız "Başka bir şey sor" dersiniz, gücenmem. Çok.',
 ]
 export const SKIP_ANSWERS = [
   'Peki lordum, o işi şimdilik bir kenara koyuyorum. Sıradakine geçelim.',
@@ -1367,40 +1383,55 @@ export const TUTORIAL_DONE = [
 
 // ---- Topics he explains on request -----------------------------------------------------------------------------------
 
+// Decimals the Turkish way (1,25), and a person's age in the house's years (one real hour each).
+const dec = (v: number) => String(Math.round(v * 1000) / 1000).replace('.', ',')
+const ageOf = (bornAt: number, now: number) => Math.max(0, Math.floor((now - bornAt) / balance.time.gameDayMs))
+
 export const TOPICS: Topic[] = [
+  // ---- The basics -------------------------------------------------------------------------------------------------
   {
     id: 'time',
     name: 'Zaman',
     icon: 'time',
-    text: () => [
-      `Her gerçek saat oyunda bir yıldır: haritada bir gündüz-gece döngüsü geçer (saatin başı gece yarısı ve 1 Ocak), takvim bir yıl ilerler, hanedan bir yaş büyür. Sezon ${balance.time.seasonGameDays} yıl, yani iki hafta sürer; sonra dünya sıfırlanır.`,
-      'Aylar beşer dakikada geçer, mevsimler yaklaşık çeyrek saat sürer: gece yarısı kış, şafakta ilkbahar, öğlen yaz, akşama doğru sonbahar. Kışın tarla ve iskele az, yazın çok yemek verir; hastalık kışın hızlı yayılır.',
-      `Ekonomi üretim turlarıyla işler: her ${balance.economy.productionSeconds} gerçek saniyede bir tur. Binalar üretir, halk yer, vergi ve maaş ödenir.`,
-      `Gece (${balance.society.night.startHour}:00–0${balance.society.night.endHour}:00) hızlı geçer ve halk dinlenir: binalar yarı hızla çalışır. Gece mesaisi tam çalıştırır ama yorar.`,
-      'Siz çevrimdışıyken de dünya akar: inşaatlar biter, tüccar sefer yapar, ordular yürür. Döndüğünüzde "Sen yokken" raporunu okursunuz.',
-    ],
+    group: 'basics',
+    pages: () => {
+      const s = balance.time.seasons.food
+      const night = balance.society.night
+      const idle = balance.economy.idle
+      return [
+        `Zaman burada tuhaf akar, lordum: her gerçek saat bir yıldır. Saatin başında gece yarısı olur, takvim 1 Ocak'a döner, hanedanınız bir yaş büyür. Sezon ${balance.time.seasonGameDays} yıl, yani ${n(balance.time.seasonGameDays / 24)} gün sürer; sonra dünya silinir, geriye yalnızca şanınız kalır.`,
+        `Aylar beşer dakikada geçer, mevsimler çeyrek saat sürer: gece kış, şafak ilkbahar, öğle yaz, akşam sonbahar. Yazın tarlalar ve iskeleler kıştakinin aşağı yukarı ${dec(Math.round((s.summer / s.winter) * 10) / 10)} katı yemek verir; hastalık da kışın hızlı yayılır. Ben kışı sevmem, lordum; sakalım donuyor.`,
+        `Ekonomi turlarla işler: her ${balance.economy.productionSeconds} gerçek saniyede bir tur. Binalar üretir, halk yer, vergi ve maaş ödenir.\n\nGece (${night.startHour}:00 ile 0${night.endHour}:00 arası) çabuk geçer ve halk dinlenir: binalar ${pct(night.workRate)} hızla çalışır. Gece mesaisi tam çalıştırır ama mutluluğu ${-night.shiftHappiness} puan düşürür ve yorgunluk biriktirir.`,
+        `Siz yokken de dünya akar: inşaatlar biter, tüccar sefere çıkar, ordular yürür. Ama ${balance.economy.away.afterMinutes} dakika görünmezseniz tüccar kaytarır, ${idle.graceHours} saati geçince de her saat üretim, vergi ve tüccarın altını ${pct(idle.perHour)} azalır (en çok ${pct(1 - idle.min)} kadar). Yemek hariç; halk kendi karnını doyurur. Döndüğünüzde "Sen yokken" raporu her şeyi anlatır.`,
+      ]
+    },
   },
   {
     id: 'build',
     name: 'İnşa',
     icon: 'build',
-    text: () => [
-      'İnşa sekmesinden bir yapı seçip hududunuzun içine yerleştirirsiniz. Her inşa, taşıma ve yıkım önce bir plana eklenir; alttaki çubukta "Onayla" deyince hepsi birden gider.',
-      `Aynı anda en çok ${balance.economy.maxConstructions} inşaat yürür; fazlası sırada bekler. Sur parçaları sıraya girmez.`,
-      'Kıyı karelerine yalnızca iskele ve balıkçı kulübesi, yol kenarına yalnızca ticaret noktası kurulur. İlk oduncu kampı, ilk ev ve ilk tarla bedavadır.',
-      `Yıkılan yapının bedelinin yarısı geri döner; taşımak, harcananın ${pct(balance.economy.move.costShare)}'ını ister.`,
-    ],
+    group: 'basics',
+    pages: ({ kingdom: k }) => {
+      const built = k.buildings.filter((b) => b.kind !== 'wall' && b.kind !== 'gate' && b.kind !== 'road').length
+      return [
+        `İnşa sekmesinden bir yapı seçip hududunuzun içine koyarsınız, lordum. Her inşa, taşıma ve yıkım önce bir plana yazılır; alttaki çubukta "Onayla" deyince hepsi birden gider. Bir planda en çok ${balance.economy.maxPlan} adım olur; benim alışveriş listem bile o kadar uzun değil.`,
+        `Aynı anda en çok ${balance.economy.maxConstructions} inşaat yürür, gerisi sırada bekler; sur ve yol sıraya girmez. İlk oduncu kampı, ilk ev ve ilk tarla bedavadır. Şu an ${built} yapınız var${built < balance.cities.crown.intro.buildings ? `; ${balance.cities.crown.intro.buildings} yapıya varınca taçlar kapınızı çalar` : ''}.`,
+        'Kıyı karelerine yalnızca iskele, balıkçı kulübesi ve sur; yol kenarına yalnızca ticaret noktası kurulur. Sur ile binalar arasında boşluk kalır, gözcü kulesi hariç. Surla sarayı kapısız çevirirseniz halk dışarı çıkamaz; buna saray değil hapishane derler.',
+        `Yıkılan yapının bedelinin yarısı geri döner. Taşımak harcananın ${pct(balance.economy.move.costShare)} kadarını ister ve yeniden yapmanın ${dec(balance.economy.move.timeFactor)} katı sürer; ama seviyesi ve işçileri korunur.`,
+      ]
+    },
     go: { label: 'İnşa sekmesi', act: tab('build') },
   },
   {
     id: 'economy',
     name: 'Ekonomi',
     icon: 'gold',
-    text: ({ kingdom: k, now }) => [
-      'Dört kaynak vardır: altın, yemek, yapı malzemesi ve savaş malzemesi. Oduncu yapı malzemesi, tarla ve iskele yemek, silah atölyesi demir (savaş malzemesi) ya da silah üretir.',
-      `Depo sınırı saray seviyesiyle artar, ambarlar ekler; şu an her maldan ${n(storageCap(k, now))} tutabilirsiniz. Hazine sınırı ${n(goldCap(k, now))} altın. Sığmayan boşa gider.`,
-      'Gelir: köylülerin vergisi, tüccarın satışları, kasabalar, taç bahşişleri. Gider: asker maaşı, gemi bakımı, kasaba bakımı, haraçlar.',
-      `Yokken üretim yavaşlar: son görülmenizden ${balance.economy.idle.graceHours} saat sonra her saat ${pct(balance.economy.idle.perHour)} azalır (yemek hariç).`,
+    group: 'basics',
+    pages: ({ kingdom: k, now }) => [
+      'Dört kaynak vardır, lordum: altın, yemek, yapı malzemesi ve savaş malzemesi. Oduncu yapı malzemesi, tarla ve iskele yemek, silah atölyesi demir ya da silah üretir. Köylü yetmezse binalar orantılı az üretir.',
+      `Depo sınırı saray seviyesiyle büyür, ambarlar ekler; şu an her maldan ${n(storageCap(k, now))} birim tutabilirsiniz, hazineniz ${n(goldCap(k, now))} altın alır. Sığmayan boşa gider. Hazine doluyken tüccar mal götürmez, evde bekler.`,
+      'Altın vergiden, tüccardan, kasabalardan, seferlerden ve ganimetten gelir. Gider: asker maaşı, gemi bakımı, kasaba bakımı ve rakip tacın haraççıları. Taçlara güvenip hazineyi doldurmayın, lordum; taçlar bu sezon aldıklarından azını geri verir.',
+      'Dolu ambar tehlikelidir: afetler dolu depodan daha çok götürür, fareler ve pas taşan malı yer. Fazlayı satın, büyük işlere aktarın ya da taca bağışlayın. Ayrıntısı "Afetler ve hava" ile "Büyük işler" konularında.',
     ],
     go: { label: 'Depo sekmesi', act: tab('store', 'store', 'books') },
   },
@@ -1408,148 +1439,410 @@ export const TOPICS: Topic[] = [
     id: 'trade',
     name: 'Ticaret',
     icon: 'trade',
-    text: () => [
-      `Tüccar her seferde seçtiğiniz maldan götürür: ticaret noktası seviyesine göre ${balance.economy.trade.levels.map((l) => l.units).join(' / ')} birim. Sefer ${balance.economy.trade.tripSeconds} saniyedir; ticaret noktası saraydan uzaksa uzar.`,
-      'Lobideki bütün lordlar aynı fiyat tablosunu paylaşır: satılan mal ucuzlar, alınan pahalanır, zamanla olağan fiyata döner. Taç krallıkları da piyasadan mal alır.',
-      `Tüccarı bir taç başkentine de gönderebilirsiniz: ${balance.cities.trade.loadFactor} kat yük götürür ama sefer uzundur. Taç siparişleri ve görevler ek altın ve tacın gönlünü getirir.`,
-      'Pazar binası eksik malı altınla almanıza yarar; her alınan birim bir sonrakini pahalandırır.',
-    ],
+    group: 'basics',
+    pages: ({ kingdom: k }) => {
+      const t = balance.economy.trade
+      const o = balance.cities.crown.orders
+      return [
+        `Tüccar her seferde seçtiğiniz maldan götürür: ticaret noktasının seviyesine göre ${t.levels.map((l) => l.units).join(' / ')} birim. Sefer ${t.tripSeconds} saniyedir, ticaret noktası saraydan uzaksa uzar. ${k.trade.good === null ? 'Sizin tüccarınız şu an eli kolu bağlı oturuyor, lordum; ona bir mal verin.' : 'Tüccarınız yolda; iyi bir adamdır, biraz konuşkan ama.'}`,
+        `Lobideki bütün lordlar aynı fiyat tablosunu paylaşır: satılan mal ucuzlar, alınan pahalanır, zamanla olağan fiyata döner. Fiyat olağanın ${pct(balance.market.minFactor)} kadarının altına inmez. Taçlar da her yirmi dakikada bir malı piyasadan toplar; dipteki fiyatı onlar kaldırır.`,
+        `Tüccarı bir taç başkentine de gönderebilirsiniz: ${balance.cities.trade.loadFactor} kat yük götürür, lobi fiyatından satar ama sefer uzar. Taç siparişleri malı lobi fiyatının ${dec(o.payFactor)} katına alır (kendi tacınız biraz fazlasını verir); ödeme kervan dönünce gelir.`,
+        `Pazar binası eksik malı altınla almanıza yarar. Bir kasabanın pazarından da alınır, ama kapısında ordunuz durmalı ve asker başına ${balance.towns.market.carryPerSoldier} birim taşınır. Bir de yollardaki yağmacılar var: tüccarın kazancından pay keserler. O ayrı bir dert, "Yağmacılar"da anlatırım.`,
+      ]
+    },
     go: { label: 'Ticaret sekmesi', act: tab('trade', 'trade', 'merchant') },
   },
   {
     id: 'people',
     name: 'Nüfus',
     icon: 'people',
-    text: ({ kingdom: k, now }) => [
-      `Evler köylüye yer verir; köylüler o yere her turda yavaş yavaş gelir. Boş yer çoksa daha hızlı gelirler. Nüfus sınırı saray seviyesi × ${balance.society.popCapPerPalaceLevel}; şu an ${popCapFor(palaceLevel(k, now))}.`,
-      'Büyümeyi mutluluk belirler; açlık, kuşatma ve çok mutsuz halk göçe yol açar. Savaş büyümeyi yavaşlatır, kraliçe ve tapınak hızlandırır.',
-      'Köylüler binalarda çalışır, vergi verir ve asker olur. Asker ve denizci köylüden düşer; terhis edilen asker köylüye döner.',
-    ],
+    group: 'basics',
+    pages: ({ kingdom: k, now }) => {
+      const p = population(k, now)
+      return [
+        `Evler köylüye yer verir; köylüler o yere her turda yavaş yavaş gelir, boş yer çoksa daha hızlı. Nüfus sınırı saray seviyesi × ${balance.society.popCapPerPalaceLevel}; sizinki şu an ${popCapFor(palaceLevel(k, now))}, içeride ${p.villagers} köylü var.`,
+        'Büyümeyi mutluluk sürer: yüzde kırkın altında halk gelmez, çok mutsuz halk göç eder. Açlık ve kuşatma da halkı kaçırır, savaş büyümeyi yarıya indirir. Kraliçe ve tapınak hızlandırır. Sarayın hizmetlileri ise hiç gitmez; onlar bana benzer, nereye gitsinler.',
+        'Köylüler binalarda çalışır, vergi verir, asker ve denizci olur. Asker ve denizci köylüden düşer, terhis edilen asker köylüye döner. Seferdeki köylüler de çalışmaz; boşta köylünüz varsa onları sefere yollayın.',
+      ]
+    },
     go: { label: 'Halk sekmesi', act: tab('people', 'people', 'people') },
   },
   {
     id: 'happiness',
     name: 'Mutluluk',
     icon: 'happy',
-    text: () => {
+    group: 'basics',
+    pages: ({ kingdom: k }) => {
       const t = balance.society.tax.levels
+      const h = balance.society.happiness
       return [
-        `Mutluluk her tur bir hedefe doğru kayar. Taban ${balance.society.happiness.base}; vergi düşükse +${t.low.happiness}, yüksekse ${t.high.happiness}, ağırsa ${t.heavy.happiness}. Kraliçe +${balance.society.happiness.queen}, açlık ${balance.society.happiness.starving}.`,
-        `Vergi köylü başına turda düşük ${t.low.goldPerVillager}, normal ${t.normal.goldPerVillager}, yüksek ${t.high.goldPerVillager}, ağır ${t.heavy.goldPerVillager} altın getirir. Ağır vergi halkı göç ettirir.`,
-        `Mutlu halk daha hızlı büyür ve daha çok asker olmaya razıdır. Gece mesaisi mutluluğu ${balance.society.night.shiftHappiness} düşürür; sarayı kapısız surla çevirmek de (hapishane) ${balance.society.happiness.imprisoned}.`,
+        `Mutluluk her tur bir hedefe doğru kayar; sizinki şu an %${Math.round(k.happiness ?? h.start)}. Taban ${h.base}. Vergi düşükse +${t.low.happiness}, yüksekse ${t.high.happiness}, ağırsa ${t.heavy.happiness}. Kraliçe +${h.queen}, açlık ${h.starving}, yağma ${h.looted}.`,
+        `Vergi köylü başına turda düşük ${dec(t.low.goldPerVillager)}, normal ${dec(t.normal.goldPerVillager)}, yüksek ${dec(t.high.goldPerVillager)}, ağır ${dec(t.heavy.goldPerVillager)} altın getirir. Ağır vergi kasayı doldurur, halkı boşaltır. Ben ortası derim, lordum; elçiler hep ortayı sever.`,
+        `Gece mesaisi mutluluğu ${-balance.society.night.shiftHappiness} puan, kapısız sur (hapishane) ${-h.imprisoned} puan düşürür. Yollardaki yağmacılar ve sulardaki korsanlar birlikte en çok ${balance.outlaws.happinessCap} puan götürür. Tapınak, şenlik, hanedan anıtı ve Ulu Katedral ise yükseltir.`,
+        'Mutlu halk hızlı büyür, asker olmaya gönüllüdür, kasabalarınız da size daha sadık kalır. Mutsuz halk pahalıya asker olur ve göç eder. Kısacası, lordum, halkı güldürmek bedava değildir ama ağlatmak daha pahalıdır.',
       ]
     },
     go: { label: 'Mutluluk bölümü', act: tab('people', 'people', 'mood') },
   },
   {
+    id: 'disasters',
+    name: 'Afetler ve hava',
+    icon: 'snow',
+    group: 'basics',
+    pages: ({ kingdom: k }) => {
+      const c = balance.institutions.events.crisis
+      const toll = c.toll
+      const hoard = balance.institutions.events.hoard
+      const sh = balance.weather.showers
+      return [
+        `Yangın, sel, deprem, çekirge, kurt… Bir kriz gelince üç yol sunarım: köylüleri seferber et (${min(c.villagers.seconds)} dakika iş gücü ${pct(-c.villagers.work)} düşer), orduyu seferber et (bir iki asker ölür, ordu ${min(c.army.lockSeconds)} dakika sefere çıkamaz) ya da bir şey yapma. Karar için ${c.decideSeconds} saniye var; susarsanız bir şey yapılmamış sayılır.`,
+        `Kriz nasıl karşılanırsa karşılansın depodan bir pay götürür: köylüler kaybı ${pct(toll.choice.villagers)} kadarına, ordu ${pct(toll.choice.army)} kadarına indirir. Örneğin orman yangını yapı malzemesinin ${pct(toll.kinds.forestFire.materials)} kadarını yakar. Depo ${pct(toll.fullAt)} doluluğu geçtikçe pay büyür, tam doluyken iki katıdır; ama ${toll.floor} birimin altı sayılmaz ve bir afet bir maldan ${pct(toll.maxShare)} kadarından fazlasını almaz.`,
+        `Bir de sessiz düşmanlar vardır: her yarım saatte bir, ambarın ${pct(hoard.fullAt)} kadarından dolu bir mal varsa fareler yemeği, rutubet yapı malzemesini, pas savaş malzemesini yer (${pct(hoard.minShare)}–${pct(hoard.maxShare)}). Seçim yok, lordum; tek çare ambarı ağzına kadar doldurmamak.`,
+        `Kâhya tutarsanız cevapsız kalan krizde köylüleri o seferber eder, her seferinde ${c.steward.fee.gold} altın alır.${k.steward ? ' Sizin kâhyanız görevde; iyi adamdır, biraz cimri ama.' : ' Çevrimdışı lordun en iyi dostudur.'}\n\nHavaya gelince: yağmur, fırtına, sel ve dolu haritayı grileştirir; ayrıca her yirmi dakikada bir ${pct(sh.chance)} ihtimalle kısa bir sağanak geçer. Fırtınada denizde korsan saldırısı ${dec(balance.navy.seaWeather.storm)} kat sıklaşır, sis ise korsanları şaşırtır.`,
+      ]
+    },
+    go: { label: 'Sağlık ve kâhya', act: tab('people', 'people', 'mood') },
+  },
+  {
+    id: 'events',
+    name: 'Günün olayları',
+    icon: 'bell',
+    group: 'basics',
+    pages: () => {
+      const e = balance.institutions.events
+      return [
+        `Olaylar iki kanaldan gelir: bütün lobiye (yağmur, kuyruklu yıldız, dolunay şenliği, salgın…) ve yalnızca size (define, gezgin ozan, haydut baskını…). Her ${min(e.lobby.windowSeconds)} dakikalık pencerede lobiye ${pct(e.lobby.chance)}, size ${pct(e.kingdom.chance)} ihtimalle bir olay düşer ve ${min(e.lobby.minSeconds)}–${min(e.lobby.maxSeconds)} dakika sürer.`,
+        `Bazı olaylar iki yol sunar: ozanı saraya davet edersiniz ya da şapka dolaştırırsınız, kayıp kervanın yükünü alırsınız ya da sahibine haber salarsınız. Her yolun bir bedeli ve bir kazancı vardır; karar için ${e.choice.decideSeconds} saniye var. Bedelini karşılayamadığınız yol kapalıdır.`,
+        'Pencereler sıra sıra gelir; "Tümünü kapat" yalnızca haber verenleri kapatır, cevap bekleyenler kalır. Bakmadığınız haberleri bayatlayınca tek bir özete toplarım; hepsi günlükte de durur. Ben unutmam, lordum; unutsam elçilikten atarlar.',
+      ]
+    },
+    go: { label: 'Günlüğü aç', act: tab('journal') },
+  },
+
+  // ---- The army and war -------------------------------------------------------------------------------------------
+  {
     id: 'army',
     name: 'Ordu',
     icon: 'swords',
-    text: () => [
-      'Kışla asker havuzundan birlik yetiştirir: mızrakçı süvariyi yener, okçu mızrakçıyı, süvari okçuyu ve kalkanlıyı. Mancınık kuşatmada surları siler.',
-      `Askerler sarayda garnizon olur; garnizondan en çok ${balance.military.maxArmies} ordu çıkarabilirsiniz. Ordular haritada yürür, ikiye bölünür, yakınken birleşir.`,
-      'Hududun dışındaki orduya emir elçiyle gider; elçi varana kadar ordu eski emrini sürdürür. Elçi vardıktan sonra kısa bir süre yeni emirler hemen uygulanır.',
-      'Ordunun morali yürürken düşer, hanların yanında hızla toparlanır. Bir yerde durdukça saha bilgisi birikir ve zara eklenir.',
-    ],
+    group: 'war',
+    pages: ({ kingdom: k }) => {
+      const delay = Math.round((balance.time.messengerDelayGameDays * balance.time.gameDayMs) / 1000)
+      const c = balance.dynasty.command
+      return [
+        `Kışla asker havuzundan birlik yetiştirir: mızrakçı süvariyi yener, okçu mızrakçıyı, süvari okçuyu ve kalkanlıyı; kalkanlı da okçuyu. Mancınık sahada zayıftır ama kuşatmada surları siler. Garnizonunuzda şu an ${k.soldiers ?? 0} asker var.`,
+        `Garnizondan en çok ${balance.military.maxArmies} ordu çıkarırsınız; ${balance.military.mergeTiles} karo yakındaki iki ordu birleşir. Hududun dışındaki orduya emir elçiyle gider (${delay} saniye); elçi vardıktan sonra ${balance.time.contactSeconds} saniye yeni emirler hemen uygulanır. O elçiler benim çıraklarımdır, lordum; yavaşlarsa bana söyleyin.`,
+        `Moral yürürken düşer, evde ve hanların yanında hızla toparlanır. Bir yerde durdukça saha bilgisi birikir ve zara en çok +${dec(balance.military.familiarity.maxBonus)} ekler. Ordular yolları sever ve köprülerden geçer; surlardan geçemez, kendi kapınızdan geçer.`,
+        `Kralınız orduya bizzat komuta edebilir: ordu sarayın kapısında durmalı, sarayda bir kraliçe ve en az bir oğul olmalı. Kralın ordusuna emir elçisiz gider ve zara kralın savaş yeteneğiyle bonus eklenir. Bedeli: kaybedilen muharebede ${pct(c.fall)} ihtimalle kral düşer.`,
+      ]
+    },
     go: { label: 'Ordu sekmesi', act: tab('army', 'army', 'land') },
   },
   {
     id: 'war',
     name: 'Savaş',
     icon: 'banner',
-    text: () => [
-      `Savaş ilan etmek için ilişki en fazla ${balance.diplomacy.war.maxRelation} olmalı; savaş gerekçeniz varsa ${balance.diplomacy.war.peaceRelation} yeter. Gerekçesiz savaş açan herkesle ilişki kaybeder.`,
-      `Savaştaki iki ordu ${balance.military.contactTiles} karo yaklaşınca meydan muharebesi olur. Muharebe turlarla sürer; zar, saha bilgisi, kuleler ve moral belirler. İzle düğmesiyle seyredebilirsiniz.`,
-      'Düşman sarayına varan ordu kuşatma yapar: garnizon, gözcü kuleleri ve surlar savunur. Kazanan depolardan yağma alır; düşen saray bir süre kuşatma kalkanı kazanır.',
-      'Savaş puanı muharebelerden ve kuşatmalardan hesaplanır; 100 puana ulaşan barışı dayatır.',
-    ],
+    group: 'war',
+    pages: () => {
+      const d = balance.diplomacy
+      const b = balance.military.battle
+      return [
+        `Savaş ilanı için ilişki en fazla ${d.war.maxRelation} olmalı; savaş gerekçeniz varsa ${d.casusBelli.maxRelation} yeter. Gerekçesiz savaş açan, lobideki herkesle ${-d.casusBelli.infamy} puan ilişki kaybeder. Kılıcı çekmeden önce bir bahane bulun, lordum; tarih bahaneleri sever.`,
+        `Savaştaki iki ordu ${balance.military.contactTiles} karo yaklaşınca meydan muharebesi olur. Her ${b.roundSeconds} saniyede bir tur: iki taraf d${b.dice} atar, saha bilgisi, kuleler, tapınak ve birlik üstünlüğü eklenir. Morali ya da askeri biten yenilir, en geç ${b.maxRounds}. turda saldıran çekilir. "İzle" ile seyredersiniz.`,
+        `Düşman sarayına varan ordu kuşatır: garnizon, gözcü kuleleri ve surlar savunur. Kazanan her depodan ${pct(balance.military.siege.lootShare)} alır, ama asker başına en çok ${balance.military.siege.carryPerSoldier} birim taşır. Düşen saray ${min(balance.military.siege.shieldSeconds)} dakika kalkan kazanır. Bir de gözdağı var: düşman hududunun yanında bekleyen ordu halkını korkutur (mutluluk ${balance.military.fear.happiness}).`,
+        `Savaş puanı muharebelerden (${d.warScore.battle}) ve kuşatmalardan (${d.warScore.siege}) birikir. Barışta altın istersiniz (her ${d.peace.goldPerScore} altın bir puan) ya da ${d.peace.tributeMinScore} puanla haraç; ${d.peace.enforceScore} puana ulaşan barışı dayatır.`,
+      ]
+    },
     go: { label: 'Savaşlar', act: tab('army', 'army', 'battles') },
   },
   {
     id: 'towns',
     name: 'Kasabalar',
     icon: 'house',
-    text: () => [
-      `Haritada küçük kasabalar vardır. Kasabanın panelinden "Kuşat" dersiniz; ordu kapıya varınca kuşatma ${min(balance.towns.siegeSeconds)} dakika sürer. Sahipsiz kasaba kendi garnizonuyla savunur.`,
-      'Alınan kasaba her tur katkı gönderir: altın, yemek, malzeme ya da köylü. Bakımını siz seçersiniz; bakım sadakati yükseltir.',
-      `Sadakat ${balance.towns.revolt.below}'in altına inerse kasaba ayaklanır, ${balance.towns.revolt.breakAwayBelow}'nin altında sizden kopar. Çok kasaba tutmak aşırı büyüme cezası getirir: dört ve üstünde hepsi ayaklanır.`,
-    ],
-  },
-  {
-    id: 'crowns',
-    name: 'Taçlar',
-    icon: 'crown',
-    text: ({ online }) => [
-      `İki taç krallığı vardır: ${online.crowns.join(' ve ') || 'iki başkent'}. Oyuncular onlardan birine biat eden lordlardır; biat sezon boyunca kalıcıdır ve sarayın ${balance.cities.crown.requiredForPalaceLevel}. seviyesi için şarttır.`,
-      `Kendi tacınızın devriyesi eğlence merkezinize uğrar ve bahşiş bırakır. Rakip taç her ${min(balance.cities.crown.patrol.tribute.everySeconds)} dakikada bir haraççı gönderir ve hazinenin ${pct(balance.cities.crown.patrol.tribute.share)}'ini ister: öde ya da reddet.`,
-      `Cevap vermezseniz haraç kendiliğinden ödenir; oyundaysanız ${pct(balance.cities.crown.patrol.tribute.afkFactor - 1)} fazlasıyla. Taçla ilişkiniz armağanları, görevleri ve fiyatlarınızı belirler.`,
-      `Taçların da hanedanı vardır: hükümdarlar bizim gibi yaşlanır, ölür, yerine oğulları ya da kızları geçer. Her hükümdarın bir huyu vardır; açgözlüsünün haraççıları daha çok ister, cömerdinin devriyesi daha çok bahşiş bırakır. Yeni hükümdar tahta çıkınca kendi lordlarına huyuna göre yaklaşır.`,
-      `İki taç ${Math.round(balance.cities.crown.rivalry.windowSeconds / 3600)} saatlik dönemlerde barış, gerginlik ya da savaş hâlindedir. Savaşta haraç ×${String(balance.cities.crown.rivalry.effects.war.tribute).replace('.', ',')}, bahşiş ×${String(balance.cities.crown.rivalry.effects.war.tip).replace('.', ',')} olur; kazanan tacın lordları +${balance.cities.crown.rivalry.victoryRelation} ilişki kazanır.`,
-      `Tacınız kardeşinizin isyanını desteklerse ve siz isyanı bastırırsanız, ${balance.cities.crown.switch.offerMinutes} dakika içinde rakip taca geçebilirsiniz. Biatin bozulabildiği tek an budur.`,
-    ],
-    go: { label: 'Krallık bölümü', act: tab('diplomacy', 'diplomacy', 'crowns') },
-  },
-  {
-    id: 'diplomacy',
-    name: 'Diplomasi',
-    icon: 'scroll',
-    text: () => [
-      'Her lord çiftinin −100 ile +100 arası bir ilişkisi vardır. Elçiyle ilişki geliştirir, hediye gönderir, haraç ister, ittifak ya da barış teklif edersiniz.',
-      `İttifak en az +${balance.diplomacy.alliance.minRelation} ilişki ister; müttefik orduları muharebede birbirini korur. Rakip taçların lordları birbirine pek ısınamaz.`,
-      `Hakaret elçisi ilişkiyi ${balance.diplomacy.insult.relation} düşürür ve karşı tarafa savaş gerekçesi verir. Haracı kesmek ya da ittifakı bozmak itibarınızı da yaralar.`,
-    ],
-    go: { label: 'Diplomasi sekmesi', act: tab('diplomacy', 'diplomacy', 'kingdoms') },
-  },
-  {
-    id: 'spies',
-    name: 'Casusluk',
-    icon: 'eye',
-    text: () => [
-      'Casus evi casus yetiştirir. Bir casusu bir lorda ve bir konuya (hammadde, ordu, diplomasi) gönderirsiniz; orada kaldıkça ağ gücü artar ve rapor netleşir.',
-      `Evde tutulan casuslar karşı casusluk yapar: her biri ${balance.espionage.counterPerSpy}, casus evinin her seviyesi ${balance.espionage.counterPerLevel} puan.`,
-      'Güçlü bir ağla operasyon yapılır: %50 sabotaj, %70 kraliçe kaçırma (hapishane gerekir), %90 isyan. Operasyon ağı harcar; başarısız olursa kim yaptığı ortaya çıkar.',
-    ],
-    go: { label: 'Casusluk bölümü', act: tab('diplomacy', 'diplomacy', 'spies') },
+    group: 'war',
+    pages: ({ kingdom: k }) => {
+      const t = balance.towns
+      const tiers = t.overreach.tiers
+      const held = k.towns?.length ?? 0
+      return [
+        `Haritada küçük kasabalar vardır. Kuşatma yalnızca kasabanın panelinden başlar; ordu kapıya varınca ${min(t.siegeSeconds)} dakika sürer ve her ${min(t.siegeRoundSeconds)} dakikada bir asker kaybedersiniz. Sahipsiz kasaba ${t.garrison[0]}–${t.garrison[1]} askerle direnir; kazıklı olanlar daha zor düşer.`,
+        `Alınan kasaba her tur gönderir: vergi kasabası ${dec(t.kinds.gold.perRound)} altın, tarım ${t.kinds.food.perRound} yemek, kereste ${t.kinds.materials.perRound} yapı, demirci ${dec(t.kinds.arms.perRound)} savaş malzemesi; kalabalık kasaba ${t.kinds.people.villagers} köylülük yer verir. Bakımı siz seçersiniz; bakım sadakati, sadakat de katkıyı büyütür.`,
+        `Sadakat ${t.revolt.below} puanın altına inerse kasaba ayaklanır, asiler kapıya dayanır; ordunuzla bastırırsanız sadakat +${t.rebels.quellLoyalty} olur. ${t.revolt.breakAwayBelow} puanın altında kasaba sizden kopar.`,
+        `Açgözlülüğün de cezası vardır, lordum: ${tiers[0].towns} kasabada hafif, ${tiers[1].towns} kasabada ağır ceza, ${tiers[2].towns} ve üstünde sadakat %${tiers[2].loyaltyCap} kadarında takılır ve hepsi sonunda kopar. ${held ? `Şu an ${held} kasabanız var.` : 'Henüz kasabanız yok; bir tanesi iyi gelir, ikisi de olur.'} Fazlasını paneldeki "Serbest bırak" ile salabilirsiniz.`,
+      ]
+    },
   },
   {
     id: 'navy',
     name: 'Donanma',
     icon: 'ship',
-    text: () => [
-      'Tersane 4. seviye sarayla açılır ve kıyıya kurulur. Kadırga savaşır, koka yük taşır, çektiri hızlı akıncıdır. Tayfa asker havuzundan gelir.',
-      `Limandan en çok ${balance.navy.maxFleets} filo çıkar. Görevler: deniz ticareti, balık avı, korsan avı; savaşta abluka, kıyı akını ve ablukayı yarma.`,
-      'Korsanlar ticaret seferlerine saldırabilir; eskort gemileri korur. Kadırga çektiriyi, çektiri kokayı yener.',
-    ],
+    group: 'war',
+    pages: ({ kingdom: k }) => {
+      const s = balance.navy.ships
+      const ships = countShips(allShips(k))
+      return [
+        `Tersane 4. seviye sarayla açılır ve kıyıya kurulur. Kadırga (${s.galley.cost.gold} altın) savaşır, koka (${s.cog.cost.gold}) yük taşır ve balık tutar, çektiri (${s.corsair.cost.gold}) hızlı akıncıdır. Kadırga çektiriyi, çektiri kokayı yener. Tayfa asker havuzundan gelir. ${ships ? `Limanınızda ${ships} gemi var.` : 'Henüz geminiz yok; ben de denize pek güvenmem zaten.'}`,
+        `Limandan en çok ${balance.navy.maxFleets} filo çıkar. Barışta deniz ticareti yapar (lobi fiyatının ${pct(balance.navy.trade.priceFactor)} kadarına satar, piyasayı az düşürür), balık tutar ya da korsan avlar. Filoyu "Hareket et" ile haritada istediğiniz suya da gönderirsiniz.`,
+        `Savaşta abluka kurarsınız: düşmanın iskelesi balık tutamaz, ticareti durur, halkı üzülür. Kıyı akını depolarından her malın ${pct(balance.navy.raid.stealShare)} kadarını kaçırır. Ablukaya düşen taraf savaş gemileriyle ablukayı yarabilir. Deniz muharebesinde kendi iskelesindeki savunan ${pct(balance.navy.battle.harbourBonus)} güçlüdür.`,
+      ]
+    },
     go: { label: 'Donanma bölümü', act: tab('army', 'army', 'sea') },
+  },
+
+  // ---- The crowns, the court and intrigue -----------------------------------------------------------------------------
+  {
+    id: 'crowns',
+    name: 'Taçlar',
+    icon: 'crown',
+    group: 'court',
+    pages: ({ kingdom: k, online }) => {
+      const cr = balance.cities.crown
+      const tr = cr.patrol.tribute
+      const asked = Math.max(tr.min, Math.round(k.stock.gold * tr.share))
+      const gifts = cr.gifts.map((g) => g.gold).join(' / ')
+      return [
+        `İki taç krallığı vardır: ${online.crowns.join(' ve ') || 'iki başkent'}. Oyuncular krallık değil, onlardan birine biat eden lordlardır. Biat sezon boyunca kalıcıdır ve sarayın ${cr.requiredForPalaceLevel}. seviyesi için şarttır. ${k.liege === undefined || k.liege === null ? 'Siz henüz kimseye bağlanmadınız, lordum.' : `Bağlı olduğunuz taç: ${online.crowns[k.liege] ?? 'bilinmiyor'}.`}`,
+        `Şimdi acı gerçek, lordum: taçlar size para kazandırmaz. Rakip taç her ${min(tr.everySeconds)} dakikada bir haraççı gönderir ve hazinenin ${pct(tr.share)} kadarını, en az ${tr.min} altın ister; bugünkü hazinenizle ${n(asked)} altın. Reddederseniz o tacın gözünden düşersiniz; konuşursanız, huyunu tutturursanız ${pct(tr.talk.discount[tr.talk.discount.length - 1])} kadar indirim koparırsınız.`,
+        `Cevap vermezseniz haraç kendiliğinden ödenir; oyundayken susarsanız ${pct(tr.afkFactor - 1)} fazlasıyla. Kendi tacınızın devriyesi ise eğlence merkezinize uğrayınca yalnızca ${cr.patrol.tip} altın bahşiş bırakır; armağanlar ilişkinize göre ${gifts} altın. Yani altını tüccardan, kasabalardan, seferlerden ve ganimetten kazanırsınız; taçtan kazandığınız itibardır.`,
+        `İtibar da boş değildir: taç siparişleri, tacın görevleri (${cr.quests.gold[0]}–${cr.quests.gold[1]} altın) ve kraliyet elçisinin istekleri ilişkiyi yükseltir; tacın yönettiği malı satarken iyi ilişki ${pct(cr.stewardship.bonus)} fazla fiyat getirir, kötüsü ${pct(cr.stewardship.penalty)} eksik.`,
+        `Taçların da hanedanı vardır: hükümdarlar yaşlanır, ölür, yerine çocukları geçer. Açgözlü hükümdarın haraççıları çok ister, cömerdinin devriyesi çok bahşiş bırakır. İki taç ${Math.round(cr.rivalry.windowSeconds / 3600)} saatlik dönemlerde barış, gerginlik ya da savaştadır; savaşta haraççılar ×${dec(cr.rivalry.effects.war.tribute)} ister.`,
+      ]
+    },
+    go: { label: 'Krallık bölümü', act: tab('diplomacy', 'diplomacy', 'crowns') },
   },
   {
     id: 'dynasty',
     name: 'Hanedan',
-    icon: 'crown',
-    text: () => [
-      `Lordluğun bir hanedanı vardır: hükümdar, kraliçe ve çocuklar. Bir hanedan yılı takvimdeki bir yıldır: bir gerçek saat.`,
-      'Yetenekler (maliye, halk, askerlik) vergiyi, mutluluğu ve savaş zarını etkiler. Kraliçenin yetenekleri hükümdara yarı yarıya eklenir.',
-      `Çocuklara ad koyar ve eğitim seçersiniz; ${balance.dynasty.comingOfAge} yaşında reşit olurlar. Hükümdar ölünce en büyük oğul tahta geçer; yoksa naipler konseyi yönetir.`,
-    ],
+    icon: 'leaf',
+    group: 'court',
+    pages: ({ kingdom: k, now }) => {
+      const d = balance.dynasty
+      const king = k.dynasty?.king
+      return [
+        `Lordluğunuzun bir hanedanı vardır: hükümdar, kraliçe, çocuklar, kardeşler ve akrabalar. Bir yıl bir gerçek saattir. ${king ? `${king.name} şu an ${ageOf(king.bornAt, now)} yaşında; Allah uzun ömür versin, ama ${d.death.atAge[0]}–${d.death.atAge[1]} arası bir yaşta hepimiz gideriz.` : 'Henüz tahtta kimse yok; naipler idare ediyor.'}`,
+        'Yetenekler üçtür: maliye vergiyi ve ticareti, halk mutluluğu ve iş gücünü, askerlik zarı ve maaşı etkiler. Kraliçenin yeteneklerinin yarısı hükümdarınkine eklenir. Beşten yukarısı iyidir, lordum; ben de gençken beşin üstündeydim.',
+        `Kraliçe sarayda oldukça çocuk doğar: bir çiftin en çok ${d.births.maxSons} oğlu, ${d.births.maxDaughters} kızı olur. Adlarını siz koyarsınız (bir kez!), eğitimlerini seçersiniz; ${d.comingOfAge} yaşında reşit olunca o yetenek artar. Sarayın ${d.queenForPalaceLevel}. seviyesi için kraliçe şarttır.`,
+        `Hükümdar ölünce en büyük oğul geçer; oğul küçükse naipler konseyi yönetir. Oğul yoksa reşit bir erkek kardeş, o da yoksa ${d.council.kinsmanYears} yıl sonra hanedandan bir akraba çağrılır. Hanedan bitmez, lordum; yalnızca karışır. Kardeşlerin hırsı ve taht kavgaları "Entrika" konusunda.`,
+      ]
+    },
     go: { label: 'Hanedan bölümü', act: tab('kingdom', 'palace', 'house') },
+  },
+  {
+    id: 'diplomacy',
+    name: 'Diplomasi',
+    icon: 'scroll',
+    group: 'court',
+    pages: () => {
+      const d = balance.diplomacy
+      return [
+        `Her iki lordun arasında −100 ile +100 arası bir ilişki vardır; zamanla sıfıra döner. Elçiyle ilişki geliştirirsiniz (${d.improve.cost.gold} altına +${d.improve.gain}), hediye yollarsınız, ittifak ya da barış teklif edersiniz. Rakip taçların lordları birbirine ${d.crowns.rivalMax} puandan fazla ısınamaz; ittifak ise +${d.alliance.minRelation} ister.`,
+        `Lordlar birbirinden haraç da ister: kabul eden her tur ${d.tribute.minGold}–${d.tribute.maxGold} altın öder ve ilişki ${d.tribute.accept} düşer. Reddetmek ${d.tribute.reject}, kabul edip sonra kesmek ${d.tribute.renege} ve herkesle ${d.tribute.renegeInfamy} getirir. İttifakı bozmak da ${d.alliance.break}. Sözünüzü tutun, lordum; tutamayacaksanız hiç vermeyin.`,
+        `Düşmanlık da diplomasidir: hakaret elçisi ilişkiyi ${d.insult.relation} düşürür. Ticaret yolu yağmasında garnizondan ${d.raid.soldiers} asker düşmanın tüccarını basar; şans ${pct(d.raid.baseChance)}, ticaret noktasının yanındaki her gözcü kulesi ${pct(d.raid.towerPenalty)} düşürür. Başarırsanız ${d.raid.lootTrips} seferlik malı alır, ticaret noktasını harap edersiniz.`,
+        `Her kötülük karşı tarafa bir savaş gerekçesi verir: casusu yakalanan, hakarete uğrayan, haracı kesilen, kraliçesi kaçırılan… Gerekçe ${Math.round(d.casusBelli.seconds / 3600)} saat geçerlidir. −20'nin altındaki ilişkiler çoğaldıkça itibarınız düşer, elçileriniz en çok ${pct(d.reputation.maxPenalty)} az etki eder.\n\nKardeş kavgaları, evlilikler ve casusların karanlık işleri için "Entrika"yı sorun.`,
+      ]
+    },
+    go: { label: 'Diplomasi sekmesi', act: tab('diplomacy', 'diplomacy', 'kingdoms') },
+  },
+  {
+    id: 'intrigue',
+    name: 'Entrika',
+    icon: 'moon',
+    group: 'court',
+    pages: ({ kingdom: k, now }) => {
+      const i = balance.dynasty.intrigue
+      const r = i.revolt
+      const ops = balance.espionage.operations
+      const sw = balance.cities.crown.switch
+      const brothers = k.dynasty ? siblingsOf(k.dynasty).filter((p) => hasOpinion(p, now)) : []
+      const sour = brothers.filter((p) => opinionOf(k, p, now).ruler < i.opinion.warn).length
+      return [
+        `Saray dışarıdan sakin görünür, lordum; içeriden kaynar. Reşit her oğlun, kardeşin ve akrabanın hükümdara bir bakışı vardır: yakınlık, hükümdarın yetenekleri, halkın mutluluğu ve kendi hırsı belirler. Büyük kardeşin tahtta gözü vardır. ${i.gift.gold} altınlık bir hediye bakışı +${i.gift.opinion} yükseltir, sonra yavaşça söner.${brothers.length ? ` Şu an ${sour ? `${sour} yakınınız hoşnutsuz` : 'kimse hoşnutsuz değil'}.` : ''}`,
+        `${i.roles.minAge} yaşını geçen hanedan üyelerine görev verin, sevinirler: vali bir kasabanın sadakatini yükseltir, devriye komutanı tacın bahşişini ve ilişkiyi artırır (ama taç onu da sever), hazinedar vergiyi maliyesiyle büyütür. Görevden alınan gücenir; ben de bir kez görevden alındım, hâlâ gücenikim.`,
+        `Prensesler evlendirilir: tacın ailesine (${i.marriage.crown.dowry} altın çeyiz, taçla ilişki +${i.marriage.crown.relation}), bir kasabanın ileri gelenine (${i.marriage.town.dowry} altın; sizin kasabanızsa sadakat +${i.marriage.town.loyalty}, kimsenin değilse kılıçsız size bağlanır) ya da elçiyle başka bir lordun hanedanına (kabul ederse ilişki +${i.marriage.lord.relation}).`,
+        `Bakışı ${r.below} puanın altına inen kardeş isyan edebilir: garnizonun bir kısmını alır, hududun dışında karargâh kurar, asileri dakikada büyür ve ${r.growMinutes} dakika sonra saraya yürür. Ordunuzla karargâhı basın ya da taçtan yardım isteyin (asker ya da ${i.aid.gold} altın). Tacınız davacıyı desteklemişse ve isyanı bastırırsanız ${sw.offerMinutes} dakika içinde rakip taca geçebilirsiniz; biatin bozulduğu tek an budur.`,
+        `Bir de karanlık işler var: casuslarınız güçlü bir ağla sabotaj yapar (${ops.sabotage.minStrength}+), kraliçeyi kaçırır (${ops.kidnap.minStrength}+, hapishaneniz olmalı; fidye en az ${ops.kidnap.ransomMin} altın), kasabada isyan kışkırtır (${ops.townRevolt.minStrength}+, sadakat ${ops.townRevolt.loyalty}) ya da lordluğu ayaklandırır (${ops.revolt.minStrength}+). Yakalanırsanız kim olduğunuz ortaya çıkar, karşı taraf da savaş gerekçesi kazanır.`,
+      ]
+    },
+    go: { label: 'Hanedan bölümü', act: tab('kingdom', 'palace', 'house') },
+  },
+  {
+    id: 'spies',
+    name: 'Casusluk',
+    icon: 'eye',
+    group: 'court',
+    pages: () => {
+      const e = balance.espionage
+      const o = e.operations
+      return [
+        `Casus evi casus yetiştirir: ${e.spyCost.gold} altına, ${e.spySeconds} saniyede bir; seviyesine göre ${e.capacityByLevel.join(' / ')} casus. Bir casusu bir lorda ve bir konuya (hammadde, ordu ya da diplomasi) gönderirsiniz; orada kaldıkça ağ gücü artar, rapor netleşir.`,
+        `Evde kalan casuslar karşı casusluk yapar (her biri ${dec(e.counterPerSpy)}, casus evinin her seviyesi ${dec(e.counterPerLevel)} puan): düşmanın ağı yavaş kurulur, casusu çabuk yakalanır. İlişkisi kötü olan lord da sizi gözler. Yakalanan casus ölür, gönderen ortaya çıkar.`,
+        `Ordu ağı güçlendikçe birlik türlerini ve gemileri de söyler. Güçlü ağla operasyon yapılır: sabotaj ${o.sabotage.cost.gold}, kraliçe kaçırma ${o.kidnap.cost.gold}, kasabada isyan ${o.townRevolt.cost.gold}, ayaklanma ${o.revolt.cost.gold} altın. Operasyon, başarılı olsun olmasın, istediği kadar ağ harcar. Ayrıntısı "Entrika"da.`,
+      ]
+    },
+    go: { label: 'Casusluk bölümü', act: tab('diplomacy', 'diplomacy', 'spies') },
+  },
+
+  // ---- Bandits, clans and pirates ---------------------------------------------------------------------------------------
+  {
+    id: 'bandits',
+    name: 'Yağmacılar',
+    icon: 'warn',
+    group: 'wilds',
+    pages: ({ kingdom: k }) => {
+      const b = balance.outlaws.bands
+      const r = balance.outlaws.road
+      const held = k.outlaws?.road ?? 0
+      return [
+        `Ticaret yollarında ${b.count} yağmacı çetesi dolaşır, lordum: her biri ${b.soldiers[0]}–${b.soldiers[1]} kişi, yırtık is karası bir sancak altında, kendi yol kesiminde ileri geri yürür. Ordulardan yavaştırlar; yakalamak zor değil, bulmak zor değil, sevmek zor.`,
+        `Ticaret noktanızın ${r.radiusTiles} karo çevresindeki yolu tutarlarsa tuttukları pay ölçüsünde tüccarınızın kazancından en çok ${pct(r.merchantCut)} kadarını keserler, halkınız da tedirgin olur. ${held > 0 ? `Şu an yolunuzun ${pct(held)} kadarı onların elinde.` : 'Şu an sizin yolunuz temiz; dua edelim öyle kalsın.'}`,
+        `Çeteye tıklayıp bir ordu seçin, "Takip et" deyin: ordu çetenin önünü keser, ${b.chase.contactTiles} karo yaklaşınca muharebe olur. ${min(b.chase.maxSeconds)} dakikada yakalayamazsa vazgeçer.`,
+        `Yenilen çete ${min(b.respawnSeconds)} dakika dağılır, sonra bir kişi kalabalık geri gelir. Ganimet kişi başına ${b.loot.armsPerSoldier} savaş malzemesi, ${b.loot.goldPerSoldier} altın, ${b.loot.materialsPerSoldier} yapı malzemesi. Çeteler başıboş da değildir: dağlardaki bir klana bağlıdırlar. Kökünü kurutmak için "Mağaralar"ı sorun.`,
+      ]
+    },
+    go: { label: 'Tüccara bak', act: tab('trade', 'trade', 'merchant') },
+  },
+  {
+    id: 'caves',
+    name: 'Mağaralar ve klanlar',
+    icon: 'map',
+    group: 'wilds',
+    pages: ({ kingdom: k }) => {
+      const cv = balance.outlaws.caves
+      const cl = balance.outlaws.clans
+      const spy = k.buildings.some((b) => b.kind === 'spyHouse')
+      const trails = Object.values(k.caveTrail ?? {})
+      const best = trails.reduce((m, t) => Math.max(m, t.wins), 0)
+      return [
+        `Dağ eteklerinde ${cv.count} mağara vardır ve hepsi birbirine benzer; ağızları hep bize doğru bakar ama içlerini göstermez. Bunların ${cl.count} tanesinde yağmacı klanları yaşar, her çete birine bağlıdır. Hangisinin dolu olduğunu dışarıdan anlayamazsınız, lordum; ben denedim, gözlüğüm yetmedi.`,
+        `İz sürmek gerekir: bir klanın çetesini yendikçe esirler konuşur. İlk zaferde bir yer işaretinden (kasaba, han, başkent, sizin topraklarınız) yön, ikincisinde aşağı yukarı uzaklık, üçüncüsünde mağaranın kendisi. Casus eviniz varsa ${cl.discovery.spyHouseWins} zafer yeter.${spy ? ' Sizin var, şanslısınız.' : ''}${best ? ` En iyi izinizde ${best} zafer var.` : ''}`,
+        `Bilmediğiniz bir mağaraya orduyu öylece yollarsanız ordu ağzın bir karo önünde durur, ama içine bakamaz: yol bozuktur, meşaleler söner, bir göçük vardır… Boş mağara da dolu mağara da aynı sözleri söyler; aynı ordu aynı mağara için saatte bir haber getirir. Yani dağ dağ gezmek boşa yorgunluktur.`,
+        `Bulunan mağaraya "Mağarayı kuşat" deyin. Koruyanlar ${cl.garrison[0]}–${cl.garrison[1]} kişiyle başlar ve zamanla büyür; evlerindedirler, moralleri ${cl.morale}, zarlarına +${dec(cl.caveBonus)} eklenir. Kazanırsanız klan yok olur: biriktirdiği ganimet (en az ${cl.hoard.gold} altın) sizin olur, puanınıza ${cl.scorePerCave} eklenir, çeteleri yollardan çekilir. Ama dağlar boş kalmaz; başka bir mağarada yeni bir klan doğar.`,
+      ]
+    },
+  },
+  {
+    id: 'pirates',
+    name: 'Korsanlar',
+    icon: 'anchor',
+    group: 'wilds',
+    pages: ({ kingdom: k }) => {
+      const b = balance.outlaws.boats
+      const s = balance.outlaws.sea
+      const held = k.outlaws?.sea ?? 0
+      return [
+        `Göllerde ve nehirlerde ${b.count} korsan teknesi dolaşır: kara yelkenli, kan kırmızısı flamalı, her birinde ${b.ships[0]}–${b.ships[1]} gemi. Savaşta çektiri sayılırlar; kokaları yener, kadırgalara yenilirler.`,
+        `İskelenizin ${b.reachTiles} karo yakınından geçen her tekne korsan etkisine ${pct(s.perBoat)} ekler: deniz ticaretine saldırı sıklaşır, iskelenin ve balıkçı filolarının avı azalır, halk tedirgin olur. ${held > 0 ? `Sizin sularınızda etki şu an ${pct(held)}.` : 'Sizin sularınız şu an sakin.'}`,
+        `Tekneye tıklayıp bir filo seçin; filoda en az bir savaş gemisi olmalı ve aynı suda yüzmeli. Filo teknenin önünü keser, ${dec(b.chase.contactTiles)} karo yaklaşınca deniz savaşı olur. Batırırsanız ${b.loot.bounty} altın artı gemi başına ${b.loot.perShip} altın, ${b.loot.arms} savaş ve ${b.loot.materials} yapı malzemesi; tekne ${min(b.respawnSeconds)} dakika ortadan kalkar. Ben yüzme bilmem, lordum; bu işleri size bırakıyorum.`,
+      ]
+    },
+    go: { label: 'Donanma bölümü', act: tab('army', 'army', 'sea') },
+  },
+
+  // ---- Pursuits and glory ---------------------------------------------------------------------------------------------
+  {
+    id: 'expeditions',
+    name: 'Seferler',
+    icon: 'pin',
+    group: 'pursuits',
+    pages: ({ kingdom: k, now }) => {
+      const x = balance.expeditions
+      const kd = x.kinds
+      const out = (k.expeditions ?? []).filter((e) => !e.result && e.startAt <= now && now < e.endAt).length
+      return [
+        `Saraydan küçük bir köylü kafilesi süreli bir yolculuğa çıkar; siz yokken de sürer. Avcılar ormana (${kd.hunt.minutes} dk), kâşifler dağlara (${kd.explore.minutes} dk), hacılar tapınağa (${kd.pilgrimage.minutes} dk), tüccar kafilesi uzak diyarlara (${kd.caravan.minutes} dk) ya da kayıp hazinenin izine (${kd.treasure.minutes} dk).`,
+        `Erzak peşin ödenir; yoldaki köylüler çalışmaz, vergi vermez. Aynı anda saray seviyesine göre ${x.maxActiveByPalaceLevel.join(' / ')} sefer, halkın en çok ${pct(x.maxVillagerShare)} kadarı yolda olur. ${out ? `Şu an ${out} kafileniz yolda.` : 'Şu an yolda kafileniz yok.'}`,
+        `Yolda iki üç şey olur: sürüye rastlarlar, ayıya rastlarlar… Her muhafız asker kötü olay ihtimalini ${pct(x.escortCut)} azaltır. Dönüşte ganimet depoya girer, resimli bir rapor açılır.`,
+        'Bir sır vereyim, lordum: seferler boşta oturan köylüler içindir. Bir binada çalışan köylüyü yollarsanız üretim kaybı kazancı yer. Boşta köylü varsa kafileye katın; hacılar dönünce halk da bir süre mutlu olur.',
+      ]
+    },
+    go: { label: 'Seferler', act: tab('kingdom', 'palace', 'expeditions') },
+  },
+  {
+    id: 'works',
+    name: 'Büyük işler',
+    icon: 'temple',
+    group: 'pursuits',
+    pages: ({ kingdom: k }) => {
+      const p = balance.projects
+      const w = p.works
+      const stages = PROJECT_IDS.reduce((s, id) => s + (k.projects?.[id]?.stage ?? 0), 0)
+      return [
+        `Ambarı ve hazinesi taşan lord için büyük işler vardır, lordum (${w.minPalace}. seviye saray): Ulu Katedral, Büyük Çarşı ve Şövalye Tarikatı. Her biri ${w.stageFactors.length} aşamadır; her aşama bir teslimat ister, "Depodan aktar" her ambarın ve hazinenin ${pct(w.keep.goods)} kadarını yedekte bırakır.`,
+        `Katedral her aşamada mutluluk +${w.kinds.cathedral.happinessPerStage}, çarşı ticarete ${pct(w.kinds.bazaar.tradePerStage)}, tarikat askerlerin zarına +${dec(w.kinds.knights.battlePerStage)} katar. Her aşama ${w.growthPerStage} puan, biten iş +${w.completeGrowth} daha ve tacınızla ilişki +${w.completeCrownRelation}. ${stages ? `Şimdiye kadar ${stages} aşama bitirdiniz.` : 'Henüz bir taş bile koymadınız.'}`,
+        `Daha küçük işler de var: halk şenliği (${p.festival.cost.gold} altın, ${n(p.festival.cost.food)} yemek; ${min(p.festival.seconds)} dakika mutluluk +${p.festival.happiness}) ve taca bağış (bir maldan ${n(p.donation.units)} birim, ilişki +${p.donation.relation}). Ambarda çürüyecek malı halka ve taca vermek, lordum, farelere vermekten iyidir.`,
+      ]
+    },
+    go: { label: 'Projelere git', act: tab('kingdom', 'palace', 'projects') },
+  },
+  {
+    id: 'goals',
+    name: 'Hedefler ve unvan',
+    icon: 'star',
+    group: 'pursuits',
+    pages: ({ kingdom: k }) => {
+      const g = balance.goals
+      const stars = Object.values(k.goals ?? {}).reduce((s, x) => s + (x?.tier ?? 0), 0)
+      const rank = [...g.ranks].reverse().find((r) => stars >= r.stars) ?? g.ranks[0]
+      const next = g.ranks.find((r) => r.stars > stars)
+      return [
+        `Hanedanın ${Object.keys(g.tracks).length} hedefi vardır: yapı, ev, saray, köylü, çocuk, zafer, kasaba, araştırma, sefer, ticaret, hazine, tapınak, gemi. Her birinin bronz, gümüş ve altın basamağı vardır ve her basamak bir yıldızla ${g.rewardByTier.map((r) => r.gold).join(' / ')} altınlık bir kese getirir.`,
+        `Yıldızlar unvanınızı belirler: ${g.ranks.map((r) => r.title).join(', ')}. Sizin ${stars} yıldızınız var, unvanınız ${rank.title}${next ? `; ${next.title} olmak için ${next.stars - stars} yıldız daha` : '; daha yukarısı yok, lordum, ben de size bakarken gözlerimi kısıyorum'}.`,
+        'Sezon sonunda lordlar puana göre sıralanır: hazine, gelişim (saray, kurumlar, büyük işler), nüfus, ordu, zafer (muharebeler, kuşatmalar, kasabalar, mağaralar) ve bilgi. Sohbetin Sıralama sekmesinde herkesin yerini görürsünüz; başkalarının hazinesini ise yalnızca casuslar söyler.',
+      ]
+    },
+    go: { label: 'Hedefler', act: tab('kingdom', 'palace', 'goals') },
   },
   {
     id: 'games',
     name: 'Mini oyunlar',
     icon: 'dice',
-    text: () => [
-      'Balıkçı kulübesinin oltası, kışlada okçuluk, silah atölyesinde örs başında ve ticaret noktasında kervan yolu; hepsi eğlence merkezinde de oynanır.',
-      `Her oyun ${min(balance.minigames.cooldownSeconds)} dakikada bir oynanır ve küçük ödüller verir. Puanı sunucu hesaplar; en iyi puanlar sezon ve tüm zamanlar sıralamasına girer.`,
-    ],
-  },
-  {
-    id: 'events',
-    name: 'Olaylar',
-    icon: 'star',
-    text: () => [
-      'Günün olayları iki kanaldan gelir: bütün lobiye (hava, kuyruklu yıldız, salgın…) ve yalnızca size (define, orman yangını, haydut baskını…).',
-      `Krizlerde üç seçenek vardır: köylüleri seferber et, orduyu seferber et ya da bir şey yapma. Karar için ${balance.institutions.events.crisis.decideSeconds} saniye var; cevap vermezseniz bir şey yapılmamış sayılır.`,
-      'Bazı olaylar iki yol sunar; her yolun bir bedeli ve bir kazancı vardır.',
-    ],
+    group: 'pursuits',
+    pages: () => {
+      const m = balance.minigames
+      return [
+        'Yorulunca biraz eğlenin, lordum: oduncu kampında odun yarma, tarlada hasat, iskelede ağ çekme, silah atölyesinde örs başında, ticaret noktasında kervan yolu, kışlada okçuluk ve balıkçı kulübesinde olta. Eğlence merkezi kurarsanız hepsi orada da oynanır.',
+        `Her oyun ${min(m.cooldownSeconds)} dakikada bir oynanır. Bütün oyunlar birlikte saatte en çok ${m.budget.goldPerWindow} altın değerinde ödül verir; gerisi yalnızca şan içindir. Puanı sunucu kendisi hesaplar, en iyiler sezon ve tüm zamanlar sıralamasına girer.`,
+        'Olta ayrıdır: balık tutarsanız bir kese ya da bir şişe çıkar. Şişedeki notlar başka lordların sırlarını fısıldar; çoğu yarım doğrudur, tıpkı saray dedikodusu gibi.',
+      ]
+    },
   },
 ]
+
+
+// ---- What to do with the stores --------------------------------------------------------------------------------------
+
+// Whether the stores or the treasury are filling up enough for the lord to ask what to do with them.
+export function wellStocked({ kingdom: k, now }: AdvisorCtx): boolean {
+  if (!hasPalace(k)) return false
+  return (['food', 'materials', 'arms'] as const).some((g) => k.stock[g] >= storageCap(k, now) * 0.6) || k.stock.gold >= goldCap(k, now) * 0.7
+}
+
+// "How do we put our goods to use?": the envoy weighs what the lord has and what he may do with it (CLAUDE.md §9.10).
+export function wealthAdvice(c: AdvisorCtx, pick: <T>(key: string, list: T[]) => T): { text: string; replies: Reply[] } {
+  const { kingdom: k, now } = c
+  const works = PROJECT_IDS.some((id) => projectError(k, id, now) === null)
+  const level = palaceLevel(k, now)
+  const replies: Reply[] = []
+  let text: string
+  if (works) {
+    text = pick('wealth:works', [
+      'Lordum, biraz büyük şeyler yapmanın vakti gelmedi mi sizce de? Ambarlar dolu, ustalar boş. Bir katedral, bir çarşı ya da bir şövalye tarikatı; her aşaması kalıcı bir kazanç ve sıralamada puan. Malı taşa çevirelim.',
+      'Dolu ambar, lordum, farenin ve yangının sofrasıdır. Saray → Projeler\'de üç büyük iş bekliyor; fazlayı oraya aktaralım, adınız taşlara kazınsın.',
+      'Lordum, servet saklandıkça erir: fare yer, pas yer, sel götürür. Büyük bir işe başlayalım; halk da görsün, tacınız da.',
+    ])
+    replies.push({ label: 'Projelere git', act: tab('kingdom', 'palace', 'projects') })
+  } else if (level >= 3) {
+    text = pick('wealth:festival', [
+      'Lordum, halka bir şenlik verin: meydanda sofralar kurulur, yemek erir, gönüller dolar. Taca bağış da var: fazla mal tacın gözünü sizden yana çevirir.',
+      'Fazla yemeği bir şenliğe, fazla malı taca bağışa çevirelim, lordum. Büyük işler için sarayın dördüncü katına çıkmamız gerekecek.',
+    ])
+    replies.push({ label: 'Projelere git', act: tab('kingdom', 'palace', 'projects') })
+  } else {
+    text = pick('wealth:sell', [
+      'Lordum, fazlayı tüccara verin: o malı satıp altın getirir. Tacın siparişleri ve kraliyet elçisinin istekleri de iyi öder. Saray büyüdükçe şenlikler ve büyük işler de açılır.',
+      'Ambarda yatan mal, lordum, kimseye yaramaz. Tüccara hangi malı satacağını söyleyin; tacın siparişine de bir göz atalım.',
+    ])
+  }
+  replies.push({ label: 'Tüccara bak', act: tab('trade', 'trade', 'merchant') })
+  replies.push({ label: 'Sonra bakarız', answer: '' })
+  return { text, replies: replies.slice(0, 3) }
+}

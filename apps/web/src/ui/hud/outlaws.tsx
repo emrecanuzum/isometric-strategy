@@ -524,7 +524,7 @@ function Known({ world, online, kingdom }: { world: World; online: Online; kingd
 
 // Send an army to a cave whose clan the lord has not found: it marches to the mouth and looks, but without the trail
 // it will most likely find nothing (the envoy says why; CLAUDE.md §7.9.1).
-function CaveLook({ cave, online, kingdom, now }: { cave: { mouth: Point }; online: Online; kingdom: Kingdom; now: number }) {
+function CaveLook({ cave, online, kingdom, now }: { cave: { mouth: Point; front: Point }; online: Online; kingdom: Kingdom; now: number }) {
   const armies = online.armies.filter((a) => a.kingdom_id === online.me)
   const [picked, setPicked] = useState<number | null>(null)
   const pick = armies.find((a) => a.id === picked)
@@ -562,7 +562,7 @@ function CaveLook({ cave, online, kingdom, now }: { cave: { mouth: Point }; onli
           <button
             className="btn primary wide"
             disabled={!pick || pick.status === 'battle'}
-            onClick={() => pick && online.act({ type: 'army', army: pick.id, order: { kind: 'move', x: Math.floor(cave.mouth.x), y: Math.floor(cave.mouth.y) } })}
+            onClick={() => pick && online.act({ type: 'army', army: pick.id, order: { kind: 'move', x: Math.floor(cave.front.x), y: Math.floor(cave.front.y) } })}
           >
             <Icon name="pin" size={16} /> {pick ? `${armies.indexOf(pick) + 1}. orduyu mağaraya gönder` : 'Önce bir ordu seç'}
           </button>

@@ -14,7 +14,8 @@
       "answerSeconds": 300,
       "tribute": {
         "everySeconds": 1800,
-        "share": 0.05,
+        "share": 0.08,
+        "min": 150,
         "afkFactor": 1.5,
         "onlineMinutes": 7,
         "lateSeenSeconds": 90,
@@ -31,7 +32,7 @@
         }
       },
       "refuseRelation": -8,
-      "tip": 120
+      "tip": 30
     },
     "relation": {
       "restSworn": 15,
@@ -47,28 +48,28 @@
       {
         "at": 30,
         "name": "Teşekkür sepeti",
-        "gold": 60,
+        "gold": 15,
         "goods": {
-          "food": 30
+          "food": 15
         }
       },
       {
         "at": 60,
         "name": "Saray armağanı",
-        "gold": 150,
+        "gold": 35,
         "goods": {
-          "food": 50,
-          "materials": 50
+          "food": 25,
+          "materials": 25
         }
       },
       {
         "at": 85,
         "name": "Hükümdarın lütfu",
-        "gold": 300,
+        "gold": 70,
         "goods": {
-          "food": 80,
-          "materials": 80,
-          "arms": 60
+          "food": 40,
+          "materials": 40,
+          "arms": 30
         }
       }
     ],

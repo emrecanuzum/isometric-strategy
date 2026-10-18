@@ -3,6 +3,7 @@ import type { Point, World } from '@game/shared'
 import { structureParts } from './buildingSprites'
 import type { Structure } from './buildingSprites'
 import { innLook } from './innSprites'
+import { caveSprites } from './caveSprites'
 import { BAYER, SPRITES, castShadow, ramp } from './sprites'
 import type { Sprite } from './sprites'
 import type { SunShadow } from './daylight'
@@ -899,12 +900,22 @@ interface Placed {
 
 // Shadows cast with the sun painted last, per sprite and footprint.
 let castSun: SunShadow | null = null
-// The tiles of the lobby's caves (caves.ts, from the seed): the rock each opens into and the land before its mouth.
-const caveTilesOf = new WeakMap<World, Map<number, { rock: boolean; dx: number; dy: number }>>()
+// The tiles of the lobby's caves (caves.ts, from the seed): the rock each opens into and the land before its mouth,
+// and round them (`clear`) the tiles where no crag, boulder or tree may stand, so the mouth shows from afar.
+const CAVE_CLEAR = 2
+const caveTilesOf = new WeakMap<World, Map<number, { rock: boolean; dx: number; dy: number } | 'clear'>>()
 function caveTiles(world: World) {
   let tiles = caveTilesOf.get(world)
   if (!tiles) {
     tiles = new Map()
+    for (const c of caveSpots(world, world.seed)) {
+      for (let dy = -CAVE_CLEAR; dy <= CAVE_CLEAR; dy++)
+        for (let dx = -CAVE_CLEAR; dx <= CAVE_CLEAR; dx++) {
+          const x = c.x + dx
+          const y = c.y + dy
+          if (x >= 0 && y >= 0 && x < world.size && y < world.size) tiles.set(y * world.size + x, 'clear')
+        }
+    }
     for (const c of caveSpots(world, world.seed)) {
       tiles.set(c.y * world.size + c.x, { rock: true, dx: c.dx, dy: c.dy })
       tiles.set(Math.floor(c.mouth.y) * world.size + Math.floor(c.mouth.x), { rock: false, dx: c.dx, dy: c.dy })
@@ -1266,9 +1277,10 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       // before it.
       const cave = caves.get(i)
       if (cave !== undefined) {
-        if (cave.rock) {
-          const facing = cave.dx - cave.dy > 0 ? SPRITES.caveRight : SPRITES.caveLeft
-          place(choose(facing, hash(x, y, seed + 45)), x + 0.5 + cave.dx * 0.45, y + 0.5 + cave.dy * 0.45, own)
+        if (cave !== 'clear' && cave.rock) {
+          // The model stands on the mouth's land tile, its anchor that tile's front corner (caveSprites.ts).
+          const looks = cave.dx > 0 ? caveSprites().u : caveSprites().v
+          place(choose(looks, hash(x, y, seed + 45)), x + cave.dx + 1, y + cave.dy + 1, own)
         }
         continue
       }

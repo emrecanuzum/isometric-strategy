@@ -6024,20 +6024,26 @@ input:not([type='range']):focus-visible {
   color: var(--muted);
 }
 
-.quest-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: calc(var(--px) * 3);
-}
-
-.quest-foot small {
+/* The progress in words on a line of its own, then the buttons in one even row across the card: a single button
+   spans it, a small refuse button sits square beside the main one. */
+.quest-info {
   color: var(--muted);
 }
 
-.quest-foot .row {
-  display: flex;
+.quest-actions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
   gap: calc(var(--px) * 2);
+}
+
+.quest-actions:has(> :nth-child(2)) {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.quest-actions .btn {
+  justify-content: center;
 }
 
 /* Phones: as wide as the timers, and away while a sheet is open. */
@@ -6176,6 +6182,33 @@ input:not([type='range']):focus-visible {
 }
 
 /* The envoy as advisor: a speech panel over the bottom of the map (not a dialog; the map stays usable). */
+/* The envoy's word on what the lord just did: a small parchment over the map, above the dock, gone in a few seconds
+   or at a tap. */
+.envoy-note {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10);
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+  width: min(460px, calc(100vw - var(--gap) * 2));
+  padding: calc(var(--px) * 4) calc(var(--px) * 6);
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  cursor: pointer;
+  animation: advisor-in 0.25s ease-out;
+}
+
+.envoy-note canvas {
+  flex: none;
+  box-shadow: var(--outline);
+}
+
 .advisor {
   position: fixed;
   left: 50%;
@@ -6262,10 +6295,48 @@ input:not([type='range']):focus-visible {
   margin-top: calc(var(--px) * 4);
 }
 
+/* The topics he explains: grouped under small headings, scrolling inside the panel so two dozen buttons never push
+   it off the screen. */
 .advisor-topics {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: calc(var(--px) * 4);
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: hidden auto;
+  /* Room for the buttons' outline and drop shadow inside the scrolling box. */
+  padding: var(--px) calc(var(--px) * 2) calc(var(--px) * 3) var(--px);
+}
+
+.advisor-topics h4 {
+  margin: 0 0 calc(var(--px) * 2);
+  font-size: inherit;
+  font-weight: normal;
+  color: var(--gold);
+}
+
+.advisor-topic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: calc(var(--px) * 3);
+}
+
+.advisor-topic-grid .btn {
+  justify-content: flex-start;
+}
+
+/* Paging a topic: back, "2 / 4", next, on the left of the replies. */
+.advisor-pager {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  margin-right: auto;
+}
+
+.advisor-pager span {
+  min-width: 3.5em;
+  text-align: center;
+  color: var(--muted);
 }
 
 .advisor-replies {
@@ -6332,6 +6403,50 @@ input:not([type='range']):focus-visible {
    are choices up to three, then wrapping: one in a column, two side by side, three in a row, four as 2×2, five and six
    in threes. Counted from the children, so a group needs no class per size; a full-width strip (.wide, or the goods'
    "sell nothing") is not counted. Each group keeps its own gap. */
+/* Gifts to the crown: one plain row per good (what goes, what is in store) with its own button, not a choice of
+   tabs; the gift is confirmed before it goes. */
+.donate-list {
+  display: grid;
+  gap: calc(var(--px) * 2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.donate-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+}
+
+.donate-list li span {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  min-width: 0;
+}
+
+.donate-list small,
+.donate-ask small {
+  color: var(--muted);
+}
+
+.donate-ask {
+  display: grid;
+  gap: calc(var(--px) * 3);
+}
+
+.donate-ask p {
+  margin: 0;
+}
+
+.donate-ask .row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: calc(var(--px) * 2);
+}
+
 .choices {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

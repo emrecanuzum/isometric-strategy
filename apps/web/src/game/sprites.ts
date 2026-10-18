@@ -1749,46 +1749,6 @@ function scrub(seed: number): Sprite {
 // A cave mouth at the foot of a slope (CLAUDE.md §7.9.1): a low rock mound with a dark arched opening on the side the
 // cave faces (`right`: toward the lower right of the screen), a lip of fallen stones before it and moss on its sill.
 // Every cave looks alike, held by a clan or not, so a lord cannot spot the clans' dens from afar.
-const CAVE_DARK = ramp(0x07060a, 0x120e14, 0x1e181e, 0x2c2428)
-function caveMouth(seed: number, right: boolean): Sprite {
-  const random = mulberry32(seed)
-  const width = 30 + Math.floor(random() * 8)
-  const tall = 16 + Math.floor(random() * 6)
-  const canvas = new Canvas(width + 2, tall + 6)
-  const base = canvas.height - 2
-  const heads = Array.from({ length: 3 }, () => ({ at: 0.2 + random() * 0.6, height: tall * (0.6 + random() * 0.4), steep: 1.6 + random() * 1.2 }))
-  const top = (x: number) => {
-    const u = (x - 1) / width
-    if (u < 0 || u > 1) return -1
-    let t = 3 + Math.min(u, 1 - u) * 16
-    for (const h of heads) t = Math.max(t, h.height * (1 - Math.abs(u - h.at) * h.steep))
-    return Math.max(0, Math.round(Math.min(t, tall) + (hash(x >> 1, 7, seed) - 0.5) * 2))
-  }
-  facets(canvas, top, false, seed)
-  // The opening: an arch on one flank, darkest deep inside, its edge lit on the side facing the light.
-  const cx = Math.round(1 + width * (right ? 0.64 : 0.36))
-  const half = 4 + Math.floor(random() * 2)
-  const high = Math.min(tall - 3, 8 + Math.floor(random() * 3))
-  for (let x = cx - half; x <= cx + half; x++) {
-    const f = (x - cx) / half
-    const h = Math.round(high * Math.sqrt(Math.max(0, 1 - f * f)))
-    for (let z = 0; z <= h; z++) {
-      const deep = 1 - Math.max(Math.abs(f), z / (high + 1))
-      canvas.set(x, base - z, pick(CAVE_DARK, 3 - deep * 4 + (hash(x, z, seed + 3) - 0.5)))
-    }
-    canvas.set(x, base - h - 1, x < cx ? STONE[4] : STONE[1])
-  }
-  // Fallen stones on the lip, moss on the sill.
-  for (let i = 0; i < 5; i++) {
-    const x = cx + (random() - 0.5) * half * 2.6
-    const y = base - random() * 1.5
-    canvas.set(x, y, STONE[2 + Math.floor(random() * 2)])
-    canvas.set(x + 1, y, STONE[1])
-  }
-  weather(canvas, seed, 0.7)
-  return canvas.sprite(canvas.width >> 1, base, 1)
-}
-
 // A glint carried by the current.
 function ripple(length: number): Sprite {
   const canvas = new Canvas(length, 1)
@@ -1884,9 +1844,6 @@ export const SPRITES = {
   scree: variants(4, scree),
   tuft: variants(4, tuft),
   outcrop: variants(5, outcrop),
-  // Cave mouths facing the lower left, then the lower right (caveMouth).
-  caveLeft: variants(3, (s) => caveMouth(s + 31, false)),
-  caveRight: variants(3, (s) => caveMouth(s + 37, true)),
   ledge: variants(4, ledge),
   pillar: variants(3, pillar),
   pebbles: variants(4, pebbles),

@@ -21,15 +21,19 @@ function reasonOf(button: HTMLButtonElement): string {
 }
 
 // The disabled-with-reason button under (x, y), searching the subtree of the element the pointer hit.
+// Only a button the hit element holds counts: the pointer passes through the transparent button to its container, so
+// a button covered by something else (an open dropdown list over it) is not under the pointer at all, and neither
+// its bubble nor the swallowed click may steal what was meant for the thing on top.
 function hitAt(target: EventTarget | null, x: number, y: number): HTMLButtonElement | null {
-  let root = target instanceof Element ? target : null
+  const hit = target instanceof Element ? target : null
+  let root = hit
   // A reason button wrapped in an element that is itself pointer-transparent: search a little higher.
   for (let depth = 0; root && depth < 3; depth++, root = root.parentElement) {
     const found = root.querySelectorAll<HTMLButtonElement>(SELECTOR)
     for (let i = found.length - 1; i >= 0; i--) {
       const b = found[i]
       const r = b.getBoundingClientRect()
-      if (r.width && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom && reasonOf(b)) return b
+      if (r.width && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom && reasonOf(b) && hit?.contains(b)) return b
     }
     if (found.length) break
   }

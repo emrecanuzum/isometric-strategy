@@ -174,7 +174,7 @@ export async function orderCave(world: LobbyWorld, army: ArmyRow, owner: Kingdom
   const cave = caves[clan.cave]
   if (!cave) return 'cave'
   const holdings = kingdoms.map((k) => ({ id: k.id, buildings: k.state?.buildings ?? [] }))
-  const update = march(world, army, owner, at, cave.mouth, { kind: 'cave', slot, gen: clan.gen } as unknown as ArmyRow['goal'], game.buildingBlocker(holdings, army.kingdom_id), undefined, game.buildingBlocker(holdings))
+  const update = march(world, army, owner, at, cave.front, { kind: 'cave', slot, gen: clan.gen } as unknown as ArmyRow['goal'], game.buildingBlocker(holdings, army.kingdom_id), undefined, game.buildingBlocker(holdings))
   if (!update) return 'route'
   await admin.from('armies').update(update).eq('id', army.id)
   return null

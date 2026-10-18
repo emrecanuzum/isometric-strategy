@@ -36,26 +36,26 @@ function markSeen(lobby: string, id: number) {
 // The two capitals face each other, their armies between them.
 function crownsPicture(): Placed[] {
   return [
-    { sprite: palaceIn('crimson', 3), x: 44, y: 76 },
-    { sprite: palaceIn('royal', 3), x: 198, y: 76 },
-    { sprite: squad('crimson', 0, 12), x: 100, y: 90 },
-    { sprite: squad('royal', 2, 12), x: 142, y: 90 },
+    { sprite: palaceIn('crimson', 3), x: -1, y: 6 },
+    { sprite: palaceIn('royal', 3), x: 6, y: 1 },
+    { sprite: squad('crimson', 0, 12), x: 1, y: 4.2 },
+    { sprite: squad('royal', 2, 12), x: 2.8, y: 2.4 },
   ]
 }
 
 function lordPicture(own: string | undefined): Placed[] {
   return [
-    { sprite: palaceIn(own, 2), x: 70, y: 84 },
-    { sprite: STRUCTURE_SPRITES.tavern[0], x: 150, y: 80 },
-    { sprite: squad('crimson', 1, 6), x: 196, y: 90 },
+    { sprite: palaceIn(own, 2), x: 0, y: 5 },
+    { sprite: STRUCTURE_SPRITES.tavern[0], x: 4, y: 2 },
+    { sprite: squad('crimson', 1, 6), x: 5.2, y: 1.4 },
   ]
 }
 
 function marketPicture(): Placed[] {
   return [
-    { sprite: STRUCTURE_SPRITES.market[0], x: 70, y: 84 },
-    { sprite: STRUCTURE_SPRITES.market[1], x: 170, y: 84 },
-    { sprite: STRUCTURE_SPRITES.warehouse[1], x: 120, y: 70 },
+    { sprite: STRUCTURE_SPRITES.market[0], x: 0, y: 5 },
+    { sprite: STRUCTURE_SPRITES.warehouse[1], x: 2, y: 0 },
+    { sprite: STRUCTURE_SPRITES.market[1], x: 6, y: 1 },
   ]
 }
 
@@ -146,7 +146,7 @@ export function CrownIntro({ world, kingdom, online, lobby, onSwear, onClose }: 
               ))}
             </ul>
             <p>
-              Rakip tacın haraççıları ise her {Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir kapına gelip hazinenin %{Math.round(balance.cities.crown.patrol.tribute.share * 100)}'ini ister. Ödersen o taçla da aran düzelir; reddedersen bozulur.
+              Rakip tacın haraççıları ise her {Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir kapına gelip hazinenin %{Math.round(balance.cities.crown.patrol.tribute.share * 100)}'ini (en az {balance.cities.crown.patrol.tribute.min} altın) ister. Ödersen o taçla da aran düzelir; reddedersen bozulur.
             </p>
             <p>Taçla ilişkini en çok, tüccarını onun başkentine göndererek artırırsın: her sefer onun ticaretine yarar.</p>
           </div>

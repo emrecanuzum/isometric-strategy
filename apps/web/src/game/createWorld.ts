@@ -1941,7 +1941,15 @@ export async function createWorld(
     laid = new Set(placed.filter((s) => s.look === 'road').map((s) => s.y * world.size + s.x))
     const trails = [...cityTrails(world), ...townTrails]
     // The free cities stand with the kingdoms' buildings, and answer to the pointer as a whole (by the city's index).
-    const structures = linkWalls([...cityStructures(world), ...placed])
+    // A capital's suburbs give way to any lord who holds the ground (only old worlds, where the cities came after the
+    // lords, let one so near): his lands and every building placed, with a tile round it.
+    const held = new Set<number>()
+    for (const p of placed) for (let y = p.y - 1; y <= p.y + p.size; y++) for (let x = p.x - 1; x <= p.x + p.size; x++) held.add(y * world.size + x)
+    const lands = [...rivals.map((r) => r.rect), ...(claimed[0] ? [claimed[0]] : [])]
+    const clearOf = (s: Structure) =>
+      !lands.some((r) => s.x < r.x + r.size && r.x < s.x + s.size && s.y < r.y + r.size && r.y < s.y + s.size) &&
+      ![...Array(s.size * s.size).keys()].some((k) => held.has((s.y + Math.floor(k / s.size)) * world.size + s.x + (k % s.size)))
+    const structures = linkWalls([...cityStructures(world).filter((s) => !s.suburb || clearOf(s)), ...placed])
     hits = structures
       .filter((s) => s.id !== undefined || s.city !== undefined)
       .map((s): (typeof hits)[number] => {

@@ -1403,6 +1403,8 @@ export interface Structure {
   links?: number
   // A building of a free city: the city's index in world.cities.
   city?: number
+  // One of a crown capital's unwalled suburbs (see cities.ts → suburbs): left out where a lord holds the ground.
+  suburb?: boolean
 }
 
 // Wall pieces joined to the wall pieces beside them, so a run of wall reads as one wall with corners and ends. A gate

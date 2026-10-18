@@ -316,7 +316,7 @@ function CrownStanding({ world, index, kingdom }: { world: World; index: number;
           ? gift
             ? `Devriyesi sana her uğradığında «${gift.name}» getirir (tacın gücüyle artar ya da azalır).`
             : `İlişkin ${balance.cities.crown.gifts[0].at}'a ulaşınca devriyesi sana armağan getirmeye başlar.`
-          : `Rakip tacın haraççıları ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelip hazinenin ${pctText(tributeShareNow(crownKeyOf(kingdom), index, serverNow()))}'ini ister${waysText(crownKeyOf(kingdom), index, serverNow(), 'tribute') ? ` (${waysText(crownKeyOf(kingdom), index, serverNow(), 'tribute')})` : ''}; armağan getirmezler.`}
+          : `Rakip tacın haraççıları ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelip hazinenin ${pctText(tributeShareNow(crownKeyOf(kingdom), index, serverNow()))}'ini (en az ${balance.cities.crown.patrol.tribute.min} altın) ister${waysText(crownKeyOf(kingdom), index, serverNow(), 'tribute') ? ` (${waysText(crownKeyOf(kingdom), index, serverNow(), 'tribute')})` : ''}; armağan getirmezler.`}
       </p>
     </Section>
   )
@@ -678,7 +678,7 @@ function CrownPolicy({ world, kingdom, crown: i, online, market, now }: { world:
                 sworn
                   ? `devriyesi eğlence merkezine uğrar, ~${fmt(tipPreview(kingdom, i, online, now))} altın bahşiş bırakır${tipWhy ? ` (${tipWhy})` : ''}`
                   : kingdom.liege !== undefined && kingdom.liege !== null
-                    ? `${Math.round(tribute.everySeconds / 60)} dakikada bir hazinenin ${pctText(tributeShareNow(key, i, now))}'ini ister${tributeWhy ? ` (${tributeWhy})` : ''}`
+                    ? `${Math.round(tribute.everySeconds / 60)} dakikada bir hazinenin ${pctText(tributeShareNow(key, i, now))}'ini (en az ${tribute.min} altın) ister${tributeWhy ? ` (${tributeWhy})` : ''}`
                     : 'biat etmediğin için ne devriye ne haraççı gönderir'
               }
             />

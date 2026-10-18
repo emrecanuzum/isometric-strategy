@@ -116,6 +116,7 @@ import { EnvoyDialog, describe as describeNotice } from './ui/Envoy'
 import { Advisor, AdvisorSettings } from './ui/advisor/Advisor'
 import type { AdvisorAction } from './ui/advisor/lines'
 import { EnvoyPortrait } from './ui/advisor/EnvoyPortrait'
+import { EnvoyNote } from './ui/advisor/EnvoyNote'
 import { AwayReport, awaySince } from './ui/AwayReport'
 import { CrownIntro, introSeen } from './ui/CrownIntro'
 import { FortuneDialog } from './ui/FortuneDialog'
@@ -1770,9 +1771,14 @@ function App({
     const lords: Lord[] = JSON.parse(lordsKey).map(([id, liege]: [number, number | null]) => ({ id, liege }))
     const towns = new Map<number, TownBuilding[]>([[mine.id, (shown?.buildings ?? []) as TownBuilding[]], ...rivals.map((r) => [r.id, r.buildings] as [number, TownBuilding[]])])
     const out: MapArmy[] = []
+    // What stands in the way (every lord's buildings, walls and gates included), as a short fingerprint: a route worked
+    // out before a wall went up, or before the other lords had loaded, is worked out again rather than kept.
+    let blockPrint = 0
+    for (const [id, buildings] of towns) for (const b of buildings) blockPrint = (Math.imul(blockPrint ^ (id * 131 + b.x * 7919 + b.y * 104729 + b.size * 31 + b.kind.length), 0x01000193) + (b.broken ? 7 : 0)) >>> 0
     // The road from a capital's gate to the free ground in front of a building, and where the squads behind the head
-    // gather round it there (CLAUDE.md §7.8; haltSpots), worked out once.
-    const routeTo = (key: string, city: { x: number; y: number }, stop: { x: number; y: number; size: number }, squads: number) => {
+    // gather round it there (CLAUDE.md §7.8; haltSpots), worked out once for the buildings as they stand.
+    const routeTo = (base: string, city: { x: number; y: number }, stop: { x: number; y: number; size: number }, squads: number) => {
+      const key = `${base}:${blockPrint}`
       if (!patrolRoutes.current.has(key)) {
         const blocked = patrolBlocker(view.world, [...towns.values()].map((buildings) => ({ buildings })))
         const { door, gather } = haltSpots(view.world, blocked, stop, squads - 1)
@@ -1890,7 +1896,7 @@ function App({
       const cave = trail?.cave !== undefined && view ? caveSpots(view.world, view.world.seed)[trail.cave] : undefined
       if (!cave) continue
       const fight = clan.battle !== null ? layer.battles.find((x) => x.id === clan.battle && !x.resolved) : undefined
-      out.push({ id: -(CAVE_ID + clan.slot), color: BANDIT_COLOR, own: false, soldiers: null, path: [{ x: cave.mouth.x + cave.dx * 0.6, y: cave.mouth.y + cave.dy * 0.6 }], departAt: t, arriveAt: t, battle: !!fight, selected: false, figures: 4, catapult: false, tag: `${clan.name} · mağara`, tagOutlaw: true })
+      out.push({ id: -(CAVE_ID + clan.slot), color: BANDIT_COLOR, own: false, soldiers: null, path: [{ x: cave.front.x - cave.dx * 0.15, y: cave.front.y - cave.dy * 0.15 }], departAt: t, arriveAt: t, battle: !!fight, selected: false, figures: 4, catapult: false, tag: `${clan.name} · mağara`, tagOutlaw: true })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2918,6 +2924,7 @@ function App({
       )}
         </QueueContext.Provider>
       )}
+      {view && kingdom && <EnvoyNote quiet={advisorBlocked} />}
       {view && kingdom && (
         <Advisor
           storeKey={`advisor:${lobby.id}:${mine.id}`}

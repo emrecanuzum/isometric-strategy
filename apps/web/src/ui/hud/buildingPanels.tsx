@@ -53,12 +53,12 @@ export function PrisonPanel({ data }: { data: HudData }) {
   const color = kingdom.color ?? undefined
   const scene = useMemo<Placed[]>(
     () => [
-      { sprite: STRUCTURE_SPRITES.house[2], x: 34, y: 78 },
-      { sprite: hostages.length > 0 ? STRUCTURE_SPRITES.prisonFull[0] : STRUCTURE_SPRITES.prison[0], x: 120, y: 86 },
-      { sprite: squad(color ?? null, 0, 1), x: 82, y: 92 },
-      { sprite: squad(color ?? null, 2, 1), x: 160, y: 92 },
-      { sprite: squad(color ?? null, 1, 2), x: 186, y: 84 },
-      { sprite: STRUCTURE_SPRITES.watchtower[0], x: 204, y: 80 },
+      { sprite: STRUCTURE_SPRITES.house[2], x: -3, y: 4 },
+      { sprite: hostages.length > 0 ? STRUCTURE_SPRITES.prisonFull[0] : STRUCTURE_SPRITES.prison[0], x: 2, y: 4 },
+      { sprite: squad(color ?? null, 0, 1), x: 0.2, y: 5.4 },
+      { sprite: squad(color ?? null, 2, 1), x: 2.6, y: 3.6 },
+      { sprite: squad(color ?? null, 1, 2), x: 4, y: 2 },
+      { sprite: STRUCTURE_SPRITES.watchtower[0], x: 6, y: 1 },
     ],
     [color, hostages.length > 0],
   )
@@ -168,10 +168,10 @@ export function TavernPanel({ data }: { data: HudData }) {
   const liege = kingdom.liege
   const scene = useMemo<Placed[]>(
     () => [
-      { sprite: STRUCTURE_SPRITES.house[1], x: 36, y: 80 },
-      { sprite: STRUCTURE_SPRITES.tavern[0], x: 116, y: 86 },
-      ...(liege != null ? [{ sprite: squad(CROWN_ROOFS[liege % CROWN_ROOFS.length], 0, 3), x: 172, y: 90 }] : []),
-      { sprite: STRUCTURE_SPRITES.market[0], x: 210, y: 80 },
+      { sprite: STRUCTURE_SPRITES.house[1], x: -3, y: 4 },
+      { sprite: STRUCTURE_SPRITES.tavern[0], x: 2, y: 4 },
+      ...(liege != null ? [{ sprite: squad(CROWN_ROOFS[liege % CROWN_ROOFS.length], 0, 3), x: 3.4, y: 2.6 }] : []),
+      { sprite: STRUCTURE_SPRITES.market[0], x: 6, y: 1 },
     ],
     [liege],
   )

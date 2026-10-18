@@ -21,9 +21,11 @@ export interface CaveSpot {
   // The mountain tile the cave opens into.
   x: number
   y: number
-  // The land tile in front of its mouth (where an army stands to besiege it), as a tile centre.
+  // The land tile the mouth opens onto (the cave's rock stands on it), as a tile centre.
   mouth: Point
-  // Unit step from the mountain tile toward the mouth.
+  // The land tile before that, where an army stands to look in or to besiege it, as a tile centre.
+  front: Point
+  // Unit step from the mountain tile toward the mouth: (1, 0) or (0, 1), toward the viewer, so the mouth is seen.
   dx: number
   dy: number
 }
@@ -89,9 +91,10 @@ export function caveSpots(world: Ground, seed: number): CaveSpot[] {
     for (let x = spec.edgeClear; x < size - spec.edgeClear; x++) {
       const i = y * size + x
       // Terrain and features only (the server's world has no heights): a mountain tile with open land right in front of it
-      // is a foothill, never a snowy peak.
+      // is a foothill, never a snowy peak. Only slopes facing the viewer (the lower right or the lower left on screen):
+      // a mouth facing away could not be seen.
       if (world.terrain[i] !== Terrain.Mountain) continue
-      for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+      for (const [dx, dy] of [[1, 0], [0, 1]]) {
         const m = (y + dy) * size + x + dx
         if (!dry(world.terrain[m]) || world.feature[m] !== Feature.None || sizes[label[m]] < spec.minLand) continue
         // The tile beyond the mouth is open land too (the army has room to stand).
@@ -109,7 +112,7 @@ export function caveSpots(world: Ground, seed: number): CaveSpot[] {
     const y = (c.i - x) / size
     if (spots.some((s) => Math.hypot(s.x - x, s.y - y) < spec.minSpacing)) continue
     if (cities.some((p) => Math.hypot(p.x - x, p.y - y) < spec.cityClear)) continue
-    spots.push({ idx: spots.length, x, y, mouth: { x: x + c.dx + 0.5, y: y + c.dy + 0.5 }, dx: c.dx, dy: c.dy })
+    spots.push({ idx: spots.length, x, y, mouth: { x: x + c.dx + 0.5, y: y + c.dy + 0.5 }, front: { x: x + c.dx * 2 + 0.5, y: y + c.dy * 2 + 0.5 }, dx: c.dx, dy: c.dy })
   }
   bySeed.set(seed, spots)
   return spots
@@ -120,7 +123,7 @@ export function caveAt(caves: CaveSpot[], tile: Point, reach = C().pickTiles) {
   let best: CaveSpot | undefined
   let bestD = reach
   for (const c of caves) {
-    const d = Math.min(Math.hypot(c.x + 0.5 - (tile.x + 0.5), c.y + 0.5 - (tile.y + 0.5)), Math.hypot(c.mouth.x - (tile.x + 0.5), c.mouth.y - (tile.y + 0.5)))
+    const d = Math.min(Math.hypot(c.x + 0.5 - (tile.x + 0.5), c.y + 0.5 - (tile.y + 0.5)), Math.hypot(c.mouth.x - (tile.x + 0.5), c.mouth.y - (tile.y + 0.5)), Math.hypot(c.front.x - (tile.x + 0.5), c.front.y - (tile.y + 0.5)))
     if (d <= bestD) [best, bestD] = [c, d]
   }
   return best

@@ -4,7 +4,7 @@ import { babble } from '../../audio/sfx'
 import { EnvoyPortrait } from './EnvoyPortrait'
 import {
   ADVISOR_EVERY_MINUTES, IDLE_LINES, LATER, LATER_ANSWERS, SKIP_ANSWERS, SMALL_TALK, SNOOZE_MINUTES, STEPS, TIPS, TOPICS, TOPICS_ASK, TUTORIAL_DONE,
-  TUTORIAL_OFF_ANSWERS,
+  TOPIC_GROUPS, TUTORIAL_OFF_ANSWERS, wealthAdvice, wellStocked,
 } from './lines'
 import type { AdvisorAction, AdvisorCtx, Reply, Step, Tip, Topic } from './lines'
 
@@ -180,6 +180,9 @@ interface Speech {
   // Shown under the text: a step of the tutorial, or the list of topics.
   step?: { index: number; of: number; title: string }
   topics?: boolean
+  // A topic told page by page: all its pages (worked out once, so the count holds while paging) and the one shown,
+  // which is `text`.
+  page?: { topic: Topic; pages: string[]; index: number }
 }
 
 const safe = <T,>(f: () => T, fallback: T): T => {
@@ -222,9 +225,24 @@ function stepSpeech(s: Step, index: number, c: AdvisorCtx, pick: Pick, cheer?: s
 }
 
 function topicSpeech(t: Topic, c: AdvisorCtx): Speech {
+  const pages = safe(() => t.pages(c), []).filter((p) => p)
+  return turnPage({ text: '', replies: [], page: { topic: t, pages: pages.length ? pages : ['…'], index: 0 } }, 0)
+}
+
+// The same talk at another page. The topic's own button and "ask something else" stay on every page (the lord may
+// act or leave at any point); the thanks that closes it waits for the last page.
+function turnPage(s: Speech, index: number): Speech {
+  if (!s.page) return s
+  const { topic: t, pages } = s.page
+  const i = Math.max(0, Math.min(pages.length - 1, index))
   return {
-    text: safe(() => t.text(c), []).join('\n\n'),
-    replies: [...(t.go ? [{ label: t.go.label, act: t.go.act }] : []), { label: 'Başka bir şey sor', topic: '' }, { label: 'Teşekkürler', answer: '' }],
+    text: pages[i],
+    page: { ...s.page, index: i },
+    replies: [
+      ...(t.go ? [{ label: t.go.label, act: t.go.act }] : []),
+      { label: 'Başka bir şey sor', topic: '' },
+      ...(i === pages.length - 1 ? [{ label: 'Teşekkürler', answer: '' }] : []),
+    ],
   }
 }
 
@@ -321,14 +339,16 @@ export function Advisor({
     const c = ctxRef.current
     if (step) return setSpeech(stepSpeech(step, stepIndex, c, pick))
     const tip = tipFor(c, {})
+    // With stores filling up, the lord may ask what to do with them.
+    const wealth: Reply | null = wellStocked(c) ? { label: 'Malımızı nasıl değerlendirelim?', say: wealthAdvice(c, pick) } : null
     if (tip) {
       const said = tipSpeech(tip, c, pick)
-      return setSpeech({ ...said, replies: [...said.replies.slice(0, 2), { label: 'Bana oyunu anlat', topic: '' }] })
+      return setSpeech({ ...said, replies: [...said.replies.slice(0, 2), wealth ?? { label: 'Bana oyunu anlat', topic: '' }] })
     }
     const talk = pick('smallTalk', SMALL_TALK)
     setSpeech({
       text: pick('idle', IDLE_LINES),
-      replies: [{ label: 'Bana oyunu anlat', topic: '' }, { label: talk.label, answer: pick(`talk:${talk.label}`, talk.answers) }, { label: 'Bir şey yok, sağ ol', answer: '' }],
+      replies: [wealth ?? { label: 'Bana oyunu anlat', topic: '' }, { label: talk.label, answer: pick(`talk:${talk.label}`, talk.answers) }, { label: 'Bir şey yok, sağ ol', answer: '' }],
     })
     // Only the button calls him.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -364,6 +384,10 @@ export function Advisor({
       onAct(r.act)
       return
     }
+    if (r.say) {
+      setSpeech(r.say)
+      return
+    }
     if (r.topic !== undefined) {
       const topic = TOPICS.find((t) => t.id === r.topic)
       setSpeech(topic ? topicSpeech(topic, ctxRef.current) : topicsSpeech(pick))
@@ -374,13 +398,51 @@ export function Advisor({
   }
 
   if (!speech || blocked || aside) return null
-  return <Panel speech={speech} onReply={reply} onTopic={(t) => setSpeech(topicSpeech(t, ctxRef.current))} onClose={() => setSpeech(null)} />
+  return (
+    <Panel
+      speech={speech}
+      onReply={reply}
+      onTopic={(t) => setSpeech(topicSpeech(t, ctxRef.current))}
+      onPage={(i) => setSpeech((s) => (s ? turnPage(s, i) : s))}
+      onClose={() => setSpeech(null)}
+    />
+  )
 }
 
-function Panel({ speech, onReply, onTopic, onClose }: { speech: Speech; onReply: (r: Reply) => void; onTopic: (t: Topic) => void; onClose: () => void }) {
-  const { shown, done, finish } = useTyping(speech.text)
+function Panel({
+  speech,
+  onReply,
+  onTopic,
+  onPage,
+  onClose,
+}: {
+  speech: Speech
+  onReply: (r: Reply) => void
+  onTopic: (t: Topic) => void
+  onPage: (index: number) => void
+  onClose: () => void
+}) {
+  const typing = useTyping(speech.text)
+  // The typing hook resets after the render that brings a new text (a new page): until it has, that render would show
+  // the old page's count of letters of the new one, so a new text starts from nothing here.
+  const typed = useRef(speech.text)
+  const fresh = typed.current !== speech.text
+  useEffect(() => {
+    typed.current = speech.text
+  }, [speech.text])
+  const shown = fresh ? 0 : typing.shown
+  const done = !fresh && typing.done
   useBabble(speech.text, shown)
   const paragraphs = useMemo(() => [...speech.text].slice(0, shown).join('').split('\n\n'), [speech.text, shown])
+  // A new page starts at the top of the parchment.
+  const bubble = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    bubble.current?.scrollTo?.({ top: 0 })
+  }, [speech.text])
+  const page = speech.page
+  const last = !page || page.index >= page.pages.length - 1
+  // A tap on the parchment shows the whole page, and once it is all there, turns to the next one.
+  const tap = () => (!done ? typing.finish() : !last && page ? onPage(page.index + 1) : undefined)
   return (
     <section className="advisor frame" role="dialog" aria-label="Elçi" aria-live="polite">
       <div className="advisor-face">
@@ -393,6 +455,10 @@ function Panel({ speech, onReply, onTopic, onClose }: { speech: Speech; onReply:
             <small>
               <Icon name="book" size={16} /> Öğretici · {speech.step.index + 1}/{speech.step.of} · <b>{speech.step.title}</b>
             </small>
+          ) : page ? (
+            <small>
+              <Icon name={page.topic.icon} size={16} /> Bana oyunu anlat · <b>{page.topic.name}</b>
+            </small>
           ) : (
             <small>Elçinin sözü</small>
           )}
@@ -400,7 +466,7 @@ function Panel({ speech, onReply, onTopic, onClose }: { speech: Speech; onReply:
             <Icon name="close" size={16} />
           </button>
         </header>
-        <div className="advisor-bubble" onClick={finish}>
+        <div className="advisor-bubble" ref={bubble} onClick={tap}>
           {paragraphs.map((p, i) => (
             <p key={i}>{p}</p>
           ))}
@@ -408,16 +474,43 @@ function Panel({ speech, onReply, onTopic, onClose }: { speech: Speech; onReply:
         </div>
         {speech.topics && (
           <div className="advisor-topics">
-            {TOPICS.map((t) => (
-              <button key={t.id} className="btn small" onClick={() => onTopic(t)}>
-                <Icon name={t.icon} size={16} /> {t.name}
-              </button>
-            ))}
+            {TOPIC_GROUPS.map((g) => {
+              const list = TOPICS.filter((t) => t.group === g.id)
+              return list.length ? (
+                <section key={g.id}>
+                  <h4>{g.name}</h4>
+                  <div className="advisor-topic-grid">
+                    {list.map((t) => (
+                      <button key={t.id} className="btn small" onClick={() => onTopic(t)}>
+                        <Icon name={t.icon} size={16} /> {t.name}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ) : null
+            })}
           </div>
         )}
         <div className="advisor-replies">
+          {page && page.pages.length > 1 && (
+            <div className="advisor-pager">
+              <button className="btn small" onClick={() => onPage(page.index - 1)} disabled={page.index === 0} data-why="Bu ilk sayfa">
+                ‹ Geri
+              </button>
+              <span>
+                {page.index + 1} / {page.pages.length}
+              </span>
+              <button className={last ? 'btn small' : 'btn small primary'} onClick={() => onPage(page.index + 1)} disabled={last} data-why="Bu son sayfa">
+                İleri ›
+              </button>
+            </div>
+          )}
           {speech.replies.map((r, i) => (
-            <button key={`${r.label}${i}`} className={i === 0 && (r.act || speech.replies.length === 1) ? 'btn small primary' : 'btn small'} onClick={() => onReply(r)}>
+            <button
+              key={`${r.label}${i}`}
+              className={last && i === 0 && (r.act || speech.replies.length === 1) ? 'btn small primary' : 'btn small'}
+              onClick={() => onReply(r)}
+            >
               {r.label}
             </button>
           ))}

@@ -116,7 +116,13 @@ export function unansweredTribute(amount: number, lastSeenAt: number | undefined
 
 // The tribute demanded of a lord with `gold` in the treasury: a fixed share of it, tilted by the asking crown's ruler
 // (`factor`: the reigning ruler's trait, crownHouse.ts → crownTraitAt).
-export const tributeDemand = (gold: number, factor = 1) => Math.floor(Math.max(0, gold) * patrolSpec().tribute.share * factor)
+// What the rival crown's collectors ask: a share of the treasury, never less than a floor (all there is, if the
+// treasury holds less), so the crowns cost a lord more than they give (CLAUDE.md §7.8).
+export const tributeDemand = (gold: number, factor = 1) => {
+  const t = patrolSpec().tribute
+  const have = Math.max(0, gold)
+  return Math.floor(Math.min(have, Math.max(have * t.share, t.min) * factor))
+}
 
 // Where a crown's patrols ride out from: just outside the capital's front wall.
 export const capitalGate = (city: Point): Point => ({ x: city.x + balance.cities.size / 2, y: city.y + balance.cities.size + 1.5 })

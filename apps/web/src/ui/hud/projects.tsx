@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   GOODS,
   PROJECT_IDS,
@@ -134,9 +135,14 @@ function Work({ kingdom, id, now, online }: { kingdom: Kingdom; id: ProjectId; n
 }
 
 export function ProjectsPanel({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?: Online }) {
+  const [asking, setAsking] = useState<Good | null>(null)
   const fx = projectEffects(kingdom, now)
   const f = balance.projects.festival
   const d = balance.projects.donation
+  const whyNot = (g: Good) => {
+    const e = donationError(kingdom, g, now)
+    return e === 'liege' ? 'Önce bir taç krallığına biat et' : e === 'palace' ? `${d.minPalace}. seviye saray gerekir` : e === 'max' ? 'Tacınla ilişkin zaten en yüksekte' : e === 'wait' ? `Sonraki bağış ${span(donationReadyAt(kingdom) - now)} sonra` : `Depoda en az ${fmt(donationUnits())} ${RESOURCE_NAMES[g].toLowerCase()} olmalı`
+  }
   const fe = festivalError(kingdom, now)
   const locked = palaceLevel(kingdom, now) < W.minPalace
   return (
@@ -154,7 +160,7 @@ export function ProjectsPanel({ kingdom, now, online }: { kingdom: Kingdom; now:
       </Section>
       <Section title="Halk şenliği" icon="music" aside={festivalOn(kingdom, now) ? `sürüyor · ${span((kingdom.festivalUntil ?? 0) - now)}` : undefined}>
         <p className="hint">
-          Meydanda sofralar kurulur: {span(f.seconds * 1000)} boyunca mutluluk +{f.happiness}. {span(f.cooldownSeconds * 1000)}de bir düzenlenir.
+          Meydanda sofralar kurulur: {span(f.seconds * 1000)} boyunca mutluluk +{f.happiness}. Sonraki şenlik için {span(f.cooldownSeconds * 1000)} beklenir.
         </p>
         <button className="btn small primary" disabled={fe !== null} data-why={fe === 'palace' ? `${f.minPalace}. seviye saray gerekir` : fe === 'wait' ? `Sonraki şenlik ${span(festivalReadyAt(kingdom) - now)} sonra` : (lackWhy(kingdom.stock, festivalCost()) ?? 'Kaynak yetmiyor')} onClick={() => online?.act({ type: 'project', action: 'festival' })}>
           <span>Şenlik düzenle</span>
@@ -165,21 +171,50 @@ export function ProjectsPanel({ kingdom, now, online }: { kingdom: Kingdom; now:
       </Section>
       <Section title="Taca bağış" icon="crown">
         <p className="hint">
-          Bağlı olduğun taca {fmt(donationUnits())} birim mal gönder: tacınla ilişki +{d.relation}. {span(d.cooldownSeconds * 1000)}da bir gönderilir.
+          Bağlı olduğun taca {fmt(donationUnits())} birim mal gönder: tacınla ilişki +{d.relation}. Bir sonrakine kadar {span(d.cooldownSeconds * 1000)} beklenir.
         </p>
         {kingdom.liege === undefined ? (
           <small className="down">Önce bir taç krallığına biat et.</small>
+        ) : asking ? (
+          // A gift this big is asked about first.
+          <div className="donate-ask">
+            <p>
+              <Icon name={asking} size={16} /> {fmt(donationUnits())} {RESOURCE_NAMES[asking].toLowerCase()} tacına gidecek (depoda {fmt(kingdom.stock[asking])}). Emin misin?
+            </p>
+            <div className="row">
+              <button className="btn small" onClick={() => setAsking(null)}>
+                Vazgeç
+              </button>
+              <button
+                className="btn small primary"
+                disabled={donationError(kingdom, asking, now) !== null}
+                data-why={whyNot(asking)}
+                onClick={() => {
+                  online?.act({ type: 'project', action: 'donate', good: asking })
+                  setAsking(null)
+                }}
+              >
+                <Icon name="crown" size={16} /> Evet, gönder
+              </button>
+            </div>
+          </div>
         ) : (
-          <div className="choices">
+          <ul className="donate-list">
             {GOODS.map((g: Good) => {
               const e = donationError(kingdom, g, now)
               return (
-                <button key={g} className="btn small" disabled={e !== null} data-why={e === 'liege' ? 'Önce bir taç krallığına biat et' : e === 'palace' ? `${d.minPalace}. seviye saray gerekir` : e === 'max' ? 'Tacınla ilişkin zaten en yüksekte' : e === 'wait' ? `Sonraki bağış ${span(donationReadyAt(kingdom) - now)} sonra` : `Depoda en az ${fmt(donationUnits())} ${RESOURCE_NAMES[g].toLowerCase()} olmalı`} onClick={() => online?.act({ type: 'project', action: 'donate', good: g })}>
-                  <Icon name={g} size={16} /> {RESOURCE_NAMES[g]}
-                </button>
+                <li key={g}>
+                  <span>
+                    <Icon name={g} size={16} /> {fmt(donationUnits())} {RESOURCE_NAMES[g].toLowerCase()}
+                    <small> · depoda {fmt(kingdom.stock[g])}</small>
+                  </span>
+                  <button className="btn small" disabled={e !== null} data-why={whyNot(g)} onClick={() => setAsking(g)}>
+                    Bağışla
+                  </button>
+                </li>
               )
             })}
-          </div>
+          </ul>
         )}
         {donationReadyAt(kingdom) > now && <Stat label="Sonraki bağış" value={span(donationReadyAt(kingdom) - now)} />}
         {kingdom.liege !== undefined && donationError(kingdom, 'food', now) === 'max' && <small className="up">Tacınla ilişkin zaten en üstte.</small>}

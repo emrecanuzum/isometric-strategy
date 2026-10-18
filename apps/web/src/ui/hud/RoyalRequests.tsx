@@ -167,10 +167,10 @@ export function QuestTracker({ world, kingdom, online, now }: { world: World; ki
                 <small>{left(q.quest.endsAt - now)}</small>
               </div>
               <Meter value={q.need ? Math.min(1, q.have / q.need) : 1} tone={q.have >= q.need ? 'up' : 'gold'} label="Görevin ilerlemesi" segments={10} />
-              <div className="quest-foot">
-                <small>
-                  {fmt(Math.min(q.have, q.need))} / {fmt(q.need)} · {fmt(q.quest.gold)} altın
-                </small>
+              <small className="quest-info">
+                {fmt(Math.min(q.have, q.need))} / {fmt(q.need)} · {fmt(q.quest.gold)} altın
+              </small>
+              <div className="quest-actions">
                 <button className={q.claim ? 'btn small' : 'btn small primary'} disabled={!!q.claim} data-why={q.claim === 'notYet' ? 'Görev henüz tamamlanmadı' : q.claim === 'done' ? 'Ödülü aldın' : 'Ödül şu an alınamaz'} onClick={() => online.act({ type: 'quest', crown: q.crown, action: 'claim' })}>
                   <Icon name="chest" size={16} /> Ödülü al
                 </button>
@@ -200,23 +200,23 @@ function RoyalRow({ world, kingdom, req, accepted, online, now, goldRoom }: { wo
         <small>{left(req.endsAt - now)}</small>
       </div>
       <Meter value={Math.min(1, have / Math.max(1, req.units))} tone={have >= req.units ? 'up' : 'gold'} label="Kraliyet isteğinin ilerlemesi" segments={10} />
-      <div className="quest-foot">
-        <small>
-          {fmt(Math.min(have, req.units))} / {fmt(req.units)} · {fmt(req.gold)} altın, ilişki +{r.relation.deliver}
-        </small>
+      <small className="quest-info">
+        {fmt(Math.min(have, req.units))} / {fmt(req.units)} · {fmt(req.gold)} altın · ilişki +{r.relation.deliver}
+      </small>
+      <div className="quest-actions">
         {accepted ? (
           <button className={can ? 'btn small primary' : 'btn small'} disabled={!can} data-why={have < req.units ? `Elinde ${fmt(have)} / ${fmt(req.units)} ${itemName(req.item)} var` : now >= req.endsAt ? 'Bu isteğin süresi doldu' : 'Şu an teslim edilemez'} onClick={() => online.act({ type: 'royal', action: 'deliver' })}>
             <Icon name="chest" size={16} /> Teslim et
           </button>
         ) : (
-          <span className="row">
-            <button className="btn small danger" title="Bu sefer olmaz" onClick={() => online.act({ type: 'royal', action: 'decline' })}>
+          <>
+            <button className="btn small danger" title="Bu sefer olmaz" aria-label="Bu sefer olmaz" onClick={() => online.act({ type: 'royal', action: 'decline' })}>
               <Icon name="close" size={16} />
             </button>
-            <button className="btn small" onClick={() => online.act({ type: 'royal', action: can ? 'deliver' : 'accept' })}>
-              {can ? 'Teslim et' : 'Üstlen'}
+            <button className="btn small primary" onClick={() => online.act({ type: 'royal', action: can ? 'deliver' : 'accept' })}>
+              <Icon name={can ? 'chest' : 'scroll'} size={16} /> {can ? 'Teslim et' : 'Üstlen'}
             </button>
-          </span>
+          </>
         )}
       </div>
       {can && goldRoom < req.gold && <small className="down">Hazinende {fmt(Math.max(0, goldRoom))} altınlık yer var; kalanı boşa gider.</small>}

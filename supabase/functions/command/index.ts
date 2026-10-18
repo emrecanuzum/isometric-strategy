@@ -1428,7 +1428,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
   }
 }
 
-const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'townUpkeep', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'nameChild', 'educate', 'crisis', 'choose', 'seen', 'reset', 'ships', 'fleet', 'order', 'quest', 'royal', 'releaseTown', 'expedition', 'steward'])
+const OWN = new Set(['join', 'roll', 'found', 'build', 'buildMany', 'plan', 'demolish', 'disband', 'upgrade', 'upgradeTrade', 'tradeGood', 'tradeAmount', 'tradeCity', 'swear', 'workers', 'product', 'tax', 'queen', 'train', 'nightShift', 'townUpkeep', 'buy', 'repairWalls', 'repairTrade', 'research', 'sermon', 'nameChild', 'educate', 'crisis', 'choose', 'seen', 'reset', 'ships', 'fleet', 'order', 'quest', 'royal', 'releaseTown', 'expedition', 'steward', 'project'])
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

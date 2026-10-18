@@ -4,7 +4,7 @@ import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { PHASE_NAMES, dayPhase, isNight } from '../../game/daylight'
 import { Icon } from '../icons'
-import { BUILDING_NAMES, RESOURCE_ICONS, RESOURCE_NAMES, SEASON_ICONS, SEASON_NAMES, dateText } from '../names'
+import { BUILDING_NAMES, RESOURCE_ICONS, RESOURCE_NAMES, SEASON_NAMES, dateText } from '../names'
 import type { TabId } from './Hud'
 import { History, Meter, fmt, short, signed, times } from './primitives'
 import { RESOURCES, flows } from './tabs'
@@ -194,7 +194,7 @@ function ResourceCard({ resource: r, kingdom, now, history, market }: { resource
         <ul className="pop-lines">
           <li>
             <span>
-              <Icon name={SEASON_ICONS[seasonOf(kingdom, now)!]} size={8} /> Mevsim: {SEASON_NAMES[seasonOf(kingdom, now)!]} (tarla, iskele)
+              Mevsim: {SEASON_NAMES[seasonOf(kingdom, now)!]} (tarla, iskele)
             </span>
             <b className={seasonFactor(kingdom, now, 'food') < 1 ? 'down' : 'up'}>{times(seasonFactor(kingdom, now, 'food'))}</b>
           </li>
@@ -356,11 +356,9 @@ function Clock({ now, seasonStart, nextRound, open, onTap }: { now: number; seas
             <b>{dateText(c)}</b>
           </li>
           <li>
-            <span>
-              <Icon name={SEASON_ICONS[c.season]} size={8} /> Mevsim
-            </span>
-            <b>
-              {SEASON_NAMES[c.season]} · {Math.max(1, Math.ceil((c.seasonEndsAt - now) / 60000))} dk sonra {SEASON_NAMES[c.nextSeason].toLocaleLowerCase('tr')}
+            <span>Mevsim</span>
+            <b title={`${Math.max(1, Math.ceil((c.seasonEndsAt - now) / 60000))} dk sonra ${SEASON_NAMES[c.nextSeason].toLocaleLowerCase('tr')}`}>
+              {SEASON_NAMES[c.season]} · {Math.max(1, Math.ceil((c.seasonEndsAt - now) / 60000))} dk kaldı
             </b>
           </li>
           <li>
