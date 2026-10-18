@@ -40,6 +40,8 @@
 
   --font: 'Digits', 'Pixelify Sans', ui-monospace, monospace;
   --dock-h: calc(var(--px) * 32);
+  /* The dock's carved frame (ui/barFrame.ts) above and below its tabs: what stands over the dock clears it. */
+  --dock-frame: calc(var(--px) * 14);
   --gap: 12px;
 
   /* The frame recipe; components set --face, --hi and --lo. */
@@ -722,7 +724,7 @@ small {
   position: fixed;
   left: var(--gap);
   top: 120px;
-  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10);
+  bottom: calc(var(--gap) + var(--dock-h) + var(--dock-frame) + var(--px) * 10);
   width: min(400px, calc(100vw - var(--gap) * 2));
   display: flex;
   flex-direction: column;
@@ -2121,7 +2123,7 @@ small {
 .chat {
   position: fixed;
   left: var(--gap);
-  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10);
+  bottom: calc(var(--gap) + var(--dock-h) + var(--dock-frame) + var(--px) * 10);
   z-index: 5;
 }
 
@@ -2227,7 +2229,9 @@ small {
 
 /* An open sheet takes the left side. */
 :root[data-sheet='open'] .chat,
-:root[data-sheet='open'] .chat-bar {
+:root[data-sheet='open'] .chat-bar,
+body:has(section.sheet) .chat,
+body:has(section.sheet) .chat-bar {
   display: none;
 }
 
@@ -2891,6 +2895,7 @@ button[data-busy]::after {
   :root {
     --gap: 8px;
     --dock-h: 56px;
+    --dock-frame: calc(var(--px) * 7);
   }
 
   html,
@@ -2916,7 +2921,7 @@ button[data-busy]::after {
   .map-alerts {
     --alerts-top: calc(var(--gap) + 72px);
     width: min(260px, calc(100vw - 2 * var(--gap)));
-    max-height: calc(100dvh - var(--alerts-top) - var(--dock-h) - 20px - 140px - var(--gap) - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - var(--alerts-top) - var(--dock-h) + var(--dock-frame) - 20px - 140px - var(--gap) - env(safe-area-inset-bottom));
   }
 
   /* The last chip of the store bar, as wide as the others, its list dropping down under the bar's right end. */
@@ -3067,7 +3072,7 @@ button[data-busy]::after {
     left: 0;
     right: 0;
     top: auto;
-    bottom: calc(var(--dock-h) + var(--px) * 4 + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + var(--dock-frame) + var(--px) * 4 + env(safe-area-inset-bottom));
     width: auto;
     height: min(62vh, calc(100vh - 140px));
   }
@@ -3076,25 +3081,25 @@ button[data-busy]::after {
   .zoom {
     left: auto;
     right: var(--gap);
-    bottom: calc(var(--dock-h) + 20px + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + var(--dock-frame) + 20px + env(safe-area-inset-bottom));
   }
 
   .chat-bar {
-    bottom: calc(var(--dock-h) + 132px + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + var(--dock-frame) + 132px + env(safe-area-inset-bottom));
   }
 
   .chat {
     left: var(--gap);
     right: var(--gap);
     width: auto;
-    bottom: calc(var(--dock-h) + var(--px) * 4 + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + var(--dock-frame) + var(--px) * 4 + env(safe-area-inset-bottom));
     height: 50vh;
   }
 
   .minimap {
     left: 54px;
     right: auto;
-    bottom: calc(var(--dock-h) + 3px + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + var(--dock-frame) + 3px + env(safe-area-inset-bottom));
   }
 
   .minimap canvas {
@@ -3106,7 +3111,7 @@ button[data-busy]::after {
   .mm-corners {
     left: 27px;
     right: auto;
-    bottom: calc(var(--dock-h) + 22px + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + var(--dock-frame) + 22px + env(safe-area-inset-bottom));
     width: 187px;
     height: 93px;
   }
@@ -3918,7 +3923,7 @@ button[data-busy]::after {
 .side-stack {
   position: fixed;
   left: var(--gap);
-  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10 + 44px + var(--px) * 6);
+  bottom: calc(var(--gap) + var(--dock-h) + var(--dock-frame) + var(--px) * 10 + 44px + var(--px) * 6);
   z-index: 4;
   display: flex;
   flex-direction: column;
@@ -4033,7 +4038,7 @@ button[data-busy]::after {
 }
 
 body:has(section.chat) .side-stack {
-  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10 + min(460px, 58vh) + var(--px) * 6);
+  bottom: calc(var(--gap) + var(--dock-h) + var(--dock-frame) + var(--px) * 10 + min(460px, 58vh) + var(--px) * 6);
 }
 
 kbd {
@@ -4484,7 +4489,7 @@ kbd {
 @media (max-width: 560px) {
   .war-targets {
     top: auto;
-    bottom: calc(var(--gap) + var(--dock-h) + 70px);
+    bottom: calc(var(--gap) + var(--dock-h) + var(--dock-frame) + 70px);
     max-height: 40vh;
   }
 }
@@ -4512,7 +4517,7 @@ kbd {
 .chat-pop {
   position: fixed;
   left: var(--gap);
-  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10 + 44px + var(--px) * 6);
+  bottom: calc(var(--gap) + var(--dock-h) + var(--dock-frame) + var(--px) * 10 + 44px + var(--px) * 6);
   z-index: 7;
   display: flex;
   align-items: flex-start;
@@ -4679,7 +4684,7 @@ kbd {
 /* Phones: the timers sit above the chat button (or the open chat), clear of the zoom buttons on the right. */
 @media (max-width: 719px) {
   .side-stack {
-    bottom: calc(var(--dock-h) + 132px + 44px + var(--px) * 4 + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + var(--dock-frame) + 132px + 44px + var(--px) * 4 + env(safe-area-inset-bottom));
     max-height: 45vh;
   }
 
@@ -4689,11 +4694,11 @@ kbd {
   }
 
   body:has(section.chat) .side-stack {
-    bottom: calc(var(--dock-h) + var(--px) * 4 + 50vh + var(--px) * 4 + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + var(--dock-frame) + var(--px) * 4 + 50vh + var(--px) * 4 + env(safe-area-inset-bottom));
   }
 
   .chat-pop {
-    bottom: calc(var(--dock-h) + 132px + 44px + var(--px) * 4 + env(safe-area-inset-bottom));
+    bottom: calc(var(--dock-h) + var(--dock-frame) + 132px + 44px + var(--px) * 4 + env(safe-area-inset-bottom));
     max-width: calc(100vw - var(--gap) * 2 - 56px);
   }
 }
@@ -6189,7 +6194,7 @@ input:not([type='range']):focus-visible {
 .envoy-note {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10);
+  bottom: calc(var(--gap) + var(--dock-h) + var(--dock-frame) + var(--px) * 10);
   transform: translateX(-50%);
   z-index: 6;
   display: flex;
@@ -6214,7 +6219,7 @@ input:not([type='range']):focus-visible {
 .advisor {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--gap) + var(--dock-h) + var(--px) * 10 + 64px);
+  bottom: calc(var(--gap) + var(--dock-h) + var(--dock-frame) + var(--px) * 10 + 64px);
   transform: translateX(-50%);
   z-index: 6;
   display: flex;
@@ -6391,7 +6396,7 @@ input:not([type='range']):focus-visible {
     top: calc(var(--gap) + 76px);
     bottom: auto;
     gap: calc(var(--px) * 4);
-    max-height: calc(100dvh - var(--dock-h) - 200px);
+    max-height: calc(100dvh - var(--dock-h) + var(--dock-frame) - 200px);
   }
 
   .advisor-face canvas {
@@ -6935,4 +6940,215 @@ input:not([type='range']):focus-visible {
   right: 22%;
   height: calc(var(--px) * 2);
   background: linear-gradient(90deg, #a8781f, #fff4c0 50%, #a8781f);
+}
+
+/* ---- Every box on the map in the same dress as the top bar and the dock (ui/barFrame.ts) ----
+   The big panels (sheets, dialogs, the chat, the envoy) wear the full carved frame over dark planks; the small boxes
+   (alerts, timers, quests, notes, menus, the floating buttons) its slim cut: a black line, a gilded bead, an oak fillet
+   with gold rivets. */
+:root {
+  --planks:
+    repeating-linear-gradient(180deg, transparent 0 calc(var(--px) * 15), rgb(0 0 0 / 20%) calc(var(--px) * 15) calc(var(--px) * 16)),
+    linear-gradient(180deg, #2c2018 0%, var(--panel) 45%, #1c140f 100%);
+}
+
+.sheet.frame,
+.dialog.frame,
+.chat.frame,
+.advisor.frame {
+  border: calc(var(--px) * 7) solid transparent;
+  border-image: var(--bar-frame) 7 / calc(var(--px) * 7) round;
+  image-rendering: pixelated;
+  background: var(--planks);
+  background-clip: padding-box;
+  box-shadow: 0 calc(var(--px) * 4) 0 0 rgb(0 0 0 / 35%);
+}
+
+.sheet.frame .sheet-head,
+.dialog.frame > .sheet-head {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(var(--px) * 23), rgb(0 0 0 / 18%) calc(var(--px) * 23) calc(var(--px) * 24)),
+    linear-gradient(180deg, var(--wood-2) 0%, var(--wood-1) 100%);
+  box-shadow:
+    inset 0 var(--px) 0 0 var(--wood-3),
+    inset 0 calc(var(--px) * -1) 0 0 var(--ink),
+    0 var(--px) 0 0 #6b4a12;
+}
+
+.map-alert.frame,
+.map-alerts-head.frame,
+.timers.frame,
+.quests.frame,
+.toast.frame,
+.placing.frame,
+.plan-bar.frame,
+.envoy-note.frame,
+.chat-pop.frame,
+.confirm.frame,
+.pop.frame,
+.map-tip.frame,
+.war-targets.frame,
+.corner-menu-list.frame,
+.explain.frame,
+.queue.frame,
+.corner-menu .btn.menu-chip.frame {
+  border: calc(var(--px) * 4) solid transparent;
+  border-image: var(--slim-frame) 4 / calc(var(--px) * 4) round;
+  image-rendering: pixelated;
+  background-clip: padding-box;
+  box-shadow: 0 calc(var(--px) * 3) 0 0 rgb(0 0 0 / 35%);
+}
+
+.timers.frame,
+.quests.frame,
+.toast.frame,
+.placing.frame,
+.plan-bar.frame,
+.envoy-note.frame,
+.chat-pop.frame,
+.confirm.frame,
+.pop.frame,
+.map-tip.frame,
+.war-targets.frame,
+.corner-menu-list.frame,
+.explain.frame,
+.queue.frame,
+.map-alerts-head.frame {
+  background-image: var(--planks);
+}
+
+.corner-menu .btn.menu-chip.frame {
+  box-sizing: border-box;
+  background: linear-gradient(180deg, var(--wood-3) 0%, var(--wood-2) 55%, var(--wood-1) 100%) padding-box;
+}
+
+/* The chat and envoy buttons over the dock, the map buttons on the right: carved wooden plaques in the slim frame. */
+.chat-bar .btn,
+.zoom .btn {
+  box-sizing: border-box;
+  height: 44px;
+  min-height: 0;
+  border: calc(var(--px) * 4) solid transparent;
+  border-image: var(--slim-frame) 4 / calc(var(--px) * 4) round;
+  image-rendering: pixelated;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(var(--px) * 11), rgb(0 0 0 / 14%) calc(var(--px) * 11) calc(var(--px) * 12)),
+    linear-gradient(180deg, var(--wood-3) 0%, var(--wood-2) 50%, var(--wood-1) 100%);
+  background-clip: padding-box;
+  box-shadow:
+    inset 0 var(--px) 0 0 var(--wood-4),
+    inset 0 calc(var(--px) * -1) 0 0 var(--wood-0),
+    0 calc(var(--px) * 3) 0 0 rgb(0 0 0 / 40%);
+  color: var(--parch-hi);
+  text-shadow: 0 var(--px) 0 var(--ink);
+}
+
+.zoom .btn {
+  width: 44px;
+  padding: 0;
+}
+
+.chat-bar .btn {
+  padding: 0 calc(var(--px) * 7) 0 calc(var(--px) * 5);
+}
+
+.chat-bar .advisor-toggle {
+  padding-left: calc(var(--px) * 1);
+}
+
+.chat-bar .btn:hover:not(:disabled),
+.zoom .btn:hover:not(:disabled) {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(var(--px) * 11), rgb(0 0 0 / 14%) calc(var(--px) * 11) calc(var(--px) * 12)),
+    linear-gradient(180deg, var(--wood-4) 0%, var(--wood-3) 50%, var(--wood-2) 100%);
+  background-clip: padding-box;
+  color: var(--gold);
+}
+
+.chat-bar .btn:active:not(:disabled),
+.zoom .btn:active:not(:disabled) {
+  transform: translateY(var(--px));
+  box-shadow:
+    inset 0 var(--px) 0 0 var(--wood-0),
+    0 calc(var(--px) * 2) 0 0 rgb(0 0 0 / 40%);
+}
+
+.chat-bar .badge {
+  top: calc(var(--px) * -7);
+  right: calc(var(--px) * -7);
+}
+
+/* An alert card: the text opens where it is dealt with, the × in its corner puts it aside for this visit. */
+.map-alert {
+  position: relative;
+  cursor: default;
+}
+
+.map-alert-open {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--px) * 4);
+  flex: 1;
+  min-width: 0;
+  padding: 0 calc(var(--px) * 8) 0 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-alert-open:hover span {
+  text-decoration: underline;
+  text-decoration-thickness: var(--px);
+}
+
+.map-alert-open svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.map-alert.frame:not(.urgent) {
+  flex-direction: row;
+}
+
+.map-alert-x {
+  position: absolute;
+  top: calc(var(--px) * 1);
+  right: calc(var(--px) * 1);
+  display: grid;
+  place-items: center;
+  width: calc(var(--px) * 9);
+  height: calc(var(--px) * 9);
+  padding: 0;
+  border: 0;
+  background: rgb(0 0 0 / 30%);
+  box-shadow: inset 0 0 0 var(--px) rgb(0 0 0 / 35%);
+  color: inherit;
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.map-alert-x:hover {
+  opacity: 1;
+  background: rgb(0 0 0 / 55%);
+  color: var(--gold);
+}
+
+/* Phones: the dock spans the screen's width, so its frame shows only along the top. */
+@media (max-width: 719px) {
+  .dock.frame {
+    border-width: calc(var(--px) * 7) 0 0;
+    border-image: var(--bar-frame) 7 0 0 / calc(var(--px) * 7) 0 0 round;
+  }
+
+  .sheet.frame {
+    border-width: calc(var(--px) * 7) 0 0;
+    border-image: var(--bar-frame) 7 0 0 / calc(var(--px) * 7) 0 0 round;
+  }
+}
+
+.map-alert.urgent > span {
+  padding-right: calc(var(--px) * 8);
 }

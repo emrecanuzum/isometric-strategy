@@ -47,6 +47,7 @@ import { AuthScreen } from './ui/home/AuthScreen'
 import { Lobbies } from './ui/home/Lobbies'
 import { SettingsPanel } from './ui/home/SettingsPanel'
 import { Tutorial } from './ui/home/Tutorial'
+import { MenuBackdrop, MenuCrown } from './ui/home/MenuBackdrop'
 
 // Before the map: signing in, then the main menu (lobbies, how to play, settings). The lobby being played goes into
 // the address (?lobby=<id>) so a reload comes back to it.
@@ -58,10 +59,10 @@ type Phase =
   | { kind: 'game'; lobby: Lobby; mine: Mine }
 
 type Tab = 'lobbies' | 'tutorial' | 'settings'
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'lobbies', label: 'Lobiler' },
-  { id: 'tutorial', label: 'Nasıl oynanır' },
-  { id: 'settings', label: 'Ayarlar' },
+const TABS: { id: Tab; label: string; icon: 'banner' | 'book' | 'gear' }[] = [
+  { id: 'lobbies', label: 'Lobiler', icon: 'banner' },
+  { id: 'tutorial', label: 'Nasıl oynanır', icon: 'book' },
+  { id: 'settings', label: 'Ayarlar', icon: 'gear' },
 ]
 
 const ERRORS: Record<string, string> = {
@@ -217,9 +218,11 @@ export default function Root() {
   }
   return (
     <main className="home-screen">
+      <MenuBackdrop />
       <header className="home-title">
-        <Icon name="crown" size={48} />
+        <MenuCrown />
         <h1>Krallıklar</h1>
+        <i className="home-rule" aria-hidden />
         <p>İki haftalık sezonlarda şehrini kur, komşularınla yarış</p>
       </header>
       {phase.kind === 'loading' && (
@@ -235,7 +238,7 @@ export default function Root() {
           <div className="home-tabs" role="tablist">
             {TABS.map((t) => (
               <button key={t.id} role="tab" aria-selected={tab === t.id} className="btn small" onClick={() => (setTab(t.id), setError(null))}>
-                {t.label}
+                <Icon name={t.icon} size={16} /> {t.label}
               </button>
             ))}
           </div>

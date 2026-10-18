@@ -100,10 +100,73 @@ function paint(): string {
   return canvas.toDataURL()
 }
 
-// Sets the frame as a CSS variable (--bar-frame) for the stylesheet; once.
+// The slim frame of the smaller boxes on the map (alerts, timers, notes, the chat and envoy buttons): the same dress
+// cut down to four pixels: a black line, a gilded bead, an oak fillet with a gold rivet every tile, a dark lip.
+export const SLIM_EDGE = 4
+const SLIM_TILE = 8
+
+function paintSlim(): string {
+  const size = SLIM_EDGE * 2 + SLIM_TILE
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  const img = ctx.createImageData(size, size)
+  const put = (x: number, y: number, c: RGB) => {
+    const i = (y * size + x) * 4
+    img.data[i] = c[0]
+    img.data[i + 1] = c[1]
+    img.data[i + 2] = c[2]
+    img.data[i + 3] = 255
+  }
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dl = x
+      const dr = size - 1 - x
+      const dt = y
+      const db = size - 1 - y
+      const d = Math.min(dl, dr, dt, db)
+      if (d >= SLIM_EDGE) continue
+      if (d === 0) {
+        put(x, y, INK)
+        continue
+      }
+      const lit = d === dt || d === dl
+      const corner = Math.min(dl, dr) < SLIM_EDGE && Math.min(dt, db) < SLIM_EDGE
+      if (corner) {
+        // A small gold plate with a bright boss on the corner.
+        const cx = dl < SLIM_EDGE ? 2 : size - 3
+        const cy = dt < SLIM_EDGE ? 2 : size - 3
+        const boss = Math.abs(x - cx) + Math.abs(y - cy)
+        put(x, y, boss === 0 ? GOLD[0] : boss === 1 ? (x + y < cx + cy ? GOLD[1] : GOLD[3]) : d === SLIM_EDGE - 1 ? GOLD[4] : GOLD[2])
+        continue
+      }
+      const along = d === dt || d === db ? x : y
+      if (d === 1) {
+        put(x, y, tone(GOLD, lit ? 1 : 2.6, x, y))
+        continue
+      }
+      if (d === SLIM_EDGE - 1) {
+        put(x, y, PANEL_LO)
+        continue
+      }
+      const r = along % SLIM_TILE
+      if (r === SLIM_TILE / 2 || r === SLIM_TILE / 2 - 1) {
+        put(x, y, r === SLIM_TILE / 2 - 1 ? GOLD[lit ? 0 : 1] : GOLD[lit ? 2 : 3])
+        continue
+      }
+      put(x, y, tone(OAK, (lit ? 0.8 : 2.2) + hash(Math.floor(along / 3), d) * 0.8, x, y))
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+  return canvas.toDataURL()
+}
+
+// Sets the frames as CSS variables (--bar-frame, --slim-frame) for the stylesheet; once.
 let done = false
 export function installBarFrame() {
   if (done || typeof document === 'undefined') return
   done = true
   document.documentElement.style.setProperty('--bar-frame', `url(${paint()})`)
+  document.documentElement.style.setProperty('--slim-frame', `url(${paintSlim()})`)
 }

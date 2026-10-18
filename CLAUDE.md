@@ -1056,7 +1056,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     ayarlar ve ana menü düğmelerinin altında kırmızı kartlarla durur; dokununca
     ilgili sekme açılır (`apps/web/src/ui/hud/MapAlerts.tsx`). Kartların
     üstündeki "Uyarılar" başlığı (kırmızı rozette sayı) onları katlar ve
-    açar; tercih tarayıcıda hatırlanır.
+    açar; tercih tarayıcıda hatırlanır. Her kartın sağ üst köşesindeki **×** kartı
+    kapatır; yalnızca bu ziyaret için (bellekte tutulur, oyun yeniden açılınca
+    yine görünür). Hafif bir uyarı ağırlaşırsa (ör. aşırı büyüme 2'den 3
+    kasabaya) kapatılmış olsa da yeniden çıkar.
     **Savaş en üsttedir:** oyuncunun kuşattığı ya da onun kasabasını kuşatan
     kasaba kuşatmaları (kalan süreyle), askerinin bulunduğu süren
     muharebeler ve kuşatmaya yürüyen orduları da birer kart olur; dokununca
@@ -3979,6 +3982,29 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   içinden köşedeki menünün "Ana menü"süyle dönülür. Lobi silinirse
   içindeki oyuncular kendiliğinden ana menüye döner (yayın + dakikalık
   yoklama).
+  **Görünüm** (`apps/web/src/ui/home/menuScene.ts`, `MenuBackdrop.tsx`,
+  `home.css`): giriş ekranının ve menünün arkasında kodla, piksel piksel bir
+  kez boyanan bir hi-bit manzara durur: alacakaranlıktan geceye dönen mor gök
+  (ufukta dither'lı kızıllık, yıldızlar, silik bir samanyolu), sol üstte hâleli
+  ay (ışık oradan gelir), karlı iki sıradağ (aya bakan yüzler aydınlık, yarıklar
+  boyunca inen kar, eteklerde pus), çam ormanı, hepsini yansıtan bir göl ve
+  çayırlardan inen bir dere; sağda tepede surlu bir kale (yuvarlak kuleler,
+  kırmızı külahlar, burç, şapel kulesi, yanan pencereler, sancaklar), altında
+  köy, solda yel değirmeni, meşalelerle kapıya tırmanan yol; önde karanlık
+  tepeler ve ulu çamlar. Resim ekranın sanat pikseli boyundadır (~290 piksel
+  yüksek, cihaz pikseli başına tam sayı katla en yakın komşuyla büyütülür;
+  kırpılır, gerilmez), tohumu sabittir, yalnız boyut değişince yeniden boyanır.
+  Üstünde saniyede 12 kare kıpırdayanlar çizilir: göz kırpan yıldızlar, kayan
+  bulutlar (karanın arkasında), ara sıra kayan yıldız, kuş sürüsü, gölde ayın
+  yolu, derede parıltılar, titreyen pencere ve meşaleler, baca dumanı, dalgalanan
+  sancaklar, dönen değirmen kanatları, ateş böcekleri; sekme gizliyken durur,
+  "hareketi azalt" tercihinde tek kare kalır. Başlıkta kodla çizilmiş taç
+  (kadife başlık, inciler, yakut ve safirler; ara sıra parlar), altın bantlı ve
+  mürekkep kenarlı "Krallıklar", ortasında baklava olan altın çizgi ve uçları
+  çentikli koyu bir şerit üstünde alt başlık; panel üst çubuğun çerçevesindedir
+  (`--bar-frame`: yaldızlı pervaz, perçinli meşe bant, koyu tahta), sekmeler
+  simgeli koyu meşe (seçili olan yaldızlı), lobi satırları köşeleri altın
+  perçinli meşe levhalardır (devam edilen lobi altın şeritli).
 - **Kapalı düğmeler nedenini söyler:** Devre dışı (disabled) her düğme,
   üstüne gelince (dokunmatikte dokununca, birkaç saniye) neden kapalı
   olduğunu küçük bir parşömen balonda yazar: "Ordu sarayın önünde
@@ -4046,6 +4072,19 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   topuz; içi koyu tahta panellerdir. Kaynak kartları ve menünün grupları altın
   çivili meşe dikmelerle ayrılır; açık sekme altın çizgili, kabartmalı tahta
   zeminlidir.
+  **Bütün kutular aynı dildedir:** sekme sayfaları, pencereler, sohbet ve
+  elçinin paneli aynı tam çerçeveyi koyu tahta (yatay kalaslar) zemin üstünde
+  taşır, başlık şeritleri ceviz tahtasıdır; küçük kutular (uyarılar, süren
+  işler, görevler, elçinin notu, menüler, ipuçları, yerleştirme ve plan
+  şeritleri) aynı çerçevenin 4 piksellik ince kesimini (`--slim-frame`: siyah
+  çizgi, yaldızlı boncuk, altın perçinli meşe pervaz, köşede altın topuz)
+  taşır. Sohbet ve elçi düğmeleri ile sağdaki harita düğmeleri (üsse dön,
+  yakınlaştır) ince çerçeveli oyma tahta levhalardır. Dock'un üstündeki her
+  şey (sayfalar, sohbet, süren işler, elçi) dock'un çerçevesini de hesaba
+  katar (`--dock-frame`), aralarında boşluk kalır; telefonda dock ve sayfalar
+  yalnızca üst kenarda çerçevelidir. Bir sayfa (devriye/haraççı penceresi
+  dahil) açıkken sohbet ve elçi düğmeleri gizlenir, pencerenin üstüne
+  binmez.
 - **Küçük haritanın çerçevesi** baklavayı izleyen, ekran pikseliyle boyanmış
   bir piksel sanatıdır (`apps/web/src/game/minimapFrame.ts` → `paintFrame`,
   başlıklar `paintCap`; kenarları gerçek 2:1 izometrik basamaklardır):

@@ -1,0 +1,320 @@
+/* ==== Main menu dress (CLAUDE.md §11) ========================================================================
+   The painted panorama behind it (MenuBackdrop.tsx), a crown and a gilded title, and the panel in the top bar's frame
+   (ui/barFrame.ts): a gilded moulding and a riveted oak band round dark planks. Everything on whole art pixels, hard
+   colour steps, no blur. Selectors carry `.home-screen` so they win over index.css. */
+
+main.home-screen:has(> .menu-backdrop) {
+  background: #0a0e1c;
+}
+
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: #0a0e1c;
+}
+
+.menu-backdrop canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  image-rendering: pixelated;
+  opacity: 0;
+  transition: opacity 0.6s steps(6);
+}
+
+.menu-backdrop canvas.ready {
+  opacity: 1;
+}
+
+/* ---- The title ---- */
+
+.home-screen .home-title {
+  gap: calc(var(--px) * 2);
+}
+
+.menu-crown {
+  position: relative;
+  display: block;
+  width: 102px;
+  height: 75px;
+  filter: drop-shadow(0 calc(var(--px) * 3) 0 rgb(0 0 0 / 45%));
+}
+
+.menu-crown canvas {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+/* A four-pointed glint that flashes on the crown's middle point now and then. */
+.menu-glint {
+  position: absolute;
+  left: 51px;
+  top: 6px;
+  width: 3px;
+  height: 3px;
+  background: #fff;
+  box-shadow:
+    0 -3px 0 0 #fff,
+    0 3px 0 0 #fff,
+    -3px 0 0 0 #fff,
+    3px 0 0 0 #fff,
+    0 -6px 0 0 rgb(255 244 192 / 70%),
+    0 6px 0 0 rgb(255 244 192 / 70%),
+    -6px 0 0 0 rgb(255 244 192 / 70%),
+    6px 0 0 0 rgb(255 244 192 / 70%);
+  opacity: 0;
+  animation: menu-glint 4.2s steps(1) infinite;
+}
+
+@keyframes menu-glint {
+  0%,
+  86% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  89% {
+    opacity: 1;
+    transform: scale(0.7);
+  }
+  93% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  97% {
+    opacity: 0.6;
+    transform: scale(0.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-glint {
+    animation: none;
+  }
+}
+
+/* The gold is struck in hard bands, outlined in ink a pixel all round, stood on a dark step. */
+.home-screen .home-title h1 {
+  font-size: clamp(42px, 9vw, 72px);
+  letter-spacing: 3px;
+  line-height: 1.05;
+  color: transparent;
+  background: linear-gradient(180deg, #fff4c0 0 24%, #f2d16b 24% 52%, #d9aa3e 52% 76%, #a8781f 76% 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  text-shadow: none;
+  filter: drop-shadow(var(--px) 0 0 #2a1806) drop-shadow(calc(var(--px) * -1) 0 0 #2a1806) drop-shadow(0 var(--px) 0 #2a1806)
+    drop-shadow(0 calc(var(--px) * -1) 0 #2a1806) drop-shadow(0 calc(var(--px) * 2) 0 #6b4a12) drop-shadow(0 var(--px) 0 #120d0b)
+    drop-shadow(0 calc(var(--px) * 3) 0 rgb(0 0 0 / 40%));
+}
+
+/* A gold rule with a diamond in the middle, under the title. */
+.home-rule {
+  position: relative;
+  display: block;
+  width: min(300px, 70vw);
+  height: calc(var(--px) * 3);
+  background:
+    linear-gradient(90deg, transparent 0, transparent 4%, #6b4a12 4% 96%, transparent 96%) 0 calc(var(--px) * 2) / 100% var(--px) no-repeat,
+    linear-gradient(90deg, transparent 0 4%, #d9aa3e 4% 96%, transparent 96%) 0 var(--px) / 100% var(--px) no-repeat,
+    linear-gradient(90deg, transparent 0 4%, #fff4c0 4% 96%, transparent 96%) 0 0 / 100% var(--px) no-repeat;
+}
+
+.home-rule::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--px) * 5);
+  height: calc(var(--px) * 5);
+  background: #f2d16b;
+  box-shadow:
+    inset var(--px) var(--px) 0 0 #fff4c0,
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 #a8781f,
+    0 0 0 var(--px) #120d0b;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+/* The subtitle on a dark ribbon with gold edges and notched ends. */
+.home-screen .home-title p {
+  position: relative;
+  margin-top: calc(var(--px) * 2);
+  padding: calc(var(--px) * 3) calc(var(--px) * 12);
+  color: var(--parch-hi);
+  background: #1a120e;
+  box-shadow:
+    inset 0 var(--px) 0 0 #d9aa3e,
+    inset 0 calc(var(--px) * -1) 0 0 #6b4a12,
+    0 calc(var(--px) * -1) 0 0 var(--ink),
+    0 var(--px) 0 0 var(--ink),
+    0 calc(var(--px) * 3) 0 0 rgb(0 0 0 / 35%);
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--px) * 5) 50%, 100% 100%, 0 100%, calc(var(--px) * 5) 50%);
+  text-shadow: 0 var(--px) 0 var(--ink);
+}
+
+/* ---- The panel ---- */
+
+.home-screen .home-card.frame {
+  width: min(560px, 100%);
+  border: calc(var(--px) * 7) solid transparent;
+  border-image: var(--bar-frame) 7 / calc(var(--px) * 7) round;
+  background:
+    repeating-linear-gradient(180deg, rgb(255 255 255 / 3.5%) 0 var(--px), transparent var(--px) calc(var(--px) * 15), rgb(0 0 0 / 30%) calc(var(--px) * 15) calc(var(--px) * 16)),
+    linear-gradient(180deg, #2c2018 0%, var(--panel) 55%, #1c140f 100%);
+  background-clip: padding-box;
+  box-shadow: 0 calc(var(--px) * 4) 0 0 rgb(0 0 0 / 45%);
+}
+
+.home-screen .home-card .sheet-head {
+  padding: calc(var(--px) * 6) calc(var(--px) * 8) 0;
+}
+
+/* Tabs: dark oak until chosen, then gilded and joined to the page by a gold seam. */
+.home-screen .home-tabs {
+  gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 5) calc(var(--px) * 6) 0;
+  box-shadow: inset 0 calc(var(--px) * -1) 0 0 #6b4a12;
+}
+
+.home-screen .home-tabs .btn {
+  --face: #241812;
+  --hi: #4a3626;
+  --lo: #120c08;
+  gap: calc(var(--px) * 3);
+  min-height: calc(var(--control-small) + var(--px) * 2);
+  box-shadow: var(--bevel), var(--outline);
+  margin-bottom: calc(var(--px) * -1);
+  color: var(--muted);
+}
+
+.home-screen .home-tabs .btn:hover:not(:disabled) {
+  --face: #33241a;
+  color: var(--text);
+}
+
+.home-screen .home-tabs .btn[aria-selected='true'] {
+  --face: #5a3d1c;
+  --hi: #f2d16b;
+  --lo: #3a2608;
+  color: #fff4c0;
+  text-shadow: 0 var(--px) 0 var(--ink);
+  box-shadow:
+    var(--bevel),
+    inset 0 calc(var(--px) * 2) 0 0 #d9aa3e,
+    var(--outline);
+}
+
+.home-screen .home-tabs .btn .icon {
+  filter: drop-shadow(0 var(--px) 0 var(--ink));
+}
+
+.home-screen .home-body {
+  gap: calc(var(--px) * 6);
+}
+
+.home-screen .home-card .btn:hover:not(:disabled):not([aria-selected]):not([aria-pressed='true']):not([aria-checked='true']) {
+  color: #fff4c0;
+}
+
+/* Lobby rows: oak boards with square gold rivets at their corners. */
+.home-screen .lobby-rows {
+  gap: calc(var(--px) * 4);
+}
+
+.home-screen .lobby-rows li {
+  --rivet: calc(var(--px) * 2);
+  position: relative;
+  background:
+    linear-gradient(#f2d16b, #f2d16b) calc(var(--px) * 3) calc(var(--px) * 3) / var(--rivet) var(--rivet) no-repeat,
+    linear-gradient(#f2d16b, #f2d16b) calc(100% - var(--px) * 3) calc(var(--px) * 3) / var(--rivet) var(--rivet) no-repeat,
+    linear-gradient(#a8781f, #a8781f) calc(var(--px) * 3) calc(100% - var(--px) * 3) / var(--rivet) var(--rivet) no-repeat,
+    linear-gradient(#a8781f, #a8781f) calc(100% - var(--px) * 3) calc(100% - var(--px) * 3) / var(--rivet) var(--rivet) no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 calc(var(--px) * 31), rgb(0 0 0 / 18%) calc(var(--px) * 31) calc(var(--px) * 32)),
+    linear-gradient(180deg, #3a2a1e 0%, #2e2118 60%, #261b14 100%);
+  box-shadow:
+    inset var(--px) var(--px) 0 0 #5c4330,
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 #140e0b,
+    var(--outline),
+    0 calc(var(--px) * 2) 0 0 rgb(0 0 0 / 35%);
+}
+
+.home-screen .lobby-rows li:hover {
+  background-color: #3a2a1e;
+  filter: brightness(1.08);
+}
+
+.home-screen .lobby-rows li.joined {
+  box-shadow:
+    inset calc(var(--px) * 3) 0 0 0 #d9aa3e,
+    inset calc(var(--px) * 4) 0 0 0 #6b4a12,
+    inset 0 var(--px) 0 0 #8a6a3a,
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 #140e0b,
+    var(--outline),
+    0 calc(var(--px) * 2) 0 0 rgb(0 0 0 / 35%);
+}
+
+.home-screen .lobby-rows li.joined .lobby-name b {
+  color: var(--gold);
+}
+
+.home-screen .lobby-row {
+  padding: calc(var(--px) * 5) calc(var(--px) * 7);
+}
+
+.home-screen .lobby-name b {
+  text-shadow: 0 var(--px) 0 var(--ink);
+}
+
+.home-screen .lobby-count {
+  padding: calc(var(--px) * 1) calc(var(--px) * 4);
+  background: var(--slot);
+  box-shadow:
+    inset var(--px) var(--px) 0 0 #0a0706,
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 #3a2a1e;
+}
+
+/* The footer: the lord's name on a small plaque under a gold seam. */
+.home-screen .home-foot {
+  margin: 0 calc(var(--px) * 6) calc(var(--px) * 5);
+  padding: calc(var(--px) * 4) calc(var(--px) * 2) 0;
+  box-shadow: inset 0 var(--px) 0 0 #6b4a12;
+}
+
+.home-screen .home-foot small {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 1) calc(var(--px) * 4);
+  color: var(--parch);
+  background: var(--slot);
+  box-shadow:
+    inset var(--px) var(--px) 0 0 #0a0706,
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 #3a2a1e;
+}
+
+@media (max-width: 520px) {
+  .menu-crown {
+    width: 68px;
+    height: 50px;
+  }
+  .menu-glint {
+    left: 34px;
+    top: 3px;
+    transform: scale(0.7);
+  }
+  .home-screen .home-title p {
+    padding: calc(var(--px) * 3) calc(var(--px) * 8);
+    font-size: 14px;
+    text-align: center;
+  }
+  .home-screen .home-tabs {
+    padding: calc(var(--px) * 4) calc(var(--px) * 3) 0;
+  }
+  .home-screen .home-tabs .btn {
+    padding: 0 calc(var(--px) * 2);
+    font-size: 14px;
+  }
+}

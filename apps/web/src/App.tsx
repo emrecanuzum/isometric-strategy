@@ -1169,8 +1169,8 @@ function App({
   }, [panel, journal.unread, markRead])
   // On phones the open sheet covers the map controls; the stylesheet hides them meanwhile.
   useEffect(() => {
-    document.documentElement.dataset.sheet = panel || selected !== null || innOpen !== null || cityOpen !== null || townOpen !== null || fleetSheet !== null || outlawOpen !== null ? 'open' : 'closed'
-  }, [panel, selected, innOpen, cityOpen, townOpen, fleetSheet, outlawOpen])
+    document.documentElement.dataset.sheet = panel || selected !== null || innOpen !== null || cityOpen !== null || townOpen !== null || fleetSheet !== null || outlawOpen !== null || columnOpen !== null ? 'open' : 'closed'
+  }, [panel, selected, innOpen, cityOpen, townOpen, fleetSheet, outlawOpen, columnOpen])
   const [placing, setPlacing] = useState<BuildingKind | null>(null)
   // A gate turned with R (null: it follows the wall around it).
   const [turned, setTurned] = useState<Along | null>(null)

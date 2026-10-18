@@ -42,6 +42,12 @@ export function MapAlerts({
       // Without storage it is only folded for now.
     }
   }
+  // Cards put aside with their ×: gone for this visit only, back when the game is opened again (kept in memory).
+  const [, setShut] = useState(0)
+  const shut = (key: string) => {
+    dismissed.add(key)
+    setShut((n) => n + 1)
+  }
   // The fighting first: war is what matters most (see warNotes).
   const alerts: { key: string; tab: TabId; text: string; sea?: boolean; town?: number; mild?: boolean; house?: boolean }[] = war.map((n) => ({ key: n.key, tab: 'army', text: n.text }))
   // A brother risen against the ruler (CLAUDE.md §9.1.1): first of all, until his camp is put down.
@@ -117,8 +123,12 @@ export function MapAlerts({
   }
   // A palace past its second level and no lady at court (raised before the rule): the house needs a queen, at once.
   const needsQueen = palaceLevel(kingdom, now) >= balance.dynasty.queenForPalaceLevel && !kingdom.queen && !kingdom.queenHeldBy
-  if (alerts.length === 0 && !needsQueen) return null
-  const count = alerts.length + (needsQueen ? 1 : 0)
+  // A card comes back when it grows worse (a mild one turning grave) even after it was put aside.
+  const keyOf = (a: { key: string; mild?: boolean }) => `${a.key}${a.mild ? ':mild' : ''}`
+  const shown = alerts.filter((a) => !dismissed.has(keyOf(a)))
+  const queen = needsQueen && !dismissed.has('queen')
+  if (shown.length === 0 && !queen) return null
+  const count = shown.length + (queen ? 1 : 0)
   return (
     <div className={folded ? 'map-alerts folded' : 'map-alerts'} role="status">
       <button className="map-alerts-head frame" onClick={fold} aria-expanded={!folded}>
@@ -126,8 +136,9 @@ export function MapAlerts({
         <span>Uyarılar</span>
         <b>{count}</b>
       </button>
-      {!folded && needsQueen && (
+      {!folded && queen && (
         <div className="map-alert frame urgent">
+          <Shut onClick={() => shut('queen')} />
           <Icon name="crown" size={16} />
           <span>Kraliçeye ihtiyacımız var! Sarayın bu büyüklükte bir hanedan ister: kraliçe olmadan çocuk doğmaz, varis olmaz.</span>
           <button className="btn small primary" onClick={onQueen}>
@@ -136,18 +147,31 @@ export function MapAlerts({
         </div>
       )}
       {!folded &&
-        alerts.map((a) => (
-          <button
-            key={a.key}
-            className={`map-alert frame${a.mild ? ' mild' : ''}`}
-            onClick={() => (a.town !== undefined && onTown ? onTown(a.town) : (a.sea && showArmyPart('sea'), a.house && showPart('palace', 'house'), onOpen(a.tab)))}
-          >
-            <Icon name="warn" size={16} />
-            <span>{a.text}</span>
-          </button>
+        shown.map((a) => (
+          <div key={a.key} className={`map-alert frame${a.mild ? ' mild' : ''}`}>
+            <button
+              className="map-alert-open"
+              onClick={() => (a.town !== undefined && onTown ? onTown(a.town) : (a.sea && showArmyPart('sea'), a.house && showPart('palace', 'house'), onOpen(a.tab)))}
+            >
+              <Icon name="warn" size={16} />
+              <span>{a.text}</span>
+            </button>
+            <Shut onClick={() => shut(keyOf(a))} />
+          </div>
         ))}
     </div>
   )
 }
 
 const FOLD_KEY = 'alerts-folded'
+
+// The cards put aside in this visit (a reload brings them all back).
+const dismissed = new Set<string>()
+
+function Shut({ onClick }: { onClick: () => void }) {
+  return (
+    <button className="map-alert-x" onClick={onClick} aria-label="Uyarıyı kapat" title="Kapat (oyunu yeniden açınca yine görünür)">
+      <Icon name="close" size={8} />
+    </button>
+  )
+}
