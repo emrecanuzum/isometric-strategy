@@ -75,24 +75,37 @@ function pickLine<T>(store: string, key: string, options: readonly T[]): T {
 // The envoy's switches in the settings window.
 export function AdvisorSettings({ storeKey }: { storeKey: string }) {
   const [memory, update] = useAdvisorMemory(storeKey)
+  const done = memory.tutorial === 'done'
   return (
-    <div className="sound-row">
-      <div className="row spread">
-        <span>Elçinin öğütleri</span>
+    <div className="settings-list">
+      <div className="settings-row">
+        <div>
+          <b>
+            <Icon name="scroll" size={16} /> Elçinin öğütleri
+          </b>
+          <small>Açıkken elçi birkaç dakikada bir gelip eksiklerine göre öğüt verir; kapalıyken yalnızca elçi düğmesiyle çağırınca gelir.</small>
+        </div>
         <button className="btn small" aria-pressed={!memory.muted} onClick={() => update({ muted: !memory.muted })}>
-          <Icon name="scroll" size={16} slash={!!memory.muted} /> {memory.muted ? 'Kapalı' : 'Açık'}
+          {memory.muted ? 'Kapalı' : 'Açık'}
         </button>
       </div>
-      <div className="row spread">
-        <span>Öğretici</span>
-        <button className="btn small" aria-pressed={memory.tutorial === 'on'} onClick={() => update(memory.tutorial === 'on' ? { tutorial: 'off' } : { tutorial: 'on', cheered: [], skipped: [] })}>
-          <Icon name="book" size={16} slash={memory.tutorial !== 'on'} /> {memory.tutorial === 'on' ? 'Açık' : memory.tutorial === 'done' ? 'Tamamlandı' : 'Kapalı'}
+      <div className="settings-row">
+        <div>
+          <b>
+            <Icon name="book" size={16} /> Öğretici
+          </b>
+          <small>Yeni bir lordu adım adım kuruluştan 5. seviye saraya götürür; bütün adımları zaten geçtiysen açılınca hemen tamamlanır.</small>
+        </div>
+        <button
+          className="btn small"
+          aria-pressed={memory.tutorial === 'on'}
+          disabled={done}
+          data-why="Öğretici tamamlandı"
+          onClick={() => update(memory.tutorial === 'on' ? { tutorial: 'off' } : { tutorial: 'on', cheered: [], skipped: [] })}
+        >
+          {memory.tutorial === 'on' ? 'Açık' : done ? 'Tamamlandı' : 'Kapalı'}
         </button>
       </div>
-      <small className="hint">
-        Öğütler açıkken elçi birkaç dakikada bir gelip eksiklerine göre öğüt verir; kapalıyken yalnızca elçi düğmesiyle çağırınca gelir. Öğretici yeni bir
-        lordu adım adım kuruluştan 3. seviye saraya götürür; bütün adımları zaten geçtiysen açılınca hemen "Tamamlandı" olur.
-      </small>
     </div>
   )
 }

@@ -6,6 +6,7 @@ import type { Fleet, Ships } from './navy'
 import type { OutlawPressure } from './outlawPressure'
 import { alongPath, fleetAt, isWaterTile, openWater, pathLength, shoreClearance, waterPath } from './seaways'
 import type { SailError } from './seaways'
+import { findRoute } from './military'
 import { Feature, Terrain, hash } from './worldgen'
 import type { World } from './worldgen'
 import { clanBandsUntil, clanOfBand, clansOf } from './caves'
@@ -180,7 +181,31 @@ export interface Band extends BandSpot {
   downUntil: number | null
   battle: number | null
   shift: number
+  // The lords' trade posts it may raid (see raidTargetsOf).
+  targets: RaidTarget[]
 }
+
+// ---- Raids ----------------------------------------------------------------------------------------------------------
+
+// A lord a band may come down on: its trade post's centre (CLAUDE.md §7.9). Sorted by the lord's id, so the server
+// and every screen pick the same.
+export interface RaidTarget {
+  id: number
+  at: Point
+}
+
+export function raidTargetsOf(lords: { id: number; buildings: { kind: string; x: number; y: number; size: number; doneAt: number }[] }[], at: number): RaidTarget[] {
+  return lords
+    .flatMap((l) => {
+      const post = l.buildings.find((b) => b.kind === 'tradePost' && b.doneAt <= at)
+      return post ? [{ id: l.id, at: { x: post.x + post.size / 2, y: post.y + post.size / 2 } }] : []
+    })
+    .sort((a, b) => a.id - b.id)
+}
+
+// The targets of each lobby (by its seed) as this screen knows them; bandsOf takes them when given none.
+const knownTargets = new Map<number, RaidTarget[]>()
+export const setRaidTargets = (seed: number, targets: RaidTarget[]) => void knownTargets.set(seed, targets)
 
 const rowOf = (rows: OutlawRow[] | null | undefined, kind: OutlawRow['kind'], idx: number) => rows?.find((r) => r.kind === kind && r.idx === idx)
 
@@ -193,42 +218,150 @@ export function bandStrength(seed: number, idx: number, gen: number, losses = 0)
 
 // A band is away while beaten, and while its clan is new to its cave (its old clan's bands scattered as the cave fell;
 // CLAUDE.md §7.9.1).
-export function bandsOf(world: Ground, seed: number, rows?: OutlawRow[] | null): Band[] {
+export function bandsOf(world: Ground, seed: number, rows?: OutlawRow[] | null, targets: RaidTarget[] = knownTargets.get(seed) ?? []): Band[] {
   const clans = clansOf(seed, rows)
   return bandSpots(world, seed).map((s) => {
+    bandWorlds.set(s.path, world)
     const row = rowOf(rows, 'band', s.idx)
     const gen = row?.gen ?? 0
     const clan = clans[clanOfBand(s.idx)]
     const scattered = clanBandsUntil(clan)
     const beaten = row?.down_until ?? null
     const downUntil = scattered !== null && (beaten === null || scattered > beaten) ? scattered : beaten
-    return { ...s, clan: clan.slot, clanName: clan.name, gen, soldiers: bandStrength(seed, s.idx, gen, row?.losses ?? 0), downUntil, battle: row?.battle ?? null, shift: Number(row?.shift ?? 0) }
+    return { ...s, clan: clan.slot, clanName: clan.name, gen, soldiers: bandStrength(seed, s.idx, gen, row?.losses ?? 0), downUntil, battle: row?.battle ?? null, shift: Number(row?.shift ?? 0), targets }
   })
 }
 
 // Whether the band is about (not beaten and gone) at `at`.
 export const outlawUp = (o: { downUntil: number | null }, at: number) => !(o.downUntil !== null && o.downUntil > at)
 
-// How far along its round trip (out and back along its stretch) the band is at `at`, in tiles.
-function bandWalked(b: Band, at: number) {
+// A band's time is cut into cycles (CLAUDE.md §7.9): most of each it walks its stretch of road up and down; for the
+// rest it leaves the road, comes down near the trade post of a lord within reach, lurks there and goes back to where
+// it left. With no lord within reach it camps by the road. The walk's clock stops while it is away, so it takes up
+// its walk where it left it.
+const R = () => B().raid
+const cycleMs = () => R().cycleSeconds * 1000
+const awayMs = () => R().cycleSeconds * R().awayShare * 1000
+
+function bandClock(b: Band, at: number) {
+  const cycle = cycleMs()
+  const walk = cycle - awayMs()
+  const u = at - b.shift + hash(b.idx, 29, b.phase * 1e6) * cycle
+  const c = Math.floor(u / cycle)
+  const r = u - c * cycle
+  // Walking time so far: a cycle's walking part for each cycle past, and this one's up to now.
+  return { cycle: c, walked: c * walk + Math.min(r, walk), away: r >= walk ? r - walk : -1 }
+}
+
+// How far along its round trip (out and back along its stretch) the band is after `walkedMs` of walking, in tiles.
+function bandWalked(b: Band, walkedMs: number) {
   const total = b.length * 2
   if (total <= 0) return 0
-  const d = ((at - b.shift) / 1000) * B().speedTilesPerSecond + b.phase * total
+  const d = (walkedMs / 1000) * B().speedTilesPerSecond + b.phase * total
   return ((d % total) + total) % total
 }
 
-// Where the band is at `at` (walking up and down its stretch of road, slower than any army).
-export function bandAt(b: Band, at: number): Point {
-  const d = bandWalked(b, at)
+const roadPoint = (b: Band, walkedMs: number) => {
+  const d = bandWalked(b, walkedMs)
   return alongPath(b.path, d <= b.length ? d : b.length * 2 - d).at
+}
+
+const raidCache = new Map<string, { target: number; route: Point[]; length: number } | null>()
+
+// The raid of cycle `c`, leaving the road at `from`: the lord, and the way to where the band lurks by its trade post.
+// Null: it camps by the road this time (no lord within reach, no way there, or too far to go and come back).
+function raidOf(world: Ground, b: Band, c: number, from: Point) {
+  const reach = R().reachTiles
+  // Lords whose trade post its own road already passes are left alone: it holds their road as it is.
+  const own = balance.outlaws.road.radiusTiles + B().holdTiles
+  const near = b.targets.filter((t) => Math.hypot(t.at.x - from.x, t.at.y - from.y) <= reach && !b.path.some((p) => Math.hypot(p.x - t.at.x, p.y - t.at.y) <= own))
+  if (near.length === 0 || hash(c, b.idx, b.phase * 1e6 + 5303) >= R().chance) return null
+  const target = near[Math.floor(hash(c, b.idx, b.phase * 1e6 + 5307) * near.length) % near.length]
+  const key = `${b.idx}:${c}:${target.id}:${Math.round(target.at.x)},${Math.round(target.at.y)}`
+  if (raidCache.has(key)) return raidCache.get(key)!
+  if (raidCache.size > 400) raidCache.clear()
+  let found: { target: number; route: Point[]; length: number } | null = null
+  const dx = from.x - target.at.x
+  const dy = from.y - target.at.y
+  const len = Math.hypot(dx, dy) || 1
+  // Short of the trade post on the band's side, a few spots tried in case one is in the water.
+  for (const short of [R().lurkTiles, R().lurkTiles + 4, R().lurkTiles - 4]) {
+    const spot = { x: Math.floor(target.at.x + (dx / len) * short) + 0.5, y: Math.floor(target.at.y + (dy / len) * short) + 0.5 }
+    const route = findRoute(world as World, from, spot)
+    if (!route || route.length < 2) continue
+    const length = pathLength(route)
+    const go = length / R().speedTilesPerSecond
+    if (go * 2 + R().minLurkSeconds > R().cycleSeconds * R().awayShare) break
+    found = { target: target.id, route, length }
+    break
+  }
+  raidCache.set(key, found)
+  return found
+}
+
+// Where the band is and how it moves at `at`: walking its road, or out on a raid (going, lurking, coming back).
+function bandNow(world: Ground, b: Band, at: number) {
+  const clock = bandClock(b, at)
+  const from = roadPoint(b, clock.walked)
+  if (clock.away < 0) return { at: from, raid: null as null | { target: number; route: Point[]; length: number; leg: 'go' | 'lurk' | 'back'; done: number } }
+  const raid = raidOf(world, b, clock.cycle, from)
+  if (!raid) return { at: from, raid: null }
+  const s = clock.away / 1000
+  const go = raid.length / R().speedTilesPerSecond
+  const away = R().cycleSeconds * R().awayShare
+  if (s < go) return { at: alongPath(raid.route, s * R().speedTilesPerSecond).at, raid: { ...raid, leg: 'go' as const, done: s } }
+  if (s < away - go) return { at: raid.route[raid.route.length - 1], raid: { ...raid, leg: 'lurk' as const, done: s - go } }
+  const back = s - (away - go)
+  return { at: alongPath(raid.route, raid.length - back * R().speedTilesPerSecond).at, raid: { ...raid, leg: 'back' as const, done: back } }
+}
+
+// The lord a band is raiding at `at` (going to it, lurking or coming back), if any.
+export function bandRaid(world: Ground, b: Band, at: number) {
+  const now = bandNow(world, b, at)
+  return now.raid ? { target: now.raid.target, leg: now.raid.leg } : null
+}
+
+// When the band next changes what it does after `at` (leaves the road, reaches the trade post, turns back, rejoins
+// the road), so a screen drawing its leg knows when to draw it anew.
+export function bandChangeAt(b: Band, at: number): number {
+  const clock = bandClock(b, at)
+  const walk = cycleMs() - awayMs()
+  if (clock.away < 0) return at + (walk - (clock.walked - clock.cycle * walk))
+  const world = bandWorlds.get(b.path)
+  const now = world ? bandNow(world, b, at) : null
+  const end = at + (awayMs() - clock.away)
+  if (!now?.raid) return end
+  const go = (now.raid.length / R().speedTilesPerSecond) * 1000
+  const marks = [at - clock.away + go, at - clock.away + awayMs() - go, end]
+  return marks.find((m) => m > at + 1) ?? end
+}
+
+// The worlds the bands walk, for bandAt (which the chase code calls with the band alone).
+const bandWorlds = new WeakMap<object, Ground>()
+
+// Where the band is at `at` (on its road or out on a raid, slower than any army).
+export function bandAt(b: Band, at: number): Point {
+  const world = bandWorlds.get(b.path)
+  return world ? bandNow(world, b, at).at : roadPoint(b, bandClock(b, at).walked)
 }
 
 // The leg of its walk the band is on at `at`, as an army's march (path, set off, arrival) for drawing it.
 export function bandLeg(b: Band, at: number) {
-  const d = bandWalked(b, at)
-  const legMs = (b.length / B().speedTilesPerSecond) * 1000
+  const world = bandWorlds.get(b.path)
+  const now = world ? bandNow(world, b, at) : null
+  const speed = B().speedTilesPerSecond
+  if (now?.raid) {
+    const { route, length, leg, done } = now.raid
+    if (leg === 'lurk') return { path: [now.at, now.at], departAt: at - 1000, arriveAt: at - 500 }
+    const legMs = (length / R().speedTilesPerSecond) * 1000
+    return { path: leg === 'go' ? route : [...route].reverse(), departAt: at - done * 1000, arriveAt: at - done * 1000 + legMs }
+  }
+  const clock = bandClock(b, at)
+  if (clock.away >= 0) return { path: [now?.at ?? roadPoint(b, clock.walked), now?.at ?? roadPoint(b, clock.walked)], departAt: at - 1000, arriveAt: at - 500 }
+  const d = bandWalked(b, clock.walked)
+  const legMs = (b.length / speed) * 1000
   const out = d <= b.length
-  const done = ((out ? d : d - b.length) / B().speedTilesPerSecond) * 1000
+  const done = ((out ? d : d - b.length) / speed) * 1000
   return { path: out ? b.path : [...b.path].reverse(), departAt: at - done, arriveAt: at - done + legMs }
 }
 
@@ -273,8 +406,11 @@ function heldBy(world: Ground, b: BandSpot, seed: number) {
 }
 
 // How much of the road within `radius` tiles of `centre` the bands about at `at` hold (0–1), and how many bands that is.
+// A band come down near the place (on a raid, or passing close) holds it too: the nearer it is, the more (raid.pressure
+// at raid.nearTiles and closer, nothing past raid.farTiles).
 export function roadHeld(world: Ground, seed: number, bands: Band[], centre: Point, at: number, radius = balance.outlaws.road.radiusTiles) {
-  const near = bands.filter((b) => outlawUp(b, at) && b.path.some((p) => Math.hypot(p.x - centre.x, p.y - centre.y) <= radius + B().holdTiles))
+  const up = bands.filter((b) => outlawUp(b, at))
+  const near = up.filter((b) => b.path.some((p) => Math.hypot(p.x - centre.x, p.y - centre.y) <= radius + B().holdTiles))
   const { size } = world
   let total = 0
   let held = 0
@@ -287,7 +423,18 @@ export function roadHeld(world: Ground, seed: number, bands: Band[], centre: Poi
       if (sets.some((s) => s.has(i))) held++
     }
   }
-  return { share: total === 0 ? 0 : held / total, bands: near.length, roadTiles: total }
+  const { pressure, nearTiles, farTiles } = R()
+  let close = 0
+  const counted = new Set(near)
+  for (const b of up) {
+    const p = bandAt(b, at)
+    const d = Math.hypot(p.x - centre.x, p.y - centre.y)
+    if (d >= farTiles) continue
+    close += pressure * Math.min(1, (farTiles - d) / (farTiles - nearTiles))
+    counted.add(b)
+  }
+  const share = Math.min(1, (total === 0 ? 0 : held / total) + close)
+  return { share, bands: counted.size, roadTiles: total }
 }
 
 // ---- Where the pirates roam ---------------------------------------------------------------------------------------

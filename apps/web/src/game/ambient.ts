@@ -269,7 +269,8 @@ export interface Ambient {
   // The lords' ships (CLAUDE.md §8.5; see fleetShips.ts).
   setFleets(ships: FleetShip[]): void
   // Power saving (CLAUDE.md §12): no birds and no clouds.
-  setLite(on: boolean): void
+  // Birds and clouds each on or off (Ayarlar → Görüntü; power saving may turn them off).
+  setSky(sky: { birds: boolean; clouds: boolean }): void
   // The lord's ship drawn at this world point (screen space before the camera), if any: whose, and which fleet.
   pickShip(p: Point): { lord: number; fleet?: number } | null
   // The lords' ships drawn this frame.
@@ -473,7 +474,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
       animals[cellOf(homeX, homeY)].push({
         kind,
         look,
-        frames: look.map(textureOf),
+        frames: look.map((s) => textureOf(s)),
         homeX,
         homeY,
         id,
@@ -619,7 +620,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
   })
   // The player's buildings add theirs (see setChimneys).
   let chimneys = innChimneys
-  const puffTextures = SMOKE_PUFFS.map(textureOf)
+  const puffTextures = SMOKE_PUFFS.map((s) => textureOf(s))
   const smokePool = new Pool(actors)
 
   function updateSmoke(seconds: number, view: View) {
@@ -653,7 +654,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
       members: 3 + Math.floor(roll(4) * 5),
     }
   })
-  const birdTextures = SPRITES.bird.map(textureOf)
+  const birdTextures = SPRITES.bird.map((s) => textureOf(s))
   const shadowTexture = textureOf(SPRITES.ripple[0])
   const birdShadows = new Pool(under)
   const birdPool = new Pool(sky)
@@ -817,7 +818,8 @@ export function createAmbient(world: World, actors: Container): Ambient {
   const cloudPool = new Pool(cloudLayer)
 
   // Power saving: birds and clouds are left out.
-  let lite = false
+  let birdsOn = true
+  let cloudsOn = true
   function updateClouds(seconds: number, view: View, alpha: number) {
     for (const cloud of clouds) {
       const sx = span.left + ((((cloud.x + seconds * cloud.drift) % span.width) + span.width) % span.width)
@@ -857,8 +859,9 @@ export function createAmbient(world: World, actors: Container): Ambient {
     setFleets(list) {
       fleets = list
     },
-    setLite(on) {
-      lite = on
+    setSky(sky) {
+      birdsOn = sky.birds
+      cloudsOn = sky.clouds
     },
     shipsDrawn: () => drawnShips,
     pickShip(p) {
@@ -888,7 +891,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
       else flowPool.finish()
       if (zoom >= LIFE_MIN_ZOOM) {
         updateLife(seconds, view)
-        if (lite) {
+        if (!birdsOn) {
           birdPool.finish()
           birdShadows.finish()
         } else updateBirds(seconds, view)
@@ -899,7 +902,7 @@ export function createAmbient(world: World, actors: Container): Ambient {
         birdPool.finish()
         birdShadows.finish()
       }
-      if (zoom <= CLOUD_MAX_ZOOM && !lite) updateClouds(seconds, view, zoom <= 0.125 ? CLOUD_ALPHA : CLOUD_ALPHA * 0.55)
+      if (zoom <= CLOUD_MAX_ZOOM && cloudsOn) updateClouds(seconds, view, zoom <= 0.125 ? CLOUD_ALPHA : CLOUD_ALPHA * 0.55)
       else {
         cloudShadows.finish()
         cloudPool.finish()

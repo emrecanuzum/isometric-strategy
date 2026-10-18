@@ -48,10 +48,12 @@ export interface OutlawDbRow {
   losses: number
 }
 
-// The lobby's bands and boats as they stand now.
-export async function outlawsIn(lobby: string, world: LobbyWorld) {
+// The lobby's bands and boats as they stand now. With the lords given, the trade posts the bands may raid are learnt
+// from them (CLAUDE.md §7.9) and kept for later calls in this lobby; without, the last ones learnt stand.
+export async function outlawsIn(lobby: string, world: LobbyWorld, kingdoms?: Row[]) {
   const [seed, { data }] = await Promise.all([lobbySeed(lobby), admin.from('lobby_outlaws').select('*').eq('lobby_id', lobby)])
   const rows = ((data ?? []) as OutlawDbRow[]).map((r) => ({ ...r, down_until: r.down_until === null ? null : Number(r.down_until), shift: Number(r.shift ?? 0) }))
+  if (kingdoms) game.setRaidTargets(seed, game.raidTargetsOf(holdingsOf(kingdoms), Date.now()))
   return { seed, rows, bands: game.bandsOf(world.world, seed, rows) as Band[], boats: game.boatsOf(world.world, seed, rows) as Boat[] }
 }
 
@@ -72,7 +74,7 @@ export function chaseMarch(world: LobbyWorld, army: ArmyRow, owner: Kingdom, kin
 // An order to chase a band reaching its army (at once in its own lands or with the lord at its head, else by envoy;
 // CLAUDE.md §8.2.1). Returns why not, if it cannot be done.
 export async function orderChase(world: LobbyWorld, army: ArmyRow, owner: Kingdom, kingdoms: Row[], idx: number, at: number): Promise<string | null> {
-  const { bands } = await outlawsIn(army.lobby_id, world)
+  const { bands } = await outlawsIn(army.lobby_id, world, kingdoms)
   const band = bands.find((b: Band) => b.idx === idx)
   if (!band || !game.outlawUp(band, at)) return 'outlaw'
   // Already after it (a repeated order): nothing new, no second word of it.
@@ -186,7 +188,7 @@ export async function settleOutlawBattle(
 // ---- The tick's part ----------------------------------------------------------------------------------------------
 
 export async function settleOutlaws(lobby: string, world: LobbyWorld, kingdoms: Row[], from: number, now: number) {
-  const { seed, bands, boats } = await outlawsIn(lobby, world)
+  const { seed, bands, boats } = await outlawsIn(lobby, world, kingdoms)
   // (No early return without bands or boats: every lord still gets its zeroed `outlaws`, which tick_due waits for.)
   const begin = Math.max(from, now - 120_000)
 

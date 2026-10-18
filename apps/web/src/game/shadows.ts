@@ -25,6 +25,8 @@ export interface Shadows {
   // building, only on the ground.
   setFootprint(caster: Container, size: number, raise?: number, group?: object, low?: boolean): void
   update(hour: number, casters: Container): void
+  // Live shadows on or off (Ayarlar → Görüntü). Off, none is cast or drawn; the shadows painted into the ground stay.
+  setEnabled(on: boolean): void
 }
 
 export function createShadows(): Shadows {
@@ -52,6 +54,7 @@ export function createShadows(): Shadows {
   let job: { target: PixiSprite; work: ShadeJob } | null = null
   let built: number[] = []
   let frame = 0
+  let enabled = true
   let step = NaN
   let sun = sunShadow(0)
   // This step's shadows, per look, footprint and facing.
@@ -126,7 +129,7 @@ export function createShadows(): Shadows {
       return
     }
     const overlay = old?.overlay ?? new PixiSprite()
-    overlay.texture = textureOf(cast)
+    overlay.texture = textureOf(cast, 'own')
     overlay.anchor.set(cast.anchorX / cast.width, cast.anchorY / cast.height)
     overlay.position.copyFrom(target.position)
     overlay.zIndex = target.zIndex + 0.01
@@ -147,7 +150,15 @@ export function createShadows(): Shadows {
       else lows.delete(caster)
       if (group && low && caster instanceof PixiSprite) baseOf.set(group, caster)
     },
+    setEnabled(on) {
+      if (on === enabled) return
+      enabled = on
+      layer.visible = on
+      for (const entry of shaded.values()) if (entry.overlay) entry.overlay.visible = on
+      for (const entry of onBase.values()) entry.overlay.visible = on && !!entry.cast
+    },
     update(hour, casters) {
+      if (!enabled) return
       filter.alpha = sunShadow(hour).alpha
       frame++
       const now = Math.floor(hour / STEP)
@@ -207,7 +218,7 @@ export function createShadows(): Shadows {
         entry.size = size
         entry.raise = raise
         const shadow = shadowOf(look, size, child.scale.x < 0)
-        const texture = textureOf(shadow)
+        const texture = textureOf(shadow, 'shade')
         if (shade.texture !== texture) {
           shade.texture = texture
           shade.anchor.set(shadow.anchorX / shadow.width, shadow.anchorY / shadow.height)
@@ -267,7 +278,7 @@ export function createShadows(): Shadows {
           if (entry?.cast) freeTexture(entry.cast)
           const overlay = entry?.overlay ?? new PixiSprite()
           if (cast) {
-            overlay.texture = textureOf(cast)
+            overlay.texture = textureOf(cast, 'own')
             overlay.anchor.set(cast.anchorX / cast.width, cast.anchorY / cast.height)
           }
           overlay.visible = !!cast

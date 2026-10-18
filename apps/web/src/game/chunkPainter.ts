@@ -892,6 +892,8 @@ export function findBridges(world: World, points: Point[]): Bridge[] {
 
 interface Placed {
   sprite: Sprite
+  // A wall or fence sheared to the slope along its run (see structureParts → shear).
+  shear?: number
   // Canvas position of the anchor and the ground row it stands on.
   x: number
   y: number
@@ -1480,8 +1482,10 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
     const y = row + pad - Math.round(p.z * k)
     const left = x - p.sprite.anchorX * k
     const top = y - p.sprite.anchorY * k
-    if (left > width || left + p.sprite.width * k < 0 || top > canvasHeight || top + p.sprite.height * k < 0) continue
-    placed.push({ sprite: p.sprite, x, y, row, own, foot: p.foot })
+    const lean: number = ('shear' in p && typeof p.shear === 'number' && p.shear) || 0
+    const slack = Math.abs(lean) * p.sprite.width * k
+    if (left > width || left + p.sprite.width * k < 0 || top - slack > canvasHeight || top + p.sprite.height * k + slack < 0) continue
+    placed.push({ sprite: p.sprite, x, y, row, own, foot: p.foot, ...(lean && { shear: lean }) })
   }
   placed.sort((p, q) => p.row - q.row || p.x - q.x)
 
@@ -1520,7 +1524,7 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
   const step = 1 / k
   // Grass tufts, wildflowers and pebbles are buried once the snow lies patchy or deeper.
   const buried = snow >= 2 ? BURIED : null
-  for (const { sprite: drawn, x, y, row, own } of placed) {
+  for (const { sprite: drawn, x, y, row, own, shear } of placed) {
     if (buried?.has(drawn)) continue
     const sprite = snowOf(drawn, snow)
     const w = Math.ceil(sprite.width * k)
@@ -1528,12 +1532,13 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
     const left = x - Math.round(sprite.anchorX * k)
     const top = y - Math.round(sprite.anchorY * k)
     for (let dy = 0; dy < h; dy++) {
-      const yy = top + dy
-      if (yy < 0 || yy >= canvasHeight) continue
       const source = Math.min(sprite.height - 1, Math.floor((dy + 0.5) * step)) * sprite.width
       for (let dx = 0; dx < w; dx++) {
         const xx = left + dx
         if (xx < 0 || xx >= width) continue
+        // A sheared piece moves each column up or down with the slope (its anchor column stays).
+        const yy = top + dy + (shear ? Math.round(shear * (xx + 0.5 - x)) : 0)
+        if (yy < 0 || yy >= canvasHeight) continue
         const color = sprite.pixels[source + Math.min(sprite.width - 1, Math.floor((dx + 0.5) * step))]
         if (color === 0) continue
         const o = yy * width + xx

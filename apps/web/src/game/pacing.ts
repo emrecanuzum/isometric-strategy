@@ -5,19 +5,16 @@ import { Ticker } from 'pixi.js'
 // (walkers, animals, ships, clouds, swaying trees) moves slowly. A hidden tab draws nothing, and a window over the map
 // (a `.modal`) lets it tick slowly behind. Power saving lowers every rate.
 
-// Frames a second: [normal, power saving].
-const RATES = {
-  // Being dragged or zoomed, or just after.
-  active: [60, 30],
-  // Still, close enough that walkers and animals are drawn (½× and nearer).
-  near: [24, 15],
-  // Still and zoomed far out: clouds, ships and armies drift slowly.
-  far: [15, 10],
-  // No input for a long while.
-  deep: [10, 8],
-  // A window covers the map.
-  covered: [8, 5],
-} as const
+// Frames a second for each pace the player can pick (Ayarlar → Performans; power saving picks 'saver').
+export type Pace = 'smooth' | 'balanced' | 'saver'
+const RATES: Record<Pace, { active: number; near: number; far: number; deep: number; covered: number }> = {
+  // active: being dragged or zoomed, or just after. near: still, close enough that walkers and animals are drawn (½×
+  // and nearer). far: still and zoomed far out (clouds, ships and armies drift slowly). deep: no input for a long
+  // while. covered: a window covers the map.
+  smooth: { active: 60, near: 30, far: 20, deep: 15, covered: 8 },
+  balanced: { active: 60, near: 24, far: 15, deep: 10, covered: 8 },
+  saver: { active: 30, near: 15, far: 10, deep: 8, covered: 5 },
+}
 // How long after the last input the map stays at the full rate.
 const ACTIVE_MS = 1500
 // How long without input before the map slows to the deep idle rate.
@@ -31,7 +28,7 @@ const COVER_CHECK_MS = 750
 export interface Pacer {
   // Something moved the map or is about to: draw at the full rate for a moment.
   wake(): void
-  setSaver(on: boolean): void
+  setPace(pace: Pace): void
   // Frames drawn in the last whole second (for measuring).
   fps(): number
   destroy(): void
@@ -44,7 +41,7 @@ export function createPacer(ticker: Ticker, near: () => boolean): Pacer {
   const system = Ticker.system
   system.autoStart = false
   system.stop()
-  let saver = false
+  let pace: Pace = 'balanced'
   let lastInput = performance.now()
   let last = 0
   let raf = 0
@@ -54,15 +51,15 @@ export function createPacer(ticker: Ticker, near: () => boolean): Pacer {
   let second = 0
   let shown = 0
   const rate = (now: number) => {
-    const k = saver ? 1 : 0
-    if (now - lastInput < ACTIVE_MS) return RATES.active[k]
+    const r = RATES[pace]
+    if (now - lastInput < ACTIVE_MS) return r.active
     if (now - coverAt > COVER_CHECK_MS) {
       coverAt = now
       covered = document.querySelector('.modal') !== null
     }
-    if (covered) return RATES.covered[k]
-    const idle = near() ? RATES.near[k] : RATES.far[k]
-    return now - lastInput > DEEP_MS ? Math.min(idle, RATES.deep[k]) : idle
+    if (covered) return r.covered
+    const idle = near() ? r.near : r.far
+    return now - lastInput > DEEP_MS ? Math.min(idle, r.deep) : idle
   }
   const loop = (now: number) => {
     raf = requestAnimationFrame(loop)
@@ -99,8 +96,8 @@ export function createPacer(ticker: Ticker, near: () => boolean): Pacer {
     wake() {
       lastInput = performance.now()
     },
-    setSaver(on) {
-      saver = on
+    setPace(value) {
+      pace = value
     },
     fps: () => shown,
     destroy() {

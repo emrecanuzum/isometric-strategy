@@ -1,26 +1,113 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { startMusic } from '../audio/music'
-import { setBattleMusicLevel, setSfx, unlockSfx } from '../audio/sfx'
+import { setBattleMusicLevel, setRain, setSfx, setVoice, unlockSfx } from '../audio/sfx'
 import type { Music } from '../audio/music'
 import type { PowerMode } from '../lib/power'
 import { supabase } from '../lib/supabase'
 
 // The player's settings, kept in their profile so they follow the account to any device.
 
+// How the weather is drawn: everything, a lighter rain (no cloud shadows or splashes, fewer drops), or not at all.
+export type WeatherMode = 'full' | 'lite' | 'off'
+// How often the map is drawn (CLAUDE.md §12): smooth, balanced or kind to the battery.
+export type Pace = 'smooth' | 'balanced' | 'saver'
+// What power saving turns down while it is on; each can be left alone.
+export type Cut = 'pace' | 'detail' | 'birds' | 'clouds' | 'glow' | 'shadows' | 'weather' | 'sharp'
+
 export interface Settings {
+  // Sound (volumes 0..100), each kind with its own switch: the tavern music, the battle music while a battle is
+  // watched, the cues (the envoy's news, the day's events), the buttons' clicks, the rain and thunder, the envoy's voice.
   music: boolean
-  // 0..100
   musicVolume: number
-  // Sound effects (the envoy's news, battles, the day's events), and how loud, 0..100.
+  battle: boolean
+  battleVolume: number
   sfx: boolean
   sfxVolume: number
-  // Small motions on the map, such as trees swaying close up; off for slower machines or a calmer screen.
+  clicks: boolean
+  rain: boolean
+  rainVolume: number
+  voice: boolean
+  voiceVolume: number
+  // Picture: swaying trees and moving buildings, birds, clouds, the glow round lit windows at night, live shadows (of
+  // buildings, walkers and armies), the weather, and the screen's full density when zoomed out.
   detail: boolean
-  // Power saving (CLAUDE.md §12): 'auto' turns it on for phones, tablets and laptops on battery.
+  birds: boolean
+  clouds: boolean
+  glow: boolean
+  shadows: boolean
+  weather: WeatherMode
+  sharp: boolean
+  // Performance: how often the map is drawn; power saving ('auto' turns it on for phones, tablets and laptops on
+  // battery) and what it turns down.
+  pace: Pace
   power: PowerMode
+  cuts: Record<Cut, boolean>
 }
 
-export const DEFAULT_SETTINGS: Settings = { music: true, musicVolume: 70, sfx: true, sfxVolume: 70, detail: true, power: 'auto' }
+export const DEFAULT_CUTS: Record<Cut, boolean> = { pace: true, detail: true, birds: true, clouds: true, glow: true, shadows: false, weather: true, sharp: true }
+
+export const DEFAULT_SETTINGS: Settings = {
+  music: true,
+  musicVolume: 70,
+  battle: true,
+  battleVolume: 70,
+  sfx: true,
+  sfxVolume: 70,
+  clicks: true,
+  rain: true,
+  rainVolume: 70,
+  voice: true,
+  voiceVolume: 70,
+  detail: true,
+  birds: true,
+  clouds: true,
+  glow: true,
+  shadows: true,
+  weather: 'full',
+  sharp: true,
+  pace: 'balanced',
+  power: 'auto',
+  cuts: DEFAULT_CUTS,
+}
+
+// What the map draws, from the settings and whether power saving is on now.
+export interface Video {
+  detail: boolean
+  birds: boolean
+  clouds: boolean
+  glow: boolean
+  shadows: boolean
+  weather: WeatherMode
+  sharp: boolean
+  pace: Pace
+}
+
+export function videoOf(s: Settings, saving: boolean): Video {
+  const cut = (k: Cut) => saving && s.cuts[k]
+  return {
+    detail: s.detail && !cut('detail'),
+    birds: s.birds && !cut('birds'),
+    clouds: s.clouds && !cut('clouds'),
+    glow: s.glow && !cut('glow'),
+    shadows: s.shadows && !cut('shadows'),
+    weather: cut('weather') && s.weather === 'full' ? 'lite' : s.weather,
+    sharp: s.sharp && !cut('sharp'),
+    pace: cut('pace') ? 'saver' : s.pace,
+  }
+}
+
+// Settings saved before the sounds were split up: the envoy's voice and the rain followed the effects, the battle
+// music followed the music.
+function fromSaved(saved: Partial<Settings> | undefined): Settings {
+  const s = { ...saved }
+  s.voice ??= s.sfx
+  s.voiceVolume ??= s.sfxVolume
+  s.rain ??= s.sfx
+  s.rainVolume ??= s.sfxVolume
+  s.battle ??= s.music
+  s.battleVolume ??= s.musicVolume
+  return { ...DEFAULT_SETTINGS, ...s, cuts: { ...DEFAULT_CUTS, ...s.cuts } } as Settings
+}
 
 export interface Profile {
   username: string
@@ -41,7 +128,7 @@ export async function loadProfile(): Promise<Profile | null> {
     username: data?.username ?? user.email?.split('@')[0] ?? '',
     email: user.email ?? '',
     admin: data?.is_admin === true,
-    settings: { ...DEFAULT_SETTINGS, ...(data?.settings as Partial<Settings> | undefined) },
+    settings: fromSaved(data?.settings as Partial<Settings> | undefined),
   }
 }
 
@@ -92,9 +179,11 @@ export function useMusic(settings: Settings, quiet = 1) {
   useEffect(() => {
     music.current?.setMuted(!settings.music)
     music.current?.setVolume((settings.musicVolume / 100) * quiet * ducked)
-    setBattleMusicLevel(settings.music, settings.musicVolume / 100)
   }, [settings.music, settings.musicVolume, quiet, ducked])
-  useEffect(() => setSfx(settings.sfx, settings.sfxVolume / 100), [settings.sfx, settings.sfxVolume])
+  useEffect(() => setBattleMusicLevel(settings.battle, settings.battleVolume / 100), [settings.battle, settings.battleVolume])
+  useEffect(() => setSfx(settings.sfx, settings.sfxVolume / 100, settings.clicks), [settings.sfx, settings.sfxVolume, settings.clicks])
+  useEffect(() => setVoice(settings.voice, settings.voiceVolume / 100), [settings.voice, settings.voiceVolume])
+  useEffect(() => setRain(settings.rain, settings.rainVolume / 100), [settings.rain, settings.rainVolume])
 }
 
 // Settings change at once on screen and are written to the profile a moment after the last change. `load` takes the

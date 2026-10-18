@@ -532,14 +532,14 @@ function warCamp(world: World, index: number): Structure[] {
   }
   if (!spot) return []
   const looks = campLooks(CROWN_ROOFS[index % CROWN_ROOFS.length] as KingdomColor)
-  const at = (dx: number, dy: number, sprite: Sprite, n = 1): Structure => ({ x: spot!.x + dx, y: spot!.y + dy, size: n, look: 'house', variant: 0, city: index, sprite })
+  const at = (dx: number, dy: number, sprite: Sprite, n = 1, fence?: 'x' | 'y'): Structure => ({ x: spot!.x + dx, y: spot!.y + dy, size: n, look: 'house', variant: 0, city: index, sprite, ...(fence && { fence }) })
   const parts: Structure[] = []
   // A palisade round it, open at the middle of the front.
   for (let t = 0; t < CAMP_W; t++) {
-    parts.push(at(t, 0, looks.fence.x))
-    if (Math.abs(t - CAMP_W / 2) > 1) parts.push(at(t, CAMP_H - 1, looks.fence.x))
+    parts.push(at(t, 0, looks.fence.x, 1, 'x'))
+    if (Math.abs(t - CAMP_W / 2) > 1) parts.push(at(t, CAMP_H - 1, looks.fence.x, 1, 'x'))
   }
-  for (let t = 1; t < CAMP_H - 1; t++) parts.push(at(0, t, looks.fence.y), at(CAMP_W - 1, t, looks.fence.y))
+  for (let t = 1; t < CAMP_H - 1; t++) parts.push(at(0, t, looks.fence.y, 1, 'y'), at(CAMP_W - 1, t, looks.fence.y, 1, 'y'))
   // The commander's pavilion at the back, rows of tents to either side.
   parts.push(at(6, 2, looks.pavilion, 2))
   for (const dx of [2, 3, 4, 9, 10, 11]) parts.push(at(dx, 2, looks.tents[dx % 2]))

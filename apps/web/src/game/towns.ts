@@ -39,7 +39,7 @@ function townPalisade(town: Town): Structure[] {
   const S = balance.towns.size
   const out: Structure[] = []
   const stake = (x: number, y: number, along: 'x' | 'y') =>
-    out.push({ x: town.x + x, y: town.y + y, size: 1, look: 'house', variant: 0, sprite: fences[along] })
+    out.push({ x: town.x + x, y: town.y + y, size: 1, look: 'house', variant: 0, sprite: fences[along], fence: along })
   for (let t = -1; t <= S; t++) {
     stake(t, -1, 'x')
     if (t < 3 || t > 4) stake(t, S, 'x')

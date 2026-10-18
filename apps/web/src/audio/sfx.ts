@@ -12,16 +12,72 @@ export type NewsCue =
   | 'council' | 'ofAge' | 'expedition' | 'sale' | 'cargo' | 'king' | 'kingFell' | 'lost' | 'tower' | 'report'
 
 const LEVEL = 0.35
+// The envoy's mumble and the rain sit lower than the cues at the same setting.
+const VOICE_LEVEL = 0.35
+const RAIN_LEVEL = 0.35
+// An idle audio context still runs its thread (and the compressor) for silence: after this long with nothing playing
+// it is put to sleep, and woken by the next sound (CLAUDE.md §12).
+const IDLE_MS = 4000
 
 let ctx: AudioContext | null = null
+// One output per kind of sound, each with its own switch and volume (CLAUDE.md §11 Ayarlar): the cues, the envoy's
+// voice, the rain and thunder. All go through the compressor.
 let out: GainNode | null = null
+let voiceOut: GainNode | null = null
+let rainOut: GainNode | null = null
+// Where the helpers below connect what they make; the envoy's voice and the thunder route it elsewhere for a moment.
+let route: GainNode | null = null
+const lane = () => route ?? out!
 let enabled = true
 let volume = 0.7
+let clicks = true
+let voiceOn = true
+let voiceVolume = 0.7
+let rainOn = true
+let rainVolume = 0.7
 
-export function setSfx(on: boolean, level: number) {
+export function setSfx(on: boolean, level: number, buttonClicks = true) {
   enabled = on
   volume = Math.min(1, Math.max(0, level))
+  clicks = buttonClicks
   if (out) out.gain.value = LEVEL * volume
+}
+
+export function setVoice(on: boolean, level: number) {
+  voiceOn = on
+  voiceVolume = Math.min(1, Math.max(0, level))
+  if (voiceOut) voiceOut.gain.value = VOICE_LEVEL * voiceVolume
+}
+
+export function setRain(on: boolean, level: number) {
+  rainOn = on
+  rainVolume = Math.min(1, Math.max(0, level))
+  if (rainOut) rainOut.gain.value = RAIN_LEVEL * rainVolume
+  if (!on) setRainSound(0)
+}
+
+// Sleeping while idle: `asleep` is set only when this module suspended the context itself (never before the first
+// gesture unlocked it).
+let asleep = false
+let idleTimer = 0
+let battles = 0
+function rest() {
+  clearTimeout(idleTimer)
+  idleTimer = window.setTimeout(() => {
+    if (!ctx || rain || battles > 0 || ctx.state !== 'running') return
+    asleep = true
+    void ctx.suspend()
+  }, IDLE_MS)
+}
+// Whether a sound can be played now; wakes a sleeping context (what is scheduled plays as it resumes, a few ms on).
+function ready() {
+  if (!ctx) return false
+  if (asleep && ctx.state === 'suspended') {
+    asleep = false
+    void ctx.resume()
+  } else if (ctx.state !== 'running') return false
+  rest()
+  return true
 }
 
 // Called from a user gesture; returns whether audio can play.
@@ -32,6 +88,10 @@ export function unlockSfx() {
     ctx = new Ctx()
     out = ctx.createGain()
     out.gain.value = LEVEL * volume
+    voiceOut = ctx.createGain()
+    voiceOut.gain.value = VOICE_LEVEL * voiceVolume
+    rainOut = ctx.createGain()
+    rainOut.gain.value = RAIN_LEVEL * rainVolume
     // A gentle compressor evens the cues out: a drum roll and a music-box chime come out about as loud.
     const comp = ctx.createDynamicsCompressor()
     comp.threshold.value = -16
@@ -39,9 +99,14 @@ export function unlockSfx() {
     comp.ratio.value = 4
     comp.attack.value = 0.004
     comp.release.value = 0.2
-    out.connect(comp).connect(ctx.destination)
+    comp.connect(ctx.destination)
+    for (const g of [out, voiceOut, rainOut]) g.connect(comp)
   }
-  if (ctx.state === 'suspended') void ctx.resume()
+  if (ctx.state === 'suspended') {
+    asleep = false
+    void ctx.resume()
+  }
+  rest()
   return ctx.state === 'running'
 }
 
@@ -56,7 +121,7 @@ function tone(hz: number, at: number, length: number, type: OscillatorType = 'tr
   g.gain.setValueAtTime(0.0001, at)
   g.gain.exponentialRampToValueAtTime(gain, at + 0.015)
   g.gain.exponentialRampToValueAtTime(0.0001, at + length)
-  osc.connect(g).connect(out!)
+  osc.connect(g).connect(lane())
   osc.start(at)
   osc.stop(at + length + 0.05)
 }
@@ -75,7 +140,7 @@ function drum(at: number, gain = 0.8, hz = 90) {
   filter.frequency.value = 700
   const g = c.createGain()
   g.gain.value = gain * 0.6
-  noise.connect(filter).connect(g).connect(out!)
+  noise.connect(filter).connect(g).connect(lane())
   noise.start(at)
   tone(hz, at, 0.2, 'sine', gain, 0.5)
 }
@@ -110,7 +175,7 @@ function noise(at: number, length: number, o: { type?: BiquadFilterType; hz?: nu
   g.gain.setValueAtTime(0.0001, at)
   g.gain.exponentialRampToValueAtTime(o.gain ?? 0.3, at + attack)
   g.gain.exponentialRampToValueAtTime(0.0001, at + length)
-  src.connect(filter).connect(g).connect(out!)
+  src.connect(filter).connect(g).connect(lane())
   src.start(at, Math.random() * 1.5)
   src.stop(at + length + 0.05)
 }
@@ -129,7 +194,7 @@ function brass(hz: number, at: number, length: number, gain = 0.12, bright = 220
   g.gain.exponentialRampToValueAtTime(gain, at + Math.min(0.035, length * 0.3))
   g.gain.setValueAtTime(gain * 0.85, at + length * 0.7)
   g.gain.exponentialRampToValueAtTime(0.0001, at + length)
-  filter.connect(g).connect(out!)
+  filter.connect(g).connect(lane())
   for (const detune of [-6, 6]) {
     const osc = c.createOscillator()
     osc.type = 'sawtooth'
@@ -185,8 +250,8 @@ function hooves(at: number, beats = [0, 0.08, 0.13, 0.26, 0.34, 0.39]) {
 
 // Every cue is short (well under a second), so the screen's news never drones on.
 export function play(cue: Cue) {
-  if (!enabled || volume <= 0 || !ctx || ctx.state !== 'running') return
-  const t = ctx.currentTime + 0.02
+  if (!enabled || volume <= 0 || (cue === 'click' && !clicks) || !ready()) return
+  const t = ctx!.currentTime + 0.02
   switch (cue) {
     case 'chat':
       // A soft two-note chime.
@@ -556,8 +621,17 @@ const VOWELS: Record<string, [number, number]> = {
 const BABBLE_HZ = 98
 // `pitch` scales the voice (the tribute collectors' gruff captain speaks lower than the envoy).
 export function babble(syllable: string, question = false, pitch = 1) {
-  if (!enabled || volume <= 0 || !ctx || ctx.state !== 'running') return
-  const c = ctx
+  if (!voiceOn || voiceVolume <= 0 || !ready()) return
+  route = voiceOut
+  try {
+    mumble(syllable, question, pitch)
+  } finally {
+    route = null
+  }
+}
+
+function mumble(syllable: string, question: boolean, pitch: number) {
+  const c = ctx!
   const lower = syllable.toLocaleLowerCase('tr-TR')
   const vowel = [...lower].find((ch) => ch in VOWELS) ?? 'a'
   let hash = 7
@@ -576,7 +650,7 @@ export function babble(syllable: string, question = false, pitch = 1) {
   const soft = c.createBiquadFilter()
   soft.type = 'lowpass'
   soft.frequency.value = 2600
-  soft.connect(out!)
+  soft.connect(lane())
   const [f1, f2] = VOWELS[vowel]
   for (const [f, q, share] of [[f1, 5, 1], [f2, 7, 0.6]] as const) {
     const band = c.createBiquadFilter()
@@ -597,7 +671,7 @@ export function babble(syllable: string, question = false, pitch = 1) {
 // ---- Battle music --------------------------------------------------------------------------------------------------
 
 // Played while a battle is watched: war drums under a low ostinato in D minor and a horn now and then, all on the
-// music's volume (not the effects'). Returns a function that fades it out.
+// battle music's own switch and volume (not the effects'). Returns a function that fades it out.
 let musicOn = true
 let musicLevel = 0.7
 export function setBattleMusicLevel(on: boolean, level: number) {
@@ -606,8 +680,9 @@ export function setBattleMusicLevel(on: boolean, level: number) {
 }
 
 export function startBattleMusic(): () => void {
-  if (!ctx || !musicOn || musicLevel <= 0) return () => {}
-  const c = ctx
+  if (!musicOn || musicLevel <= 0 || !ready()) return () => {}
+  const c = ctx!
+  battles++
   const bus = c.createGain()
   bus.gain.setValueAtTime(0.0001, c.currentTime)
   bus.gain.exponentialRampToValueAtTime(0.5 * musicLevel + 0.0001, c.currentTime + 1.5)
@@ -658,7 +733,12 @@ export function startBattleMusic(): () => void {
       step++
     }
   }, 120)
+  let over = false
   return () => {
+    if (over) return
+    over = true
+    battles--
+    rest()
     clearInterval(timer)
     const t = c.currentTime
     bus.gain.cancelScheduledValues(t)
@@ -671,11 +751,11 @@ export function startBattleMusic(): () => void {
 // ---- Rain (CLAUDE.md §4.2.1) ----------------------------------------------------------------------------------------
 
 // A soft loop of rain while it rains on the map: looping noise through a band of hiss and a low patter, on the effects'
-// volume. `level` 0…1 follows how hard it rains; 0 fades it out and stops it.
+// rain's own switch and volume. `level` 0…1 follows how hard it rains; 0 fades it out and stops it.
 let rain: { src: AudioBufferSourceNode; gain: GainNode } | null = null
 let rainStop = 0
 export function setRainSound(level: number) {
-  const want = enabled && ctx && ctx.state === 'running' ? Math.min(1, Math.max(0, level)) : 0
+  const want = rainOn && rainVolume > 0 && level > 0.01 && ready() ? Math.min(1, Math.max(0, level)) : 0
   if (!ctx) return
   const c = ctx
   if (want <= 0.01) {
@@ -688,6 +768,7 @@ export function setRainSound(level: number) {
         r.src.disconnect()
         if (rain === r) rain = null
         rainStop = 0
+        rest()
       }, 2000)
     }
     return
@@ -708,7 +789,7 @@ export function setRainSound(level: number) {
     low.frequency.value = 5200
     const gain = c.createGain()
     gain.gain.value = 0.0001
-    src.connect(hiss).connect(low).connect(gain).connect(out!)
+    src.connect(hiss).connect(low).connect(gain).connect(rainOut!)
     src.start(c.currentTime, Math.random() * 1.5)
     rain = { src, gain }
   }
@@ -717,8 +798,10 @@ export function setRainSound(level: number) {
 
 // A distant roll of thunder after a lightning flash (under a second, like every cue).
 export function thunder(strength = 1) {
-  if (!enabled || !ctx || ctx.state !== 'running') return
-  const t = ctx.currentTime + 0.15
+  if (!rainOn || rainVolume <= 0 || !ready()) return
+  const t = ctx!.currentTime + 0.15
+  route = rainOut
   noise(t, 0.9, { type: 'lowpass', hz: 420, to: 90, gain: 0.35 * strength, attack: 0.08 })
   noise(t + 0.1, 0.7, { type: 'lowpass', hz: 220, to: 70, gain: 0.25 * strength, attack: 0.15 })
+  route = null
 }

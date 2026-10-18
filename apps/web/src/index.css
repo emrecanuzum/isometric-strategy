@@ -1468,11 +1468,11 @@ small {
 }
 
 .chase-pick small.up {
-  color: #3d6b2a;
+  color: #2f5a1e !important;
 }
 
 .chase-pick small.down {
-  color: #9a2a1c;
+  color: #8a1f12 !important;
 }
 
 .chase-on {
@@ -6739,4 +6739,189 @@ input:not([type='range']):focus-visible {
   color: var(--gold);
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* Ayarlar (CLAUDE.md §11): one row per setting, its name and what it does on the left, the control on the right. */
+.settings-list {
+  display: grid;
+  gap: calc(var(--px) * 5);
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+}
+
+.settings-row > div {
+  display: grid;
+  gap: var(--px);
+}
+
+.settings-row b {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+}
+
+.settings-row small {
+  font-size: 13px;
+  line-height: 1.35;
+  opacity: 0.75;
+}
+
+.settings-choice {
+  flex-wrap: nowrap;
+  gap: var(--px);
+}
+
+.settings-cuts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--px) * 2) calc(var(--px) * 4);
+  padding-top: calc(var(--px) * 3);
+  border-top: var(--px) solid rgba(255, 255, 255, 0.12);
+}
+
+.settings-cuts > b {
+  grid-column: 1 / -1;
+}
+
+.pixel-check {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 2) calc(var(--px) * 3);
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pixel-check:hover {
+  background: rgba(242, 209, 107, 0.08);
+}
+
+.pixel-check .box {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--px) * 10);
+  height: calc(var(--px) * 10);
+  background: #1a120d;
+  box-shadow:
+    inset 0 0 0 var(--px) #0b0705,
+    inset var(--px) var(--px) 0 calc(var(--px) * 1) #3a2a1f,
+    0 0 0 var(--px) #6b4c2e;
+}
+
+.pixel-check .box svg {
+  width: calc(var(--px) * 8);
+  height: calc(var(--px) * 8);
+  fill: var(--ink);
+  visibility: hidden;
+}
+
+.pixel-check[aria-checked='true'] .box {
+  background: var(--gold);
+  box-shadow:
+    inset 0 0 0 var(--px) #0b0705,
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 calc(var(--px) * 1) var(--gold-2),
+    0 0 0 var(--px) #6b4c2e;
+}
+
+.pixel-check[aria-checked='true'] .box svg {
+  visibility: visible;
+}
+
+.pixel-check[aria-checked='false'] > span:last-child {
+  opacity: 0.7;
+}
+
+/* Settings' own switches and choices: the one picked stands out in gold. */
+.settings-row .btn[aria-pressed='true'] {
+  background: var(--gold-2);
+  color: var(--ink);
+}
+
+.settings-row .btn[aria-pressed='false'] {
+  opacity: 0.85;
+}
+
+@media (max-width: 560px) {
+  .settings-row {
+    grid-template-columns: 1fr;
+  }
+  .settings-cuts {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The top bar and the dock in the minimap frame's dress (ui/barFrame.ts): a gilded moulding and a riveted oak band
+   round a panel of dark planks; the chips and the tab groups are parted by oak posts with a gold stud. */
+.topbar.frame,
+.dock.frame {
+  border: calc(var(--px) * 7) solid transparent;
+  border-image: var(--bar-frame) 7 / calc(var(--px) * 7) round;
+  image-rendering: pixelated;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(var(--px) * 23), rgb(0 0 0 / 22%) calc(var(--px) * 23) calc(var(--px) * 24)),
+    linear-gradient(180deg, #2c2018 0%, var(--panel) 55%, #1c140f 100%);
+  background-clip: padding-box;
+  box-shadow: 0 calc(var(--px) * 3) 0 0 rgb(0 0 0 / 35%);
+  padding: 0;
+}
+
+.topbar .res-wrap + .res-wrap {
+  box-shadow: none;
+}
+
+.topbar .res-wrap + .res-wrap::before,
+.topbar > .menu-chip::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--px) * -1);
+  top: calc(var(--px) * 3);
+  bottom: calc(var(--px) * 3);
+  width: calc(var(--px) * 2);
+  background:
+    radial-gradient(circle at 50% 50%, var(--gold) 0 calc(var(--px) * 1), transparent calc(var(--px) * 1.2)) center / 100% calc(var(--px) * 4) no-repeat,
+    linear-gradient(90deg, #8f6740 0 50%, #432c19 50% 100%);
+  box-shadow: 0 0 0 calc(var(--px) * 0.5) #120d0b;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.topbar .res:hover,
+.dock .tab:hover {
+  background: rgb(242 209 107 / 8%);
+}
+
+.dock .tab.gap::before {
+  width: calc(var(--px) * 2);
+  background:
+    radial-gradient(circle at 50% 50%, var(--gold) 0 calc(var(--px) * 1), transparent calc(var(--px) * 1.2)) center / 100% calc(var(--px) * 4) no-repeat,
+    linear-gradient(90deg, #8f6740 0 50%, #432c19 50% 100%);
+  box-shadow: 0 0 0 calc(var(--px) * 0.5) #120d0b;
+}
+
+.dock .tab[aria-selected='true'] {
+  background: linear-gradient(180deg, var(--wood-3) 0%, var(--wood-2) 60%, var(--wood-1) 100%);
+  box-shadow:
+    inset 0 calc(var(--px) * 1) 0 0 var(--wood-4),
+    inset 0 calc(var(--px) * -1) 0 0 var(--wood-0),
+    inset calc(var(--px) * 1) 0 0 0 #6b4a12,
+    inset calc(var(--px) * -1) 0 0 0 #6b4a12;
+}
+
+.dock .tab[aria-selected='true']::after {
+  top: calc(var(--px) * -1);
+  left: 22%;
+  right: 22%;
+  height: calc(var(--px) * 2);
+  background: linear-gradient(90deg, #a8781f, #fff4c0 50%, #a8781f);
 }

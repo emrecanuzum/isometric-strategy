@@ -21,6 +21,18 @@
       "goldPerSoldier": 6,
       "materialsPerSoldier": 4
     },
+    "raid": {
+      "cycleSeconds": 1800,
+      "awayShare": 0.5,
+      "chance": 0.8,
+      "reachTiles": 320,
+      "speedTilesPerSecond": 0.9,
+      "lurkTiles": 10,
+      "minLurkSeconds": 120,
+      "pressure": 0.45,
+      "nearTiles": 14,
+      "farTiles": 45
+    },
     "chase": {
       "maxSeconds": 1200,
       "contactTiles": 4,

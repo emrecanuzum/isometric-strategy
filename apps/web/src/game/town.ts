@@ -185,7 +185,7 @@ function walker(layer: Container, pair: Sprite[]): Walker {
   sprite.anchor.set(pair[0].anchorX / pair[0].width, pair[0].anchorY / pair[0].height)
   sprite.visible = false
   layer.addChild(sprite)
-  return { sprite, frames: pair.map(textureOf) }
+  return { sprite, frames: pair.map((s) => textureOf(s)) }
 }
 
 export interface Town {

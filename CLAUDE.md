@@ -266,6 +266,18 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   yürüyüş yoluna, kule duvara gölge düşürür; köşeler ve duvar dibi
   koyulaşır. Yüzlerde sıra sıra kesme taş, harç, yontulmuş köşeler,
   dipte ve yolda yosun, mazgal aralıklarından aşağı kir izi vardır.
+  **Eğimde sur kesintisizdir** (`buildingSprites.ts` → `structureParts`,
+  `Part.shear`): sur, kapı ve kazık çit parçaları (lordların surları, taç
+  başkentlerinin iç ve dış surları, kasabaların ve ordu karargâhının çitleri;
+  çitler `Structure.fence` ile işaretlenir) kaideye çıkmaz. Her parça karosunun
+  ortasının yüksekliğinde durur ve duvarın koştuğu yöndeki eğim kadar **dikey
+  kaydırılır** (sütunlar dik kalır, genişlik korunur; köşe ve T parçalarında iki
+  yönün ortalaması). Komşu iki parça ortak kenarlarının ortasında aynı
+  yükseklikte buluşur, duvarın dibi ve yürüyüş yolu basamaksız akar. Kaydırma
+  haritada (`createWorld.ts`, sprite'ın `skew.y`'si, `scale.x` = 1/cos) ve
+  zemine boyanırken (`chunkPainter.ts`, sütun sütun) aynıdır. (Önce her parça
+  kendi en yüksek köşesine kaide üstünde oturuyor, sur basamak basamak
+  kopuyordu; çitler en alçak köşeye oturup yamaca gömülüyordu.)
   Kapı kulesi kare ve yüksektir, üstü konsollarla taşar, mazgal
   pencereleri ve flaması vardır; kapı kemerli, demir kuşaklı meşe kapı ve
   üstünde sancaklıdır; yıkık sur basamaklı bir kütük ve önüne dökülmüş
@@ -409,8 +421,9 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
     Fırtınada ara sıra şimşek çakar (ekran bir an ağarır, ardından
     1 saniyenin altında gök gürültüsü). Yağmurun kısık bir sesi vardır
     (sentezlenmiş gürültü, efekt sesine bağlı; sekme gizliyken susar).
-    Güç tasarrufunda yalnız grilik ve seyrek çizgiler kalır (bulut
-    gölgesi, sıçrama ve ses yok). Geliştirmede `?rain=1` / `storm` /
+    Hava efektleri "Sade"yken (Ayarlar → Görüntü; güç tasarrufu da
+    sadeleştirebilir) yalnız grilik ve seyrek çizgiler kalır (bulut gölgesi
+    ve sıçrama yok), "Kapalı"yken hava hiç çizilmez ve duyulmaz. Geliştirmede `?rain=1` / `storm` /
     `sleet` / `shower` / `snow` havayı, `?snow=1..3` kar örtüsünü zorlar
     (yalnız `bun run dev`).
   - **Kar örtüsü** (`weather.ts` → `snowCover`, `weather.json` →
@@ -873,6 +886,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   ucunda direkte bir fener durur.
 - **Eğim:** Yokuşa kurulan yapı, en yüksek köşesi hizasında düz bir taş
   kaide üzerinde durur (tarlada toprak set); kaide aşağıdaki zemine iner.
+  Sur, kapı ve çitler bundan ayrıdır: kaidesiz, eğime göre kaydırılarak
+  kesintisiz uzanır (§4.2.1).
   Kıyı yapıları (iskele binası, balıkçı kulübesi) kaideye çıkmaz: dik
   kıyıda suya bakan alçak köşeye oturur, arkasındaki yamaca gömülür;
   böylece iskelenin ahşap kısmıyla aynı hizada kalır.
@@ -1871,6 +1886,25 @@ Değerler `config/balance/outlaws.json` → `bands`, `road`; mantık
   muharebe (`battle`), çarpışmaların onu ne kadar bekletti (`shift`: çete
   savaştığı yerden yoluna devam eder) ve kazandığı çarpışmalarda düşenler
   (`losses`). Satırı olmayan çete hiç dokunulmamış, yolda demektir.
+- **Baskınlar** (`bands.raid`; `outlaws.ts` → `bandClock`, `raidOf`, `bandNow`,
+  `bandRaid`, `bandChangeAt`, `raidTargetsOf`): çeteler yalnızca yolda kalmaz.
+  Her çetenin zamanı 30 dakikalık döngülerdir (`cycleSeconds`); döngünün
+  yarısında (`awayShare`) kendi yolunu yürür, öbür yarısında %80 olasılıkla
+  (`chance`) yoldan ayrılıp menzilindeki (kuş uçuşu 320 karo, `reachTiles`) bir
+  lordun **ticaret noktasına baskına** iner: yolun ayrıldığı noktadan ticaret
+  noktasının 10 karo önüne (`lurkTiles`) araziden yürür (`findRoute`, su ve
+  dağdan dolanır; saniyede 0,9 karo, ordulardan yine yavaş), orada pusuda
+  bekler (en az 2 dk) ve aynı yoldan geri döner. Kendi yolu zaten ticaret
+  noktasının yakınından geçen lorda baskın yapmaz; menzilde lord yoksa, yol
+  bulunamazsa ya da gidip dönmeye vakit yetmezse yolun kenarında kamp kurar.
+  Yürüyüşün saati baskında durur, çete yürüyüşüne kaldığı yerden devam eder.
+  Hedef lordların listesi (ticaret noktası olan her lord, kimliğe göre sıralı)
+  sunucuda tick ve takip emrinde lordlardan (`outlawsIn(…, kingdoms)`),
+  istemcide rakipler ve oyuncudan (`App.tsx` → `setRaidTargets`) kurulur; seçim
+  lobi tohumu, çete ve döngüden çekilir, herkes aynı baskını görür. Çetenin
+  penceresi baskındaysa kime gittiğini, pusuda mı döndüğünü yazar. Denetim:
+  `bun scripts/raid-check.ts` (bir dünyada dokuz yol kenarı ticaret noktasıyla
+  her lordun saatlik ortalama, en yüksek ve sıfır kalan payı).
 - **Güç:** 6–14 kişi (tohumdan), her yenilip geri dönüşünde +1; %35'i
   okçu, gerisi mızrakçı; moral 55, saha bilgisi 70 (yolları bilirler).
 - **Görünüm:** Haritada herkese görünür: yamalı kahverengi deri giysili
@@ -1885,8 +1919,10 @@ Değerler `config/balance/outlaws.json` → `bands`, `road`; mantık
   haritada ve dünya haritasında gösterilmez.
 - **Tuttukları yol:** Bir çete kesiminin 8 karo yakınındaki yol karolarını
   tutar (`holdTiles`). Bir lordun **ticaret noktasının 70 karo çevresindeki**
-  yol karolarının ayaktaki çetelerce tutulan payı (`roadHeld`, 0–1) o lordun
-  yağmacı payıdır. Sunucu bunu her tick'te hesaplar ve değiştiğinde lordun
+  yol karolarının ayaktaki çetelerce tutulan payı (`roadHeld`, 0–1), artı
+  yakındaki her çetenin yakınlık payı (ticaret noktasına 14 karo ve daha yakınsa
+  0,45, 45 karoda 0'a iner; `raid.pressure`, `nearTiles`, `farTiles`; baskına inen
+  ya da yakından geçen çete) o lordun yağmacı payıdır (en fazla 1). Sunucu bunu her tick'te hesaplar ve değiştiğinde lordun
   durumuna yazar (`Kingdom.outlaws` → `road`, `bands`; `pressureOf`);
   `advance` oradan okur. Alanı olmayan eski kayıtlarda pay 0'dır.
 - **Etkileri** (`outlawEffects`): tüccarın her seferde getirdiği altının
@@ -3239,8 +3275,8 @@ mertebesindedir.
   yakınlaştırmada** ve bu ayardan bağımsız olarak ayrı çizilir; ordu
   ormanda önündeki ağaçların arkasında kalır. Komşu parçalar sınırdan taşan
   ağaçları buna göre ya boyar ya da bırakır (`createWorld.ts` → `liftFor`,
-  `nearOf`). **Güç tasarrufu** açıkken detay animasyonları ayar ne olursa
-  olsun kapalıdır (§12).
+  `nearOf`). **Güç tasarrufu** açıkken (oyuncu bunu seçili bırakmışsa)
+  detay animasyonları kapalıdır (§11 Ayarlar, §12).
 - Gece yanan pencerelerin çevresinde yumuşak bir **parıltı** vardır (aynı
   ışıklar bulanıklaştırılıp gecenin üstüne eklenir).
 - Ordular (ve devriyeler) köprüden geçerken güvertenin üstünde yürür,
@@ -3944,6 +3980,14 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   yer yoksa altına, sağına ya da soluna yerleşir; hiçbir yere sığmayan ad
   (oyuncununki hariç) yakınlaştırılana kadar gizlenir, adlar üst üste
   binmez.
+- **Üst çubuk ve alt menünün çerçevesi** (`apps/web/src/ui/barFrame.ts`):
+  küçük haritanın çerçevesiyle aynı dilde, bir kez piksel piksel boyanan 9'lu
+  dilim bir resim (`--bar-frame`, CSS `border-image`, sanat pikseli başına 2
+  ekran pikseli): siyah dış çizgi, ışığa göre parlayan altın pervaz, her 16
+  pikselde altın perçinli damarlı meşe bant, köşelerde altın plaka ve baklava
+  topuz; içi koyu tahta panellerdir. Kaynak kartları ve menünün grupları altın
+  çivili meşe dikmelerle ayrılır; açık sekme altın çizgili, kabartmalı tahta
+  zeminlidir.
 - **Küçük haritanın çerçevesi** baklavayı izleyen, ekran pikseliyle boyanmış
   bir piksel sanatıdır (`apps/web/src/game/minimapFrame.ts` → `paintFrame`,
   başlıklar `paintCap`; kenarları gerçek 2:1 izometrik basamaklardır):
@@ -4013,15 +4057,39 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   hafifçe karartır ve sol altta lordun adını ve tarihi yazar; Boşluk
   kamerayı yavaşça süzdürür, tekerlek yakınlaştırır, başka herhangi bir
   tuş ya da tıklama moddan çıkar.
-- **Ayarlar ve ses:** Köşedeki menünün **Ayarlar**'ı pencereyi açar: müzik ve **ses efektleri** ayrı ayrı açılıp kapanır,
-  sesleri yüzde olarak ayarlanır (profilde saklanır). Efektler tarayıcıda
-  sentezlenir (`apps/web/src/audio/sfx.ts`): savaş davulu ve boru,
-  savaş ilanı, elçi borusu, kötü haber çanı, inşaat başlarken testere ve
-  tokmak, bina bitince çekiç, günün olayları için arp.
+- **Ayarlar** (`apps/web/src/ui/home/SettingsPanel.tsx` → `SettingsTabs`;
+  model `net/settings.ts`): köşedeki menünün **Ayarlar**'ı (ana menüde Ayarlar
+  sekmesi) sekmeli bir pencere açar (son bakılan sekme hatırlanır; Esc
+  kapatır). Her şey profilde saklanır, cihazdan cihaza taşınır. Her satırda
+  ayarın adı ve ne yaptığı solda, düğmesi sağda; seçili seçenek altın zeminlidir.
+  - **Ses:** müzik, **savaş müziği** (savaş izlerken), **ses efektleri**
+    (elçinin haberleri, olaylar, inşaat, pencereler) ve altında **düğme
+    sesleri** (tık), **yağmur ve gök gürültüsü**, **elçinin sesi** (elçi ve
+    haraççıbaşının mırıltısı): her biri ayrı açılıp kapanır ve ayrı ses
+    düzeyindedir (`sfx.ts` → `setSfx`, `setVoice`, `setRain`,
+    `setBattleMusicLevel`; her türün kendi kazanç düğümü, hepsi sıkıştırıcıdan
+    geçer). Ayrılmadan önce kaydedilmiş profillerde elçinin sesi ve yağmur efekt
+    ayarını, savaş müziği müzik ayarını alır (`fromSaved`).
+  - **Görüntü:** detay animasyonları, canlı gölgeler, gece ışıltısı, kuşlar,
+    bulutlar, keskin çizim (uzaklaşınca ekranın tam yoğunluğu) aç/kapa; **hava
+    efektleri** Tam / Sade (daha az damla, bulut gölgesi ve sıçrama yok) /
+    Kapalı (hava hiç çizilmez ve duyulmaz).
+  - **Performans:** **kare hızı** Akıcı / Dengeli / Pil dostu (§12) ve **güç
+    tasarrufu** Otomatik / Açık / Kapalı; altında **güç tasarrufu açıkken**
+    neyin kısılacağı tek tek seçilir (piksel onay kutuları: kare hızını Pil
+    dostu yap, detay animasyonları, canlı gölgeler, gece ışıltısı, kuşlar,
+    bulutlar, havayı sadeleştir, keskin çizim; varsayılan canlı gölgeler hariç
+    hepsi). Görüntü sekmesi tasarrufun şu an kıstığı satırlarda bunu yazar.
+    Harita bu ayarlardan tek bir görüntü tarifi alır (`videoOf` → `WorldView.setVideo`).
+  - **Elçi** (oyunda): öğütler ve öğretici; öğretici tamamlanınca düğmesi
+    "Tamamlandı" yazar ve tıklanmaz.
+  Efektler tarayıcıda sentezlenir (`apps/web/src/audio/sfx.ts`): savaş davulu
+  ve boru, savaş ilanı, elçi borusu, kötü haber çanı, inşaat başlarken testere
+  ve tokmak, bina bitince çekiç, günün olayları için arp.
   Kapatılan müzik sessizce çalmaya devam etmez: sesi kısıldıktan sonra ses
-  motoru durdurulur, açılınca yeniden başlar (`music.ts` → `setMuted`).
-  Görüntü bölümünde **Detay animasyonları** ve **Güç tasarrufu**
-  (Otomatik / Açık / Kapalı) durur (§12).
+  motoru durdurulur, açılınca yeniden başlar (`music.ts` → `setMuted`). Efekt
+  ses motoru da 4 saniye bir şey çalmayınca uyutulur, ilk seste uyanır (yağmur
+  ya da savaş müziği sürerken uyumaz).
   Hafif bir sıkıştırıcı efektlerin yüksekliğini eşitler.
   - **Her pencerenin kendi sesi vardır** (hepsi 1 saniyenin altında, pencere
     açılınca bir kez çalar; `sfx.ts` → `playOnce`). Elçi haberlerinin sesi
@@ -4156,8 +4224,8 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
     aynıdır ama Retina'da 4 kat az piksel boyanır (dizüstü ve telefonun pili
     piksel boyamaya gider). Uzaklaştırınca (½× ve altı) binalar sanatlarından
     küçük çizildiği için ekranın kendi yoğunluğu (en fazla 2) kullanılır;
-    güç tasarrufunda her yakınlıkta 1. Yakınlık değişince tuval yeniden
-    boyutlanır. Gece ışıltısının bulanıklığı ekran noktası başına bir
+    keskin çizim kapalıyken (ya da güç tasarrufu onu kısarken) her yakınlıkta 1. Yakınlık değişince tuval yeniden
+    boyutlanır. Gece ışıltısının bulanıklığı ekran noktası başına yarım
     pikselde çizilir. WebGL düşük güç tercihiyle açılır.
   - Arayüzün ikonları (`icons.tsx` → `Icon`) piksel başına bir `<rect>`
     yerine renk başına tek `<path>` ile çizilir ve `memo`'dur: arayüz her
@@ -4171,14 +4239,37 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
     da bina değişince, kameranın yeri (küçük haritanın çerçevesi) en sık 120
     ms'de bir arayüze bildirilir. Devriye noktaları devriye yoksa ya da sekme
     gizliyse güncellenmez.
-- **Güç tasarrufu** (Ayarlar → Görüntü: Otomatik / Açık / Kapalı; profilde
-  `power`, varsayılan Otomatik; `apps/web/src/lib/power.ts`): Otomatik, dokunmatik
-  ve faresiz cihazlarda (telefon, tablet), hareketi azalt tercihinde ve
-  dizüstü pilde çalışırken (tarayıcı söylüyorsa) açılır. Açıkken kare hızları
-  düşer (etkin 30, yakında 15, uzakta 10, uzun süre dokunulmazsa 8, pencere
-  altında 5), detay animasyonları (sallanan ağaçlar, hareketli binalar),
-  kuşlar, bulutlar ve gece ışıltısı kapanır; tuval her yakınlıkta ekran
-  noktası başına 1 piksel çizilir.
+- **Kare hızı ve güç tasarrufu** (Ayarlar → Performans; profilde `pace`,
+  `power`, `cuts`; `apps/web/src/lib/power.ts`, `game/pacing.ts`): kare hızı
+  üç kademedir (etkin / yakında / uzakta / uzun süre dokunulmazsa / pencere
+  altında): **Akıcı** 60 / 30 / 20 / 15 / 8, **Dengeli** (varsayılan) 60 / 24 /
+  15 / 10 / 8, **Pil dostu** 30 / 15 / 10 / 8 / 5. Güç tasarrufu Otomatik'te
+  dokunmatik ve faresiz cihazlarda, hareketi azalt tercihinde ve dizüstü pilde
+  çalışırken (tarayıcı söylüyorsa; Safari söylemez) açılır. Açıkken oyuncunun
+  seçtikleri kısılır (varsayılan: kare hızı Pil dostu, detay animasyonları,
+  kuşlar, bulutlar, gece ışıltısı kapalı, hava sade, keskin çizim kapalı;
+  canlı gölgeler açık kalır).
+- **Doku atlası** (`game/textures.ts`): kodla üretilen bütün sprite'lar
+  (ağaçlar, binalar, yürüyenler, gölgeler…) 2048² atlas sayfalarına raf
+  yöntemiyle paketlenir (2 piksel saydam payla; sayfadan büyükler kendi
+  dokusunu alır). Önce her sprite'ın kendi dokusu vardı; Pixi 16 dokuda bir
+  partiyi böldüğü için kare başına ~340 çizim çağrısı GPU sürecine gidiyordu,
+  şimdi ~11. Sayfa, değiştiği karede çizimden hemen önce bir kez yüklenir
+  (`flushTextures`). Her güneş adımında yeniden dökülen gölgeler ayrı bir
+  havuzdadır (`'shade'`; sayfadaki bütün dokular serbest kalınca sayfa yeniden
+  doldurulur), maskeli pencere ışıkları da (`'masked'`). Kare kare birer birer
+  üretilen bina gölge kaplamaları atlasa girmez (`'own'`): her biri bütün
+  sayfayı yeniden yüklerdi.
+- **Filtreler:** gölge katmanının saydamlık filtresi ve gece ışıltısının
+  bulanıklığı ekranın gördüğü alanla sınırlıdır (`filterArea`, her kare kamera
+  koordinatında): her karede bütün ışıkların ve gölgelerin sınırları
+  ölçülmez. Işıltı yarım çözünürlükte, iki geçişle bulanıklaşır.
+- **Ses:** müziğin yankısı tek kanallı ve 2,6 sn'dir (stereo 3,2 sn'lik yankı
+  çalıştığı sürece dört evrişim yapıyordu); efekt ses motoru boşta uyur.
+- **Ölçüm (bu düzeltmelerle):** üretim sürümü, 1440×900, DPR 1, yakın zoom,
+  güç tasarrufu açık, müzik açık; Chrome'un bütün süreçleri: boşta %43 →
+  %29 (GPU süreci %14 → %4–9). Ölçüm `ps` ile süreç ağacının CPU zamanından,
+  WebGL çağrıları `drawElements`/`texSubImage2D` sayılarak alındı.
 - **Çizim yükü (şu an uygulanan; ölçüm: 1440×900, 1× yakınlık, ormanlık bir
   yer, ana iş parçacığının dolu payı):** duruyorken %31 → %16, sürüklerken
   %76 → %35, fırtınada duruyorken %12 (yağmur kendisi ölçülemeyecek kadar

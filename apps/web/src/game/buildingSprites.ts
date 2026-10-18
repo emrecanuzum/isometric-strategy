@@ -1401,6 +1401,8 @@ export interface Structure {
   pier?: { x: number; y: number; w: number; h: number; along: 'x' | 'y' }
   // Wall pieces: which neighbouring tiles hold wall too (see linkWalls).
   links?: number
+  // A fence of stakes drawn as `sprite` (a town's or a war camp's palisade), and the way it runs: it follows the slope.
+  fence?: 'x' | 'y'
   // A building of a free city: the city's index in world.cities.
   city?: number
   // One of a crown capital's unwalled suburbs (see cities.ts → suburbs): left out where a lord holds the ground.
@@ -1561,6 +1563,9 @@ export interface Part {
   solid: boolean
   // Drawn in depth order with the buildings like a solid part, but walked over (what stands on a field).
   stands?: boolean
+  // A vertical shear (screen pixels down per pixel to the right of the anchor): a wall or a fence follows the slope of
+  // the ground along its run instead of standing level on a stepped base.
+  shear?: number
 }
 
 const made = new Map<string, Sprite>()
@@ -1573,6 +1578,23 @@ export function structureParts(world: World, s: Structure): Part[] {
   if (s.look === 'jetty') return s.pier ? [pierPart(s, s.pier, at)] : []
   // A road lies flat on the ground (painted into it); its tile is only for the pointer.
   if (s.look === 'road') return [{ sprite: STRUCTURE_SPRITES.road[0], fx: s.x + 1, fy: s.y + 1, z: at(s.x + 0.5, s.y + 0.5), solid: false }]
+  // A wall, a gate or a fence runs over the ground like a ribbon (CLAUDE.md §4.2.1): no level base, each piece stands
+  // at its tile's middle and is sheared to the slope along its run. Two neighbours meet at the same height, the middle
+  // of their shared edge, so the wall's foot and its walk run on without a step.
+  if (WALL_KINDS.has(s.look) || (s.sprite && s.fence)) {
+    const h = (x: number, y: number) => heightAt(world, x, y)
+    const gx = h(s.x + 1, s.y + 0.5) - h(s.x, s.y + 0.5)
+    const gy = h(s.x + 0.5, s.y + 1) - h(s.x + 0.5, s.y)
+    // One step along x is half a tile to the right on screen, along y half a tile to the left; ground higher is up.
+    const kx = -gx / (TILE_WIDTH / 2)
+    const ky = gy / (TILE_WIDTH / 2)
+    const links = s.sprite ? (s.fence === 'y' ? 12 : 3) : (s.links ?? lonePiece(s.look as WallKind))
+    const runX = (links & 3) !== 0
+    const runY = (links & 12) !== 0
+    const shear = runX && runY ? (kx + ky) / 2 : runY ? ky : kx
+    const sprite = s.sprite ?? stillOf(wallLook(s.look as WallKind, links, s.variant))
+    return [{ sprite, fx: s.x + s.size, fy: s.y + s.size, z: h(s.x + s.size / 2, s.y + s.size / 2), solid: true, shear }]
+  }
   // A sprite of its own (a camp's tent or squad) stands on its lowest corner, without a base.
   if (s.sprite) {
     const z = Math.min(at(s.x, s.y), at(s.x, s.y + s.size), at(s.x + s.size, s.y + s.size), at(s.x + s.size, s.y)) + 1

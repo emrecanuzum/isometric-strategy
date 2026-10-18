@@ -35,13 +35,13 @@ const degreeToMidi = (degree: number) => {
 }
 const pick = <T>(items: T[]) => items[Math.floor(Math.random() * items.length)]
 
+// The reverb's impulse: one channel (a stereo impulse makes the convolver do four convolutions instead of two, and
+// it runs for as long as the music plays; CLAUDE.md §12).
 function impulse(ctx: AudioContext, seconds: number) {
   const length = Math.floor(ctx.sampleRate * seconds)
-  const buffer = ctx.createBuffer(2, length, ctx.sampleRate)
-  for (let c = 0; c < 2; c++) {
-    const data = buffer.getChannelData(c)
-    for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / length) ** 3
-  }
+  const buffer = ctx.createBuffer(1, length, ctx.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / length) ** 3
   return buffer
 }
 
@@ -71,7 +71,7 @@ export function startMusic(muted: boolean, volume = 1): Music {
   tone.connect(master)
 
   const reverb = ctx.createConvolver()
-  reverb.buffer = impulse(ctx, 3.2)
+  reverb.buffer = impulse(ctx, 2.6)
   const wet = ctx.createGain()
   wet.gain.value = 0.45
   reverb.connect(wet).connect(tone)

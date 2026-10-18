@@ -18,7 +18,8 @@ import {
   snowCover,
 } from '@game/shared'
 import type { Point, Rect, RiverKeep, World } from '@game/shared'
-import { Application, BlurFilter, Container, Graphics, ImageSource, Sprite, Text, Texture } from 'pixi.js'
+import type { Video } from '../net/settings'
+import { Application, BlurFilter, Container, Graphics, ImageSource, Rectangle, Sprite, Text, Texture, UPDATE_PRIORITY } from 'pixi.js'
 import { createAmbient } from './ambient'
 import { createArmies } from './armies'
 import type { FleetShip } from './ambient'
@@ -44,7 +45,7 @@ import type { Sprite as Sprite_ } from './sprites'
 import { CHUNK_PAD } from './chunkPainter'
 import type { LiftedTree, Structure } from './chunkPainter'
 import type { PaintRequest, PaintResult } from './paintWorker'
-import { freeTexture, textureOf } from './textures'
+import { flushTextures, freeTexture, textureOf } from './textures'
 import { createTown, tilesAlong } from './town'
 import type { Errand, MerchantTrip } from './town'
 import type { FederatedPointerEvent } from 'pixi.js'
@@ -94,10 +95,10 @@ const CAMERA_REPORT_MS = 120
 // shown with nearest-neighbour scaling, so at those zooms a canvas of one pixel per point looks the same as a dense
 // one while filling a quarter of the pixels on a 2× screen (a laptop's or phone's battery goes on filling pixels).
 // Zoomed out, where a building is drawn smaller than its art, the screen's own density (up to 2) keeps its detail;
-// power saving draws one pixel per point at every zoom.
-export function canvasResolution(saver: boolean, zoom = 1): number {
+// with sharp drawing off (Ayarlar → Görüntü, or power saving) it is one pixel per point at every zoom.
+export function canvasResolution(sharp: boolean, zoom = 1): number {
   const dpr = window.devicePixelRatio || 1
-  if (saver || zoom >= 1) return 1
+  if (!sharp || zoom >= 1) return 1
   return Math.min(2, dpr)
 }
 // Tiles around a building whose chunks show part of it (see SPRITE_MARGIN in chunkPainter).
@@ -261,10 +262,9 @@ export interface WorldView {
   centerOn(tile: Point): void
   // An army or a fleet is being sent somewhere: the tile under the pointer is marked (not while just looking round).
   setTargeting(on: boolean): void
-  // Detail animations (swaying trees close up) on or off; the chunks on screen are painted again.
-  setDetail(on: boolean): void
-  // Power saving (CLAUDE.md §12): lower frame rates, no birds, clouds or night glow, a coarser canvas on dense screens.
-  setPowerSave(on: boolean): void
+  // What the map draws and how often (Ayarlar → Görüntü and Performans, with power saving worked in; see videoOf).
+  // Turning detail animations (swaying trees, moving buildings) on or off paints the chunks on screen again.
+  setVideo(video: Video): void
   // Frames the map drew in the last second (for measuring).
   fps(): number
   // The lobby's key (lobbyKeyOf), which the weather follows (see weather.ts); undefined for a clear sky.
@@ -351,7 +351,7 @@ export async function createWorld(
     background: 0x10141a,
     antialias: false,
     roundPixels: true,
-    resolution: canvasResolution(false, ZOOMS[DEFAULT_ZOOM_INDEX]),
+    resolution: canvasResolution(true, ZOOMS[DEFAULT_ZOOM_INDEX]),
     autoDensity: true,
     // Frames are stepped by the pacer (see pacing.ts), not by Pixi's own loop.
     autoStart: false,
@@ -359,10 +359,13 @@ export async function createWorld(
   })
   app.canvas.style.imageRendering = 'pixelated'
   host.appendChild(app.canvas)
-  // Power saving (CLAUDE.md §12): lower frame rates, no birds, clouds or glow, a coarser canvas on dense phone screens.
-  let saver = false
+  // What the player chose to see (see setVideo).
+  let video: Video = { detail: true, birds: true, clouds: true, glow: true, shadows: true, weather: 'full', sharp: true, pace: 'balanced' }
   const pacer = createPacer(app.ticker, () => camera.scale.x >= CARAVAN_MIN_ZOOM)
   const wake = pacer.wake
+  // Sprites packed onto atlas pages this frame are uploaded once, after every update and just before the draw (the
+  // draw itself runs at UPDATE_PRIORITY.LOW).
+  app.ticker.add(flushTextures, undefined, UPDATE_PRIORITY.LOW + 1)
   // The pointer's hover is told only when what it is over changes (a mouse move inside one tile tells nothing new),
   // so the interface is not drawn again for every move of the mouse.
   let hoverKey = ''
@@ -495,8 +498,13 @@ export async function createWorld(
   const glow = new Container()
   // A soft halo under the lit windows: the same lights again, blurred and added onto the night.
   const halo = new Container()
-  // Blurred anyway, so drawn at no more than one pixel per screen point (a quarter of the work on a sharp screen).
-  halo.filters = [new BlurFilter({ strength: 5, quality: 3, resolution: 1 })]
+  // Blurred anyway, so drawn at half a pixel per screen point (a sixteenth of the work of a sharp screen).
+  halo.filters = [new BlurFilter({ strength: 5, quality: 2, resolution: 0.5 })]
+  // Its area is what the screen shows (kept up to date each frame, in the camera's coordinates): measuring the bounds
+  // of every light on the map each frame cost more than the blur. The shadow layer's filter uses the same area.
+  const viewArea = new Rectangle()
+  halo.filterArea = viewArea
+  shadows.layer.filterArea = viewArea
   halo.blendMode = 'add'
   // Each light goes into both layers: crisp in `glow`, blurred in `halo`.
   const addLight = (texture: Texture, anchorX: number, anchorY: number, x: number, y: number) => {
@@ -681,11 +689,15 @@ export async function createWorld(
   app.ticker.add(() => {
     above.position.copyFrom(camera.position)
     above.scale.copyFrom(camera.scale)
+    viewArea.x = -camera.x / camera.scale.x
+    viewArea.y = -camera.y / camera.scale.y
+    viewArea.width = app.screen.width / camera.scale.x
+    viewArea.height = app.screen.height / camera.scale.y
     const hour = gameTime(clock(), 0).hour
     glow.alpha = nightness(hour)
     glow.visible = glow.alpha > 0.02
     halo.alpha = glow.alpha * 0.85
-    halo.visible = glow.visible && !saver
+    halo.visible = glow.visible && video.glow
     shadows.update(hour, caravans.layer)
     // Shadows painted into the ground follow the sun an hour at a time: each new hour paints the chunks again.
     // So does the snow lying on the ground, roofs and trees (weather.ts → snowCover): a few times an hour in winter.
@@ -738,7 +750,7 @@ export async function createWorld(
       // Trees lifted round the armies keep the visibility of their chunk.
       for (const child of caravans.layer.children) {
         if (child.label === 'tree') continue
-        child.visible = child.label === 'occluder' || child.label === 'anim' || child.label === 'inn' || child.label === 'shade' || child.label === 'ship' || child.label.startsWith('army')
+        child.visible = child.label === 'occluder' || child.label === 'anim' || child.label === 'inn' || (child.label === 'shade' && video.shadows) || child.label === 'ship' || child.label.startsWith('army')
       }
       return
     }
@@ -1173,9 +1185,9 @@ export async function createWorld(
   }
 
   // Steps to a zoom level, keeping the ground under the given screen point fixed.
-  // The canvas's density follows the zoom and power saving (see canvasResolution).
+  // The canvas's density follows the zoom and the sharp drawing setting (see canvasResolution).
   const fitResolution = () => {
-    const resolution = canvasResolution(saver, camera.scale.x)
+    const resolution = canvasResolution(video.sharp, camera.scale.x)
     if (app.renderer.resolution === resolution) return
     app.renderer.resolution = resolution
     app.resize()
@@ -1559,7 +1571,7 @@ export async function createWorld(
     sprite.zIndex = z
     sprite.label = 'anim'
     layer.addChild(sprite)
-    moving.push({ sprite, anim, frames: anim.frames.map(textureOf), phase: hash(seed, 7, 911) * anim.frames.length, frame: 0 })
+    moving.push({ sprite, anim, frames: anim.frames.map((s) => textureOf(s)), phase: hash(seed, 7, 911) * anim.frames.length, frame: 0 })
   }
   app.ticker.add(() => {
     if (moving.length === 0) return
@@ -1619,7 +1631,14 @@ export async function createWorld(
         const sprite = new Sprite(textureOf(snowOf(look, paintedSnow)))
         sprite.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
         sprite.label = 'occluder'
-        shadows.setFootprint(sprite, s.size, part.z - heightAt(world, part.fx, part.fy), s, part !== main && !part.stands)
+        // A wall or a fence on a slope leans with the ground along its run (see structureParts): a vertical shear, the
+        // width kept.
+        if (part.shear) {
+          const angle = Math.atan(part.shear)
+          sprite.skew.set(0, angle)
+          sprite.scale.x = 1 / Math.cos(angle)
+        }
+        shadows.setFootprint(sprite, s.size, Math.max(0, part.z - heightAt(world, part.fx, part.fy)), s, part !== main && !part.stands)
         const sx = (part.fx - part.fy) * (TILE_WIDTH / 2)
         const sy = (part.fx + part.fy) * (TILE_HEIGHT / 2) - part.z
         sprite.position.set(sx, sy)
@@ -1738,7 +1757,7 @@ export async function createWorld(
           masked.push(shown)
         }
       }
-      windows.push(...addLight(textureOf(shown), shown.anchorX / shown.width, shown.anchorY / shown.height, sx, sy))
+      windows.push(...addLight(textureOf(shown, shown === lit ? 'main' : 'masked'), shown.anchorX / shown.width, shown.anchorY / shown.height, sx, sy))
     }
     ambient.setChimneys(chimneys)
     palaces = structures.flatMap((s) => {
@@ -1792,7 +1811,7 @@ export async function createWorld(
         // A hammerer faces either way.
         if (!c.carry) sprite.scale.x = roll(i + 20) < 0.5 ? -1 : 1
         caravans.layer.addChild(sprite)
-        builders.push({ sprite, frames: look.map(textureOf), back: plain.map(textureOf), ...c, z: site.lift, offset: roll(i + 40) * 10 })
+        builders.push({ sprite, frames: look.map((s) => textureOf(s)), back: plain.map((s) => textureOf(s)), ...c, z: site.lift, offset: roll(i + 40) * 10 })
       })
     }
   }
@@ -2146,25 +2165,25 @@ export async function createWorld(
   return {
     world,
     centerOn,
-    setPowerSave(on) {
-      if (on === saver) return
-      saver = on
-      pacer.setSaver(on)
-      ambient.setLite(on)
-      weather.setSaver(on)
+    setVideo(next) {
+      const was = video
+      video = next
+      pacer.setPace(next.pace)
+      ambient.setSky({ birds: next.birds, clouds: next.clouds })
+      weather.setMode(next.weather)
+      shadows.setEnabled(next.shadows)
       fitResolution()
+      detail = next.detail
+      if (next.detail !== was.detail) {
+        // Paint the chunks again, with or without their trees lifted out.
+        version++
+        for (const key of chunks.keys()) staleSince.set(key, version)
+        refresh()
+      }
       wake()
     },
     fps: () => pacer.fps(),
     setWeather: (key) => weather.setKey(key),
-    setDetail(on) {
-      if (on === detail) return
-      detail = on
-      // Paint the chunks again, with or without their trees lifted out.
-      version++
-      for (const key of chunks.keys()) staleSince.set(key, version)
-      refresh()
-    },
     follow(target, onStop) {
       followTarget = target
       followStop = target ? (onStop ?? null) : null

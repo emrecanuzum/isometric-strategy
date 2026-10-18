@@ -8,6 +8,9 @@ import './fonts'
 import './index.css'
 import Root from './Root.tsx'
 import { watchForUpdates } from './lib/version'
+import { installBarFrame } from './ui/barFrame'
+
+installBarFrame()
 import './lib/whyTooltip'
 
 // iOS Safari ignores `user-scalable=no` and zooms the page on pinch (double-tap zoom is

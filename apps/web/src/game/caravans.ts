@@ -71,7 +71,7 @@ export interface Caravans {
 export function createCaravans(world: World): Caravans {
   const layer = new Container()
   layer.sortableChildren = true
-  const frames = (pair: Sprite[]) => pair.map(textureOf)
+  const frames = (pair: Sprite[]) => pair.map((s) => textureOf(s))
 
   // Inns are painted into the ground, below this layer; a walker behind or inside one is hidden wherever the
   // inn's pixels cover its feet, so caravans pass through inns instead of over their roofs.

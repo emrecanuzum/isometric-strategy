@@ -20,7 +20,9 @@ export interface WeatherLayer {
   // A lightning flash over everything but the labels: on the stage just above the light.
   flash: Graphics
   setKey(key: number | undefined): void
-  setSaver(on: boolean): void
+  // Everything, a lighter rain (no cloud shadows or splashes, fewer drops, a fainter flash), or no weather drawn or
+  // heard at all (Ayarlar → Görüntü).
+  setMode(mode: 'full' | 'lite' | 'off'): void
   // The light of the hour as the rain sees it: darker and greyer while it rains.
   light(color: number): number
   update(time: number, camera: { x: number; y: number; scale: number }, width: number, height: number): void
@@ -222,6 +224,7 @@ export function createWeather(world: World): WeatherLayer {
   const forced = forcedWeather()
   let key: number | undefined = forced ? 1 : undefined
   let saver = false
+  let off = false
   let weather: Weather = CLEAR_WEATHER
   let weatherAt_ = 0
   let last = performance.now()
@@ -308,10 +311,17 @@ export function createWeather(world: World): WeatherLayer {
     setKey(k) {
       if (!forced) key = k
     },
-    setSaver(on) {
-      saver = on
+    setMode(mode) {
+      saver = mode !== 'full'
+      off = mode === 'off'
+      ground.visible = screen.visible = !off
+      if (off) {
+        flash.visible = false
+        setRainSound(0)
+      }
     },
     light(color) {
+      if (off) return color
       const g = weather.grey
       if (g <= 0) return color
       const l = luma(color)
@@ -322,6 +332,7 @@ export function createWeather(world: World): WeatherLayer {
       return (ch(16, 0) << 16) | (ch(8, 1) << 8) | ch(0, 2)
     },
     update(time, cam, width, height) {
+      if (off) return
       const now = performance.now()
       const dt = Math.min(0.12, (now - last) / 1000)
       last = now
@@ -332,7 +343,7 @@ export function createWeather(world: World): WeatherLayer {
       }
       const w = weather
       // Snow falls without a sound.
-      const sound = !saver && !document.hidden && !w.snow ? w.rain * (w.sleet ? 0.5 : 1) : 0
+      const sound = !document.hidden && !w.snow ? w.rain * (w.sleet ? 0.5 : 1) : 0
       if (now - soundAt > 500) {
         soundAt = now
         setRainSound(sound)
@@ -411,7 +422,7 @@ export function createWeather(world: World): WeatherLayer {
       const slot = Math.floor(time / (balance.weather.lightning.slotSeconds * 1000))
       if (bright > 0.3 && slot !== thunderSlot) {
         thunderSlot = slot
-        if (!saver && !document.hidden) thunder(0.6 + w.rain * 0.4)
+        if (!document.hidden) thunder(0.6 + w.rain * 0.4)
       }
     },
     destroy() {

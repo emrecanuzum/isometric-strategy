@@ -2,6 +2,7 @@ import {
   armyAt,
   balance,
   bandAt,
+  bandRaid,
   bandLoot,
   bandsOf,
   boatAt,
@@ -126,6 +127,23 @@ function BandSheet({ world, band, online, kingdom, now, onShow, onClose }: { wor
   const post = kingdom.buildings.find((b) => b.kind === 'tradePost' && b.doneAt <= now)
   const mine = post ? roadHeld(world, world.seed, [band], centre(post), now) : null
   const rough = `${Math.max(1, band.soldiers - 2)}–${band.soldiers + 2}`
+  // Out on a raid (CLAUDE.md §7.9): whose trade post it is going for, lurking by or coming back from.
+  const raid = up && !fighting ? bandRaid(world, band, now) : null
+  const mineRaid = raid?.target === online.me
+  const raidName = raid && !mineRaid ? (online.kingdoms.find((k) => k.id === raid.target)?.name ?? 'bir lord') : ''
+  const raidText = !raid
+    ? ''
+    : raid.leg === 'go'
+      ? mineRaid
+        ? 'Yoldan ayrıldı, senin ticaret noktana baskına iniyor!'
+        : `Yoldan ayrıldı, ${raidName} ticaret noktasına baskına iniyor.`
+      : raid.leg === 'lurk'
+        ? mineRaid
+          ? 'Ticaret noktanın yakınında pusuda; tüccarın yolu ondan sakınıyor.'
+          : `${raidName} ticaret noktasının yakınında pusuda bekliyor.`
+        : mineRaid
+          ? 'Ticaret noktandan çekiliyor, kendi yoluna dönüyor.'
+          : `${raidName} ticaret noktasından dönüyor.`
   const armies = online.armies.filter((a) => a.kingdom_id === online.me)
   const land = territoryRect(kingdom.site, territoryStage(kingdom, now))
   const inside = (p: Point) => p.x >= land.x && p.y >= land.y && p.x < land.x + land.size && p.y < land.y + land.size
@@ -157,9 +175,9 @@ function BandSheet({ world, band, online, kingdom, now, onShow, onClose }: { wor
               ? `Çete dağıtıldı; ${minutes((band.downUntil ?? now) - now)} dakika sonra yeniden toplanıp yolu tutar.`
               : fighting
                 ? 'Şu an bir orduyla çarpışıyor.'
-                : `Ticaret yolunun yaklaşık ${Math.round(band.length)} karoluk bir kesimini tutuyor, gelip geçen kervanları soyuyor. Ordulardan yavaş yürür (saniyede ${dec(B.bands.speedTilesPerSecond)} karo; ordular ${dec(balance.military.speedTilesPerSecond)}): yakalamak zor değil.`}
+                : `${raidText ? raidText + ' ' : ''}Ticaret yolunun yaklaşık ${Math.round(band.length)} karoluk bir kesimini tutuyor, gelip geçen kervanları soyuyor; ara sıra yoldan ayrılıp menzilindeki bir lordun ticaret noktasına baskına iner. Ordulardan yavaş yürür (saniyede ${dec(B.bands.speedTilesPerSecond)} karo, baskında ${dec(B.bands.raid.speedTilesPerSecond)}; ordular ${dec(balance.military.speedTilesPerSecond)}): yakalamak zor değil.`}
           </p>
-          {up && <Stat label="Senin ticaretine etkisi" value={mine ? pct(mine.share) : '—'} note={mine ? `ticaret noktanın çevresindeki yolun bu kadarını bu çete tutuyor` : 'ticaret noktan yok'} />}
+          {up && <Stat label="Senin ticaretine etkisi" value={mine ? pct(mine.share) : '—'} note={mine ? `ticaret noktanın çevresindeki yolu tutuşu ve yakınlığı (baskında artar)` : 'ticaret noktan yok'} />}
           <Stat label="Yendiğinde ganimet" value={lootText(bandLoot(band.soldiers))} note="savaş malzemesi, altın ve yapı malzemesi; çete bir süre sonra biraz daha kalabalık geri gelir" />
         </Section>
         <ClanTrail world={world} slot={band.clan} online={online} kingdom={kingdom} now={now} />

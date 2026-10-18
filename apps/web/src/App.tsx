@@ -103,13 +103,13 @@ import { BANDIT_COLOR, REBEL_COLOR, roughSize } from './game/armies'
 import { OutlawSheet, lobbyBands, lobbyBoats } from './ui/hud/outlaws'
 import type { OutlawPick } from './ui/hud/outlaws'
 import { SHIP_LENGTHS } from './game/fleetShips'
-import { bandAt, bandLeg, boatAt, caveAt, caveSpots, clansOf, outlawUp, roadHeld, seaHeld, trailOf } from '@game/shared'
+import { bandAt, bandChangeAt, bandLeg, boatAt, caveAt, caveSpots, clansOf, outlawUp, raidTargetsOf, roadHeld, seaHeld, setRaidTargets, trailOf } from '@game/shared'
 import { lobbyKeyOf } from '@game/shared'
 import type { Spot } from './ui/MinimapCorners'
 
 import { play } from './audio/sfx'
 import type { Cue } from './audio/sfx'
-import { DetailSettings, SoundSettings } from './ui/home/SettingsPanel'
+import { SettingsTabs } from './ui/home/SettingsPanel'
 import { usePowerSave } from './lib/power'
 import { WarTargets } from './ui/hud/WarTargets'
 import { EnvoyDialog, describe as describeNotice } from './ui/Envoy'
@@ -133,6 +133,7 @@ import { relationTermsIn } from './ui/hud/online'
 import { BattleView, TownSiegeView, showArmyPart, warNotes } from './ui/hud/war'
 import { RivalFleetSheet } from './ui/hud/navy'
 import { showPart } from './ui/hud/Subtabs'
+import { videoOf } from './net/settings'
 import type { Settings } from './net/settings'
 import { Chat } from './ui/Chat'
 import { findPath, tilesAlong } from './game/town'
@@ -587,14 +588,22 @@ function App({
   }, [seed])
 
   const muted = !settings.music
-  // Detail animations follow the setting; power saving (CLAUDE.md §12) turns them off with the rest.
+  // What the map draws: the picture settings, with what power saving turns down while on (CLAUDE.md §12).
   const saving = usePowerSave(settings.power)
-  useEffect(() => view?.setPowerSave(saving), [view, saving])
+  const video = videoOf(settings, saving)
+  const videoKey = JSON.stringify(video)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => view?.setVideo(video), [view, videoKey])
   // The weather over the map follows the lobby (see weather.ts).
   useEffect(() => view?.setWeather(lobbyKeyOf(lobby.id)), [view, lobby.id])
-  useEffect(() => view?.setDetail(settings.detail && !saving), [view, settings.detail, saving])
   // The sound settings, opened from the corner button or the kingdom tab.
   const [settingsOpen, setSettingsOpen] = useState(false)
+  useEffect(() => {
+    if (!settingsOpen) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setSettingsOpen(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [settingsOpen])
   // The phone menu (settings, main menu); a tap anywhere else closes it.
   const [menuOpen, setMenuOpen] = useState(false)
   const mapMenu = useRef<HTMLDivElement>(null)
@@ -1921,7 +1930,16 @@ function App({
   // The bands of bandits on the trade roads (CLAUDE.md §7.9): worked out from the seed and the clock like the server
   // does, drawn as ragged squads under a torn black banner; redrawn as each turns round at the end of its stretch.
   const [bandStep, setBandStep] = useState(0)
-  const bands = useMemo(() => (view ? lobbyBands(view.world, layer.outlaws) : []), [view, layer.outlaws])
+  // The trade posts the bands may raid, the same as the server knows them (every lord's, sorted by id).
+  const raidKey = useMemo(() => {
+    const t = serverNow()
+    const lords = [...rivals, ...(kingdom ? [{ id: mine.id, buildings: kingdom.buildings }] : [])]
+    const targets = raidTargetsOf(lords, t)
+    if (view) setRaidTargets(view.world.seed, targets)
+    return JSON.stringify(targets)
+  }, [rivals, kingdom?.buildings, mine.id, view])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const bands = useMemo(() => (view ? lobbyBands(view.world, layer.outlaws) : []), [view, layer.outlaws, raidKey])
   const banditSquads = useMemo((): MapArmy[] => {
     const t = serverNow()
     const out: MapArmy[] = []
@@ -1952,6 +1970,8 @@ function App({
     const ends = banditSquads.filter((a) => !a.battle && a.arriveAt > t).map((a) => a.arriveAt)
     // Bands beaten come back on their own.
     for (const b of bands) if (b.downUntil !== null && b.downUntil > t) ends.push(b.downUntil)
+    // And go off on a raid, reach a trade post, turn back (CLAUDE.md §7.9).
+    for (const b of bands) if (outlawUp(b, t)) ends.push(bandChangeAt(b, t))
     const next = ends.length ? Math.min(...ends) : t + 30_000
     const id = window.setTimeout(() => setBandStep((n) => n + 1), Math.max(500, Math.min(next - t + 100, 60_000)))
     return () => clearTimeout(id)
@@ -2502,16 +2522,14 @@ function App({
               <Icon name="gear" size={32} />
               <div>
                 <h2 id="settings-title">Ayarlar</h2>
-                <small>Ses, müzik ve görüntü</small>
+                <small>Ses, görüntü ve performans</small>
               </div>
               <button className="btn icon-only" onClick={() => setSettingsOpen(false)} aria-label="Kapat">
                 <Icon name="close" size={16} />
               </button>
             </header>
             <div className="form">
-              <SoundSettings settings={settings} onChange={onSettings} />
-              <DetailSettings settings={settings} onChange={onSettings} />
-              {kingdom && <AdvisorSettings storeKey={`advisor:${lobby.id}:${mine.id}`} />}
+              <SettingsTabs settings={settings} onChange={onSettings} envoy={kingdom ? <AdvisorSettings storeKey={`advisor:${lobby.id}:${mine.id}`} /> : undefined} />
             </div>
           </section>
         </div>
