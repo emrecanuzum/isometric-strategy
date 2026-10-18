@@ -58,7 +58,8 @@ export function innPulls(inn: Point, lords: InnLord[], towns: InnTown[]): InnPul
   const c = innCenter(inn)
   const pull = (p: Point) => Math.max(0, 1 - Math.hypot(p.x - c.x, p.y - c.y) / reachTiles)
   const rows = lords.map((l) => {
-    const held = towns.filter((t) => t.owner === l.id)
+    // Only the towns near enough to pull count (and are counted).
+    const held = towns.filter((t) => t.owner === l.id && pull(t.at) > 0)
     const value = pull(l.palace) + held.reduce((sum, t) => sum + town * pull(t.at), 0)
     return { id: l.id, value, towns: held.length, distance: Math.round(Math.hypot(l.palace.x - c.x, l.palace.y - c.y)) }
   })
