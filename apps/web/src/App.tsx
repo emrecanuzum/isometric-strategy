@@ -80,6 +80,7 @@ import { cityInfo, setCrownClock } from './game/cities'
 import { setHintWorld } from './game/caveHints'
 import { BetrayalDialog, crownNews, liveOffer } from './ui/hud/crownHouse'
 import { townStructures, townTrails } from './game/towns'
+import { havenStructures, inHaven } from './game/havens'
 import { pretenderCampStructures } from './game/pretenderCamp'
 import { Minimap } from './game/Minimap'
 import type { MinimapFlag, MinimapPatrol, MinimapTown } from './game/Minimap'
@@ -103,7 +104,7 @@ import { BANDIT_COLOR, REBEL_COLOR, roughSize } from './game/armies'
 import { OutlawSheet, lobbyBands, lobbyBoats } from './ui/hud/outlaws'
 import type { OutlawPick } from './ui/hud/outlaws'
 import { SHIP_LENGTHS } from './game/fleetShips'
-import { bandAt, bandChangeAt, bandLeg, boatAt, caveAt, caveSpots, clansOf, outlawUp, raidTargetsOf, roadHeld, seaHeld, setRaidTargets, trailOf } from '@game/shared'
+import { bandAt, bandChangeAt, bandLeg, boatAt, havenGuards, havenSpots, havensOf, caveAt, caveSpots, clansOf, outlawUp, raidTargetsOf, roadHeld, seaHeld, setRaidTargets, trailOf } from '@game/shared'
 import { lobbyKeyOf } from '@game/shared'
 import type { Spot } from './ui/MinimapCorners'
 
@@ -173,6 +174,8 @@ const BAND_ID = 800_000_000
 // Map ids of the bandit clans' caves a lord has found (-(CAVE_ID + slot); CLAUDE.md §7.9.1), tested before the bands.
 const CAVE_ID = 900_000_000
 const OUTLAW_LORD = -1
+// The corsairs at anchor before a haven: their fleet is this plus the haven's index.
+const HAVEN_FLEET = 1000
 
 const TERRAIN_NAMES: Record<number, string> = {
   [Terrain.Grass]: 'Çayır',
@@ -303,7 +306,7 @@ const refusal = (e: unknown) => {
 }
 
 // News that goes against the player: kept under the journal's "Önemli" tab.
-const HURTFUL = new Set(['king_fell', 'siege_people', 'fleet_turned', 'town_revolt', 'town_lost_revolt', 'patrol_tribute', 'patrol_ignored', 'patrol_taken', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed', 'cargo_lost', 'outlaw_road', 'pirate_waters', 'outlaw_escaped', 'pirate_escaped'])
+const HURTFUL = new Set(['king_fell', 'siege_people', 'fleet_turned', 'town_revolt', 'town_lost_revolt', 'patrol_tribute', 'patrol_ignored', 'patrol_taken', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed', 'cargo_lost', 'outlaw_road', 'pirate_waters', 'outlaw_escaped', 'pirate_escaped', 'haven_turned'])
 // War news keeps longer as a popup (CLAUDE.md §9.8: the popups' shelf life).
 const WAR_NEWS = new Set(['battle_start', 'battle_end', 'war_declared', 'peace_enforced', 'king_fell', 'king_command', 'siege_people', 'town_siege', 'town_taken', 'town_held', 'town_siege_lifted', 'naval_battle'])
 function noticeHurts(n: Notice, me: string | undefined) {
@@ -316,7 +319,7 @@ function noticeHurts(n: Notice, me: string | undefined) {
   // Sieges of towns, laid or suffered, lifted, won or beaten off: war is always important.
   // Sea battles are war too.
   if (n.kind === 'naval_battle') return true
-  if (n.kind === 'pirate_battle') return !(p as { won?: boolean }).won
+  if (n.kind === 'pirate_battle' || n.kind === 'haven_battle') return !(p as { won?: boolean }).won
   if (n.kind === 'town_siege' || n.kind === 'town_taken' || n.kind === 'town_held' || n.kind === 'town_siege_lifted') return true
   return false
 }
@@ -1022,6 +1025,8 @@ function App({
       ...buildings.map((b) => structure(b, shown?.color, null, b.id, !!shown?.trade.damaged)),
       ...rivals.flatMap((r) => r.buildings.map((b) => structure(b, r.color, r, r.id * 1000 + b.id, !!r.trade_damaged))),
       ...townsRef.current.flatMap((t) => townStructures(t, townWalled(view.world.seed, t.idx))),
+      // The pirates' havens on their shores (CLAUDE.md §8.5).
+      ...havenSpots(view.world, view.world.seed).flatMap((h) => havenStructures(view.world, h)),
       // Pretenders' camps near the realms they rose against (CLAUDE.md §9.1.1).
       ...camps.flatMap((c) => pretenderCampStructures(c.at, campTier(campSoldiers(c, time)))),
     ]
@@ -1384,6 +1389,22 @@ function App({
       setFleetFocus(ship?.fleet !== undefined ? { lord: ship.lord, fleet: ship.fleet } : null)
       setFleetSheet(null)
       setOutlawOpen(null)
+    }
+    // A pirate haven (its corsairs at anchor, or its huts): its sheet, with "Ablukaya al" for the player's fleets.
+    const havenHere = view && aiming === null && !tool && !placingKind
+      ? ship && ship.lord === OUTLAW_LORD && ship.fleet !== undefined && ship.fleet >= HAVEN_FLEET
+        ? ship.fleet - HAVEN_FLEET
+        : havenSpots(view.world, view.world.seed).find((h) => inHaven(h, tile))?.idx
+      : undefined
+    if (havenHere !== undefined) {
+      setInnOpen(null)
+      setCityOpen(null)
+      setTownOpen(null)
+      setSelected(null)
+      setPanel(null)
+      play('click')
+      setOutlawOpen({ kind: 'haven', idx: havenHere })
+      return
     }
     // A pirate boat (lord -1): its sheet, with "Takip et" for the player's fleets (CLAUDE.md §8.5).
     if (ship && ship.lord === OUTLAW_LORD && ship.fleet !== undefined && aiming === null && !tool && !placingKind) {
@@ -2109,7 +2130,23 @@ function App({
           ...(i === 0 && { tag: `${b.name} · korsan` }),
         }))
       })
-    view.setFleets([...fleetShips(view.world, lords), ...pirates])
+    // The corsairs riding at anchor before each haven, as many as its people man (fleet HAVEN_FLEET + its index).
+    const moored = havensOf(view.world, view.world.seed, layer.outlaws).flatMap((h) =>
+      Array.from({ length: Math.min(3, havenGuards(h, t).corsair ?? 1) }, (_, i) => ({
+        key: `haven:${h.idx}:${i}`,
+        at: { x: h.mooring.x + (i % 2) * 2.5 - 1, y: h.mooring.y + Math.floor(i / 2) * 2.5 },
+        along: 'x' as const,
+        reverse: i % 2 === 1,
+        seed: 900 + h.idx * 5 + i,
+        length: SHIP_LENGTHS.pirate,
+        kind: 'pirate' as const,
+        lord: OUTLAW_LORD,
+        fleet: HAVEN_FLEET + h.idx,
+        color: 0x2a2226,
+        ...(i === 0 && { tag: h.held ? `${h.name} · ${h.held.name} abluka ediyor` : h.name }),
+      })),
+    )
+    view.setFleets([...fleetShips(view.world, lords), ...pirates, ...moored])
   }, [view, fleetKey, layer.outlaws])
 
   // The envoy's dialogs, one at a time, once their moment has come.
@@ -3010,7 +3047,7 @@ function App({
       {view && kingdom && (
         <Advisor
           storeKey={`advisor:${lobby.id}:${mine.id}`}
-          ctx={{ kingdom, now, online, crowns: view.world.cities.length }}
+          ctx={{ kingdom, now, online, crowns: view.world.cities.length, world: view.world }}
           blocked={advisorBlocked}
           aside={holding && !needsPalace}
           busy={(holding && !needsPalace) || aiming !== null || sailing !== null || selected !== null || panel !== null || plan.length > 0}

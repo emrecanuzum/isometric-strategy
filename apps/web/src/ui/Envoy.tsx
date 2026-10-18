@@ -580,7 +580,12 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       return {
         icon: 'warn',
         title: 'Yağmacılar yolu tuttu!',
-        text: `Ticaret noktanın çevresindeki ticaret yolunun %${Math.round(Number(p.share) * 100)}'i yağmacıların elinde (${p.bands} çete). Tüccarının altınının %${Math.round(Number(p.cut) * 100)}'ini kesiyorlar ve halk tedirgin. Haritada çeteye tıkla, bir ordu seç ve "Takip et".`,
+        text: `${vary(n, [
+          `Ticaret noktanın çevresindeki ticaret yolunun %${Math.round(Number(p.share) * 100)}'i yağmacıların elinde (${p.bands} çete).`,
+          `Gözcüler haber verdi: ${p.bands} çete ticaret noktanın yollarına indi; yolun %${Math.round(Number(p.share) * 100)}'i onların.`,
+          `Tüccarın soluk soluğa döndü: yağmacılar (${p.bands} çete) yolun %${Math.round(Number(p.share) * 100)}'ini tutuyor.`,
+          `Hanlarda tek konu yağmacılar: ${p.bands} çete ticaret noktanın çevresindeki yolun %${Math.round(Number(p.share) * 100)}'ini kesmiş.`,
+        ])} Tüccarının altınının %${Math.round(Number(p.cut) * 100)}'ini kesiyorlar ve halk tedirgin. Haritada çeteye tıkla, bir ordu seç ve "Takip et".`,
       }
     case 'outlaw_road_clear':
       return {
@@ -597,7 +602,12 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       return {
         icon: 'ship',
         title: 'Korsanlar sularında!',
-        text: `İskelenin yakınında ${p.boats} korsan teknesi dolaşıyor (korsanların etkisi %${Math.round(Number(p.share) * 100)}): deniz ticaretine saldırı olasılığı arttı, balık azaldı, halk tedirgin. Haritada kara yelkenli tekneye tıkla, savaş gemili bir filo seç ve "Takip et".`,
+        text: `${vary(n, [
+          `İskelenin yakınında ${p.boats} korsan teknesi dolaşıyor (korsanların etkisi %${Math.round(Number(p.share) * 100)}).`,
+          `Kara yelkenler göründü: ${p.boats} korsan teknesi iskelenin önünde (etkileri %${Math.round(Number(p.share) * 100)}).`,
+          `Balıkçılar ağlarını topladı: ${p.boats} korsan teknesi sularında geziyor (etkileri %${Math.round(Number(p.share) * 100)}).`,
+          `İskele bekçisi çan çaldı: korsanlar geldi, ${p.boats} tekne (etkileri %${Math.round(Number(p.share) * 100)}).`,
+        ])} Deniz ticaretine saldırı olasılığı arttı, balık azaldı, halk tedirgin. Haritada kara yelkenli tekneye tıkla, savaş gemili bir filo seç ve "Takip et"; ya da korsan limanını ablukaya al, hepsi zayıflar.`,
       }
     case 'pirate_waters_clear':
       return {
@@ -617,6 +627,42 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         ? { icon: 'chest', title: `${p.name} batırıldı!`, text: `Filon korsanları yakaladı ve yendi (${might}; zarlar ${(p.rolls as number[])?.join('–')}).${lostShips ? ` ${lostShips} gemi kaybettin.` : ' Kayıp yok.'}${p.loot ? ` Ödül ve ganimet: ${goodsText(p.loot)}.` : ''}` }
         : { icon: 'warn', title: `${p.name} korsanları kazandı`, text: `Filon korsanlara yenildi (${might}; zarlar ${(p.rolls as number[])?.join('–')})${lostShips ? ` ve ${lostShips} gemi kaybetti` : ''}. Korsanlar dolaşmaya devam ediyor; daha güçlü bir filoyla (kadırgalar korsanları yener) yeniden dene.` }
     }
+    case 'haven_battle': {
+      const lostShips = Object.values((p.loss ?? {}) as Record<string, number>).reduce((a, b) => a + b, 0)
+      const might = `filonun gücü ${String(Math.round(Number(p.fleetMight) * 10) / 10).replace('.', ',')}, limanın ${String(Math.round(Number(p.might) * 10) / 10).replace('.', ',')}`
+      return p.won
+        ? {
+            icon: 'chest',
+            title: `${p.name} abluka altında!`,
+            text: `${vary(n, [
+              `Filon limanı koruyan ${p.guards} çektiriyi yendi`,
+              `Korsanların muhafızları (${p.guards} çektiri) filonun önünde dağıldı`,
+              `Limanın ağzındaki ${p.guards} çektiri batırıldı ya da kaçtı`,
+              `Filon limanın önüne demir attı; ${p.guards} çektiri karşı koyamadı`,
+            ])} (${might}; zarlar ${(p.rolls as number[])?.join('–')}).${lostShips ? ` ${lostShips} gemi kaybettin.` : ' Kayıp yok.'}${p.loot ? ` Ganimet: ${goodsText(p.loot)}.` : ''} Filo limanın önünde kaldıkça korsanların nüfusu (${p.pop}) saatte ${balance.outlaws.havens.pop.blockadePerHour} kişi azalır ve bütün korsanlar zayıflar. Geri çağırınca liman yeniden dolmaya başlar.`,
+          }
+        : { icon: 'warn', title: `${p.name} dayandı`, text: `Filon limanı koruyan ${p.guards} çektiriye yenildi (${might}; zarlar ${(p.rolls as number[])?.join('–')})${lostShips ? ` ve ${lostShips} gemi kaybetti` : ''}; kalanlar eve dönüyor. Daha güçlü bir filoyla (kadırgalar çektirileri yener) yeniden dene.` }
+    }
+    case 'haven_turned':
+      return {
+        icon: 'anchor',
+        title: `${p.name} zaten kuşatılmış`,
+        text: vary(n, [
+          `Filon vardığında limanın önünde ${p.by} gemilerini buldu; bir limanı aynı anda tek filo abluka eder. Filon eve dönüyor.`,
+          `${p.by} senden önce davranmış: liman onun ablukasında. Filon geri dönüyor.`,
+          `Limanın ağzı ${p.by} kadırgalarıyla dolu; filonun demirleyecek yeri yok. Eve dönüyor.`,
+        ]),
+      }
+    case 'haven_empty':
+      return {
+        icon: 'chest',
+        title: `${p.name} boşaldı`,
+        text: vary(n, [
+          'Ablukan işini yaptı: korsan limanında kimse kalmadı. Korsanlar bu limandan güç alamıyor; filon geri çağırana dek orada bekler.',
+          'Limanın son korsanları da gece kaçtı; iskeleler bomboş. Filon döndüğünde liman yavaş yavaş yeniden dolacak.',
+          'Korsan limanı ıssız: abluka korsanları dağıttı. Ne kadar uzun beklersen, liman o kadar geç dolar.',
+        ]),
+      }
     case 'pirate_gone':
       return {
         icon: 'anchor',

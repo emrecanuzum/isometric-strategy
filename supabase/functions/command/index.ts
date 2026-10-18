@@ -40,7 +40,7 @@ import { ensureTowns, townOf, townsOf } from '../_shared/towns.ts'
 import type { TownRow } from '../_shared/towns.ts'
 import { refuseDemand } from '../_shared/patrols.ts'
 import type { VisitRow } from '../_shared/patrols.ts'
-import { outlawsIn } from '../_shared/outlaws.ts'
+import { outlawsIn, setHavenHold } from '../_shared/outlaws.ts'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -554,12 +554,29 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
         }
         case 'mission': {
           const o = cmd.order ?? {}
-          const kinds = ['port', 'fish', 'hunt', 'sortie', 'trade', 'blockade', 'raid']
+          const kinds = ['port', 'fish', 'hunt', 'sortie', 'trade', 'blockade', 'raid', 'haven']
           if (!kinds.includes(o.kind)) refuse('rejected')
           const order =
-            o.kind === 'trade' ? { kind: 'trade', good: o.good, city: o.city } : o.kind === 'blockade' || o.kind === 'raid' ? { kind: o.kind, target: o.target } : { kind: o.kind }
+            o.kind === 'trade'
+              ? { kind: 'trade', good: o.good, city: o.city }
+              : o.kind === 'blockade' || o.kind === 'raid'
+                ? { kind: o.kind, target: o.target }
+                : o.kind === 'haven'
+                  ? { kind: 'haven', haven: Number(o.haven) }
+                  : { kind: o.kind }
           // Against another lord: its dock, whether it is already blockaded, and whether we are at war with it.
           let ctx: Record<string, unknown> = { cities: lobbyWorld.cities }
+          // Against a pirate haven (CLAUDE.md §8.5): the fleet sails to the open water before it.
+          let base = k
+          if (order.kind === 'haven') {
+            const { havens } = await outlawsIn(lobby, lobbyWorld)
+            const haven = havens.find((h: { idx: number }) => h.idx === order.haven)
+            if (!haven) refuse('target')
+            const sailed = game.atHome(game.fleetOf(k, id) ?? { mission: { kind: 'return' } }) ? game.sailFleet(lobbyWorld.world, game.dropChase(k, id), id, haven.mooring, now) : k
+            const sail = sailed !== k ? game.fleetOf(sailed, id)?.sail : null
+            if (sail) base = sailed
+            ctx = { ...ctx, haven: { idx: haven.idx, name: haven.name, heldBy: haven.held?.kingdom ?? null, arriveAt: sail ? sail.arriveAt : null } }
+          }
           if (order.kind === 'blockade' || order.kind === 'raid') {
             const { data: t } = await admin.from('kingdoms').select('id, name, state').eq('lobby_id', lobby).eq('id', o.target).neq('id', row.id).maybeSingle()
             if (!t?.state) refuse('target')
@@ -570,9 +587,9 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
               target: { id: t!.id, name: t!.name ?? '?', dockPlot: t!.state.dockPlot, hasDock: t!.state.buildings.some((b: { kind: string; doneAt: number }) => b.kind === 'dock' && b.doneAt <= now), blockadedBy: t!.state.blockade?.by ?? null },
             }
           }
-          const error = game.missionError(k, id, order, now, ctx)
+          const error = game.missionError(base, id, order, now, ctx)
           if (error) refuse(error)
-          next = changed(game.setMission(k, id, order, now, ctx))
+          next = changed(game.setMission(base, id, order, now, ctx))
           break
         }
         case 'recall': {
@@ -588,6 +605,13 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
               await mutateKingdom(t.id, now, (s) => (s.blockade?.by === row.id ? { ...s, blockade: null } : null))
               await notify(lobby, [t.id], 'blockade_lifted', { by: row.name, why: 'recalled' }, now)
             }
+          } else if (m.kind === 'haven') {
+            // As long back as the way there; a blockade called off leaves the haven at once.
+            const sail = game.fleetOf(k, id).sail
+            outMs = sail ? sail.arriveAt - sail.departAt : undefined
+            const { havens } = await outlawsIn(lobby, lobbyWorld)
+            const haven = havens.find((h: { idx: number }) => h.idx === m.haven)
+            if (haven?.held?.kingdom === row.id && haven.held.fleet === id) await setHavenHold(lobby, haven, null, now)
           } else outMs = game.balance.navy.sortieSeconds * 1000
           next = changed(game.recallFleet(k, id, now, outMs))
           break

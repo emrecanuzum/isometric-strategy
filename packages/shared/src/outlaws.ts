@@ -27,8 +27,8 @@ type Ground = Pick<World, 'size' | 'terrain' | 'feature'>
 
 // What the lobby keeps of a band or a boat (absent: as it was made, at large).
 export interface OutlawRow extends ClanRowFields {
-  // 'clan': a bandit clan in its cave (idx: its slot; caves.ts).
-  kind: 'band' | 'boat' | 'clan'
+  // 'clan': a bandit clan in its cave (idx: its slot; caves.ts). 'haven': a pirate haven (pop, pop_at, held).
+  kind: 'band' | 'boat' | 'clan' | 'haven'
   idx: number
   // Times beaten (a band comes back a little stronger each time).
   gen?: number | null
@@ -40,6 +40,9 @@ export interface OutlawRow extends ClanRowFields {
   shift?: number | null
   // Soldiers lost in fights it won since it last came back.
   losses?: number | null
+  pop?: number | null
+  pop_at?: number | null
+  held?: HavenHold | null
 }
 
 // ---- Names --------------------------------------------------------------------------------------------------------
@@ -565,10 +568,155 @@ export function boatLoot(b: Pick<Boat, 'ships'>) {
 }
 
 // The pirates' hold on the water by `dock` (0–1): each boat whose loop comes within reach of it adds its share.
-export function seaHeld(boats: Boat[], dock: Point, at: number) {
+// `strength`: the pirates' havens' share of their full strength (havenStrength): emptied havens send fewer, weaker crews.
+export function seaHeld(boats: Boat[], dock: Point, at: number, strength = 1) {
   const reach = P().reachTiles
   const near = boats.filter((b) => outlawUp(b, at) && b.loop.some((p) => Math.hypot(p.x - dock.x, p.y - dock.y) <= reach))
-  return { share: Math.min(1, near.length * balance.outlaws.sea.perBoat), boats: near.length }
+  return { share: Math.min(1, near.length * balance.outlaws.sea.perBoat * strength), boats: near.length }
+}
+
+// ---- The pirates' havens --------------------------------------------------------------------------------------------
+
+// A haven (CLAUDE.md §8.5): a pirate harbour on the shore of a great lake, drawn from the seed. Its people grow back
+// over time; a lord's fleet blockading it makes them dwindle. How many live in the havens sets how hard the pirates
+// press on every lord's water.
+const H = () => balance.outlaws.havens
+
+export interface HavenSpot {
+  idx: number
+  name: string
+  // The shore tile it stands on, and the open water before it where a blockading fleet lies at anchor.
+  at: Point
+  mooring: Point
+}
+
+// What the lobby keeps of a haven (lobby_outlaws, kind 'haven').
+export interface HavenRow {
+  kind: 'haven'
+  idx: number
+  pop?: number | null
+  pop_at?: number | null
+  held?: HavenHold | null
+}
+
+// A lord's fleet blockading a haven.
+export interface HavenHold {
+  kingdom: number
+  fleet: number
+  name: string
+  color?: string
+  since: number
+  // Told to its blockader that the haven stands empty.
+  empty?: boolean
+}
+
+const HAVEN_FIRST = ['Kara', 'Kanlı', 'Sisli', 'Yılan', 'Kurt', 'Martı', 'Kuzgun', 'Kızıl', 'Paslı', 'Yıkık', 'Çürük', 'Dumanlı']
+const HAVEN_SECOND = ['Koy', 'Kaya', 'Burun', 'Çatak', 'Kovuk', 'Kıyı', 'Ada', 'Sığ']
+// The second haven never takes the first one's first word.
+export const havenName = (seed: number, idx: number) => {
+  const first = (i: number) => Math.floor(hash(i, 31, seed + 5401) * HAVEN_FIRST.length) % HAVEN_FIRST.length
+  const a = idx > 0 && first(idx) === first(idx - 1) ? (first(idx) + 1) % HAVEN_FIRST.length : first(idx)
+  return `${HAVEN_FIRST[a]} ${pick(HAVEN_SECOND, hash(idx, 32, seed + 5403))} korsan limanı`
+}
+
+const havenCache = new WeakMap<object, Map<number, HavenSpot[]>>()
+
+// The lobby's havens: on dry shore tiles by open water of the greatest lakes, away from the capitals, the map's edge
+// and one another.
+export function havenSpots(world: Ground, seed: number): HavenSpot[] {
+  let bySeed = havenCache.get(world)
+  if (!bySeed) havenCache.set(world, (bySeed = new Map()))
+  const known = bySeed.get(seed)
+  if (known) return known
+  const spec = H()
+  const { size } = world
+  const field = shoreClearance(world as World)
+  const { label, sizes } = waterBodies(world)
+  const cities = cityCentres(world)
+  const candidates: { at: Point; mooring: Point }[] = []
+  for (let y = spec.edgeClear; y < size - spec.edgeClear; y += 3) {
+    for (let x = spec.edgeClear; x < size - spec.edgeClear; x += 3) {
+      const i = y * size + x
+      if (!dryAt(world, i) || world.feature[i] !== Feature.None) continue
+      // Open water (two tiles from any shore) within four tiles, of a great lake.
+      let water: Point | null = null
+      for (let r = 2; r <= 4 && !water; r++) {
+        for (const [dx, dy] of [[r, 0], [-r, 0], [0, r], [0, -r]]) {
+          const wx = x + dx
+          const wy = y + dy
+          if (wx < 0 || wy < 0 || wx >= size || wy >= size) continue
+          const j = wy * size + wx
+          if (field[j] >= 2 && label[j] >= 0 && sizes[label[j]] >= spec.minWater) {
+            water = { x: wx + 0.5, y: wy + 0.5 }
+            break
+          }
+        }
+      }
+      if (!water) continue
+      if (cities.some((c) => Math.hypot(c.x - x, c.y - y) < spec.cityClear)) continue
+      // Its huts need a little dry ground round the tile.
+      let dry = 0
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (dryAt(world, (y + dy) * size + x + dx) && world.feature[(y + dy) * size + x + dx] === Feature.None) dry++
+      if (dry < 6) continue
+      candidates.push({ at: { x: x + 0.5, y: y + 0.5 }, mooring: water })
+    }
+  }
+  const spots: HavenSpot[] = []
+  for (let attempt = 0; attempt < 400 && spots.length < spec.count && candidates.length > 0; attempt++) {
+    const c = candidates[Math.floor(hash(attempt, 41, seed + 5411) * candidates.length) % candidates.length]
+    if (spots.some((p) => Math.hypot(p.at.x - c.at.x, p.at.y - c.at.y) < spec.minSpacing)) continue
+    const idx = spots.length
+    spots.push({ idx, name: havenName(seed, idx), at: c.at, mooring: c.mooring })
+  }
+  bySeed.set(seed, spots)
+  return spots
+}
+
+export interface Haven extends HavenSpot {
+  // Its people at `popAt` (ms), from which the people now follow (havenPop), and the blockade on it.
+  pop: number
+  popAt: number
+  held: HavenHold | null
+}
+
+export function havensOf(world: Ground, seed: number, rows?: { kind: string; idx: number; pop?: number | null; pop_at?: number | null; held?: HavenHold | null }[] | null): Haven[] {
+  return havenSpots(world, seed).map((s) => {
+    const row = rows?.find((r) => r.kind === 'haven' && r.idx === s.idx)
+    return { ...s, pop: row?.pop ?? H().pop.start, popAt: Number(row?.pop_at ?? 0), held: row?.held ?? null }
+  })
+}
+
+// The haven's people at `at`: growing back towards its fill while free, dwindling while blockaded.
+export function havenPop(h: Pick<Haven, 'pop' | 'popAt' | 'held'>, at: number) {
+  const { max, regrowPerHour, blockadePerHour } = H().pop
+  const hours = Math.max(0, at - h.popAt) / 3_600_000
+  const v = h.held ? h.pop - hours * blockadePerHour : h.pop + hours * regrowPerHour
+  return Math.max(0, Math.min(max, v))
+}
+
+// The pirates' strength from their havens (0–1): at full people 1, emptied the floor (pirates roam on regardless).
+export function havenStrength(havens: Haven[], at: number) {
+  if (havens.length === 0) return 1
+  const { floor } = H().effect
+  const share = havens.reduce((sum, h) => sum + havenPop(h, at), 0) / (havens.length * H().pop.max)
+  return floor + (1 - floor) * share
+}
+
+// The ships guarding a haven: corsairs, by its people.
+export function havenGuards(h: Pick<Haven, 'pop' | 'popAt' | 'held'>, at: number): Ships {
+  const g = H().guards
+  return { corsair: Math.max(g.minShips, Math.ceil(havenPop(h, at) / g.popPerShip)) } as Ships
+}
+
+// What breaking a haven's guard brings.
+export function havenLoot(ships: number) {
+  const l = H().loot
+  return { gold: l.bounty + l.perShip * ships, arms: l.arms * ships, materials: l.materials * ships }
+}
+
+// Where a haven stands on a tile (the shore tile and the ring round it), for the pointer.
+export function havenAt(havens: HavenSpot[], tile: Point) {
+  return havens.find((h) => Math.abs(Math.floor(h.at.x) - Math.floor(tile.x)) <= 1 && Math.abs(Math.floor(h.at.y) - Math.floor(tile.y)) <= 1)
 }
 
 // ---- A lord's lot -------------------------------------------------------------------------------------------------
@@ -577,11 +725,11 @@ const centreOf = (r: { x: number; y: number; size: number }): Point => ({ x: r.x
 
 // What the bandits and pirates hold of a lord's trade: the road round its trade post, the water by its dock (only
 // with a dock built). The server writes this into the lord's state (see outlawPressure.ts).
-export function pressureOf(world: Ground, seed: number, bands: Band[], boats: Boat[], k: Pick<Kingdom, 'buildings' | 'dockPlot'>, at: number): OutlawPressure {
+export function pressureOf(world: Ground, seed: number, bands: Band[], boats: Boat[], k: Pick<Kingdom, 'buildings' | 'dockPlot'>, at: number, strength = 1): OutlawPressure {
   const post = k.buildings.find((b) => b.kind === 'tradePost' && b.doneAt <= at)
   const dock = k.buildings.find((b) => b.kind === 'dock' && b.doneAt <= at)
   const road = post ? roadHeld(world, seed, bands, centreOf(post), at) : { share: 0, bands: 0 }
-  const sea = dock ? seaHeld(boats, centreOf(dock), at) : { share: 0, boats: 0 }
+  const sea = dock ? seaHeld(boats, centreOf(dock), at, strength) : { share: 0, boats: 0 }
   const round = (v: number) => Math.round(v * 100) / 100
   return { road: round(road.share), sea: round(sea.share), bands: road.bands, boats: sea.boats, at }
 }

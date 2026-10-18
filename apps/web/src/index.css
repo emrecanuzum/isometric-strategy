@@ -294,7 +294,8 @@ small {
   gap: calc(var(--px) * 6);
   max-width: calc(100vw - var(--gap) * 2 - 56px);
   pointer-events: none;
-  z-index: 4;
+  /* Above the chat and envoy buttons and the side stack: the top bar's cards drop over them. */
+  z-index: 7;
 }
 
 .top > * {
@@ -725,7 +726,8 @@ small {
   width: min(400px, calc(100vw - var(--gap) * 2));
   display: flex;
   flex-direction: column;
-  z-index: 5;
+  /* An open sheet covers the chat and envoy buttons (z 5) and the timers beside them. */
+  z-index: 6;
 }
 
 .sheet-head {
@@ -6708,6 +6710,15 @@ input:not([type='range']):focus-visible {
     var(--outline),
     var(--stack),
     0 calc(var(--px) * 3) 0 0 rgb(0 0 0 / 35%);
+}
+
+/* On a phone the stack is not drawn (it took room from the dialog): the counter ("1 / 4") says how many wait. */
+@media (max-width: 720px) {
+  .dialog-stack[data-behind] {
+    --stack-shift: 0px;
+    --stack-room: 0px;
+    --stack: 0 0 0 0 transparent;
+  }
 }
 
 /* The envoy's panel kept plain (Advisor.tsx → Panel): the book for "Bana oyunu anlat" by the close button, side

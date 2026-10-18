@@ -1790,9 +1790,16 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   sunucuda `quest` komutu): her taç her saat her lorddan bir iş ister (lobi
   tohumundan, herkese aynı): **ticari üstünlük** (bu saat tüccarın bir maldan
   150–450 birim satsın), **kasaba ele geçir**, **siparişimizi gönder** (bu
-  saatin taç siparişi) ya da **ordunu büyüt** (garnizon ve sahadaki askerler
-  en az ×1,25, en az 10). Lord görevi alır (başladığı yer saklanır:
-  satılmış birim, kasaba sayısı, hedef asker; `Kingdom.crownQuests`), saat
+  saatin taç siparişi), **ordunu büyüt** (garnizon ve sahadaki askerler
+  en az ×1,25, en az 10) ya da **yolları temizle** (haritada gezen bir yağmacı
+  çetesini yen; iki kat sık çıkar). Tersanesi olan lorda ayrıca **korsan avı**
+  (bir korsan teknesi batır) ve **korsan limanını kuşat** (bir korsan limanının
+  muhafızlarını yenip ablukaya al) da gelir (`crown.quests.navyKinds`,
+  `asksNavy`; bunlar tersanesi olanların hepsine aynıdır). Yağmacı ve korsan
+  görevleri lordun sayaçlarını okur (`Kingdom.record` → `bandsBeaten`,
+  `piratesSunk`, `havensTaken`; sunucu çete yenilince, tekne batınca, liman
+  muhafızları yenilince artırır). Lord görevi alır (başladığı yer saklanır:
+  satılmış birim, kasaba sayısı, hedef asker, sayaç; `Kingdom.crownQuests`), saat
   dolmadan bitirip **ödülü alır**: 100–250 altın (hazineye sığdığı kadar;
   yer azsa önceden uyarılır) ve o taçla ilişki (kendi tacı +5, öbürü +3).
   2. seviye saray ister; ilişki −50'nin altındaysa taç bir şey istemez.
@@ -2576,6 +2583,43 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
     korsanlar is karası), sesleri abluka borusu, zafer ya da hüzünlü boru.
     Haritanın sağında "Korsanlar iskelenin önünde" kartı, Sıcak noktalarda
     iskelenin yakınındaki ve peşindeki tekneler durur.
+- **Korsan limanları** (`outlaws.json` → `havens`; `outlaws.ts` →
+  `havenSpots`, `havensOf`, `havenPop`, `havenStrength`, `havenGuards`;
+  sunucu `_shared/outlaws.ts` → `settleHavens`, `havenStrike`, `setHavenHold`;
+  çizim `game/havens.ts`, pencere `outlaws.tsx` → `HavenSheet`): lobi başına 2
+  korsan limanı, en az 2500 karoluk bir suyun (büyük göl ya da geniş nehir)
+  kıyısında, açık suya bakan kuru bir karoda (taç başkentlerinden 120,
+  harita kenarından 90 karo, birbirinden 260 karo uzak; tohumdan, saklanmaz).
+  Haritada kıyıda bir gözcü kulesi, kulübeler ve barakalar, önündeki suda
+  nüfusu kadar (en çok 3) demirli kara yelkenli çektiri durur; ilk geminin
+  etiketinde limanın adı ("Martı Kaya korsan limanı") ya da onu kimin abluka
+  ettiği yazar. Gemilere ya da kulübelere tıklamak limanın penceresini açar;
+  üstüne gelince yapılar ve gemiler dış hatla vurgulanır.
+  - **Nüfus:** en çok 60 korsan; abluka yokken saatte 10 kişi geri gelir,
+    abluka altındayken saatte 36 kişi azalır (`havenPop`; saklanan yalnız son
+    nüfus ve anıdır, `lobby_outlaws` → `pop`, `pop_at`, `held`). Satırı olmayan
+    liman doludur.
+  - **Etki:** iki limanın toplam nüfusu korsanların gücünü belirler
+    (`havenStrength`: dolu limanlarda 1, boşaldıkça en az 0,35; korsanlar
+    limansız da dolaşır). Her lordun korsan etkisi (`seaHeld`) bununla
+    çarpılır: deniz ticaretine saldırı, balık kaybı ve halkın tedirginliği
+    birlikte azalır.
+  - **Abluka** (filo görevi `haven`; `fleet` komutu `mission`, `{ kind:
+    'haven', haven }`): penceredeki **Ablukaya al** bölümünde (tersane
+    gerekir) filo seçilir, filo limanın önündeki açık suya seyreder (yolu
+    `sail` olarak saklanır, haritada görünür; varış seyrin bitişidir). Varınca
+    limanı koruyan çektirilerle deniz savaşı olur (nüfusun her 12 kişisine
+    bir çektiri, en az 1; savunan kendi limanındadır). Kazanırsa filo limanın
+    önünde demirler ve abluka başlar (`mission.resolved`, satırda `held`),
+    muhafızların ganimeti gelir (80 + 25 × gemi altın, gemi başına 20 savaş ve
+    30 yapı malzemesi). Kaybederse kalanlarıyla eve döner. Aynı anda limanı tek
+    filo abluka eder; başkasının ablukasındaki limana varan filo döner
+    (`haven_turned`). Filo geri çağrılınca (penceredeki "Ablukayı kaldır" ya
+    da Donanma'daki geri çağır) abluka hemen kalkar ve liman yeniden dolmaya
+    başlar; filo yok olursa sunucu ablukayı kaldırır. Liman boşalınca
+    ablukacıya bir kez haber gelir (`haven_empty`).
+  - **Elçi:** liman savaşı (`haven_battle`, kazanınca ganimet ve nüfus), dönen
+    filo, boşalan liman; öğütlerde liman doluyken ablukaya almayı önerir.
 - **Hareket et** (`seaways.ts`; sunucuda `fleet` komutu, `sail` eylemi):
   evdeki bir filo (ticarette değilse) ordu gibi haritada bir yere
   gönderilir: "Hareket et" deyip bir nehre ya da göle tıklanır. **Karaya
@@ -3378,10 +3422,18 @@ krallıkta birer tane olur ve 3 seviyelidir.
   Kuruluştan 4. seviyeye makul oynayan aktif bir lord ~8 saatte, 30
   dakikada bir giren ~16 saatte varır (bot simülasyonu, 10 harita).
 - **Hastalık ve hastane:** Köylülerin bir payı hastadır; hasta köylü
-  çalışmaz, vergi vermez ve mutluluğu düşürür. Her tur birkaç kişi
-  hastalanır (hasta çoksa, açlıkta ve soğukta daha hızlı yayılır) ve
-  hastalar kendiliğinden yavaşça iyileşir. **Hastane** doktorlarıyla (işçi)
-  her tur hastaların bir payını daha iyileştirir.
+  çalışmaz, vergi vermez ve mutluluğu düşürür. Hastalık kendiliğinden
+  çıkmaz (`sickness.perRound` 0): **yılın salgını** (`sickness.outbreak`;
+  `economy.ts` → `outbreakOf`, `outbreakBetween`) her oyun yılında (gerçek
+  saatte) %90 olasılıkla bir kez gelir ve halkın %3–8'ini yatağa düşürür;
+  anı lordun yeri, lobi ve yıldan çekilir, ay ağırlıklıdır (kış ×3, sonbahar
+  ×1,5, ilkbahar ×1, yaz ×0,5; 336 yılın ~30'u sağlıklı geçer). Günlüğe
+  Önemli olarak yazar. Hastalık hasta çoksa, açlıkta ve soğukta daha hızlı
+  yayılır; hastalar kendiliğinden iyileşir (tur başına %3,5) ve hasta sayısı
+  yarım kişinin altına inince hastalık biter (önce her tur %0,1 temel
+  hastalanma vardı, iyileşmeyle %2'de dengelenip hiç sıfıra inmiyordu).
+  **Hastane** doktorlarıyla (işçi) her tur hastaların bir payını daha
+  iyileştirir. Krizlerin salgınları (§9.8 günün olayları) ayrıca gelir.
 - **Tapınak:** Mutluluk hedefini yükseltir; askerler **iman gücüyle** zara
   bonus ekler (seviyeyle artar). **Vaaz:** altınla, bekleme süresiyle;
   bir süre verginin mutluluğa olumsuz etkisi azalır ("vergiler iyidir").
@@ -3523,7 +3575,8 @@ krallıkta birer tane olur ve 3 seviyelidir.
   en altta), sıradaki tam öncekinin yerine gelir. Arkada bekleyen pencere
   varsa, masaüstündeki üst üste pencereler gibi en çok üçü sol üste doğru
   çapraz kayarak öndekinin arkasından görünür (`index.css` →
-  `.dialog-stack`, `data-behind`). "Tümünü kapat" yalnızca bir şey bildiren pencereleri kapatır
+  `.dialog-stack`, `data-behind`); telefonda (720 pikselden dar) yığın çizilmez,
+  pencere tam boyunu alır, yalnız sayaç ("1 / 4") kaç pencere beklediğini söyler. "Tümünü kapat" yalnızca bir şey bildiren pencereleri kapatır
   (süresi işleyen haraç isteği, cevap bekleyen elçi teklifi, kriz ve seçim kalır) ve kapattıklarını
   kısa bir pencerede başlık başlık (tekrarlananlar "×N") özetler. Özetteki her satıra dokununca o haber (birden çok geldiyse hepsi)
   tam metniyle açılır; "Geri dön" listeye döndürür. Raf ömrü özeti de
@@ -3667,7 +3720,12 @@ krallıkta birer tane olur ve 3 seviyelidir.
   sur yok, evler dolu, boşta köylü, gece mesaisi yorgunluğu, mutsuz ya da
   hasta halk, dolu ambarlar varken büyük işler (Saray → Projeler), tacın
   görevi, alınabilecek kasaba, oynanabilir mini oyun, rakip
-  taca geçme teklifi, taç savaşı, haraççıları çok isteyen rakip hükümdar…).
+  taca geçme teklifi, taç savaşı, haraççıları çok isteyen rakip hükümdar;
+  bir çete ticaret noktamıza baskına iniyor / pusuda / dönüyor, yağmacılar
+  yolu tutuyor, korsanlar sularımızda, korsan limanı yeniden kalabalık
+  (ablukaya al), yılın salgını, boştaki köylülerle bir sefer başlat, yarım
+  kalan mağara izi; taçların yağmacı ve korsan görevleri kendi sözleriyle…).
+  Yağmacı ve korsan haberleri de birkaç söylenişle gelir.
   Panel sade tutulur: söze verilen cevaplar düğmedir; **"Bana oyunu
   anlat"** kapatma düğmesinin yanında bir kitap simgesidir; yan sorular
   ("Malımızı nasıl değerlendirelim?", sohbet sorusu) cevapların altında
@@ -4194,7 +4252,7 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
 | `kingdom_daily` | günlük istatistik |
 | `chat_messages` | lobi, gönderen krallık, ad, renk, metin, zaman |
 | `minigame_scores` | mini oyun puanları: lobi, lord, oyuncu, oyun, puan, zaman, ad/renk/lobi adı (yalnız sunucu yazar) |
-| `lobby_outlaws` | yağmacı çeteleri, korsan tekneleri ve yağmacı klanları (§7.9, §7.9.1, §8.5): tür (`band` / `boat` / `clan`), sıra, kaç kez yenildiği (klanda kuşağı), `down_until`, süren muharebe, `shift`, kayıplar; klanda `born_at`, `fallen` ve yalnız sunucunun okuduğu `cave` (yalnız sunucu yazar; satırı olmayan dokunulmamıştır) |
+| `lobby_outlaws` | yağmacı çeteleri, korsan tekneleri, yağmacı klanları ve korsan limanları (§7.9, §7.9.1, §8.5): tür (`band` / `boat` / `clan` / `haven`); limanda `pop`, `pop_at`, `held` (abluka eden filo); sıra, kaç kez yenildiği (klanda kuşağı), `down_until`, süren muharebe, `shift`, kayıplar; klanda `born_at`, `fallen` ve yalnız sunucunun okuduğu `cave` (yalnız sunucu yazar; satırı olmayan dokunulmamıştır) |
 
 ---
 

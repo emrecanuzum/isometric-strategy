@@ -436,7 +436,7 @@ export async function loadTowns(lobby: string): Promise<Town[]> {
 // What befell the lobby's bandits and pirates (CLAUDE.md §7.9): beaten and until when, in a fight, held back, losses.
 export async function loadOutlaws(lobby: string): Promise<OutlawRow[]> {
   // (A clan's cave is the server's secret: not readable, CLAUDE.md §7.9.1.)
-  const { data } = await supabase.from('lobby_outlaws').select('kind, idx, gen, down_until, battle, shift, losses, born_at, fallen').eq('lobby_id', lobby)
+  const { data } = await supabase.from('lobby_outlaws').select('kind, idx, gen, down_until, battle, shift, losses, born_at, fallen, pop, pop_at, held').eq('lobby_id', lobby)
   return (data ?? []).map((r) => ({ kind: r.kind, idx: r.idx, gen: r.gen, down_until: r.down_until === null ? null : Number(r.down_until), battle: r.battle === null ? null : Number(r.battle), shift: Number(r.shift ?? 0), losses: r.losses, born_at: r.born_at === null || r.born_at === undefined ? null : Number(r.born_at), fallen: r.fallen ?? [] }))
 }
 

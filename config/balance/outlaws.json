@@ -131,5 +131,32 @@
       "spyHouseWins": 2,
       "farStep": 25
     }
+  },
+  "havens": {
+    "count": 2,
+    "minWater": 2500,
+    "cityClear": 120,
+    "minSpacing": 260,
+    "edgeClear": 90,
+    "pop": {
+      "max": 60,
+      "start": 45,
+      "regrowPerHour": 10,
+      "blockadePerHour": 36
+    },
+    "guards": {
+      "popPerShip": 12,
+      "minShips": 1
+    },
+    "effect": {
+      "floor": 0.35
+    },
+    "loot": {
+      "bounty": 80,
+      "perShip": 25,
+      "arms": 20,
+      "materials": 30
+    },
+    "noticeStep": 15
   }
 }

@@ -295,17 +295,38 @@
     }
   },
   "sickness": {
-    "perRound": 0.001,
+    "perRound": 0,
     "spread": 0.01,
     "starvingFactor": 2,
-    "recoveryPerRound": 0.02,
+    "recoveryPerRound": 0.035,
     "max": 0.6,
     "happinessPerShare": -40,
     "hospitalHealByLevel": [
       0.04,
       0.07,
       0.1
-    ]
+    ],
+    "outbreak": {
+      "chance": 0.9,
+      "share": [
+        0.03,
+        0.08
+      ],
+      "monthWeights": [
+        3,
+        3,
+        1,
+        1,
+        1,
+        0.5,
+        0.5,
+        0.5,
+        1.5,
+        1.5,
+        1.5,
+        3
+      ]
+    }
   },
   "temple": {
     "happinessByLevel": [

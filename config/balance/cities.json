@@ -108,7 +108,8 @@
     },
     "quests": {
       "windowSeconds": 3600,
-      "kinds": ["trade", "town", "order", "army"],
+      "kinds": ["trade", "town", "order", "army", "bandit", "bandit"],
+      "navyKinds": ["pirate", "haven"],
       "tradeUnits": [150, 450],
       "tradeStep": 50,
       "armyGrowth": 1.25,

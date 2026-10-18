@@ -156,6 +156,14 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
         title: event.steward ? `${f?.title ?? 'Olay'}: kâhya köylüleri seferber etti` : `${f?.title ?? 'Olay'}: ${event.choice === 'army' ? 'ordu' : 'köylüler'} müdahale etti`,
         text: `${event.steward ? 'Sen karar veremeden kâhyan köylüleri topladı; asıl zarar önlendi.' : 'Asıl zarar önlendi.'}${lost ? ` Yine de ${lost} gitti.` : ''}`,
       })
+    } else if (event.kind === 'outbreak') {
+      j = write(j, seasonStart, at, {
+        important: true,
+        tone: 'bad',
+        icon: 'heal',
+        title: 'Yılın salgını',
+        text: `Köyde ateşli bir hastalık baş gösterdi: halkın %${Math.round(event.share * 100)} kadarı yatağa düştü. Hastalar çalışmaz, vergi vermez; şifahane onları daha çabuk ayağa kaldırır.`,
+      })
     } else if (event.kind === 'spoiled') {
       const h = HOARD_TEXTS[event.hoard]
       j = write(j, seasonStart, at, {

@@ -1,5 +1,5 @@
 import { balance } from './balance'
-import { calendarAt, seasonEffect } from './clock'
+import { calendarAt, seasonEffect, yearMs } from './clock'
 import type { Season } from './clock'
 import type { Point } from './iso'
 import { priceAt } from './market'
@@ -23,7 +23,7 @@ import type { Unit, Units } from './units'
 import type { TaxLevel } from './society'
 import { TileRule, findPlot, territoryRect, tileRule } from './territory'
 import type { Rect } from './territory'
-import { Terrain, cityCenter } from './worldgen'
+import { Terrain, cityCenter, hash } from './worldgen'
 import { cargoOf, fishCatch, huntRound, launchShips, navyOf, navyUpkeep, nextVoyage, sailorsOf, takeFleetLosses, voyagePirates } from './navy'
 import type { Blockade, Navy, Ship } from './navy'
 import type { World } from './worldgen'
@@ -299,7 +299,9 @@ export interface Kingdom {
   minigameEarned?: { at: number; worth: number }[]
   // Battles and sieges won (kept by the server, for the lobby's ranking).
   // Expeditions back (not called home early) are counted here too (CLAUDE.md §9.9).
-  record?: { battlesWon?: number; siegesWon?: number; expeditions?: number; cavesTaken?: number }
+  // bandsBeaten, piratesSunk, havensTaken: bandit bands beaten, pirate boats sunk, pirate havens' guards broken (the
+  // crowns' quests count them; CLAUDE.md §7.8).
+  record?: { battlesWon?: number; siegesWon?: number; expeditions?: number; cavesTaken?: number; bandsBeaten?: number; piratesSunk?: number; havensTaken?: number }
   // The towns it holds and what each sends (kept by the server as towns are taken; CLAUDE.md §8.4).
   towns?: HeldTown[]
   // Towns that broke free of the lord in a revolt, for the server to set free (CLAUDE.md §8.4; the latest few).
@@ -445,6 +447,8 @@ export type EconomyEvent =
   | { kind: 'crisis'; fortune: FortuneKind; lost?: Partial<Stock>; sick?: number; steward?: boolean; choice?: 'villagers' | 'army' }
   // A brimming store struck by rats, rot or rust (CLAUDE.md §9.8; disasters.ts).
   | { kind: 'spoiled'; hoard: HoardKind; good: Good; lost: number }
+  // The year's wave of sickness (CLAUDE.md §9.8): this share of the people fell ill.
+  | { kind: 'outbreak'; share: number }
   // A stage of a great work built (CLAUDE.md §9.10).
   | { kind: 'project'; id: ProjectId; stage: number; finished: boolean }
   // A party back from its journey (CLAUDE.md §9.9), and a goal of the season reached.
@@ -1533,6 +1537,8 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
   if (learnt.length > 0) edit()
   // A building counts from the moment it is done, so production rounds after that use it.
   const finishing = kingdom.buildings.filter((b) => b.doneAt > kingdom.settledAt && b.doneAt <= now)
+  // The last production round looked at (for what falls between two rounds: the year's outbreak).
+  let lastRound = kingdom.settledAt
   for (;;) {
     const tripEnd = k.trade.good ? k.trade.departedAt + tradeTripMs(k) : Infinity
     const voyage = nextVoyage(k)
@@ -1717,6 +1723,13 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
         k.people = Math.max(0, Math.min(grown.room, grown.people + grown.perRound))
       }
       k.sickness = sicknessStep(k, next)
+      // The year's outbreak, once (CLAUDE.md §9.8).
+      const outbreak = outbreakBetween(k, lastRound, next)
+      lastRound = next
+      if (outbreak) {
+        k.sickness = Math.min(balance.institutions.sickness.max, (k.sickness ?? 0) + outbreak.share)
+        events.push({ kind: 'outbreak', share: outbreak.share })
+      }
       // A few of the sick die (CLAUDE.md §9.1), and now and then the sickness reaches the lord's house.
       if ((k.sickness ?? 0) > 0) {
         if (k.people !== undefined) k.people = Math.max(0, k.people - k.people * k.sickness! * balance.dynasty.sickness.peoplePerSick)
@@ -1867,8 +1880,34 @@ export function happinessFor(k: Kingdom, at: number) {
   })
 }
 
+// The year's outbreak (CLAUDE.md §9.8): nearly every game year (a real hour) a mild wave of sickness comes once, at a
+// moment drawn from the lord's place and the year, most likely in winter and least in summer. Null: a healthy year.
+export function outbreakOf(k: Pick<Kingdom, 'site' | 'lobbyKey'>, year: number): { at: number; share: number } | null {
+  const o = balance.institutions.sickness.outbreak
+  const seed = (k.site.x * 7919 + k.site.y * 104729 + (k.lobbyKey ?? 0)) | 0
+  if (hash(year, 61, seed) >= o.chance) return null
+  const weights = o.monthWeights
+  const total = weights.reduce((a, b) => a + b, 0)
+  let r = hash(year, 62, seed) * total
+  let month = 0
+  while (month < 11 && r >= weights[month]) r -= weights[month++]
+  const within = hash(year, 63, seed)
+  const [lo, hi] = o.share
+  return { at: (year + (month + within) / 12) * yearMs(), share: lo + (hi - lo) * hash(year, 64, seed) }
+}
+
+// The outbreak falling in (from, to], if any.
+export function outbreakBetween(k: Pick<Kingdom, 'site' | 'lobbyKey'>, from: number, to: number) {
+  for (let y = Math.floor(from / yearMs()); y <= Math.floor(to / yearMs()); y++) {
+    const o = outbreakOf(k, y)
+    if (o && o.at > from && o.at <= to) return o
+  }
+  return null
+}
+
 // One round of sickness: some fall ill (faster when many are already sick, when hungry and in the cold), some get
-// well on their own, and the hospital's staff heal more.
+// well on their own, and the hospital's staff heal more. Without an outbreak, nobody falls ill out of nothing: the
+// sickness dies away.
 export function sicknessStep(k: Kingdom, at: number) {
   const s = balance.institutions.sickness
   const share = k.sickness ?? 0
@@ -1879,7 +1918,8 @@ export function sicknessStep(k: Kingdom, at: number) {
   const crew = hospital && done(hospital, at) ? (workerSlots(hospital) === 0 ? 1 : staffOf(hospital) / workerSlots(hospital)) * population(k, at).efficiency : 0
   const healing = share * (s.recoveryPerRound + hospitalHeal(levelOf(k, 'hospital', at)) * crew) * learnt.healing
   const next = Math.max(0, Math.min(s.max, share + falling - healing))
-  return next < 1e-4 ? 0 : next
+  // Under half a sick villager left: the village is well again.
+  return next < 1e-4 || next * (k.people ?? 0) < 0.5 ? 0 : next
 }
 
 const isWater = (world: World, x: number, y: number) =>

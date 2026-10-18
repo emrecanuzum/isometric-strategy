@@ -44,6 +44,9 @@ export type FleetMission =
   // there until called back, beaten or the war ends.
   | { kind: 'blockade'; target: number; name: string; arriveAt: number; resolved?: boolean }
   | { kind: 'raid'; target: number; name: string; arriveAt: number }
+  // Blockading a pirate haven (CLAUDE.md §8.5; outlaws.ts → havens): sails there (its `sail`), fights the haven's guard
+  // on arrival (resolved) and holds it until called back; the haven's people dwindle meanwhile.
+  | { kind: 'haven'; haven: number; name: string; arriveAt: number; resolved?: boolean }
   // Breaking a blockade of one's own dock: meets the blockading ships on arrival.
   | { kind: 'sortie'; arriveAt: number }
   // Coming home, with what it carries.
@@ -157,6 +160,8 @@ export type NavyError =
   | 'notBlockaded'
   | 'target'
   | 'cooldown'
+  | 'held'
+  | 'nopath'
   | 'city'
   | 'good'
   | 'engaged'
@@ -291,12 +296,16 @@ export type MissionOrder =
   | { kind: 'port' | 'fish' | 'hunt' | 'sortie' }
   | { kind: 'trade'; good: Good; city: number }
   | { kind: 'blockade' | 'raid'; target: number }
+  | { kind: 'haven'; haven: number }
 
 export interface MissionContext {
   cities: Point[]
   // The target lord (blockade, raid): its dock plot and whether it has a dock; whether we are at war with it.
   target?: { id: number; name: string; dockPlot: Rect | null; hasDock: boolean; blockadedBy?: number | null }
   atWar?: boolean
+  // The pirate haven (haven): its name, whether another lord holds it, and when the fleet would get there (its way
+  // over the water worked out by the caller; null: no way there by water).
+  haven?: { idx: number; name: string; heldBy: number | null; arriveAt: number | null }
 }
 
 const GOOD_KINDS = ['food', 'materials', 'arms']
@@ -327,6 +336,15 @@ export function missionError(k: Kingdom, id: number, order: MissionOrder, at: nu
     case 'sortie':
       if (!blockaded) return 'notBlockaded'
       return warships(f.ships) > 0 ? null : 'warships'
+    case 'haven': {
+      if (blockaded) return 'blockaded'
+      if (warships(f.ships) < 1) return 'warships'
+      const h = ctx.haven
+      if (!h || h.idx !== order.haven) return 'target'
+      if (h.heldBy !== null) return 'held'
+      if (h.arriveAt === null) return 'nopath'
+      return null
+    }
     case 'blockade':
     case 'raid': {
       if (blockaded) return 'blockaded'
@@ -362,6 +380,9 @@ export function setMission(k: Kingdom, id: number, order: MissionOrder, at: numb
     case 'sortie':
       mission = { kind: 'sortie', arriveAt: at + N.sortieSeconds * 1000 }
       break
+    case 'haven':
+      mission = { kind: 'haven', haven: order.haven, name: ctx.haven!.name, arriveAt: ctx.haven!.arriveAt! }
+      break
     default:
       mission = { kind: order.kind }
   }
@@ -374,9 +395,9 @@ export function recallError(k: Kingdom, id: number, at = -Infinity): NavyError |
   const f = fleetOf(k, id)
   if (!f) return 'fleet'
   const m = f.mission
-  if (m.kind !== 'blockade' && m.kind !== 'raid' && m.kind !== 'sortie') return 'away'
+  if (m.kind !== 'blockade' && m.kind !== 'raid' && m.kind !== 'sortie' && m.kind !== 'haven') return 'away'
   // Arrived and about to fight: the battle is fought first (its outcome is not to be dodged).
-  if (m.arriveAt <= at && !(m.kind === 'blockade' && m.resolved)) return 'engaged'
+  if (m.arriveAt <= at && !((m.kind === 'blockade' || m.kind === 'haven') && m.resolved)) return 'engaged'
   return null
 }
 // (The server turns fleets home after their battle too, so this does not wait for the battle: the player's command
@@ -390,7 +411,8 @@ export function recallFleet(k: Kingdom, id: number, at: number, outMs?: number):
   const full = outMs ?? N.minVoyageSeconds * 1000
   const sailed = m.arriveAt > at ? Math.max(0, full - (m.arriveAt - at)) : full
   const back = Math.max(N.sortieSeconds * 1000, sailed)
-  return putFleets(k, n, n.fleets.map((x) => (x.id === id ? { ...x, mission: { kind: 'return', arriveAt: at + back } } : x)))
+  // A fleet back from a haven is home again: its way there is not where it lies.
+  return putFleets(k, n, n.fleets.map((x) => (x.id === id ? { ...x, mission: { kind: 'return', arriveAt: at + back }, ...(m.kind === 'haven' && { sail: undefined }) } : x)))
 }
 
 // ---- Pirates ------------------------------------------------------------------------------------------------------

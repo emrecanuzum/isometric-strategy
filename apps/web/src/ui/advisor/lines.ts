@@ -1,9 +1,10 @@
 import {
-  ARCADE_GAMES, BUILDINGS, allShips, balance, countShips, buildingCount, clogsOf, crownQuest, fealtyOpen, fishError, gameError, goldCap, hasPalace,
+  ARCADE_GAMES, BUILDINGS, allShips, balance, countShips, buildingCount, clogsOf, fealtyOpen, fishError, gameError, goldCap, hasPalace,
   hasTradePost, palaceLevel, popCapFor, population, queenError, questProgress, storageCap, upgradeError,
   campSoldiers, PROJECT_IDS, projectError, hasOpinion, ofAge, opinionOf, siblingsOf, crownHouseAt, crownWays, liegeSwitchError,
+  bandRaid, bandsOf, outlawUp, havensOf, havenPop, havenStrength, navyOf, warships, shipyardLevel, expeditionsOut, maxExpeditions, clansOf, trailOf,
 } from '@game/shared'
-import type { BuildingKind, Kingdom } from '@game/shared'
+import type { BuildingKind, Kingdom, World } from '@game/shared'
 import type { IconName } from '../icons'
 import type { TabId } from '../hud/Hud'
 import type { Online } from '../hud/online'
@@ -20,6 +21,8 @@ export interface AdvisorCtx {
   online: Online
   // How many crown kingdoms the lobby has (their capitals).
   crowns: number
+  // The map (for the bandits on their roads and the pirates' havens).
+  world: World
 }
 
 // What a reply does in the game: opens a tab (at one of its parts), starts placing a building, opens one of the
@@ -776,10 +779,37 @@ export const TIPS: Tip[] = [
       return !taken || (!taken.done && have >= need)
     },
     say: (c) => {
-      const { taken } = questProgress(c.kingdom, c.kingdom.liege!, c.now)
-      const q = crownQuest(c.kingdom.lobbyKey, c.kingdom.liege!, c.now)
+      const { taken, quest: q } = questProgress(c.kingdom, c.kingdom.liege!, c.now)
       const g = n(q.gold)
       const crown = c.online.crowns[c.kingdom.liege!] ?? 'Tacımız'
+      // The tasks of the wilds (bandits, pirates, havens) are told as what they are.
+      if (!taken && q.kind === 'bandit')
+        return [
+          `${crown} yollarından şikâyetçi, lordum: yağmacı çetelerinden birini bu saat ortadan kaldırmamızı istiyor. Ödülü ${g} altın; bir orduyla çetenin önünü keselim mi?`,
+          `Lordum, ${crown} sarayından ulak geldi: "Yollarımızdaki çetelerden birini temizleyin." ${g} altın ve tacın gönlü, artı çetenin ganimeti. Fena pazarlık değil.`,
+          `Bir çete tüccarları soyuyor, ${crown} de bunu bizden bekliyor, lordum. Haritada bir çeteye tıklayın, bir ordu seçin; gerisini kılıçlar konuşur. Ödül ${g} altın.`,
+          `${crown} der ki: "Yolları temizleyen lord tacın gözüdür." Bu saat bir çete yenersek ${g} altın bizim, lordum.`,
+          `Lordum, yağmacılara karşı bir görev var: ${crown} bir çetenin dağıtılmasını istiyor. Ordumuz hazırsa ${g} altın kapıda.`,
+          `Kervanlar ağlıyor, taçlar kızıyor, lordum. ${crown} bu saat bir yağmacı çetesinin başını istiyor; karşılığı ${g} altın.`,
+        ]
+      if (!taken && q.kind === 'pirate')
+        return [
+          `${crown} göllerdeki korsanlardan bıkmış, lordum: bu saat bir korsan teknesi batırmamızı istiyor. Ödülü ${g} altın; kadırgalarımız boş durmasın.`,
+          `Lordum, tersanemizi duyan ${crown} bir iş gönderdi: bir korsan teknesini batırın. ${g} altın ve korsanın ambarı bizim olur.`,
+          `Kara yelkenli bir tekne tacın kadırgalarını kızdırıyor, lordum. ${crown} onu dibe göndermemizi istiyor; ödül ${g} altın.`,
+          `Denizde iş var, lordum! ${crown} bir korsan teknesinin batırılmasını istiyor. Savaş gemili bir filoyla takip etmek yeter.`,
+          `${crown}: "Göllerimizde korsan istemiyoruz." Biz de istemiyoruz, lordum; üstelik ${g} altın veriyorlar.`,
+          `Lordum, bu saat taçtan bir korsan avı görevi var. Haritada bir korsan teknesine tıklayın, filoyu gönderin; ödül ${g} altın.`,
+        ]
+      if (!taken && q.kind === 'haven')
+        return [
+          `${crown} korsanların yuvasını hedef gösteriyor, lordum: bir korsan limanını ablukaya almamızı istiyor. Ödülü ${g} altın; liman boşaldıkça korsanlar da zayıflar.`,
+          `Lordum, büyük bir iş: ${crown} bir korsan limanının kuşatılmasını istiyor. Limana tıklayın, savaş gemili bir filo seçin, "Ablukaya al" deyin. Ödül ${g} altın.`,
+          `Korsanlar bir yerden çıkıyor, lordum, o yer de bir liman. ${crown} oranın ablukaya alınmasını istiyor; karşılığı ${g} altın ve tacın gönlü.`,
+          `${crown}: "Korsan limanını kuşatın, tekneleri yuvasında boğun." ${g} altın veriyorlar, lordum; muhafız çektirileri de cabası.`,
+          `Lordum, filomuza layık bir görev geldi: bir korsan limanını abluka. Ödül ${g} altın, şanı bedava.`,
+          `Bir korsan limanı tacın uykusunu kaçırıyor, lordum. ${crown} oraya bir filo göndermemizi istiyor; ödül ${g} altın.`,
+        ]
       return taken
         ? [
             `Tacımızın görevini bitirdik, lordum! ${g} altınlık ödül bizi bekliyor; taç unutkan değildir ama hazinedar biraz öyledir.`,
@@ -822,6 +852,178 @@ export const TIPS: Tip[] = [
       ['Askerler evde kalsın', 'Kalırlar, lordum; ama evdeki asker her tur maaş ve yemek ister, karşılığında yalnızca horlar.'],
       ['Kasaba ne işime yarar?', 'Altın, yemek, malzeme ya da köylü gönderir, lordum; sıralamada da puan. Küçük ama tatlı bir lokma.'],
     ],
+  },
+  // ---- The wilds: bandits coming down, pirates on the water, the havens, the year's sickness, a journey ----------
+  {
+    id: 'raid',
+    when: (c) => bandsOf(c.world, c.world.seed, c.online.outlaws).some((b) => outlawUp(b, c.now) && bandRaid(c.world, b, c.now)?.target === c.online.me),
+    say: (c) => {
+      const band = bandsOf(c.world, c.world.seed, c.online.outlaws).find((b) => outlawUp(b, c.now) && bandRaid(c.world, b, c.now)?.target === c.online.me)!
+      const leg = bandRaid(c.world, band, c.now)!.leg
+      const name = band.name
+      return leg === 'go'
+        ? [
+            `Lordum, gözcüler bağırıyor: ${name} yolundan ayrıldı, ticaret noktamıza doğru iniyor! Bir ordu çıkarıp önünü kesersek ganimet de bizim olur.`,
+            `${name} bize geliyor, lordum. Tüccarımız şimdiden develeri saklamaya başladı; ben de şapkamı. Bir orduyla karşılayalım mı?`,
+            `Lordum, yağmacılar kokuyu almış: ${name} ticaret noktamıza baskına geliyor. Haritada çeteye tıklayıp "Takip et" demek yeter.`,
+            `Kötü haber, lordum: ${name} bizim yollara sapmış. İyi haber: yağmacılar ordulardan yavaştır, yakalamak kolay.`,
+            `Lordum, uzaktan toz bulutu görünüyor; kervan değil, ${name}. Ticaret noktamıza varmadan bir orduyla önünü keselim.`,
+          ]
+        : leg === 'lurk'
+          ? [
+              `${name} ticaret noktamızın dibinde pusuya yattı, lordum; tüccarın kazancından pay kesiyorlar. Bir orduyla dağıtalım mı?`,
+              `Lordum, yağmacılar kapımızda bekliyor: ${name}. Beklemek onların işi, kovmak bizim. Ordumuzu gönderelim.`,
+              `${name} çalıların arkasında sinsi sinsi bekliyor, lordum; tüccarlar yolu ondan sakınıyor. Bu iş kılıçla çözülür.`,
+              `Lordum, ticaret noktamızın önünde ${name} kamp kurdu. Ganimeti onlarda, ordu bizde; bence adil bir takas.`,
+            ]
+          : [
+              `${name} ticaret noktamızdan çekiliyor, lordum; sırtını dönmüşken yakalamak kolaydır. Bir ordu gönderelim mi?`,
+              `Lordum, ${name} baskından dönüyor; çantaları dolu. Önünü kesersek o çantalar bizim olur.`,
+              `Yağmacılar dönüyor, lordum, ama yine gelecekler. ${name} yoldayken yakalamak en iyisi.`,
+            ]
+    },
+    go: { label: 'Orduya bak', act: tab('army', 'army', 'land') },
+    jokes: [
+      ['Tüccar kendini korusun', 'Tüccar korkudan develerin arkasına saklandı, lordum; develer de onun arkasına. Kimse kimseyi korumuyor.'],
+      ['Yağmacılar da insan', 'İnsan, lordum, ama bizim altınımızı seven insan. Sevgileri tek taraflı.'],
+      ['Sur yaptırırız', 'Sur güzel fikir, lordum; ama yağmacılar surla değil kılıçla sohbet eder.'],
+    ],
+    snooze: 6,
+  },
+  {
+    id: 'bandits',
+    when: (c) => (c.kingdom.outlaws?.road ?? 0) >= 0.25,
+    say: ({ kingdom: k }) => {
+      const p = pct(k.outlaws?.road ?? 0)
+      const cut = pct((k.outlaws?.road ?? 0) * balance.outlaws.road.merchantCut)
+      return [
+        `Lordum, yağmacılar ticaret noktamızın çevresindeki yolların ${p}'ini tutuyor; tüccarın altınının ${cut}'ini kesiyorlar. Bir çeteyi kovalasak?`,
+        `Yollarımız yağmacı dolu, lordum: ${p}. Tüccarımız her seferde ${cut} kayıpla dönüyor. Ordumuz da kışlada esniyor.`,
+        `Lordum, hanlarda yağmacılardan başka konu yok: yolların ${p}'i onların elinde. Bir çeteyi yenersek hem ganimet hem huzur gelir.`,
+        `Tüccar şikâyet dilekçesi yazdı, lordum; üç sayfa, hepsi yağmacılar hakkında. Yolların ${p}'i tutulmuş.`,
+        `Yağmacılar ${cut} kesiyor, lordum. Az görünür ama her seferde; sonunda bir sarayın çatısı eder.`,
+      ]
+    },
+    go: { label: 'Tüccara bak', act: tab('trade', 'trade', 'merchant') },
+    jokes: [
+      ['Vergi saysınlar', 'Vergi gibi sayarsak bari onlardan da makbuz isteyelim, lordum. Vermiyorlar, sordum.'],
+      ['Yollar zaten kötü', 'Yollar kötü, yağmacılar daha kötü, lordum. İkisinden biriyle uğraşabiliriz; yağmacılar daha kolay.'],
+    ],
+    snooze: 25,
+  },
+  {
+    id: 'pirates',
+    when: (c) => (c.kingdom.outlaws?.sea ?? 0) >= 0.35,
+    say: (c) => {
+      const k = c.kingdom
+      const p = pct(k.outlaws?.sea ?? 0)
+      const fleet = navyOf(k).fleets.some((f) => warships(f.ships) > 0)
+      return fleet
+        ? [
+            `Lordum, iskelemizin önünde korsan tekneleri dolaşıyor: etkileri ${p}. Savaş gemili bir filoyla takip edersek ödülü bizim olur.`,
+            `Kara yelkenler göründü, lordum! Korsanlar sularımızda (${p}); balıkçılar ağ atmaya korkuyor. Filomuzu salalım mı?`,
+            `Lordum, korsanlar deniz ticaretimizi kollamaya başladı. Bir tekneye tıklayıp filomuzla "Takip et" demek yeter.`,
+            `Korsanların sularımızdaki gücü ${p}, lordum. Daha da iyisi: yuvaları olan korsan limanını ablukaya alırsak hepsi zayıflar.`,
+          ]
+        : [
+            `Lordum, iskelemizin önünde korsanlar dolaşıyor (${p}); balık az, ticaret korkak. Savaş gemilerimiz olsaydı bu iş kolay olurdu.`,
+            `Korsanlar sularımızda, lordum, biz de kıyıda seyrediyoruz. Tersanede birkaç kadırga yapsak?`,
+            `Lordum, balıkçılar korsanlardan yakınıyor: etkileri ${p}. Kadırgasız deniz, kuzusuz çoban gibi... ya da tersi.`,
+          ]
+    },
+    go: { label: 'Donanmaya bak', act: tab('army', 'army', 'sea') },
+    jokes: [
+      ['Korsanlar romantiktir', 'Şarkılarda öyle, lordum. Gerçekte balığımızı çalıp kokuyorlar.'],
+      ['Denizi sevmem', 'Deniz de sizi sevmiyor, lordum; ama korsanları hiç sevmiyor. Ortak düşmanımız var.'],
+    ],
+    snooze: 25,
+  },
+  {
+    id: 'haven',
+    when: (c) => {
+      if (shipyardLevel(c.kingdom, c.now) <= 0 || !navyOf(c.kingdom).fleets.some((f) => warships(f.ships) > 0)) return false
+      if (navyOf(c.kingdom).fleets.some((f) => f.mission.kind === 'haven')) return false
+      return havensOf(c.world, c.world.seed, c.online.outlaws).some((h) => !h.held && havenPop(h, c.now) >= balance.outlaws.havens.pop.max * 0.6)
+    },
+    say: (c) => {
+      const havens = havensOf(c.world, c.world.seed, c.online.outlaws)
+      const h = havens.filter((x) => !x.held).sort((a, b) => havenPop(b, c.now) - havenPop(a, c.now))[0]
+      const strength = pct(havenStrength(havens, c.now))
+      return [
+        `Lordum, ${h.name} yine kalabalıklaştı: ${Math.round(havenPop(h, c.now))} korsan. Filomuzla ablukaya alırsak nüfusu erir, korsanların gücü düşer.`,
+        `Korsanların yuvası belli, lordum: ${h.name}. Oraya bir filo gönderip limanı ablukaya alalım; korsanlar şu an tam güçlerinin ${strength}'inde.`,
+        `Lordum, korsan teknelerini tek tek kovalamak yerine yuvalarını kuşatalım: ${h.name}. Limana tıklayıp "Ablukaya al" demek yeter.`,
+        `Liman doldukça korsanlar azgınlaşır, lordum. ${h.name} bir abluka için yalvarıyor; tabii korsanlar böyle düşünmüyor.`,
+        `Lordum, kadırgalarımız limanda paslanıyor. ${h.name}'ın önünde demirleseler hem pas gider hem korsan.`,
+      ]
+    },
+    go: { label: 'Donanmaya bak', act: tab('army', 'army', 'sea') },
+    jokes: [
+      ['Korsanlar da yaşasın', 'Yaşasınlar, lordum; ama başka bir gölde. Mümkünse rakip tacın gölünde.'],
+      ['Kadırgalar yorgun', 'Kadırgalar yorulmaz, lordum; kürekçiler yorulur. Onlara da çift yemek veririz.'],
+    ],
+    snooze: 30,
+  },
+  {
+    id: 'outbreak',
+    when: (c) => (c.kingdom.sickness ?? 0) >= 0.03 && count(c.kingdom, 'hospital') > 0,
+    say: ({ kingdom: k }) => {
+      const p = pct(k.sickness ?? 0)
+      return [
+        `Lordum, köyde hastalık var: halkın ${p}'i yatakta. Şifahanenin doktorları tam kadro çalışırsa çabuk geçer.`,
+        `Salgın kapımızı çaldı, lordum; ${p} hasta. Şifahaneye işçi verirsek hastalar daha çabuk iş başı yapar.`,
+        `Lordum, öksürük sesleri sarayın içine kadar geliyor: halkın ${p}'i hasta. Şifahaneyi bir yoklayalım mı?`,
+        `Yılın hastalığı geldi, lordum; her yıl gelir ama her yıl geçer. Hastalar ${p}; şifahane işini yapıyor.`,
+      ]
+    },
+    go: { label: 'Sağlığa bak', act: tab('people', 'people', 'health') },
+    jokes: [
+      ['Bana bulaşmasın', 'Bulaşmaz, lordum; hükümdarlar hastalanmaz, yalnızca "dinlenir". Yine de mendil taşıyın.'],
+      ['Elçiler hastalanır mı?', 'Hastalanır, lordum, ama işten kaçmak için. Ben hiç hastalanmadım; bu da bir şey söylüyor.'],
+    ],
+    snooze: 20,
+  },
+  {
+    id: 'journey',
+    when: (c) => maxExpeditions(c.kingdom, c.now) > 0 && expeditionsOut(c.kingdom, c.now).length === 0 && (c.kingdom.expeditions ?? []).length > 0 && population(c.kingdom, c.now).healthy - population(c.kingdom, c.now).jobs >= 4,
+    say: ({ kingdom: k, now }) => {
+      const p = population(k, now)
+      const idle = n(Math.floor(p.healthy - p.jobs))
+      return [
+        `Lordum, ${idle} köylü boşta oturuyor. Bir sefer başlatalım mı? Avcılar ormana, kâşifler dağlara; ganimetle dönerler.`,
+        `Boştaki köylüler meydanda sinek kovalıyor, lordum. Onları bir sefere yollasak hem sinekler rahatlar hem ambar dolar.`,
+        `Lordum, uzun zamandır kimse yola çıkmadı. ${idle} köylümüz hazır; bir sefer başlatalım, belki bir define bulurlar.`,
+        `Bir sefer başlatın, lordum: köylüler macera ister, ambar da ganimet. İkisi birden mutlu olur, ben de.`,
+        `Lordum, kâşifler dağların ardında harabeler olduğunu söylüyor. ${idle} boşta köylüyle bir sefer düzenleyelim mi?`,
+      ]
+    },
+    go: { label: 'Seferler', act: tab('kingdom', 'palace', 'expeditions') },
+    jokes: [
+      ['Seferler tehlikeli', 'Tehlikeli, lordum; ama boş oturmak daha tehlikeli: köylüler düşünmeye başlar. Birkaç muhafız verirsek içimiz rahat eder.'],
+      ['Köylüler yorgun', 'Boşta oturan köylü yorgun olmaz, lordum; sıkılır. Sıkılan köylü de şarkı söyler, kötü söyler.'],
+    ],
+    snooze: 35,
+  },
+  {
+    id: 'trail',
+    when: (c) => clansOf(c.world.seed, c.online.outlaws).some((clan) => {
+      const t = trailOf(c.kingdom.caveTrail, clan)
+      return !!t && t.cave === undefined && (t.wins ?? 0) > 0
+    }),
+    say: (c) => {
+      const clan = clansOf(c.world.seed, c.online.outlaws).find((x) => {
+        const t = trailOf(c.kingdom.caveTrail, x)
+        return !!t && t.cave === undefined && (t.wins ?? 0) > 0
+      })!
+      return [
+        `Lordum, ${clan.name}'nın izi yarım kaldı. Çetelerinden birini daha yenersek mağaralarının yerini söylerler.`,
+        `Yakalanan yağmacılar ${clan.name}'nın mağarasından bahsediyordu, lordum. Bir zafer daha, iz tamamlanır; sonra ganimet dolu mağarayı kuşatırız.`,
+        `Lordum, ${clan.name} dağlarda bir yerde saklanıyor. İz sürmeye devam edelim: onların çetelerinden birini takip edin.`,
+        `Mağaradaki ganimet her saat büyüyor, lordum. ${clan.name}'nın izini bitirsek fena olmaz.`,
+      ]
+    },
+    go: { label: 'Orduya bak', act: tab('army', 'army', 'land') },
+    snooze: 40,
   },
   {
     id: 'game',

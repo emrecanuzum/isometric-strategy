@@ -39,22 +39,34 @@ export function lobbySeed(lobby: string): Promise<number> {
 
 export interface OutlawDbRow {
   lobby_id: string
-  kind: 'band' | 'boat'
+  kind: 'band' | 'boat' | 'haven'
   idx: number
   gen: number
   down_until: number | null
   battle: number | null
   shift: number
   losses: number
+  pop?: number | null
+  pop_at?: number | null
+  held?: { kingdom: number; fleet: number; name: string; color?: string; since: number } | null
 }
 
 // The lobby's bands and boats as they stand now. With the lords given, the trade posts the bands may raid are learnt
 // from them (CLAUDE.md §7.9) and kept for later calls in this lobby; without, the last ones learnt stand.
 export async function outlawsIn(lobby: string, world: LobbyWorld, kingdoms?: Row[]) {
   const [seed, { data }] = await Promise.all([lobbySeed(lobby), admin.from('lobby_outlaws').select('*').eq('lobby_id', lobby)])
-  const rows = ((data ?? []) as OutlawDbRow[]).map((r) => ({ ...r, down_until: r.down_until === null ? null : Number(r.down_until), shift: Number(r.shift ?? 0) }))
+  const rows = ((data ?? []) as OutlawDbRow[]).map((r) => ({ ...r, down_until: r.down_until === null ? null : Number(r.down_until), shift: Number(r.shift ?? 0), pop_at: r.pop_at == null ? null : Number(r.pop_at) }))
   if (kingdoms) game.setRaidTargets(seed, game.raidTargetsOf(holdingsOf(kingdoms), Date.now()))
-  return { seed, rows, bands: game.bandsOf(world.world, seed, rows) as Band[], boats: game.boatsOf(world.world, seed, rows) as Boat[] }
+  return { seed, rows, bands: game.bandsOf(world.world, seed, rows) as Band[], boats: game.boatsOf(world.world, seed, rows) as Boat[], havens: game.havensOf(world.world, seed, rows) as Haven[] }
+}
+
+// deno-lint-ignore no-explicit-any
+type Haven = any
+
+// A haven's row, its people written as they stand at `at` (from there they follow the new state), with `held` set.
+export async function setHavenHold(lobby: string, haven: Haven, held: Haven['held'] | null, at: number) {
+  const pop = Math.round(game.havenPop(haven, at) * 100) / 100
+  await admin.from('lobby_outlaws').upsert({ lobby_id: lobby, kind: 'haven', idx: haven.idx, pop, pop_at: at, held }, { onConflict: 'lobby_id,kind,idx' })
 }
 
 // A band's or boat's row, made (as at large) if it has none yet.
@@ -177,7 +189,8 @@ export async function settleOutlawBattle(
       }
       loot.gold = Math.max(0, Math.min(want.gold ?? 0, Math.floor(game.goldCap(k, at) - stock.gold)))
       stock.gold += loot.gold
-      return game.book({ ...k, stock }, { outlawLoot: loot.gold })
+      const record = { ...(k.record ?? {}), bandsBeaten: (k.record?.bandsBeaten ?? 0) + (mine ? 1 : 0) }
+      return game.book({ ...k, stock, record }, { outlawLoot: loot.gold })
     }).catch(() => null)
     // A step further on the trail of the band's clan, to its cave (CLAUDE.md §7.9.1).
     if (world && mine) await followTrail(lobby, world, lord, o.idx, { x: battle.x, y: battle.y }, at).catch((e) => console.error('followTrail', e))
@@ -188,7 +201,8 @@ export async function settleOutlawBattle(
 // ---- The tick's part ----------------------------------------------------------------------------------------------
 
 export async function settleOutlaws(lobby: string, world: LobbyWorld, kingdoms: Row[], from: number, now: number) {
-  const { seed, bands, boats } = await outlawsIn(lobby, world, kingdoms)
+  const { seed, bands, boats, havens } = await outlawsIn(lobby, world, kingdoms)
+  await settleHavens(lobby, kingdoms, havens, now)
   // (No early return without bands or boats: every lord still gets its zeroed `outlaws`, which tick_due waits for.)
   const begin = Math.max(from, now - 120_000)
 
@@ -278,7 +292,7 @@ export async function settleOutlaws(lobby: string, world: LobbyWorld, kingdoms: 
   for (const row of kingdoms) {
     if (!row.state) continue
     const before = row.state.outlaws as { road: number; sea: number; bands?: number; boats?: number } | undefined
-    const p = game.pressureOf(world.world, seed, bands, boats, row.state, now)
+    const p = game.pressureOf(world.world, seed, bands, boats, row.state, now, game.havenStrength(havens, now))
     if (before && Math.abs(before.road - p.road) < 0.01 && Math.abs(before.sea - p.sea) < 0.01 && (before.bands ?? 0) === p.bands && (before.boats ?? 0) === p.boats) continue
     await mutateKingdom(row.id, now, (k) => ({ ...k, outlaws: p })).catch(() => null)
     const road = before?.road ?? 0
@@ -331,7 +345,8 @@ async function pirateBattle(lobby: string, row: Row, f: Fleet, boat: Boat, t: nu
       stock.gold += loot.gold
       const n = game.navyOf(next)
       const l = n.ledger ?? { voyages: 0, units: 0, gold: 0, pirates: 0, lostUnits: 0, sunk: 0, bounty: 0 }
-      next = game.book({ ...next, stock, navy: { ...n, ledger: { ...l, pirates: l.pirates + 1, bounty: l.bounty + loot.gold } } }, { outlawLoot: loot.gold })
+      const record = { ...(next.record ?? {}), piratesSunk: (next.record?.piratesSunk ?? 0) + 1 }
+      next = game.book({ ...next, stock, record, navy: { ...n, ledger: { ...l, pirates: l.pirates + 1, bounty: l.bounty + loot.gold } } }, { outlawLoot: loot.gold })
     }
     return next
   }).catch(() => {
@@ -344,5 +359,100 @@ async function pirateBattle(lobby: string, row: Row, f: Fleet, boat: Boat, t: nu
     'pirate_battle',
     { boat: boat.idx, name: boat.name, won, ships: boat.ships, might: game.boatMight(boat), fleetMight: game.shipMight(f.ships), loss: fight.attackerLoss, rolls: fight.rolls, ...(won && { loot }) },
     t,
+  )
+}
+
+// ---- The pirates' havens ------------------------------------------------------------------------------------------
+
+// Fleets reaching a haven fight its guard; blockades whose fleet has gone are lifted; a haven emptied while held is
+// told to its blockader once (CLAUDE.md §8.5).
+async function settleHavens(lobby: string, kingdoms: Row[], havens: Haven[], now: number) {
+  // Fought over this run: the lords' rows read before it do not show the outcome yet.
+  const struck = new Set<number>()
+  for (const row of kingdoms) {
+    for (const f of (row.state?.navy?.fleets ?? []) as Fleet[]) {
+      const m = f.mission
+      if (m.kind !== 'haven' || m.resolved || m.arriveAt > now) continue
+      const haven = havens.find((h: Haven) => h.idx === m.haven)
+      if (!haven) continue
+      struck.add(haven.idx)
+      await havenStrike(lobby, row, f, haven, now)
+    }
+  }
+  const { data: rows } = await admin.from('lobby_outlaws').select('idx, held').eq('lobby_id', lobby).eq('kind', 'haven')
+  for (const haven of havens) {
+    if (struck.has(haven.idx)) continue
+    const held = ((rows ?? []) as { idx: number; held: Haven['held'] }[]).find((r) => r.idx === haven.idx)?.held ?? null
+    if (!held) continue
+    const owner = kingdoms.find((k) => k.id === held.kingdom)
+    const f = owner?.state?.navy?.fleets?.find((x: Fleet) => x.id === held.fleet)
+    const holding = f && f.mission.kind === 'haven' && f.mission.haven === haven.idx && f.mission.resolved
+    if (!holding) {
+      await setHavenHold(lobby, { ...haven, held }, null, now)
+      continue
+    }
+    if (!held.empty && game.havenPop({ ...haven, held }, now) <= 0) {
+      await admin.from('lobby_outlaws').update({ held: { ...held, empty: true } }).eq('lobby_id', lobby).eq('kind', 'haven').eq('idx', haven.idx)
+      await notify(lobby, [held.kingdom], 'haven_empty', { haven: haven.idx, name: haven.name }, now)
+    }
+  }
+}
+
+// A fleet reaching a haven: held by another lord's fleet already, and it turns back; otherwise it fights the haven's
+// guard (corsairs by its people). Won, it lies off the haven, holding it; lost, it sails home with its losses.
+async function havenStrike(lobby: string, row: Row, f: Fleet, haven: Haven, now: number) {
+  const m = f.mission
+  const at = m.arriveAt
+  const sail = f.sail
+  const back = sail ? sail.arriveAt - sail.departAt : undefined
+  if (haven.held && (haven.held.kingdom !== row.id || haven.held.fleet !== f.id)) {
+    await mutateKingdom(row.id, now, (k) => {
+      const x = game.fleetOf(k, f.id)
+      return x?.mission.kind === 'haven' && !x.mission.resolved ? game.recallFleet(k, f.id, now, back) : null
+    }).catch(() => null)
+    await notify(lobby, [row.id], 'haven_turned', { haven: haven.idx, name: haven.name, by: haven.held.name }, now)
+    return
+  }
+  const guards = game.havenGuards(haven, at) as Record<string, number>
+  const fight = game.navalBattle(f.ships, guards, seedOf(row.id, f.id, at / 1000, haven.idx, 77), true)
+  let won = fight.winner === 'attackers'
+  const want = game.havenLoot(guards.corsair ?? 1) as Record<string, number>
+  const loot: Record<string, number> = {}
+  let claimed = false
+  await mutateKingdom(row.id, now, (k) => {
+    const x = game.fleetOf(k, f.id)
+    if (!x || x.mission.kind !== 'haven' || x.mission.resolved || x.mission.haven !== haven.idx) return null
+    claimed = true
+    let next = game.takeFleetLosses(k, f.id, fight.attackerLoss)
+    if (!game.fleetOf(next, f.id)) won = false
+    if (won) {
+      const stock = { ...next.stock }
+      const cap = game.storageCap(next, now)
+      for (const g of ['arms', 'materials']) {
+        loot[g] = Math.max(0, Math.min(want[g] ?? 0, Math.floor(cap - stock[g])))
+        stock[g] += loot[g]
+      }
+      loot.gold = Math.max(0, Math.min(want.gold ?? 0, Math.floor(game.goldCap(next, now) - stock.gold)))
+      stock.gold += loot.gold
+      const n = game.navyOf(next)
+      const record = { ...(next.record ?? {}), havensTaken: (next.record?.havensTaken ?? 0) + 1 }
+      next = game.book(
+        { ...next, stock, record, navy: { ...n, fleets: n.fleets.map((y: Fleet) => (y.id === f.id ? { ...y, mission: { ...y.mission, resolved: true } } : y)) } },
+        { outlawLoot: loot.gold },
+      )
+    } else if (game.fleetOf(next, f.id)) next = game.recallFleet(next, f.id, now, back)
+    return next
+  }).catch(() => {
+    won = false
+    return null
+  })
+  if (!claimed) return
+  if (won) await setHavenHold(lobby, haven, { kingdom: row.id, fleet: f.id, name: row.name ?? '?', color: row.state?.color, since: at }, at)
+  await notify(
+    lobby,
+    [row.id],
+    'haven_battle',
+    { haven: haven.idx, name: haven.name, won, guards: guards.corsair ?? 1, might: game.shipMight(guards), fleetMight: game.shipMight(f.ships), loss: fight.attackerLoss, rolls: fight.rolls, pop: Math.round(game.havenPop(haven, at)), ...(won && { loot }) },
+    at,
   )
 }

@@ -110,7 +110,7 @@ export function fleetShips(world: World, lords: NavyOnMap[]): FleetShip[] {
     const home = dockWater(world, lord.dock)
     for (const [n, f] of lord.fleets.entries()) {
       // Off against another lord, or coming back: out of sight (a blockade shows at the enemy's jetty, below).
-      if (!['port', 'fish', 'hunt', 'trade'].includes(f.mission)) continue
+      if (!['port', 'fish', 'hunt', 'trade', 'haven'].includes(f.mission)) continue
       const seed = lord.id * 7 + f.id * 3
       const kinds = f.kinds.slice(0, 3)
       const anchor = f.sail ? f.sail.path[f.sail.path.length - 1] : home

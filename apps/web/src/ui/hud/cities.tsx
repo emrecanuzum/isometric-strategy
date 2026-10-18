@@ -491,7 +491,15 @@ export function CrownOrders({ world, kingdom, now, online }: { world: World; kin
 // standing with the lord, its policies of the moment (what it buys at the lobby's market, the good it watches over,
 // its order of the hour, its patrols and tribute), the task it asks of the lord this hour, and the struggle for power
 // between the two.
-export const QUEST_TITLES: Record<QuestKind, string> = { trade: 'Ticari üstünlük', town: 'Kasaba ele geçir', order: 'Siparişimizi gönder', army: 'Ordunu büyüt' }
+export const QUEST_TITLES: Record<QuestKind, string> = {
+  trade: 'Ticari üstünlük',
+  town: 'Kasaba ele geçir',
+  order: 'Siparişimizi gönder',
+  army: 'Ordunu büyüt',
+  bandit: 'Yolları temizle',
+  pirate: 'Korsan avı',
+  haven: 'Korsan limanını kuşat',
+}
 
 function questText(kind: QuestKind, units: number | undefined, good: string | undefined, need: number) {
   switch (kind) {
@@ -503,6 +511,12 @@ function questText(kind: QuestKind, units: number | undefined, good: string | un
       return 'Bu saatin siparişini (yukarıda; Ticaret → Siparişler) kervanla başkente gönder.'
     case 'army':
       return `Garnizonun ve sahadaki ordularınla en az ${fmt(need)} askere ulaş.`
+    case 'bandit':
+      return 'Yollarda gezen yağmacı çetelerinden birini bu saat ortadan kaldır: haritada bir çeteye tıkla, bir orduyla takip et ve yen.'
+    case 'pirate':
+      return 'Göllerde dolaşan korsan teknelerinden birini bu saat batır: haritada bir korsan teknesine tıkla, savaş gemili bir filoyla takip et.'
+    case 'haven':
+      return 'Bir korsan limanını bu saat ablukaya al: limana tıkla, savaş gemili bir filoyla git ve limanı koruyan çektirileri yen.'
   }
 }
 

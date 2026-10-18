@@ -199,9 +199,10 @@ export function settleOrderTrips(kingdom: Kingdom, at: number, goldRoom: (k: Kin
 // ---- What the crowns ask of the lords (CLAUDE.md §7.8) --------------------------------------------------------------
 
 // Each crown asks one task an hour of every lord, the same for all (seeded by the lobby): sell a lot of a good (trade
-// mastery), take a town, send its order, or grow the army. A lord takes it (what it starts from is noted), does it
-// before the hour is out and claims gold and the crown's goodwill.
-export type QuestKind = 'trade' | 'town' | 'order' | 'army'
+// mastery), take a town, send its order, grow the army or beat one of the bandit bands roaming the roads; of a lord
+// with a shipyard also sink a pirate boat or blockade a pirate haven (the same for every lord with one). A lord takes
+// it (what it starts from is noted), does it before the hour is out and claims gold and the crown's goodwill.
+export type QuestKind = 'trade' | 'town' | 'order' | 'army' | 'bandit' | 'pirate' | 'haven'
 
 export interface CrownQuest {
   crown: number
@@ -225,12 +226,13 @@ export interface QuestTaken {
 
 const quests = () => spec().quests
 
-export function crownQuest(lobbyKey: number | undefined, crown: number, at: number): CrownQuest {
+export function crownQuest(lobbyKey: number | undefined, crown: number, at: number, navy = false): CrownQuest {
   const q = quests()
   const ms = q.windowSeconds * 1000
   const window = Math.floor(at / ms)
   const h = mix(lobbyKey ?? 0, window, crown, 7717)
-  const kind = q.kinds[h % q.kinds.length] as QuestKind
+  const kinds = navy ? [...q.kinds, ...q.navyKinds] : q.kinds
+  const kind = kinds[h % kinds.length] as QuestKind
   const steps = Math.floor((q.tradeUnits[1] - q.tradeUnits[0]) / q.tradeStep)
   const gold = q.gold[0] + ((h >>> 8) % (q.gold[1] - q.gold[0] + 1))
   return {
@@ -245,9 +247,15 @@ export function crownQuest(lobbyKey: number | undefined, crown: number, at: numb
 
 const soldiersNow = (k: Kingdom) => (k.soldiers ?? 0) + (k.fielded ?? 0)
 
+// Whether the crowns ask the lord the sea's tasks (it has a shipyard).
+export const asksNavy = (k: Pick<Kingdom, 'buildings'>, at: number) => k.buildings.some((b) => b.kind === 'shipyard' && b.doneAt <= at)
+
+// The counter a task of the wilds reads (bands beaten, pirate boats sunk, havens' guards broken).
+const tally = (k: Kingdom, kind: QuestKind) => (kind === 'bandit' ? (k.record?.bandsBeaten ?? 0) : kind === 'pirate' ? (k.record?.piratesSunk ?? 0) : kind === 'haven' ? (k.record?.havensTaken ?? 0) : 0)
+
 // Where the lord stands on the task: how far along and how far to go.
 export function questProgress(kingdom: Kingdom, crown: number, at: number): { quest: CrownQuest; taken: QuestTaken | null; have: number; need: number } {
-  const quest = crownQuest(kingdom.lobbyKey, crown, at)
+  const quest = crownQuest(kingdom.lobbyKey, crown, at, asksNavy(kingdom, at))
   const t = kingdom.crownQuests?.[crown] ?? null
   const taken = t && t.window === quest.window ? t : null
   const sold = (g?: Good) => (g ? (kingdom.trade.ledger?.[g] ?? 0) : 0)
@@ -260,6 +268,10 @@ export function questProgress(kingdom: Kingdom, crown: number, at: number): { qu
       return { quest, taken, have: (kingdom.ordersDone ?? [])[crown] === quest.window ? 1 : 0, need: 1 }
     case 'army':
       return { quest, taken, have: soldiersNow(kingdom), need: taken?.target ?? Math.max(quests().armyMin, Math.ceil(soldiersNow(kingdom) * quests().armyGrowth)) }
+    case 'bandit':
+    case 'pirate':
+    case 'haven':
+      return { quest, taken, have: taken ? Math.max(0, tally(kingdom, quest.kind) - taken.base) : 0, need: 1 }
   }
 }
 
@@ -279,7 +291,7 @@ export function questError(kingdom: Kingdom, crown: number, action: 'take' | 'cl
 export function takeQuest(kingdom: Kingdom, crown: number, at: number, crowns: number, palace: number): Kingdom {
   if (questError(kingdom, crown, 'take', at, crowns, palace)) return kingdom
   const { quest, need } = questProgress(kingdom, crown, at)
-  const base = quest.kind === 'trade' ? (kingdom.trade.ledger?.[quest.good!] ?? 0) : quest.kind === 'town' ? (kingdom.towns?.length ?? 0) : 0
+  const base = quest.kind === 'trade' ? (kingdom.trade.ledger?.[quest.good!] ?? 0) : quest.kind === 'town' ? (kingdom.towns?.length ?? 0) : tally(kingdom, quest.kind)
   const list = [...(kingdom.crownQuests ?? [])]
   while (list.length <= crown) list.push(null)
   list[crown] = { window: quest.window, base, ...(quest.kind === 'army' && { target: need }) }

@@ -63,10 +63,11 @@ export const MISSION_NAMES: Record<Fleet['mission']['kind'], string> = {
   blockade: 'Abluka',
   raid: 'Kıyı akını',
   sortie: 'Ablukayı yarma',
+  haven: 'Korsan limanı ablukası',
   return: 'Dönüyor',
 }
 
-const WHY: Partial<Record<NavyError, string>> = {
+export const WHY: Partial<Record<NavyError, string>> = {
   locked: 'Tersane seviyesi yetmiyor',
   count: 'Geçersiz sayı',
   cap: 'Limanda yer yok',
@@ -85,6 +86,8 @@ const WHY: Partial<Record<NavyError, string>> = {
   cooldown: 'Yeni akın için beklemelisin',
   city: 'Liman seç',
   good: 'Mal seç',
+  held: 'Bu limanı başka bir lordun filosu abluka ediyor',
+  nopath: 'Oraya su yolu yok',
 }
 
 const clock = (ms: number) => {

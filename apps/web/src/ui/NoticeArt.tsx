@@ -1305,7 +1305,12 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
     case 'pirate_escaped':
       return L('naval', own, 'bad', 'calm')
     case 'pirate_battle':
+    case 'haven_battle':
       return L('naval', BANDIT_HEX, p.won ? 'good' : 'bad')
+    case 'haven_turned':
+      return L('naval', own, 'bad', 'calm')
+    case 'haven_empty':
+      return L('naval', BANDIT_HEX, 'good', 'blockade')
     // The lord's house (CLAUDE.md §9.1.1).
     case 'kin_unhappy':
       return L('insult', own, 'bad')
@@ -1425,7 +1430,12 @@ export function soundForNotice(n: Notice, online: Online): Cue {
     case 'pirate_waters':
       return 'blockade'
     case 'pirate_battle':
+    case 'haven_battle':
       return p.won ? 'victory' : 'sorrow'
+    case 'haven_turned':
+      return 'lost'
+    case 'haven_empty':
+      return 'triumph'
     // The lord's house (CLAUDE.md §9.1.1).
     case 'envoy_proposal':
     case 'envoy_answer':

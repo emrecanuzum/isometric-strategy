@@ -11,7 +11,15 @@ import {
   boatsOf,
   chaseBoatError,
   fleetAt,
+  havenGuards,
+  havenLoot,
+  havenPop,
+  havenStrength,
+  havensOf,
   leadsArmy,
+  missionError,
+  sailError,
+  shipyardLevel,
   navyOf,
   outlawEffects,
   outlawUp,
@@ -21,14 +29,14 @@ import {
   territoryRect,
   territoryStage,
 } from '@game/shared'
-import type { Band, Boat, ChaseError, Clan, Kingdom, OutlawRow, Point, World } from '@game/shared'
+import type { Band, Boat, ChaseError, Clan, Haven, Kingdom, OutlawRow, Point, World } from '@game/shared'
 import { caveSpots, clanBandsUntil, clanGarrison, clanHoard, clansOf, hash, trailOf, winsToFind } from '@game/shared'
 import { useState } from 'react'
 import { Icon } from '../icons'
 import { RESOURCE_NAMES } from '../names'
 import type { Online } from './online'
 import { Section, Stat, fmt } from './primitives'
-import { ShipRow } from './navy'
+import { ShipRow, WHY as NAVY_WHY } from './navy'
 import { trailHint } from '../../game/caveHints'
 
 // Bandits on the roads and pirates on the water (CLAUDE.md §7.9, §8.5): the sheet that opens when one is clicked on
@@ -42,7 +50,7 @@ const minutes = (ms: number) => Math.max(1, Math.ceil(ms / 60_000))
 const centre = (b: { x: number; y: number; size: number }): Point => ({ x: b.x + b.size / 2, y: b.y + b.size / 2 })
 
 // 'clan': a clan by its slot (its cave, when found); 'cave': a cave of the mountains by its number (CLAUDE.md §7.9.1).
-export type OutlawPick = { kind: 'band' | 'boat' | 'clan' | 'cave'; idx: number }
+export type OutlawPick = { kind: 'band' | 'boat' | 'clan' | 'cave' | 'haven'; idx: number }
 
 // The lobby's bands and boats as the layer has them.
 export const lobbyBands = (world: World, rows: OutlawRow[]) => bandsOf(world, world.seed, rows)
@@ -88,6 +96,10 @@ export function OutlawSheet({ world, pick, online, kingdom, now, onShow, onClose
   onClose(): void
 }) {
   if (pick.kind === 'clan' || pick.kind === 'cave') return <CaveSheet key={`${pick.kind}${pick.idx}`} world={world} pick={pick} online={online} kingdom={kingdom} now={now} onShow={onShow} onClose={onClose} />
+  if (pick.kind === 'haven') {
+    const haven = havensOf(world, world.seed, online.outlaws).find((h) => h.idx === pick.idx)
+    return haven ? <HavenSheet key={`h${haven.idx}`} world={world} haven={haven} online={online} kingdom={kingdom} now={now} onShow={onShow} onClose={onClose} /> : null
+  }
   if (pick.kind === 'band') {
     const band = lobbyBands(world, online.outlaws).find((b) => b.idx === pick.idx)
     return band ? <BandSheet key={`b${band.idx}`} world={world} band={band} online={online} kingdom={kingdom} now={now} onShow={onShow} onClose={onClose} /> : null
@@ -96,7 +108,7 @@ export function OutlawSheet({ world, pick, online, kingdom, now, onShow, onClose
   return boat ? <BoatSheet key={`s${boat.idx}`} world={world} boat={boat} online={online} kingdom={kingdom} now={now} onShow={onShow} onClose={onClose} /> : null
 }
 
-function Head({ icon, title, sub, onShow, onClose }: { icon: 'swords' | 'ship' | 'pin'; title: string; sub: string; onShow(): void; onClose(): void }) {
+function Head({ icon, title, sub, onShow, onClose }: { icon: 'swords' | 'ship' | 'pin' | 'anchor'; title: string; sub: string; onShow(): void; onClose(): void }) {
   return (
     <header className="sheet-head">
       <Icon name={icon} size={32} />
@@ -249,7 +261,7 @@ function BoatSheet({ world, boat, online, kingdom, now, onShow, onClose }: { wor
   const up = outlawUp(boat, now)
   const here = boatAt(boat, now).at
   const dock = kingdom.buildings.find((b) => b.kind === 'dock' && b.doneAt <= now)
-  const mine = dock ? seaHeld([boat], centre(dock), now) : null
+  const mine = dock ? seaHeld([boat], centre(dock), now, havenStrength(havensOf(world, world.seed, online.outlaws), now)) : null
   const fleets = navyOf(kingdom).fleets
   const might = boatMight(boat)
   // Which fleet goes: always picked by the player, even when there is only one.
@@ -326,6 +338,116 @@ function BoatSheet({ world, boat, online, kingdom, now, onShow, onClose }: { wor
             )}
           </Section>
         )}
+      </div>
+    </section>
+  )
+}
+
+// A pirate haven (CLAUDE.md §8.5): its people and how they set the pirates' strength, who blockades it, and "Ablukaya
+// al": a fleet picked by the player sails there, fights the haven's guard and holds it while the people dwindle.
+function HavenSheet({ world, haven, online, kingdom, now, onShow, onClose }: { world: World; haven: Haven; online: Online; kingdom: Kingdom; now: number; onShow(at: Point): void; onClose(): void }) {
+  const H = B.havens
+  const pop = havenPop(haven, now)
+  const all = havensOf(world, world.seed, online.outlaws)
+  const strength = havenStrength(all, now)
+  const guards = havenGuards(haven, now).corsair ?? 1
+  const might = guards * balance.navy.ships.corsair.might
+  const fleets = navyOf(kingdom).fleets
+  const yard = shipyardLevel(kingdom, now) > 0
+  const mineHolds = haven.held?.kingdom === online.me
+  const [picked, setPicked] = useState<number | null>(null)
+  const pick = fleets.find((f) => f.id === picked)
+  const ctxFor = (id: number) => ({
+    cities: [],
+    haven: { idx: haven.idx, name: haven.name, heldBy: haven.held?.kingdom ?? null, arriveAt: sailError(world, kingdom, id, haven.mooring, now) ? null : now + 1 },
+  })
+  const whyOf = (id: number) => missionError(kingdom, id, { kind: 'haven', haven: haven.idx }, now, ctxFor(id))
+  const going = fleets.filter((f) => f.mission.kind === 'haven' && f.mission.haven === haven.idx)
+  const farOf = (f: (typeof fleets)[number]) => {
+    const at = fleetAt(world, kingdom, f, now)
+    return at ? Math.round(Math.hypot(at.x - haven.mooring.x, at.y - haven.mooring.y)) : null
+  }
+  const perHour = haven.held ? -H.pop.blockadePerHour : pop >= H.pop.max ? 0 : H.pop.regrowPerHour
+  return (
+    <section className="sheet frame" aria-labelledby="outlaw-title">
+      <Head icon="anchor" title={haven.name} sub={haven.held ? `${haven.held.name} abluka ediyor` : `Korsan limanı · ${Math.round(pop)} korsan`} onShow={() => onShow(haven.at)} onClose={onClose} />
+      <div className="sheet-body">
+        <Section title="Liman" icon="anchor">
+          <p className="hint">
+            Göllerdeki korsan teknelerinin yuvası. Limanın nüfusu korsanların gücünü belirler: dolu liman tekneleri tam güçle salar, boşalan liman zayıf düşer. Bir filo limanı ablukaya
+            alırsa nüfus saatte {H.pop.blockadePerHour} kişi azalır; abluka kalkınca saatte {H.pop.regrowPerHour} kişi geri gelir.
+          </p>
+          <Stat label="Nüfus" value={`${Math.round(pop)} / ${H.pop.max}`} tone={haven.held ? 'up' : undefined} note={perHour === 0 ? 'dolu' : perHour > 0 ? `saatte +${perHour}, büyüyor` : `saatte ${perHour}, abluka eritiyor`} />
+          <div className="bar" aria-hidden>
+            <i style={{ width: `${(pop / H.pop.max) * 100}%` }} />
+          </div>
+          <Stat label="Korsanların gücü" value={pct(strength)} note={`bütün limanların nüfusuna göre; en az ${pct(H.effect.floor)} (korsanlar limansız da dolaşır). İskelelerin önündeki sulara etkisi bununla çarpılır`} />
+          <Stat label="Limanı koruyan" value={`${guards} çektiri`} note={`güç ${dec(might)}; nüfusla artar`} />
+          <Stat label="Muhafızları yenince" value={lootText(havenLoot(guards))} note="ödül altını ve korsanların ambarı" />
+        </Section>
+        <Section title="Ablukaya al" icon="ship" aside={yard ? `${fleets.length} filo` : 'tersane gerekir'}>
+          {!yard ? (
+            <p className="hint">Korsan limanını ablukaya almak için önce bir tersane kur ve savaş gemisi yap.</p>
+          ) : (
+            <>
+              <p className="hint">
+                Bir filo seç, sonra "Ablukaya al": filo limanın önüne seyreder, varınca limanı koruyan çektirilerle deniz savaşı olur. Kazanırsa limanın önünde demirler ve
+                geri çağırana dek ablukayı sürdürür; kaybederse kalanlarıyla eve döner. Aynı anda limanı tek filo abluka edebilir.
+              </p>
+              {going.map((f) => {
+                const m = f.mission as Extract<typeof f.mission, { kind: 'haven' }>
+                return (
+                  <div key={f.id} className="chase-on">
+                    <Icon name="ship" size={16} />
+                    <span>
+                      <b>
+                        {fleets.indexOf(f) + 1}. filo {m.resolved ? 'limanı abluka ediyor' : 'yolda'}
+                      </b>
+                      <small className="hint">{m.resolved ? ` · nüfus saatte −${H.pop.blockadePerHour}` : ` · ${Math.max(0, Math.ceil((m.arriveAt - now) / 1000))} sn sonra varır`}</small>
+                    </span>
+                    <button className="btn small" onClick={() => online.act({ type: 'fleet', action: 'recall', fleet: f.id })} disabled={!m.resolved && m.arriveAt <= now} data-why="Savaş sürüyor">
+                      {m.resolved ? 'Ablukayı kaldır' : 'Geri çağır'}
+                    </button>
+                  </div>
+                )
+              })}
+              {haven.held && !mineHolds && <p className="hint">Bu limanı şu an {haven.held.name} abluka ediyor.</p>}
+              {fleets.length === 0 ? (
+                <p className="hint">Filon yok. Tersanede gemi yap, limandan filo çıkar.</p>
+              ) : (
+                <>
+                  <div className="chase-picks" role="radiogroup" aria-label="Abluka edecek filo">
+                    {fleets.map((f, i) => {
+                      const why = whyOf(f.id)
+                      const mightF = shipMight(f.ships)
+                      const far = farOf(f)
+                      return (
+                        <button key={f.id} role="radio" aria-checked={picked === f.id} className={picked === f.id ? 'chase-pick active' : 'chase-pick'} disabled={!!why} data-why={why ? (NAVY_WHY[why] ?? 'Bu filo gidemez') : undefined} onClick={() => setPicked(f.id)}>
+                          <b>
+                            {i + 1}. filo <ShipRow ships={f.ships} />
+                          </b>
+                          <small>{far !== null ? `${far} karo uzakta` : 'yeri bilinmiyor'} · emir hemen</small>
+                          <small className={mightF > might ? 'up' : 'down'}>
+                            güç {dec(mightF)} / {dec(might)}
+                            {why ? ` · ${NAVY_WHY[why] ?? 'olmaz'}` : ''}
+                          </small>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <button
+                    className="btn primary wide"
+                    disabled={!pick || !!whyOf(pick.id)}
+                    data-why={!pick ? 'Önce bir filo seç' : (NAVY_WHY[whyOf(pick.id)!] ?? 'Bu filo gidemez')}
+                    onClick={() => pick && online.act({ type: 'fleet', action: 'mission', fleet: pick.id, order: { kind: 'haven', haven: haven.idx } })}
+                  >
+                    <Icon name="ship" size={16} /> {pick ? `${fleets.indexOf(pick) + 1}. filoyla ablukaya al` : 'Önce bir filo seç'}
+                  </button>
+                </>
+              )}
+            </>
+          )}
+        </Section>
       </div>
     </section>
   )
