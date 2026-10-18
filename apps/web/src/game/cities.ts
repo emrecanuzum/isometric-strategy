@@ -10,8 +10,16 @@ import { SHIP_LENGTH } from './shipSprites'
 // kingdom the players swear fealty to as its lords (§7.8). Their names and layout follow from the lobby seed, so every
 // player sees the same city; they are drawn with the kingdoms' own buildings.
 
-const NAMES = ['Altınkapı', 'Sedefhisar', 'Gümüşsu', 'Kervankale', 'Yıldızlıhan', 'Akkale', 'Mermerli', 'Lalezar', 'Bakırköprü', 'Safranbolu']
-const RULERS = ['Kral Alparslan', 'Kraliçe Nilüfer', 'Kral Orhan', 'Kraliçe Selcan', 'Kral Tuğrul', 'Kraliçe Gevherhan', 'Kral Kılıç Arslan', 'Kraliçe Mahperi']
+const NAMES = [
+  'Altınkapı', 'Sedefhisar', 'Gümüşsu', 'Kervankale', 'Yıldızlıhan', 'Akkale', 'Mermerli', 'Lalezar', 'Bakırköprü',
+  'Safranbolu', 'Mercankale', 'Gülşehir', 'Firuzehisar', 'Tunçkapı', 'Sarıkemer', 'Sarayburnu', 'Çinikale',
+  'İpekhan', 'Gökkubbe', 'Demirkapı',
+]
+const RULERS = [
+  'Kral Alparslan', 'Kraliçe Nilüfer', 'Kral Orhan', 'Kraliçe Selcan', 'Kral Tuğrul', 'Kraliçe Gevherhan',
+  'Kral Kılıç Arslan', 'Kraliçe Mahperi', 'Kral Kubilay', 'Kraliçe Tomris', 'Kral Selçuk', 'Kraliçe Turhan',
+  'Kral Osman', 'Kraliçe Gülbahar', 'Kral Keykubad', 'Kraliçe Mihrimah',
+]
 // The crowns' banners: the first capital's red, the second's blue.
 export const CROWN_COLORS = ['#b23a26', '#2f5d9e']
 // The same crowns' colours lifted for text on the dark panels, where the banner colours are too dark to read.

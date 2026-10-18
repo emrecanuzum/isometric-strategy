@@ -148,7 +148,7 @@ const WHY: Record<Good, string> = {
 
 const NAME_MAX = 24
 // Place names in the manner of Ulupınar, Gökova, Altınova: a first word (a colour, a metal, a beast, a quality) and a
-// feature of the land. Any first word goes with any feature, so there are some thousands of names; a few that came
+// feature of the land. Any first word goes with any feature, so there are over ten thousand names; a few that came
 // out awkward are left out.
 const NAME_HEADS = [
   'Ak', 'Kara', 'Gök', 'Demir', 'Ulu', 'Kızıl', 'Yeşil', 'Altın', 'Kartal', 'Sarı', 'Ay', 'Boz', 'Gümüş', 'Bakır', 'Mavi',
@@ -156,16 +156,32 @@ const NAME_HEADS = [
   'Elma', 'Çınar', 'Meşe', 'Söğüt', 'Kavak', 'Ardıç', 'Lale', 'Gül', 'Menekşe', 'Nergis', 'Sedef', 'Mercan', 'İnci',
   'Yakut', 'Zümrüt', 'Firuze', 'Tunç', 'Çelik', 'Kaya', 'Taş', 'Bulut', 'Rüzgar', 'Yel', 'Şimşek', 'Ilık', 'Serin',
   'Derin', 'Uzun', 'Yüce', 'Eski', 'Yeni', 'Bey', 'Han', 'Hatun', 'Tekin', 'Bayram', 'Sultan', 'Erguvan', 'Safran',
+  'Akça', 'Karaca', 'Gökçe', 'Alaca', 'Turaç', 'Kumral', 'Tatlı', 'Soğuk', 'Küçük', 'Büyük', 'Sisli', 'Karlı',
+  'Atmaca', 'Sungur', 'Kumru', 'Keklik', 'Ceren', 'Pars', 'Balaban', 'Tay', 'Koç', 'Kuzu', 'Ceviz', 'Kestane',
+  'Fındık', 'Badem', 'Nar', 'Ayva', 'Armut', 'İncir', 'Zeytin', 'Kiraz', 'Sedir', 'Ihlamur', 'Yonca', 'Sümbül',
+  'Karanfil', 'Kurşun', 'Mermer', 'Kehribar', 'Elmas', 'Yeşim', 'Akik', 'Şafak', 'Seher', 'Tan', 'Yağmur',
+  'Poyraz', 'Yıldırım', 'Ayaz', 'Duman', 'Paşa', 'Ağa', 'Emir', 'Kağan', 'Alp', 'Ata', 'Çoban', 'Kırk', 'Bin',
+  'Yedi', 'Üç', 'Değirmen', 'Kervan', 'Pazar', 'Saray', 'Derviş',
 ]
 const NAME_TAILS = [
   'pınar', 'ova', 'dere', 'su', 'kaya', 'ırmak', 'yurt', 'tepe', 'çam', 'kale', 'köy', 'yaka', 'bel', 'göl', 'yazı',
   'bük', 'çay', 'dağ', 'kent', 'hisar', 'alan', 'yayla', 'koru', 'kum', 'kuyu', 'çeşme', 'bağ', 'bahçe', 'eli',
   'oba', 'kır', 'konak', 'burun', 'ada', 'pınarı', 'suyu', 'ırmağı', 'bayır', 'taş',
+  'ören', 'yamaç', 'deresi', 'ovası', 'gölü', 'tepesi', 'köprü', 'sırt', 'yolu', 'saray', 'çayır', 'orman',
+  'çukur', 'gedik', 'boğaz', 'kıyı', 'korusu', 'yaylası', 'düz', 'otağ', 'ağıl', 'yatak', 'özü', 'pazar', 'ocak',
+  'ili', 'kapı', 'kemer', 'bucak', 'kışla', 'derbent', 'meydan', 'kuyusu', 'tarla', 'çiftlik', 'seki', 'köprüsü',
+  'bağı', 'çeşmesi',
 ]
 // Pairs that read badly as one word.
-const NAME_SKIP = new Set(['Taştaş', 'Kayakaya', 'Kırkır', 'Kayataş', 'Taşkaya', 'Hanhan', 'Alalan', 'Akak'])
+const NAME_SKIP = new Set([
+  'Taştaş', 'Kayakaya', 'Kırkır', 'Kayataş', 'Taşkaya', 'Hanhan', 'Alalan', 'Akak', 'Kırkkır', 'Saraysaray',
+  'Pazarpazar', 'Ağaağıl', 'Ağaada', 'Ağaalan', 'Ataada', 'Ataalan', 'Ataağıl', 'Paşaağıl', 'Tanyatak',
+])
 // A lord's lands, never a kingdom: the two crown kingdoms are the only kingdoms (CLAUDE.md §7.8).
-const NAME_KINDS = ['Beyliği', 'Diyarı', 'Hanedanı', 'Sancağı', 'Yurdu', 'Malikânesi', 'Lordluğu', 'Hisarı']
+const NAME_KINDS = [
+  'Beyliği', 'Diyarı', 'Hanedanı', 'Sancağı', 'Yurdu', 'Malikânesi', 'Lordluğu', 'Hisarı',
+  'Tımarı', 'Zeameti', 'Toprakları', 'Vilayeti', 'Kalesi', 'Obası', 'Ocağı', 'Ağalığı',
+]
 const pick = <T,>(list: readonly T[]) => list[Math.floor(Math.random() * list.length)]
 // A name to start from, unlike any the lobby's other kingdoms already carry; the player may type their own.
 const suggestName = (taken: ReadonlySet<string> = new Set()) => {

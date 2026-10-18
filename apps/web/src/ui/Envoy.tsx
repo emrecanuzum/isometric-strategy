@@ -74,6 +74,10 @@ function tilt(crown: number, at: number) {
   return why ? `; ${why}` : ''
 }
 
+// One wording of a notice that is said several ways, picked by the notice's own number: the same notice reads the
+// same every time it is drawn (and in the away report), while two notices of a kind rarely sound alike.
+const vary = (n: Notice, list: string[]) => list[Math.abs(Math.trunc(Number(n.id) || 0)) % list.length]
+
 export function describe(n: Notice, online: Online): { icon: IconName; title: string; text: string } {
   const p = n.payload as Record<string, never>
   const kind = (k: unknown) => ENVOY_NAMES[k as EnvoyRow['kind']] ?? String(k)
@@ -95,8 +99,26 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       }
     case 'envoy_courtesy':
       return p.kind === 'gift'
-        ? { icon: 'gold', title: `${p.from} hediye gönderdi`, text: `${p.gold} altın hazinene eklendi; ilişkiniz iyileşti.` }
-        : { icon: 'scroll', title: `${p.from} elçisi geldi`, text: `${p.from} ilişkilerinizi geliştirmek istiyor (+${balance.diplomacy.improve.gain}).` }
+        ? {
+            icon: 'gold',
+            title: `${p.from} hediye gönderdi`,
+            text: vary(n, [
+              `${p.gold} altın hazinene eklendi; ilişkiniz iyileşti.`,
+              `${p.from} elçisi bir sandık bıraktı: içinden ${p.gold} altın çıktı. İlişkiniz iyileşti.`,
+              `Kapıya mühürlü bir kese geldi: ${p.gold} altın, ${p.from} hediyesi. İlişkiniz iyileşti; elçisi de pek kibardı.`,
+              `${p.from} cömert davrandı: ${p.gold} altın hazinene girdi ve aranız ısındı.`,
+            ]),
+          }
+        : {
+            icon: 'scroll',
+            title: `${p.from} elçisi geldi`,
+            text: vary(n, [
+              `${p.from} ilişkilerinizi geliştirmek istiyor (+${balance.diplomacy.improve.gain}).`,
+              `${p.from} elçisi selam ve güzel sözler getirdi; ilişkiniz +${balance.diplomacy.improve.gain}.`,
+              `${p.from} dostluk elçisi yolladı: iltifatlar, eğilmeler ve +${balance.diplomacy.improve.gain} ilişki.`,
+              `${p.from} aranızın iyi olmasını istiyor; elçisi bunu üç kez söyledi. İlişkiniz +${balance.diplomacy.improve.gain}.`,
+            ]),
+          }
     case 'envoy_answer':
       return {
         icon: p.accepted ? 'happy' : 'unhappy',
@@ -105,10 +127,10 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
           ? p.kind === 'tribute'
             ? `${p.by} artık her turda ${p.gold} altın ödeyecek.`
             : p.kind === 'alliance'
-              ? `${p.by} artık müttefikin.`
+              ? vary(n, [`${p.by} artık müttefikin.`, `${p.by} ittifakı mühürledi; artık ordularınız birbirini korur.`, `${p.by} elini uzattı: artık müttefiksiniz.`, `Antlaşma imzalandı: ${p.by} ile artık müttefiksiniz.`])
               : p.kind === 'marriage'
                 ? `Prenses ${p.bride} ${p.by} hanedanına gelin gitti. İlişkiniz +${balance.dynasty.intrigue.marriage.lord.relation} arttı.`
-                : 'Savaş bitti.'
+                : vary(n, ['Savaş bitti.', 'Kılıçlar kınına girdi; savaş bitti.', 'Barış imzalandı; savaş bitti.', 'Davullar sustu, savaş bitti.'])
           : p.kind === 'tribute'
             ? `İlişkiniz ${-balance.diplomacy.tribute.reject} düştü.`
             : '',
@@ -133,29 +155,113 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
             : p.op === 'kidnap'
             ? `${p.by} casusları kraliçeni kaçırdı. Fidye ödeyebilir ya da savaş açabilirsin (savaş gerekçen var).`
             : p.op === 'revolt'
-              ? 'Kışkırtıcılar halkı ayaklandırdı: üretim bir süre yarıya indi.'
+              ? vary(n, [
+                  'Kışkırtıcılar halkı ayaklandırdı: üretim bir süre yarıya indi.',
+                  'Meydanlarda öfkeli kalabalıklar toplandı; kışkırtıcıların işi. Üretim bir süre yarıya indi.',
+                  'Yabancı ağızlar halkın kulağına zehir akıttı: köylüler aletlerini bıraktı, üretim bir süre yarıya indi.',
+                  'Halk ayaklandı; arkasında birilerinin parmağı var. Üretim bir süre yarıya indi.',
+                ])
               : p.op === 'burn'
-                ? 'Kimliği belirsiz sabotajcılar depolarını ateşe verdi.'
-                : 'Sabotajcılar inşaatlarını geciktirdi.',
+                ? vary(n, [
+                    'Kimliği belirsiz sabotajcılar depolarını ateşe verdi.',
+                    'Gece yarısı ambarların yandı; kaçan gölgeleri kimse tanımadı.',
+                    'Depolarından alevler yükseldi. Yangın kendiliğinden çıkmadı; birileri kıvılcımı getirdi.',
+                    'Sabotajcılar depolarını yaktı ve karanlığa karıştı.',
+                  ])
+                : vary(n, [
+                    'Sabotajcılar inşaatlarını geciktirdi.',
+                    'Şantiyelerinde aletler kayboldu, iskeleler gevşetildi: inşaatların gecikti.',
+                    'Biri ustalarının harcına kum karıştırmış; inşaatların gecikti.',
+                    'Gece şantiyelerine sızanlar oldu; inşaatların gecikecek.',
+                  ]),
       }
     case 'ransom_paid':
-      return { icon: 'gold', title: 'Fidye ödendi', text: `${p.by} kraliçesi için ${p.gold} altın fidye ödedi.` }
+      return {
+        icon: 'gold',
+        title: 'Fidye ödendi',
+        text: vary(n, [
+          `${p.by} kraliçesi için ${p.gold} altın fidye ödedi.`,
+          `${p.by} sandığı getirdi: ${p.gold} altın. Kraliçeleri hapishanenden çıkıp evine dönüyor.`,
+          `Fidye geldi: ${p.by} kraliçesini ${p.gold} altına geri aldı.`,
+          `${p.by} kraliçesine kavuşmak için ${p.gold} altın saydı; hapishanenin avlusu yine boş.`,
+        ]),
+      }
     case 'queen_released':
-      return { icon: 'happy', title: 'Kraliçen döndü', text: `${p.by} kraliçeni serbest bıraktı.` }
+      return {
+        icon: 'happy',
+        title: 'Kraliçen döndü',
+        text: vary(n, [
+          `${p.by} kraliçeni serbest bıraktı.`,
+          `${p.by} hapishanesinin kapısı açıldı; kraliçen sarayına dönüyor.`,
+          `Kraliçen eve dönüyor: ${p.by} onu serbest bıraktı. Halk sokaklara döküldü.`,
+          `${p.by} kraliçeni bıraktı. Saray yeniden şenlenecek.`,
+        ]),
+      }
     case 'alliance_broken':
-      return { icon: 'unhappy', title: 'İttifak bozuldu', text: `${p.by} ittifakınızı bozdu.` }
+      return {
+        icon: 'unhappy',
+        title: 'İttifak bozuldu',
+        text: vary(n, [
+          `${p.by} ittifakınızı bozdu.`,
+          `${p.by} antlaşmayı yırttı; artık müttefik değilsiniz.`,
+          `${p.by} sana sırtını döndü: ittifak bitti.`,
+          `${p.by} elçisi ittifakın bittiğini bildirdi; yüzüne bile bakmadan.`,
+        ]),
+      }
     case 'tribute_ended':
-      return { icon: 'gold', title: 'Haraç bitti', text: p.renege ? `${p.by} haracı kesti; sözünden döndü.` : `${p.by} haracı bağışladı.` }
+      return {
+        icon: 'gold',
+        title: 'Haraç bitti',
+        text: p.renege
+          ? vary(n, [`${p.by} haracı kesti; sözünden döndü.`, `${p.by} artık haraç ödemeyecek; sözünü çiğnedi.`, `${p.by} haraç kesesini kapattı ve sözünden döndü.`, `${p.by} haracı kesti. Söz verip dönen herkesin gözünde küçülür.`])
+          : vary(n, [`${p.by} haracı bağışladı.`, `${p.by} artık senden haraç istemiyor; bağışladı.`, `${p.by} cömert davrandı: haraç bitti.`, `${p.by} haraç defterini kapattı; artık ödemeyeceksin.`]),
+      }
     case 'spy_caught':
-      return { icon: 'eye', title: 'Casus yakalandı', text: `Topraklarında ${p.owner} adına ${TOPIC_NAMES[p.topic as SpyTopic]} bilgisi toplayan bir casus yakalandı.` }
+      return {
+        icon: 'eye',
+        title: 'Casus yakalandı',
+        text: vary(n, [
+          `Topraklarında ${p.owner} adına ${TOPIC_NAMES[p.topic as SpyTopic]} bilgisi toplayan bir casus yakalandı.`,
+          `Muhafızların bir yabancıyı ${TOPIC_NAMES[p.topic as SpyTopic].toLocaleLowerCase('tr-TR')} kayıtlarını kurcalarken yakaladı. Konuştu: ${p.owner} göndermiş.`,
+          `${p.owner} casusu ${TOPIC_NAMES[p.topic as SpyTopic].toLocaleLowerCase('tr-TR')} bilgisi toplarken yakalandı. Artık ne aradıklarını biliyorsun.`,
+          `Bir seyisin aslında ${p.owner} casusu olduğu ortaya çıktı; ${TOPIC_NAMES[p.topic as SpyTopic].toLocaleLowerCase('tr-TR')} bilgisi topluyormuş.`,
+        ]),
+      }
     case 'spy_lost':
-      return { icon: 'eye', title: 'Casusun yakalandı', text: `${p.target} topraklarındaki casusun yakalandı. İlişkiniz bozuldu.` }
+      return {
+        icon: 'eye',
+        title: 'Casusun yakalandı',
+        text: vary(n, [
+          `${p.target} topraklarındaki casusun yakalandı. İlişkiniz bozuldu.`,
+          `${p.target} muhafızları casusunu yakaladı; artık kimin gönderdiğini biliyorlar. İlişkiniz bozuldu.`,
+          `Kötü haber: ${p.target} casusunun kılığını deldi. İlişkiniz bozuldu.`,
+          `${p.target} topraklarından casusundan haber gelmeyecek; yakalandı. İlişkiniz bozuldu.`,
+        ]),
+      }
     case 'envoy_insult':
       return { icon: 'unhappy', title: `${p.from} elçisi hakaret etti!`, text: `"${INSULTS[Number(p.seed ?? 0) % INSULTS.length]}" İlişkiniz ${balance.diplomacy.insult.relation} düştü; artık onlara karşı savaş gerekçen var.` }
     case 'insult_delivered':
-      return { icon: 'scroll', title: 'Hakaretin iletildi', text: `Elçin ${p.to} sarayında ağzına geleni söyledi. İlişkiniz ${balance.diplomacy.insult.relation} düştü; onlar da sana karşı savaş gerekçesi kazandı.` }
+      return {
+        icon: 'scroll',
+        title: 'Hakaretin iletildi',
+        text: `${vary(n, [
+          `Elçin ${p.to} sarayında ağzına geleni söyledi.`,
+          `Elçin ${p.to} hükümdarının yüzüne söyleneni söyledi; salon buz kesti.`,
+          `Elçin ${p.to} sarayında hakaretini okudu ve muhafızlar onu kapıya kadar kovaladı.`,
+          `${p.to} sarayında elçinin sözleri yankılandı; kimse gülmedi.`,
+        ])} İlişkiniz ${balance.diplomacy.insult.relation} düştü; onlar da sana karşı savaş gerekçesi kazandı.`,
+      }
     case 'army_threat':
-      return { icon: 'warn', title: 'Düşman ordusu sınırda!', text: `${p.by} ordusu sınırına kamp kurdu. Ordu orada kaldıkça halkın korkuyor ve mutluluğu düşüyor.` }
+      return {
+        icon: 'warn',
+        title: 'Düşman ordusu sınırda!',
+        text: vary(n, [
+          `${p.by} ordusu sınırına kamp kurdu. Ordu orada kaldıkça halkın korkuyor ve mutluluğu düşüyor.`,
+          `Sınırında ${p.by} çadırları yükseldi. Halkın geceleri o ateşleri seyrediyor ve korkuyor; ordu kaldıkça mutluluk düşüyor.`,
+          `${p.by} ordusu sınırının dibinde bekliyor; gözdağı veriyorlar. Ordu orada kaldıkça halkın mutluluğu düşüyor.`,
+          `${p.by} askerleri sınırda kılıç parlatıyor. Köylülerin korkuyor; ordu gitmedikçe mutluluk düşmeye devam edecek.`,
+        ]),
+      }
     case 'trade_raided':
       return {
         icon: 'warn',
@@ -163,7 +269,16 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         text: `${p.by} askerleri tüccarını bastı${p.units ? ` ve ${fmt(Number(p.units))} ${RESOURCE_NAMES[p.good as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? ''} götürdü` : ''}. Ticaret noktan harap; onarana kadar satış yapılamaz. Onarmak için ticaret noktasına tıkla ya da Ticaret sekmesini aç (${balance.economy.trade.repairCost.gold} altın, ${balance.economy.trade.repairCost.materials} yapı malzemesi). Savaş gerekçen var.`,
       }
     case 'raid_repelled':
-      return { icon: 'shield', title: 'Yağmacılar püskürtüldü', text: `${p.by} askerleri ticaret yolunu basmaya çalıştı ama geri püskürtüldü. Savaş gerekçen var.` }
+      return {
+        icon: 'shield',
+        title: 'Yağmacılar püskürtüldü',
+        text: `${vary(n, [
+          `${p.by} askerleri ticaret yolunu basmaya çalıştı ama geri püskürtüldü.`,
+          `${p.by} askerleri tüccarına pusu kurdu; gözcülerin onları erken gördü ve kovaladı.`,
+          `${p.by} ticaret yolunu basmak istedi ama elleri boş döndü.`,
+          `Tüccarın ${p.by} askerlerinin pususundan sağ salim kurtuldu; saldırganlar geri püskürtüldü.`,
+        ])} Savaş gerekçen var.`,
+      }
     case 'naval_battle': {
       const mine = p.attacker === me
       const won = (p.winner === 'attackers') === mine
@@ -224,7 +339,12 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       return {
         icon: 'swords',
         title: p.kind === 'siege' ? 'Kuşatma başladı!' : 'Savaş başladı!',
-        text: `${(p.sides as string[][])[0].join(', ')} ile ${(p.sides as string[][])[1].join(', ')} karşı karşıya. Savaş tur tur sürecek.`,
+        text: `${(p.sides as string[][])[0].join(', ')} ile ${(p.sides as string[][])[1].join(', ')} karşı karşıya. ${vary(n, [
+          'Savaş tur tur sürecek.',
+          'Davullar çalıyor; savaş tur tur sürecek.',
+          'Saflar kapıştı; savaş tur tur sürecek, izleyebilirsin.',
+          'Zarlar atılmaya başladı; savaş tur tur sürecek.',
+        ])}`,
       }
     case 'battle_end': {
       const report = p.report as { winner: string; losses: Record<string, number>; loot?: Record<string, number> }
@@ -274,7 +394,16 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         ? { icon: 'unhappy', title: 'Kral savaşta düştü!', text: `Hükümdar ${p.king} ordusunun başında savaşırken öldü. Ordu onsuz yoluna devam ediyor; tahta kimin geçeceğini hanedan belirleyecek.` }
         : { icon: 'swords', title: `${p.name} hükümdarı düştü`, text: `${p.name} hükümdarı ${p.king} ordusunun başında savaşırken öldü.` }
     case 'tower_losses':
-      return { icon: 'warn', title: 'Gözcü kuleleri ateş açtı', text: `Düşman kuleleri ordundan ${p.killed} askeri vurdu.` }
+      return {
+        icon: 'warn',
+        title: 'Gözcü kuleleri ateş açtı',
+        text: vary(n, [
+          `Düşman kuleleri ordundan ${p.killed} askeri vurdu.`,
+          `Kulelerden ok yağdı; ordundan ${p.killed} asker düştü.`,
+          `Düşmanın gözcüleri seni erken gördü: kulelerden atılan oklar ${p.killed} askerini vurdu.`,
+          `Ordun düşman kulelerinin menzilinden geçerken ${p.killed} asker kaybetti.`,
+        ]),
+      }
     case 'order_failed':
       if (p.why === 'peace') return { icon: 'warn', title: 'Kasaba kuşatılamadı', text: 'Ordun kasabaya vardı ama kasabanın sahibiyle savaşta değilsin; kuşatma yapamaz. Ordu orada bekliyor.' }
       if (p.why === 'cave') return { icon: 'warn', title: 'Mağara kuşatılamadı', text: 'Elçi orduya ulaştı ama o mağarada artık bildiğin klan yok (ya da mağarayı bilmiyorsun). Ordu olduğu yerde bekliyor.' }
@@ -288,7 +417,11 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         : { icon: 'warn', title: `${p.name} kuşatma altında!`, text: `${p.by} ordusu ${p.name} kasabanı kuşattı. ${minutes} dakika içinde ordunla gelip kuşatmayı kıramazsan kasaba onların olur.${Number(p.relation) < 0 ? ` ${p.by} ile ilişkin ${-Number(p.relation)} düştü.` : ''}` }
     }
     case 'town_siege_lifted':
-      return { icon: 'shield', title: `${p.name} kuşatması kalktı`, text: `${p.name} önündeki kuşatma sona erdi: kuşatan ordu gitti, yenildi ya da artık savaşta değilsiniz.` }
+      return {
+        icon: 'shield',
+        title: `${p.name} kuşatması kalktı`,
+        text: `${vary(n, [`${p.name} önündeki kuşatma sona erdi`, `${p.name} kapısındaki çadırlar söküldü`, `${p.name} surları önünde artık kimse yok`, `${p.name} kuşatması dağıldı`])}: kuşatan ordu gitti, yenildi ya da artık savaşta değilsiniz.`,
+      }
     case 'town_taken': {
       const mine = p.by === me
       return mine
@@ -305,7 +438,16 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       }
     }
     case 'patrol_tip':
-      return { icon: 'gold', title: 'Devriye eğlenip gitti', text: `${crown(p.crown)} devriyesi eğlence merkezinde soluklandı, içti, şarkı söyledi ve ${fmt(Number(p.amount))} altın bahşiş bıraktı.` }
+      return {
+        icon: 'gold',
+        title: 'Devriye eğlenip gitti',
+        text: vary(n, [
+          `${crown(p.crown)} devriyesi eğlence merkezinde soluklandı, içti, şarkı söyledi ve ${fmt(Number(p.amount))} altın bahşiş bıraktı.`,
+          `${crown(p.crown)} askerleri fıçıları boşalttı, ozanı alkışladı ve giderken masaya ${fmt(Number(p.amount))} altın bıraktı.`,
+          `${crown(p.crown)} devriyesi gece boyu şarkı söyledi; çavuşları biraz da dans etti. Bahşiş: ${fmt(Number(p.amount))} altın.`,
+          `Eğlence merkezinde ${crown(p.crown)} devriyesi vardı: kadehler kalktı, zarlar atıldı ve ${fmt(Number(p.amount))} altın bahşiş kaldı.`,
+        ]),
+      }
     case 'patrol_visit':
       return {
         icon: 'crown',
@@ -337,7 +479,16 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         text: `${p.name} halkı sana karşı ayaklandı: ${p.minutes ?? Math.round(balance.towns.revolt.seconds / 60)} dakika boyunca hiçbir şey göndermeyecek${Number(p.rebels) > 0 ? ` ve ${p.rebels} asi kasabanın kapısını tuttu` : ''}. Ordunu gönderip asileri yenersen ayaklanma biter (kasabanın panelinde "Ayaklanmayı bastır"). Yoksa ayaklanma bittiğinde sadakat hâlâ ${balance.towns.revolt.breakAwayBelow}'nin altındaysa kasaba senden kopar ve asiler onun garnizonu olur.`,
       }
     case 'town_lost_revolt':
-      return { icon: 'warn', title: `${p.name} senden koptu`, text: `${p.name} halkı ayaklanmayı sonuna götürdü ve sana bağlılığını bıraktı. Kasaba artık kimseye bağlı değil; küçük bir garnizonla kendini savunuyor, yeniden kuşatıp alabilirsin.` }
+      return {
+        icon: 'warn',
+        title: `${p.name} senden koptu`,
+        text: `${vary(n, [
+          `${p.name} halkı ayaklanmayı sonuna götürdü ve sana bağlılığını bıraktı.`,
+          `${p.name} burcundaki sancağın indirildi; kasaba sana bağlılığını bıraktı.`,
+          `${p.name} valinin kapısını gösterdi; kasaba artık senin değil.`,
+          `${p.name} halkı "yeter" dedi ve senden koptu.`,
+        ])} Kasaba artık kimseye bağlı değil; küçük bir garnizonla kendini savunuyor, yeniden kuşatıp alabilirsin.`,
+      }
     case 'town_sale': {
       const good = RESOURCE_NAMES[p.good as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? String(p.good)
       return {
@@ -355,9 +506,27 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       }
     }
     case 'cargo_lost':
-      return { icon: 'warn', title: 'Yük kaybedildi', text: `Ordun yenildi; kasabadan taşıdığı mallar (${goodsText(p.goods)}) savaş alanında kaldı.` }
+      return {
+        icon: 'warn',
+        title: 'Yük kaybedildi',
+        text: vary(n, [
+          `Ordun yenildi; kasabadan taşıdığı mallar (${goodsText(p.goods)}) savaş alanında kaldı.`,
+          `Yenilen ordun çuvalları bırakıp kaçtı: ${goodsText(p.goods)} düşmanın eline geçti.`,
+          `Kasabadan alınan mallar (${goodsText(p.goods)}) savaşın tozunda kayboldu; ordun yenildi.`,
+          `Ordun canını kurtardı ama yükünü kurtaramadı: ${goodsText(p.goods)} savaş alanında kaldı.`,
+        ]),
+      }
     case 'town_held':
-      return { icon: 'warn', title: `${p.name} dayandı`, text: `${p.name} garnizonu kuşatmayı püskürttü; ordundan ${fmt(Number(p.lost))} asker düştü, kimse kalmadı.` }
+      return {
+        icon: 'warn',
+        title: `${p.name} dayandı`,
+        text: vary(n, [
+          `${p.name} garnizonu kuşatmayı püskürttü; ordundan ${fmt(Number(p.lost))} asker düştü, kimse kalmadı.`,
+          `${p.name} surları dayandı: ordundan ${fmt(Number(p.lost))} asker düştü ve ayakta kimse kalmadı.`,
+          `${p.name} garnizonu son adamına kadar direndi, ama son adam senin ordundandı: ${fmt(Number(p.lost))} asker düştü.`,
+          `Kuşatma kanla bitti: ${p.name} dayandı, ordundan ${fmt(Number(p.lost))} asker düştü, kimse kalmadı.`,
+        ]),
+      }
     case 'outlaw_chase':
       return { icon: 'swords', title: `${p.name} peşindesin`, text: `Ordun ${p.name} yağmacılarının önünü kesmek için yola çıktı (yaklaşık ${fmt(Number(p.soldiers))} kişiler). Yağmacılar ordudan yavaş yürür; yakaladığı an savaş başlar. ${Math.round(balance.outlaws.bands.chase.maxSeconds / 60)} dakikada yakalayamazsa takibi bırakır.` }
     case 'cave_trail': {
@@ -378,13 +547,35 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
     case 'cave_found':
       return { icon: 'pin', title: `${p.clan} mağarası bulundu!`, text: `İzler sonunda ${p.clan} mağarasına çıktı. Mağara artık haritanda işaretli (yalnız sen biliyorsun). Mağaraya ya da çetelerinden birine tıkla, bir ordu seç ve "Mağarayı kuşat": klanı yok edersen mağaradaki ganimet senin.` }
     case 'cave_empty':
-      return { icon: 'shield', title: 'Mağara boş', text: 'Ordun mağaraya vardı ama içeride kimse yok: klan çoktan yok edilmiş. Ordu mağaranın önünde bekliyor.' }
+      return {
+        icon: 'shield',
+        title: 'Mağara boş',
+        text: `${vary(n, [
+          'Ordun mağaraya vardı ama içeride kimse yok: klan çoktan yok edilmiş.',
+          'Meşaleler mağaranın dibine kadar indi; yalnızca sönmüş ateşler ve kırık çanaklar var. Klan çoktan yok edilmiş.',
+          'Mağarada yarasalardan başka kimse yok; klan çoktan yok edilmiş.',
+          'Ordun mağaraya daldı ve boş buldu: biri klanı senden önce bitirmiş.',
+        ])} Ordu mağaranın önünde bekliyor.`,
+      }
     case 'clan_destroyed':
       return { icon: 'swords', title: `${p.clan} yok edildi`, text: `${p.byName} ordusu ${p.clan} mağarasını aldı; klanın çeteleri yollardan dağıldı. Ama dağlarda yeni bir çete türedi: ${p.next}. Bir süre sonra onun çeteleri yolları tutmaya başlar; izini yeniden sürmek gerekecek.` }
     case 'outlaw_gone':
-      return { icon: 'shield', title: 'Çete ortada yok', text: `${p.name} dağıtılmış; ordun takibi bıraktı ve olduğu yerde bekliyor.` }
+      return {
+        icon: 'shield',
+        title: 'Çete ortada yok',
+        text: `${vary(n, [`${p.name} dağıtılmış`, `${p.name} çoktan dağılmış, izleri bile soğumuş`, `${p.name} senden önce birinin kılıcına denk gelmiş`, `Yolda ${p.name} adına yalnızca sönmüş bir kamp ateşi kaldı`])}; ordun takibi bıraktı ve olduğu yerde bekliyor.`,
+      }
     case 'outlaw_escaped':
-      return { icon: 'warn', title: `${p.name} izini kaybettirdi`, text: `Ordun ${p.name} yağmacılarına yetişemedi ve takibi bıraktı; olduğu yerde bekliyor. Daha yakındaki bir orduyla yeniden dene.` }
+      return {
+        icon: 'warn',
+        title: `${p.name} izini kaybettirdi`,
+        text: `${vary(n, [
+          `Ordun ${p.name} yağmacılarına yetişemedi ve takibi bıraktı`,
+          `${p.name} yağmacıları dere yataklarına dalıp kayboldu; ordun takibi bıraktı`,
+          `${p.name} izlerini ustaca sildi; ordun peşlerini bıraktı`,
+          `Ordun ${p.name} yağmacılarını gözden kaçırdı ve takibi bıraktı`,
+        ])}; olduğu yerde bekliyor. Daha yakındaki bir orduyla yeniden dene.`,
+      }
     case 'outlaw_road':
       return {
         icon: 'warn',
@@ -392,7 +583,16 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         text: `Ticaret noktanın çevresindeki ticaret yolunun %${Math.round(Number(p.share) * 100)}'i yağmacıların elinde (${p.bands} çete). Tüccarının altınının %${Math.round(Number(p.cut) * 100)}'ini kesiyorlar ve halk tedirgin. Haritada çeteye tıkla, bir ordu seç ve "Takip et".`,
       }
     case 'outlaw_road_clear':
-      return { icon: 'shield', title: 'Yollar temizlendi', text: 'Ticaret noktanın çevresindeki yollarda yağmacı kalmadı; tüccarın yine tam kazanıyor.' }
+      return {
+        icon: 'shield',
+        title: 'Yollar temizlendi',
+        text: vary(n, [
+          'Ticaret noktanın çevresindeki yollarda yağmacı kalmadı; tüccarın yine tam kazanıyor.',
+          'Yollar yeniden güvenli: ticaret noktanın çevresinde yağmacı kalmadı, tüccarın tam kazanıyor.',
+          'Tüccarın bu sabah ıslık çalarak yola çıktı; yollarda yağmacı yok, kazancı tam.',
+          'Ticaret yolunun yağmacıları gitti; tüccarın kesesi yine dolu dönüyor.',
+        ]),
+      }
     case 'pirate_waters':
       return {
         icon: 'ship',
@@ -400,7 +600,16 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         text: `İskelenin yakınında ${p.boats} korsan teknesi dolaşıyor (korsanların etkisi %${Math.round(Number(p.share) * 100)}): deniz ticaretine saldırı olasılığı arttı, balık azaldı, halk tedirgin. Haritada kara yelkenli tekneye tıkla, savaş gemili bir filo seç ve "Takip et".`,
       }
     case 'pirate_waters_clear':
-      return { icon: 'anchor', title: 'Sular temizlendi', text: 'İskelenin önündeki sularda korsan kalmadı.' }
+      return {
+        icon: 'anchor',
+        title: 'Sular temizlendi',
+        text: vary(n, [
+          'İskelenin önündeki sularda korsan kalmadı.',
+          'Kara yelkenler ufuktan çekildi; iskelenin önü yeniden temiz.',
+          'İskelenin sularında korsan yok; balıkçılar yine rahat ağ atıyor.',
+          'Korsanlar iskelenin önünden gitti; deniz ticareti yeniden güvenli.',
+        ]),
+      }
     case 'pirate_battle': {
       const lostShips = Object.values((p.loss ?? {}) as Record<string, number>).reduce((a, b) => a + b, 0)
       const might = `filonun gücü ${String(Math.round(Number(p.fleetMight) * 10) / 10).replace('.', ',')}, korsanlarınki ${String(Math.round(Number(p.might) * 10) / 10).replace('.', ',')}`
@@ -409,9 +618,17 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         : { icon: 'warn', title: `${p.name} korsanları kazandı`, text: `Filon korsanlara yenildi (${might}; zarlar ${(p.rolls as number[])?.join('–')})${lostShips ? ` ve ${lostShips} gemi kaybetti` : ''}. Korsanlar dolaşmaya devam ediyor; daha güçlü bir filoyla (kadırgalar korsanları yener) yeniden dene.` }
     }
     case 'pirate_gone':
-      return { icon: 'anchor', title: 'Korsanlar ortada yok', text: `${p.name} batırılmış; filon takibi bıraktı.` }
+      return {
+        icon: 'anchor',
+        title: 'Korsanlar ortada yok',
+        text: vary(n, [`${p.name} batırılmış; filon takibi bıraktı.`, `${p.name} çoktan dalgaların altında; filon takibi bıraktı.`, `${p.name} başka bir filonun eline düşmüş; filon takibi bıraktı.`, `Suyun üstünde ${p.name} adına yalnızca bir kırık direk yüzüyor; filon takibi bıraktı.`]),
+      }
     case 'pirate_escaped':
-      return { icon: 'warn', title: `${p.name} kaçtı`, text: `Filon ${p.name} korsanlarına yetişemedi ve takibi bıraktı.` }
+      return {
+        icon: 'warn',
+        title: `${p.name} kaçtı`,
+        text: vary(n, [`Filon ${p.name} korsanlarına yetişemedi ve takibi bıraktı.`, `${p.name} rüzgârı arkasına aldı ve kaçtı; filon takibi bıraktı.`, `${p.name} sazlıklara sokuldu, filon izini kaybetti ve takibi bıraktı.`, `Filon ${p.name} yelkenlerini ufukta kaybetti ve takibi bıraktı.`]),
+      }
     // ---- The lord's house (CLAUDE.md §9.1.1) ----
     case 'kin_unhappy': {
       const brother = p.kinship === 'sibling'
@@ -496,15 +713,32 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
           text: `${both} arasındaki savaş bitti${p.stance === 'tension' ? ', ama gerginlik sürüyor' : ''}.${won !== null ? ` Zafer ${crown(won)} tacının.` : ''}${mine ? ` Bağlı olduğun tacın zaferi seni de gururlandırdı: onunla ilişkin +${balance.cities.crown.rivalry.victoryRelation}.` : ''}`,
         }
       return p.stance === 'tension'
-        ? { icon: 'warn', title: 'Taçlar arasında gerginlik', text: `${both} arasında gerginlik var: haraççılar biraz daha çok ister.` }
-        : { icon: 'flower', title: 'Taçlar barıştı', text: `${both} arasındaki gerginlik yatıştı.` }
+        ? {
+            icon: 'warn',
+            title: 'Taçlar arasında gerginlik',
+            text: `${vary(n, [`${both} arasında gerginlik var`, `${both} elçilerini geri çağırdı`, `${both} sınırlarına asker yığıyor`, `${both} arasında soğuk rüzgârlar esiyor`])}: haraççılar biraz daha çok ister.`,
+          }
+        : {
+            icon: 'flower',
+            title: 'Taçlar barıştı',
+            text: vary(n, [`${both} arasındaki gerginlik yatıştı.`, `${both} elçileri yeniden kadeh tokuşturuyor; gerginlik yatıştı.`, `${both} arasında rüzgâr dindi; barış sürüyor.`, `${both} birbirine hediyeler gönderdi; gerginlik geride kaldı.`]),
+          }
     }
     case 'liege_switch':
       return p.accept
         ? { icon: 'banner', title: `Artık ${crown(p.to)} lordusun`, text: `${crown(p.from)} kardeşin ${p.name}'i sana karşı destekledi; sen de sancağını ${crown(p.to)} tarafına çevirdin. ${crown(p.to)} seni kollarını açarak karşıladı (ilişki en az +${balance.cities.crown.switch.newRelation}); ${crown(p.from)} bunu unutmayacak (ilişki en çok ${balance.cities.crown.switch.oldRelation}). Devriyeler ve haraççılar bundan sonra yeni bağlılığına göre gelir.` }
         : { icon: 'gold', title: `${crown(p.from)} özür diledi`, text: `${crown(p.from)} hanesine sadık kalmana çok sevindi: davacıyı desteklediği için özür diledi${Number(p.gold) > 0 ? `, hazinene ${fmt(Number(p.gold))} altın gönderdi` : ''} ve ilişkin +${balance.cities.crown.switch.declineRelation} arttı.` }
     case 'liege_changed':
-      return { icon: 'banner', title: `${p.by} taraf değiştirdi`, text: `${p.by}, kendisine karşı bir taht davacısını desteklediği için ${crown(p.from)} hanesinden ayrıldı ve ${crown(p.to)} tarafına geçti.` }
+      return {
+        icon: 'banner',
+        title: `${p.by} taraf değiştirdi`,
+        text: vary(n, [
+          `${p.by}, kendisine karşı bir taht davacısını desteklediği için ${crown(p.from)} hanesinden ayrıldı ve ${crown(p.to)} tarafına geçti.`,
+          `${p.by} sancağını indirip yenisini çekti: ${crown(p.from)} kendisine karşı taht davacısını desteklemişti, şimdi ${crown(p.to)} lordu.`,
+          `${crown(p.from)} ${p.by} karşısında bir davacıyı tuttu; ${p.by} de ${crown(p.to)} tarafına geçerek karşılık verdi.`,
+          `Saraylarda tek konu bu: ${p.by}, ${crown(p.from)} ihanetinden sonra ${crown(p.to)} tarafına geçti.`,
+        ]),
+      }
     default:
       // A kind this page does not know yet: the game was updated while it was open.
       return { icon: 'scroll', title: 'Elçiden haber', text: 'Oyun güncellendi; bu haberi okumak için sayfayı yenile.' }

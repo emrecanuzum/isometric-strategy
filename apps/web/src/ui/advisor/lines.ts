@@ -121,6 +121,9 @@ export const LATER_ANSWERS = [
   `Bekleriz, lordum. Ben beklemekte ustayım; bir keresinde bir taç elçisinin kapısında üç gün bekledim.`,
   `Peki lordum; ben de bu sırada ayna karşısında bir sonraki öğüdümü prova ederim.`,
   `Not ettim, lordum, hem de kırmızı mürekkeple. Kırmızı mürekkep "yine geleceğim" demektir.`,
+  `Peki lordum. Kumsaati çevirdim; dolunca kapınızı yine çalarım.`,
+  `Anlaşıldı, lordum. Bir elçinin en iyi bildiği iş beklemektir, ikincisi de beklerken konuşmak. Şimdilik birinciyi yapıyorum.`,
+  `Siz bilirsiniz, lordum. Ben bu arada aşçıya uğrayayım; bekleyen elçinin karnı çabuk acıkır.`,
 ]
 
 const GOOD_NAMES = { food: 'yemek', materials: 'yapı malzemesi', arms: 'savaş malzemesi' } as const
@@ -274,6 +277,7 @@ export const TIPS: Tip[] = [
       'Bu bolluk çürümeden bir şeye dönüşmeli, lordum. Ustalar büyük bir iş için hazır; her aşama kalıcı bir katkı ve sıralamada puan getirir. Projeler bölümüne bakalım mı?',
       'Lordum, hazinedar da ambarcı da yer kalmadı diye ağlıyor. Ulu Katedral\'e kereste, Büyük Çarşı\'ya yemek, Şövalye Tarikatı\'na demir gönderelim; afetler yakmadan.',
       'Dolu ambar, lordum, deprem de sel de geldiğinde en çok yanan ambardır. Fazlayı büyük işlere aktaralım; adınız taşlara kazınsın.',
+      'Lordum, ustabaşı kapımda şapkasını çeviriyor: "elimiz boş, ambar dolu" diyor. Büyük işlerin her aşaması kalıcı bir kazanç; Projeler bölümünde bekliyorlar.',
     ],
     go: { label: 'Projelere git', act: tab('kingdom', 'palace', 'projects') },
     jokes: [
@@ -429,10 +433,18 @@ export const TIPS: Tip[] = [
       return [
         `Lordum, kardeşiniz ${p.person.name} karargâhında ${s} asiyle tahtınızı bekliyor. ${m} dakika sonra sarayınıza yürür; karargâhı şimdi dağıtmak sonradan surlarda dövüşmekten iyidir.`,
         `${p.person.name} karargâhına her gün yeni asiler katılıyor, lordum: ${s} oldular. ${m} dakika var; bir ordu gönderin ya da tacınızdan yardım isteyin.`,
+        `Lordum, karargâhtan davul sesleri geliyor. ${p.person.name} ${s} asiyle hazırlanıyor ve ${m} dakika sonra kapımızda olacak. Çadırları şimdi yıkmak, sonra surlarda kan dökmekten iyidir.`,
+        `Kardeşiniz ${p.person.name} kendine taç bile yaptırmış, lordum; tenekeden ama parlıyor. ${s} asisi var, ${m} dakikası var. Hanedan bölümünden ordu gönderebilirsiniz.`,
+        `Lordum, isyan büyüdükçe zorlaşır: ${p.person.name} şimdi ${s} asiyle, ${m} dakika sonra daha fazlasıyla sarayımıza yürür. Ordu ya da taçtan yardım; ikisi birden de olur.`,
       ]
     },
     go: { label: 'Hanedana bak', act: tab('kingdom', 'palace', 'house') },
-    jokes: [['Kardeşim beni sever', 'Severdi, lordum. Şimdi çadırında sizin portrenize ok atıyor.']],
+    jokes: [
+      ['Kardeşim beni sever', 'Severdi, lordum. Şimdi çadırında sizin portrenize ok atıyor.'],
+      ['Gelsin, surlarım sağlam', 'Sağlam, lordum; ama kardeşiniz surların zayıf yerini bilir. Çocukken oradan kaçardınız ikiniz.'],
+      ['Ona bir mektup yazarım', 'Yazdım, lordum, sizin adınıza. Cevap olarak mektubu ok ucuna takıp geri yolladı.'],
+      ['Annem bizi barıştırır', 'Kraliçe ana denedi, lordum. Şimdi o da karargâha pasta gönderiyor; kimin tarafında, belli değil.'],
+    ],
   },
   {
     // The liege backed a beaten pretender: the lord may go over to the rival crown, for a while (CLAUDE.md §9.1.1).
@@ -447,10 +459,17 @@ export const TIPS: Tip[] = [
         `Lordum, ${from} kardeşiniz ${o.name}'in tarafını tuttu. Bunu yutacak mıyız? ${m} dakika içinde ${to} tarafına geçebiliriz; ya da sadık kalır, özürlerini ve altınlarını alırız.`,
         `${from} size sırtını döndü, lordum. ${to} kapısını açık tutuyor, ama yalnızca ${m} dakika daha. Karar sizin: intikam mı, özür mü?`,
         `Bir taç kendi lorduna karşı davacıyı destekler mi? ${from} destekledi. ${m} dakikanız var, lordum: ${to} sancağına geçin ya da sadakatinizin bedelini isteyin.`,
+        `${to} ulağı koridorda bekliyor, lordum; elinde yeni bir sancak. ${m} dakika sonra gidecek. ${from} ise özür mektubunu yazmış, mührünü basmayı bekliyor. Hangisini açalım?`,
+        `Lordum, ihanete ihanetle mi, sadakatle mi karşılık vereceğiz? ${from} ${o.name}'i destekledi; ${to} kapısı ${m} dakika daha açık. Seçim sezon boyunca bir daha gelmez.`,
       ]
     },
     go: { label: 'Kararı ver', act: tab('diplomacy', 'diplomacy', 'crowns') },
-    jokes: [['İkisine de biat etsem?', 'Denendi, lordum. O lordun başı şimdi iki başkentin surlarında, yarısı birinde yarısı öbüründe.']],
+    jokes: [
+      ['İkisine de biat etsem?', 'Denendi, lordum. O lordun başı şimdi iki başkentin surlarında, yarısı birinde yarısı öbüründe.'],
+      ['Yazı tura atalım', 'Attım, lordum; para yine dik düştü. Bu parayı artık kimseye göstermiyorum.'],
+      ['Elçi efendi ne derse o', 'Beni bu kadar önemsemeniz gururumu okşadı, lordum; ama taç değiştiren lordun elçisinin başı da değişir. Karar sizin.'],
+      ['Bekleyelim, bakalım', 'Bekleriz, lordum; ama teklif beklemez. Saat dolunca ulak atına biner, kapı kapanır.'],
+    ],
     snooze: 5,
   },
   {
@@ -465,10 +484,17 @@ export const TIPS: Tip[] = [
         `Taçlar savaşta, lordum! ${m} dakika daha sürecek gibi. Rakip haraççılar ×${String(fx.tribute).replace('.', ',')} ister; hazineyi şişirmeyin, harcayın.`,
         `Sınırlarda taç savaşı var. Tacımız sadık lordlarını kolluyor: devriyenin bahşişi ×${String(fx.tip).replace('.', ',')}. Bir eğlence merkeziniz varsa şimdi tam zamanı.`,
         `Lordum, iki taç birbirine girdi. Savaş bittiğinde kazanan tacın lordları gururlanır; dua edelim de bizimki kazansın.`,
+        `Başkentlerde savaş borusu çalıyor, lordum; ${m} dakika daha sürecek. Rakip haraççılar hazinenin daha çoğunu ister, tacımız da lordlarına daha cömert davranır.`,
+        `Taç savaşı, lordum! Biz bu kavgada kılıç sallamıyoruz ama keselerimiz sallanıyor: rakip haraç ×${String(fx.tribute).replace('.', ',')}, devriyenin bahşişi ×${String(fx.tip).replace('.', ',')}.`,
       ]
     },
     go: { label: 'Krallık bölümü', act: tab('diplomacy', 'diplomacy', 'crowns') },
-    jokes: [['Ben de katılayım mı?', 'Taçlar lordların kılıcını değil kesesini ister, lordum. Kesenizi sıkı tutun.']],
+    jokes: [
+      ['Ben de katılayım mı?', 'Taçlar lordların kılıcını değil kesesini ister, lordum. Kesenizi sıkı tutun.'],
+      ['Kim kazanır sence?', 'Ben hep kazananın elçisiyim, lordum; savaş bitince söylerim.'],
+      ['Uzaktan seyrederiz', 'Ben de bir tas leblebi kaptım, lordum; seyirlik bir savaş. Yalnız haraççılar seyirci bırakmaz.'],
+      ['Bize ne taçların kavgasından', 'Haraççılara bunu siz söyleyin, lordum; onlar kavganın masrafını bizim hazinemizden çıkarıyor.'],
+    ],
     snooze: 60,
   },
   {
@@ -482,9 +508,18 @@ export const TIPS: Tip[] = [
       return [
         `${online.crowns[rival] ?? 'Rakip taç'} tahtında ${h.title} oturuyor, lordum; ${t.name.toLocaleLowerCase('tr-TR')} biri. Haraççıları hazinenin daha çoğunu ister: altını hazinede bekletmeyin.`,
         `Rakip tacın hükümdarı ${h.title} pek ${t.name.toLocaleLowerCase('tr-TR')}, lordum. Haraç günü gelmeden altını binalara, askere ya da siparişlere yatırın.`,
+        `Lordum, ${online.crowns[rival] ?? 'rakip taç'} haraççıları hazinenin payını ister; ${h.title} gibi ${t.name.toLocaleLowerCase('tr-TR')} bir hükümdarın haraççıları daha da çoğunu. Dolu kasa onların iştahını açar.`,
+        `${h.title} hakkında bir söz dolaşıyor, lordum: "${t.name.toLocaleLowerCase('tr-TR')} hükümdarın haraççısı da açgözlü olur." Altını hazinede tutmak, onlara hazır sofra kurmaktır.`,
+        `Lordum, haraççılar yarım saatte bir gelir ve hazinenin payını alır. ${h.title} tahtta oldukça bu pay büyük; altını işe koşalım, kasada uyutmayalım.`,
       ]
     },
     go: { label: 'Krallık bölümü', act: tab('diplomacy', 'diplomacy', 'crowns') },
+    jokes: [
+      ['Altını gömerim', 'Gömdünüz mü, lordum? Bahçıvan buldu, sayıp hazineye geri koydu. Dürüst adam, ne yazık ki.'],
+      ['Hükümdara bir mektup yazarım', 'Yazdım, lordum; cevabında "haraç az" diyor. Mektubu bir daha yazmayalım.'],
+      ['Haraççıları kapıda oyalarım', 'Oyalamayı ben de denedim, lordum; beş dakika sonra haraç kendiliğinden ödendi, üstüne fazlası.'],
+      ['Ne kadar isterlerse isterler', 'İsterler, lordum, ama alamadıklarını alamazlar. Boş kasa en iyi kalkandır.'],
+    ],
     snooze: 90,
   },
   {
@@ -495,10 +530,18 @@ export const TIPS: Tip[] = [
       return [
         `Kardeşiniz ${p.name} sofrada size hiç bakmıyor, lordum. Bir görev ya da küçük bir hediye gönlünü alır; yoksa bir gün asker toplayıp tahtınızı ister.`,
         `Lordum, ${p.name} saray kapısında fısıldaşıyor. Hoşnutsuz bir kardeş en tehlikeli düşmandır: ona bir kasabanın valiliğini verin ya da hazineden bir kese yollayın.`,
+        `${p.name} ava çıktı, lordum, ama av yerine askerlerle konuştuğunu gördüm. Gönlü soğuk bir kardeş bir gün karargâh kurar; bir görev ya da hediye, şimdiden.`,
+        `Lordum, ${p.name} sizin sağlığınıza kadeh kaldırmayı unuttu; dün de, önceki gün de. Bir hediye kesesi hafızasını tazeler.`,
+        `Saray kulağı fısıldıyor, lordum: ${p.name} memnun değil. İşsiz kardeş kötü fikir üretir; ona bir görev verin, meşgul olsun.`,
       ]
     },
     go: { label: 'Hanedana bak', act: tab('kingdom', 'palace', 'house') },
-    jokes: [['Kardeşimden korkmam', 'Korkmayın, lordum; ama yatağınızın altına bakmayı da ihmal etmeyin.']],
+    jokes: [
+      ['Kardeşimden korkmam', 'Korkmayın, lordum; ama yatağınızın altına bakmayı da ihmal etmeyin.'],
+      ['Çocukken iyi anlaşırdık', 'O zaman taht yoktu, lordum, yalnızca tahta at vardı. Onu da hep siz binerdiniz, hatırlıyor.'],
+      ['Ona bir şiir yazayım', 'Şiir güzel, lordum; ama kardeşiniz şiir okumaz, kese sayar.'],
+      ['Elçi efendi onu yatıştırsın', 'Denedim, lordum; bir saat konuştum. Sonunda o da yatıştı, ben de; ikimiz de uyuyakaldık.'],
+    ],
   },
   {
     id: 'princess',
@@ -508,10 +551,18 @@ export const TIPS: Tip[] = [
       return [
         `Saraydaki prensesimiz evlenme çağında, lordum. Taca gelin verirsek taçla ilişkimiz +${m.crown.relation} artar; bir kasabaya verirsek kasaba sadık kalır, kimsenin olmayan bir kasaba ise kılıçsız bizim olur.`,
         `Lordum, prensese talipler kapıda kuyruk oldu. Bir lorda gelin verirseniz ilişkiniz +${m.lord.relation} artar; taca ya da bir kasabaya vermek de akıllıca olur.`,
+        `Saray terzisi yine gelinlik ölçüsü istiyor, lordum. Prenses evlenme çağında; taca verirsek ilişki +${m.crown.relation}, sahipsiz bir kasabaya verirsek kasaba kılıçsız bizim.`,
+        `Lordum, bir prenses sarayda bir hazinedir, evlendirildiğinde ise bir ittifak. Taç, kasaba ya da bir lordun hanedanı; her birinin ayrı bir kazancı var.`,
+        `Prenses bahçede papatya falı bakıyor, lordum: "seviyor, sevmiyor". Kimin sevdiğini bilmiyoruz ama kimin işine yarayacağını biliyoruz: Hanedan bölümünde "Evlendir".`,
       ]
     },
     go: { label: 'Hanedana bak', act: tab('kingdom', 'palace', 'house') },
-    jokes: [['Kızım kimseyle evlenmez', 'O da öyle diyor, lordum; ama şövalye turnuvasında gözü birine takıldı.']],
+    jokes: [
+      ['Kızım kimseyle evlenmez', 'O da öyle diyor, lordum; ama şövalye turnuvasında gözü birine takıldı.'],
+      ['Elçi efendi evlensin', 'Teşekkür ederim, lordum, ama ben kırk yıldır elçiliğe nişanlıyım. Kıskançtır.'],
+      ['Önce ben bir görüşeyim', 'Görüşün, lordum; ama damat adaylarını ben de gördüm. Çoğu sizden korkuyor; bu iyi bir işaret.'],
+      ['Çeyiz çok pahalı', 'Pahalı, lordum; ama bir kasabayı kılıçsız almak bir ordudan ucuzdur.'],
+    ],
   },
   {
     id: 'barracks',
@@ -801,6 +852,12 @@ export const IDLE_LINES = [
   'Getirecek kötü bir haberim yok, lordum; bu yüzden kendimi işsiz hissediyorum. Bir şey sormak ister misiniz?',
   'Lordum, bugün size yalnızca iltifat edeceğim: sarayınız heybetli, şapkanız da. Şapka benim tavsiyemdi.',
   'Her şey yolunda. Böyle günlerin fırtına öncesi olduğunu bilirim, lordum; ama şimdilik keyfini çıkaralım.',
+  'Bugün ulaklar bile tembel, lordum; atları ahırda geviş getiriyor. Ben de onlara uydum.',
+  'Söyleyecek bir derdim yok, lordum. Kırk yılda üçüncü kez başıma geliyor; tarihini not ettim.',
+  'Hazinedar gülümsüyor, ambarcı ıslık çalıyor, lordum. Ya işler iyi ya da ikisi bir şey biliyor.',
+  'Lordum, bugün size kötü haber getiremediğim için özür dilerim. Yarın telafi ederim, söz.',
+  'Sarayda huzur var, lordum. Kraliyet kedisi bile güneşte uyuyor; ben de onu taklit etmeyi düşünüyorum.',
+  'Pazarda fiyatlar yerinde, yollarda kervanlar yolunda, lordum. Benim dilim de yerinde; ona bir iş bulun.',
 ]
 
 // Things to chat about when there is nothing to advise, each with a few answers.
@@ -812,6 +869,7 @@ export const SMALL_TALK: { label: string; answers: string[] }[] = [
       'İyiyim, lordum; dişlerimin yarısı ve hatıralarımın tamamı yerinde.',
       'Daha iyi olamazdım, lordum. Gerçi dün de böyle demiştim, sonra merdivenden düştüm.',
       'Bir elçi nasıl olduğunu kimseye söylemez, lordum; ama size söylerim: yorgun ama gururlu.',
+      'Sabah üç merdiven çıktım, öğlen iki haber taşıdım, akşam bir şarkı söyledim, lordum. Bu yaşta fena sayılmaz.',
     ],
   },
   {
@@ -821,6 +879,7 @@ export const SMALL_TALK: { label: string; answers: string[] }[] = [
       'Bir lord tüccarına "Hiçbir şey satma" demiş. Tüccar bir hafta oturmuş, sonra gelip "Lordum, oturmaktan yoruldum, bari sandalyeyi satayım mı?" diye sormuş.',
       'Bir lord mancınığı ters kurmuş, taşı kendi sarayına atmış. "Tatbikattı" demiş. O günden beri o lordluğun tatbikatlarına herkes miğferle geliyor.',
       'Köylünün biri hastaneye gitmiş: "Doktor, her gün yorgun uyanıyorum." Doktor sormuş: "Gece mesaisi mi?" Köylü: "Ben istemedim, lordum açtı." Doktor: "O zaman ilaç bende değil, lordunda."',
+      'Haraççı bir lordun kapısını çalmış: "Hazinenin payını almaya geldik." Lord kasayı açmış, içinden bir fare çıkmış. Haraççı fareyi almış, gitmiş. Fare hâlâ rakip tacın hazinesinde, kendini pek önemli sanıyormuş.',
     ],
   },
   {
@@ -830,6 +889,7 @@ export const SMALL_TALK: { label: string; answers: string[] }[] = [
       'Elbette, lordum. Bir de ambarları doldurursanız kusursuz olursunuz.',
       'Kitaplar size "Büyük" diyecek, lordum. Neyin büyüğü olduğunu ben uydururum.',
       'Sizden önceki lordlara da böyle demiştim, lordum; ama size gerçekten inanarak söylüyorum. Neredeyse.',
+      'Halka sordum, lordum: yarısı "iyi" dedi, yarısı "vergiye bağlı". Bence bu, bir lord için parlak bir karne.',
     ],
   },
   {
@@ -839,6 +899,46 @@ export const SMALL_TALK: { label: string; answers: string[] }[] = [
       'Eskiden elçiler atla giderdi, lordum. Şimdi de atla gidiyoruz, ama eskiden atlar daha hızlıydı. Ya da ben daha hafiftim.',
       'Bir keresinde iki lord arasında barış imzalattım, lordum. Mürekkep kurumadan savaş çıktı, ama imza çok güzeldi.',
       'Dedem de elçiydi, lordum; o da çok konuşurdu. Ailemizde sessiz biri doğsa sanırım onu evlatlıktan reddederiz.',
+      'Bir kış bir taç sarayında kar yüzünden mahsur kaldım, lordum. Üç ay boyunca hükümdara masal anlattım; bahara çıktığımda o elçi olmuştu, ben neredeyse hükümdar.',
+    ],
+  },
+  {
+    label: 'Taçlar hakkında ne düşünürsün?',
+    answers: [
+      'Taçlar güneş gibidir, lordum: uzaktan ısıtır, yakından yakar. Biz uygun mesafede duralım.',
+      'Bir taç ne verdiğini hiç unutmaz, ne aldığını da hemen unutur. Defterleri tek sayfalıktır, lordum.',
+      'Gençken bir hükümdarın elini öptüm, lordum. Yüzüğü o kadar büyüktü ki burnumu çizdi; izi hâlâ duruyor.',
+      'Taçlara güvenin, lordum, ama hazinenizi kilitli tutun. İkisini aynı anda yapabilen lord uzun yaşar.',
+      'İki taç, iki sancak, bir sürü lord; biz de aradaki köprüyüz, lordum. Köprüye herkes basar ama köprü olmadan kimse karşıya geçemez.',
+    ],
+  },
+  {
+    label: 'Komşularımız hakkında ne biliyorsun?',
+    answers: [
+      'Çok şey bilirim, lordum, ama yarısını uydururum; hangi yarısı olduğunu casus evi söyler.',
+      'Komşulardan biri her gece surlarını sayıyormuş, lordum. Saydıkça azalıyormuş; ben de anlamadım.',
+      'Bir komşu lordun aşçısı bizim aşçının kuzeni, lordum. Mutfaktan çıkan dedikodu, casustan çıkan rapordan hızlıdır.',
+      'Komşular iyi insanlar, lordum; uyurken. Uyanınca her biri bir hesap peşinde.',
+      'Han söylentilerini dinlerseniz, lordum, kimin ne sattığını, kimin kime savaş açtığını öğrenirsiniz. Ben her akşam bir hana uğrarım; yalnızca işim için.',
+    ],
+  },
+  {
+    label: 'Bir öğüt ver',
+    answers: [
+      'Dolu ambar, dolu hazine, boş kafa: üçü bir arada olmasın, lordum. İlk ikisi tehlikelidir, üçüncüsü ölümcül.',
+      'Kraliçenizi iyi koruyun, kardeşlerinizi iyi doyurun, haraççıları iyi uğurlayın, lordum. Gerisi kendiliğinden gelir.',
+      'Bir lord herkesle kavga edemez, lordum; ama herkes onunla kavga etmekten çekinmeli. İkisi arasındaki ince çizgiye diplomasi denir.',
+      'Tüccarınızı hiç boş oturtmayın, lordum; boş tüccar ya şarkı söyler ya dedikodu yapar, ikisi de altın getirmez.',
+      'Fazla düşünen lord fırsatı kaçırır, hiç düşünmeyen tahtını, lordum. Ben arada bir düşünürüm; o yüzden hâlâ buradayım.',
+    ],
+  },
+  {
+    label: 'En sevdiğin yemek ne?',
+    answers: [
+      'Bal kaymak, lordum. Ama doktor yasakladı; ben de doktoru yasakladım. Şimdi ikimiz de mutsuzuz.',
+      'Sarayın aşçısının kuzu güveci, lordum. Tarifini bir kez sordum; kepçeyle kovaladı.',
+      'Ziyafet sofrasında başkasının tabağındaki her şey, lordum. Elçilik bunu öğretir.',
+      'Kuru ekmek ve peynir, lordum; yolda yediğim. Gerçi yolda yediğim her şey kuru ekmek ve peynirdi.',
     ],
   },
 ]
@@ -856,12 +956,14 @@ export const SKIP_ANSWERS = [
   'Anlaşıldı, lordum; o adımı atlıyoruz. Her lordun kendi yolu var.',
   'Geçtik, lordum. İleride gerekirse öğreticiyi ayarlardan yeniden açarsınız, atlanan adımlar da geri gelir.',
   'Peki lordum; o binayı şimdilik hayal defterime yazıyorum. Sıradaki adım geliyor.',
+  'Atlıyoruz, lordum. Ben de gençken birçok adımı atladım; çoğu merdivendi, dizlerim hâlâ hatırlar.',
 ]
 export const TUTORIAL_OFF_ANSWERS = [
   'Peki lordum, artık kendi yolunuzu çiziyorsunuz. Bir şey sormak isterseniz sohbetin yanındaki Elçi düğmesi beni çağırır.',
   'Peki lordum; öğretmenlik bitti, danışmanlık başlıyor. Beni çağırmak için sohbetin yanındaki Elçi düğmesi yeter.',
   'Anladım, lordum, kanatlarınız çıktı. Öğreticiyi ayarlardan yeniden açabilirsiniz; ben de Elçi düğmesinin arkasında beklerim.',
   'Nasıl isterseniz, lordum. Kitabı kapatıyorum ama dilimi kapatmıyorum; Elçi düğmesine basmanız yeter.',
+  'Peki lordum, ders bitti. Hocalığı bıraktım, elçiliğe döndüm; gerçi ikisi de aynı kapıya çıkar: çok konuşmak.',
 ]
 
 // ---- The tutorial ----------------------------------------------------------------------------------------------------
@@ -1379,6 +1481,7 @@ export const TUTORIAL_DONE = [
   'Öğretici bitti, lordum; artık benden çok şey biliyorsunuz. Gerçi bunu kimseye söylemeyin. Bir köşeyi merak ederseniz "Bana oyunu anlat" deyin.',
   'İşte bu kadar, lordum: sarayı kurdunuz, büyüttünüz, bir taca bağlandınız. Gerisi sizin hikâyeniz. Merak ettiğiniz bir şey olursa beni çağırın.',
   'Son adım da bitti, lordum. Artık yalnızca öğüt vereceğim; öğüt vermek de en sevdiğim iştir. Sorunuz olursa "Bana oyunu anlat" yeter.',
+  'Lordum, artık size öğretecek bir şeyim kalmadı; bu beni hem gururlandırıyor hem de işsiz bırakıyor. Ben yine de yanınızdayım; "Bana oyunu anlat" dediğiniz an anlatırım.',
 ]
 
 // ---- Topics he explains on request -----------------------------------------------------------------------------------
@@ -1828,18 +1931,26 @@ export function wealthAdvice(c: AdvisorCtx, pick: <T>(key: string, list: T[]) =>
       'Lordum, biraz büyük şeyler yapmanın vakti gelmedi mi sizce de? Ambarlar dolu, ustalar boş. Bir katedral, bir çarşı ya da bir şövalye tarikatı; her aşaması kalıcı bir kazanç ve sıralamada puan. Malı taşa çevirelim.',
       'Dolu ambar, lordum, farenin ve yangının sofrasıdır. Saray → Projeler\'de üç büyük iş bekliyor; fazlayı oraya aktaralım, adınız taşlara kazınsın.',
       'Lordum, servet saklandıkça erir: fare yer, pas yer, sel götürür. Büyük bir işe başlayalım; halk da görsün, tacınız da.',
+      'Ustalar boş, ambar dolu, lordum; bu ikisini buluşturalım. Katedral gönüllere, çarşı keselere, tarikat kılıçlara yarar.',
+      'Bir lordun adını yüzyıllar sonra ambarı değil, diktiği taşlar söyler, lordum. Projeler bölümünde üç büyük iş bekliyor.',
     ])
     replies.push({ label: 'Projelere git', act: tab('kingdom', 'palace', 'projects') })
   } else if (level >= 3) {
     text = pick('wealth:festival', [
       'Lordum, halka bir şenlik verin: meydanda sofralar kurulur, yemek erir, gönüller dolar. Taca bağış da var: fazla mal tacın gözünü sizden yana çevirir.',
       'Fazla yemeği bir şenliğe, fazla malı taca bağışa çevirelim, lordum. Büyük işler için sarayın dördüncü katına çıkmamız gerekecek.',
+      'Halk karnını doyurup gülmek ister, taç da gönlünü hoş tutmak, lordum. Bir şenlik ve bir bağış; ambar hafifler, gönüller dolar.',
+      'Lordum, dolu ambarı afetler sever. Bir şenlik düzenleyelim, taca bir araba mal gönderelim; fare de pas da eli boş kalsın.',
+      'Malı saklamak yerine bir şenliğe harcayın, lordum: yarım saat mutluluk, bir ömür hatıra. Taca bağış da ilişkiyi ısıtır.',
     ])
     replies.push({ label: 'Projelere git', act: tab('kingdom', 'palace', 'projects') })
   } else {
     text = pick('wealth:sell', [
       'Lordum, fazlayı tüccara verin: o malı satıp altın getirir. Tacın siparişleri ve kraliyet elçisinin istekleri de iyi öder. Saray büyüdükçe şenlikler ve büyük işler de açılır.',
       'Ambarda yatan mal, lordum, kimseye yaramaz. Tüccara hangi malı satacağını söyleyin; tacın siparişine de bir göz atalım.',
+      'Fazla malı satalım, lordum; altın da yerinde durmasın, yeni yapılara ve yükseltmelere gitsin. Büyüyen lordun ambarı hiç taşmaz.',
+      'Lordum, ambar dolarsa fazlası boşa gider. Tüccara sattıralım, kraliyet elçisinin isteğini karşılayalım ya da sarayı yükseltmek için harcayalım.',
+      'Mal satılır, altın harcanır, saray büyür, lordum; dünyanın düzeni bu. Ambarın tavanını beklemeyelim.',
     ])
   }
   replies.push({ label: 'Tüccara bak', act: tab('trade', 'trade', 'merchant') })

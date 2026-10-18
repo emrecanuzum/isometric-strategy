@@ -5,7 +5,7 @@
 import * as game from './game.js'
 import { admin, iso, refuse } from './server.ts'
 import { townAt, townsOf } from './towns.ts'
-import { orderChase } from './outlaws.ts'
+import { lobbySeed, orderChase } from './outlaws.ts'
 import { orderCave } from './caves.ts'
 import type { Kingdom, LobbyWorld, Point, Row } from './server.ts'
 
@@ -153,6 +153,15 @@ export async function applyOrder(world: LobbyWorld, army: ArmyRow, order: Order,
       const holdings = kingdoms.map((k) => ({ id: k.id, buildings: k.state?.buildings ?? [] }))
       const goal: ArmyRow['goal'] = order.siege ? { kind: 'town', town: town.id } : { kind: 'move' }
       const update = march(world, army, owner, at, game.townGate(town), goal, game.buildingBlocker(holdings, army.kingdom_id), undefined, game.buildingBlocker(holdings))
+      if (!update) return 'route'
+      await admin.from('armies').update(update).eq('id', army.id)
+      return null
+    }
+    // Sent onto a cave's rock or the tile its mouth opens onto: it stands before the mouth (CLAUDE.md §7.9.1).
+    const cave = game.caveOnTile(game.caveSpots(world.world, await lobbySeed(army.lobby_id)), target) as { front: Point } | undefined
+    if (cave) {
+      const holdings = kingdoms.map((k) => ({ id: k.id, buildings: k.state?.buildings ?? [] }))
+      const update = march(world, army, owner, at, cave.front, { kind: 'move' }, game.buildingBlocker(holdings, army.kingdom_id), undefined, game.buildingBlocker(holdings))
       if (!update) return 'route'
       await admin.from('armies').update(update).eq('id', army.id)
       return null

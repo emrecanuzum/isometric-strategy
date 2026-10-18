@@ -131,8 +131,15 @@ const CHARACTERS: Record<Temper, Character> = {
   },
 }
 
-const TITLES = ['Yüzbaşı', 'Haraççıbaşı', 'Onbaşı', 'Tahsildar', 'Sancaktar']
-const NAMES = ['Kara Ömer', 'Toygar', 'Kayhan', 'Ertuğ', 'Sungur', 'Alpay', 'Duman', 'Karaca', 'Oktay', 'Bozkurt', 'Çağan', 'Topal Rıza', 'Gümüş Temir', 'Bıyıklı Saltuk', 'Uzun Hasan', 'Demirci Battal']
+const TITLES = [
+  'Yüzbaşı', 'Haraççıbaşı', 'Onbaşı', 'Tahsildar', 'Sancaktar', 'Çavuş', 'Subaşı', 'Ağa', 'Bölükbaşı', 'Kethüda',
+]
+const NAMES = [
+  'Kara Ömer', 'Toygar', 'Kayhan', 'Ertuğ', 'Sungur', 'Alpay', 'Duman', 'Karaca', 'Oktay', 'Bozkurt', 'Çağan',
+  'Topal Rıza', 'Gümüş Temir', 'Bıyıklı Saltuk', 'Uzun Hasan', 'Demirci Battal', 'Deli Hüsrev', 'Kara Mustafa',
+  'Turgut', 'Atsız', 'Kaplan', 'Yavuz', 'Akbaş Murat', 'Çakır Ali', 'Kel Hamza', 'Sağır Bekir', 'Tekinalp', 'Börü',
+  'Esen', 'Kutlu', 'Koca Davut', 'Sarı Saltuk',
+]
 
 const draw = (seed: number, visit: number, k: number, n: number) => Math.floor(hash(visit, k, seed + 4021) * n)
 

@@ -1,7 +1,7 @@
 // Small pixel icons for the interface, drawn from 8×8 character maps so they match the pixel art of the map.
 // They are always drawn at a whole multiple of 8 pixels, so every art pixel stays square.
 
-const PALETTE: Record<string, string> = {
+export const PALETTE: Record<string, string> = {
   k: '#1c1612',
   y: '#f2d16b',
   o: '#c8952e',
@@ -22,7 +22,7 @@ const PALETTE: Record<string, string> = {
   m: '#7a1822',
 }
 
-const MAPS = {
+export const MAPS = {
   gold: ['..kkkk..', '.kyyyyk.', 'kyywyyok', 'kywyyyok', 'kyyyyook', 'kyyyoook', '.kooook.', '..kkkk..'],
   food: ['........', '..kkkk..', '.kttttk.', 'ktlltttk', 'kttttttk', 'kbbbbbbk', '.kkkkkk.', '........'],
   materials: ['........', 'kkkkkkk.', 'ktttttlk', 'kbbbbbbk', 'kkkkkkk.', 'ktttttlk', 'kbbbbbbk', 'kkkkkkk.'],
@@ -73,6 +73,11 @@ const MAPS = {
   star: ['...yy...', '...yy...', 'yyywwyyy', '.yywwyy.', '..yyyy..', '.yy..yy.', '.y....y.', '........'],
   map: ['kkkkkkkk', 'kllGlllk', 'klGGlRlk', 'klllRllk', 'kllRlGlk', 'klRllGGk', 'kllllllk', 'kkkkkkkk'],
   camera: ['........', '..kkk...', 'kkkkkkkk', 'kddkkdyk', 'kdkCwkdk', 'kdkcCkdk', 'kddkkddk', 'kkkkkkkk'],
+  wheat: ['..y.y...', '.yoyoy..', '..yoy...', '.yoyoy..', '..yoy...', '...g....', '..gg....', '..g.....'],
+  axe: ['..kkk...', '.kSSSk..', 'kSSSskk.', '.kSSkbk.', '..kkkbk.', '....kbk.', '.....kbk', '......kk'],
+  anvil: ['........', 'kkkkkkk.', 'ksSSSSSk', '.kssssk.', '..kdk...', '.kdddk..', 'kddddddk', 'kkkkkkkk'],
+  fish: ['........', '.....k..', '.kkkkCk.', 'kCCCCCck', 'kCwCCCck', '.kkkkck.', '.....k..', '........'],
+  torch: ['...R....', '..RyR...', '..ywy...', '...y....', '..kbk...', '...b....', '...b....', '...b....'],
 } as const
 
 export type IconName = keyof typeof MAPS

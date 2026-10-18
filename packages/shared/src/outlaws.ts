@@ -43,10 +43,23 @@ export interface OutlawRow extends ClanRowFields {
 
 // ---- Names --------------------------------------------------------------------------------------------------------
 
-const BAND_EPITHETS = ['Kara', 'Topal', 'Kızıl', 'Deli', 'Çolak', 'Sarı', 'Yaralı', 'Kör', 'Uzun', 'Kurt', 'Tilki', 'Demir']
-const BAND_NAMES = ['Yusuf', 'Hasan', 'Murat', 'Kasım', 'Bayram', 'Şahin', 'Rüstem', 'Doğan', 'Ali', 'Halil', 'Cafer', 'Ömer', 'Selim', 'Arslan']
-const BOAT_FIRST = ['Kara', 'Kanlı', 'Sisli', 'Kızıl', 'Gece', 'Fırtına', 'Yırtık', 'Sinsi', 'Deli', 'Paslı']
-const BOAT_SECOND = ['Martı', 'Kürek', 'Yelken', 'Yılan', 'Balina', 'Kanca', 'Kurt', 'Dalga', 'Çapa', 'Akrep']
+const BAND_EPITHETS = [
+  'Kara', 'Topal', 'Kızıl', 'Deli', 'Çolak', 'Sarı', 'Yaralı', 'Kör', 'Uzun', 'Kurt', 'Tilki', 'Demir', 'Kel',
+  'Kambur', 'Çopur', 'Bıçkın', 'Kanlı', 'Boz', 'Çakır', 'Pala', 'Şaşı', 'Cingöz', 'Kuduz', 'Akrep',
+]
+const BAND_NAMES = [
+  'Yusuf', 'Hasan', 'Murat', 'Kasım', 'Bayram', 'Şahin', 'Rüstem', 'Doğan', 'Ali', 'Halil', 'Cafer', 'Ömer',
+  'Selim', 'Arslan', 'Mustafa', 'Hüseyin', 'İbrahim', 'Mahmut', 'Osman', 'Battal', 'Durmuş', 'Bekir', 'Veli',
+  'Kadir', 'Haydar', 'Kenan', 'Musa', 'Recep',
+]
+const BOAT_FIRST = [
+  'Kara', 'Kanlı', 'Sisli', 'Kızıl', 'Gece', 'Fırtına', 'Yırtık', 'Sinsi', 'Deli', 'Paslı', 'Uğursuz', 'Lanetli',
+  'Kör', 'Topal', 'Çılgın', 'Aç', 'Boz', 'Sessiz', 'Kuduz', 'Azgın',
+]
+const BOAT_SECOND = [
+  'Martı', 'Kürek', 'Yelken', 'Yılan', 'Balina', 'Kanca', 'Kurt', 'Dalga', 'Çapa', 'Akrep', 'Köpekbalığı', 'Kartal',
+  'Ahtapot', 'Kurşun', 'Mızrak', 'Kılıç', 'Sırtlan', 'Fener', 'Pala', 'Kuzgun',
+]
 const pick = <T>(list: T[], r: number) => list[Math.floor(r * list.length) % list.length]
 
 export const bandName = (seed: number, idx: number) => `${pick(BAND_EPITHETS, hash(idx, 1, seed + 5201))} ${pick(BAND_NAMES, hash(idx, 2, seed + 5203))} çetesi`

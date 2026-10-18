@@ -419,7 +419,24 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   peygamber çiçeği, düğün çiçeği, yonca, lavanta) serpilir; yer yer bütün
   bir kesim tek tür çiçekle kaplıdır. Ayrıca uzun ot tutamları, kırmızı ya
   da mor meyveli böğürtlen çalıları ve otun arasında tek tük taş vardır.
-- Karo ızgarası çizilmez; yalnızca **imlecin altındaki karo** vurgulanır.
+- Karo ızgarası çizilmez. İmlecin altındaki karo haritada gezerken yalnızca
+  çok soluk bir hayalet olarak (beyaz, dolgu %3, kenar %16) görünür; bir yer
+  seçilirken (yapı yerleştirme, yıkım/taşıma, ordu ya da filo gönderme)
+  belirgindir (`createWorld.ts` → `setTargeting`).
+- **Fare imleci** ortaçağ tarzı, piksel bir **zırh eldiveni**dir (işaret
+  parmağı fare oku gibi çapraz, sol üste uzanır; altın kenarlı deri bilek
+  sağ altta; `lib/cursors.ts` → `handCursor`,
+  simgeler gibi karakter haritasından 2 kat çizilir, sıcak noktası parmak
+  ucu). Bir şeyin üstüne gelince eldivenin sağ altında, altın kenarlı koyu bir
+  levhada onun simgesi durur (`createWorld.ts` → `LOOK_ICONS`): saray taç,
+  ev ev, tarla başak, oduncu balta, silah atölyesi örs, iskele ve balıkçı
+  kulübesi balık, pazar ve hazine altın, kışla kılıçlar, casus evi göz, gözcü
+  kulesi yay, sur ve kapı kalkan, üniversite kitap, hastane şifa, tapınak
+  tapınak, ambar sandık, eğlence merkezi müzik, hapishane kilit, tersane gemi,
+  hisar kalkan, anıt yıldız, lonca konağı parşömen, ticaret noktası ticaret,
+  iskele (inşaat) çekiç, yol harita; ordular (yağmacılar ve devriyeler de) kılıçlar,
+  gemiler gemi, hanlar han, mağaralar meşale, taç başkentleri taç, kasabalar
+  sancak. Yıkım ve taşıma araçları kendi imleçlerini korur.
   İmleç bir taç başkentinin (dış suruna kadar, 36×36 karo) ya da bir
   kasabanın (8×8) üstündeyse, binalarının üstünde de olsa, o yerin **bütün
   alanı** araziye yatırılmış bir çerçeveyle vurgulanır.
@@ -521,7 +538,8 @@ dener (ilk 16 deneme); yalnızca hiçbiri çıkmazsa böyle bir yer verir
   merkezini korur. Hudut haritada **kesikli** sarı çizgiyle gösterilir.
 - Krallık kurulurken oyuncu krallığına bir **isim** ve bir **renk** verir.
   Önerilen isim bir ön ek ile bir yer adı ekinden kurulur (Ulupınar,
-  Gökova, Kartalsuyu… binlerce birleşim) ve lobideki başka bir krallığın
+  Gökova, Kartalsuyu… 134 ön ek × 78 ek, on bini aşkın kök; 16 unvan:
+  Beyliği, Diyarı, Tımarı, Zeameti, Toprakları…) ve lobideki başka bir krallığın
   adıyla aynı kökü taşımaz; oyuncu kendi adını da yazabilir.
   Lobi, büyüklüğü kadar renk sunar (9 ya da 18; `packages/shared/src/colors.ts`)
   ve **bir renk lobide yalnızca bir krallığındır**: alınmış renk seçilemez.
@@ -1532,7 +1550,8 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   (taçlar); oyuncunun toprağı "lordluk"tur. Menüdeki sekmenin adı
   **Saray**dır; arayüz oyuncuya "krallığın" demez, önerilen adlar
   "Krallığı/Hükümdarlığı" ile bitmez (Beyliği, Diyarı, Hanedanı, Sancağı,
-  Yurdu, Malikânesi, Lordluğu, Hisarı).
+  Yurdu, Malikânesi, Lordluğu, Hisarı, Tımarı, Zeameti, Toprakları,
+  Vilayeti, Kalesi, Obası, Ocağı, Ağalığı).
 - **Biat:** Oyuncu Saray sekmesindeki ya da saray menüsündeki
   **Bağlılık** bölümünden iki taç krallığından birine biat eder
   ("Biat et", onay ister). Biat **sezon boyunca kalıcıdır**, değiştirilemez.
@@ -1669,6 +1688,13 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     Reddet / Öde düğmeleri durur. Sunucuya cevaplar eskisi gibi konuşma
     bitince tek komutla gider.
   - Biat etmemiş lordlara ne devriye ne haraççı gelir.
+  - **Tıklayınca:** devriyeye ya da haraççılara tıklamak küçük bir pencere açar
+    (`ui/hud/crownColumn.tsx`): kimin adamları (tacın adı, tahttaki hükümdar ve
+    huyu, seninle ilişkisi, senin tacın mı rakip mi), ne iş yaptıkları ve şu an
+    nereye gittikleri (sana geliyorlarsa bırakacakları bahşiş ya da şimdiki
+    hazinenle isteyecekleri haraç), "… sayfasını aç" ile tacın paneli. Kasaba
+    asilerine tıklamak kasabanın, taht davacısının kampına tıklamak sahibinin
+    sayfasını açar (kendi kampın Saray → Hanedan).
 - **Eğlence merkezi** (4. seviye saray, krallıkta bir tane; 1200 altın, 700
   yapı malzemesi, 120 sn): bayraklı, fenerli, küçük sahneli iki katlı bir
   salon. Bağlı olunan tacın devriyeleri buraya gelip bahşiş bırakır.
@@ -1925,7 +1951,13 @@ Değerler `config/balance/outlaws.json` → `bands`, `road`; mantık
   vardır. Mağaranın 2 karo çevresine sivri kaya, kaya kümesi, çakıl ya da ağaç
   konmaz (`chunkPainter.ts` → `caveTiles`, `CAVE_CLEAR`). Ordular ağzın
   içinde değil, **bir karo önünde** (`CaveSpot.front`) durur: mağaraya bakmak,
-  kuşatmak ve bulunan mağaranın nöbetçileri oradadır.
+  kuşatmak ve bulunan mağaranın nöbetçileri oradadır. Haritadan "Hareket" ile
+  mağaranın kayasına ya da modelin durduğu ağız karosuna gönderilen ordu da
+  oraya gider (`caves.ts` → `caveOnTile`, sunucuda `applyOrder`); kayanın tepesine
+  çıkmaz. Fare mağaranın üstüne gelince binalar gibi **dış hatla** vurgulanır
+  (önündeki toprak ve çakıl dışarıda kalır), imleç karesi çıkmaz; tıklamak
+  mağaranın penceresini açar (`createWorld.ts` → `caveHits`, `caveSprites.ts` →
+  `caveLook`).
   Bu kural gelince (2026-10-18) mağaraların yeri değişti; sayı ve sıra aynı
   kaldığı için her klan aynı sıradaki mağarada kalır, yani yeni yerine taşınmış
   olur (bulunmuş mağaralar da onunla birlikte; yarım kalan izlerin ipuçları
@@ -3552,14 +3584,40 @@ krallıkta birer tane olur ve 3 seviyelidir.
   şenliğe ve taca bağışa, daha önce tüccara, taç siparişlerine ve kraliyet
   isteklerine yönlendirir.
   **Elçinin notu** (`advisor/narration.ts`, `EnvoyNote.tsx`): lordun yaptığı
-  işlere elçi kısa bir sözle karşılık verir (vaaz, şenlik, taca bağış, büyük
+  işlere elçi kısa bir sözle karşılık verir: vaaz, şenlik, taca bağış, büyük
   işe aktarma, araştırma, vergi, gece mesaisi, kraliçe, asker eğitimi ve
-  terhis, sefer, kâhya, biat, onarımlar, kasabayı bırakma, taç görevleri ve
-  kraliyet istekleri, taç siparişi, hanedan işleri, gemi). Sunucu komutu kabul
-  edince (`net/online.ts` → `onCommandDone`) haritanın altında, menünün üstünde
+  terhis, sefer ve geri çağırma, kâhya, biat, onarımlar, kasabayı bırakma, taç
+  görevleri ve kraliyet istekleri, taç siparişi, tüccarın yolu, malı ve yükü,
+  ticaret noktasını yükseltme, onaylanan plan (inşa, taşıma, yıkım; yalnızca yol
+  döşemek not düşmez) ve bina yükseltme (sarayınki ayrı), ürün seçimi, pazardan ve
+  kasabadan alım, kasaba bakımı, hanedan işleri (görev verme ve alma, hediye,
+  evlendirme ya da bir lorda evlilik teklifi, taçtan yardım, çocuğa ad ve
+  eğitim), gemi yapımı, filo emirleri (kurma, bölme, birleştirme, limana bağlama,
+  geri çağırma, seyir, korsan takibi; liman, balık, korsan avı, deniz ticareti,
+  abluka, kıyı akını, ablukayı yarma), ordu çıkarma ve emirleri (yürüyüş,
+  kuşatmaya gönderme, eve dönüş, bölme, birleşme, yağmacı takibi, mağara
+  kuşatması), kralın komutayı alması ve bırakması, elçi gönderme (ilişki
+  geliştirme, hediye, haraç isteği, ittifak, barış, hakaret), teklife cevap,
+  savaş ilanı, ittifakı bozma, haracı bitirme, ticaret yolu yağması, casus
+  gönderme, geri çağırma ve rapor isteme, casus operasyonları, fidye ve rehine
+  kraliçeyi bırakma. Her işin en az altı söylenişi vardır (rastgele biri; mal,
+  birlik, sayı, araştırma, iş, vergi gibi ayrıntılar söze girer). Sunucu komutu
+  kabul edince (`net/online.ts` → `onCommandDone`; bina yükseltmede sunucunun
+  döndürdüğü durumdan binanın türü okunur) haritanın altında, menünün üstünde
   portreli küçük bir parşömen 9 saniye durur; dokununca kapanır, yenisi eskisinin
   yerini alır. Kendi penceresi olan işler (kriz, seçim, elçi cevapları, haraç
-  konuşması) not düşmez; bir pencere açıkken not gelmez. **Öğretici:** yeni lordda açık başlar; adımlar durumdan anlaşılır
+  konuşması, taç değiştirme) ve sık yapılan küçük işler (işçi sayısı, mini
+  oyunlar, "buradayım", dürtme) not düşmez; bir pencere açıkken not gelmez.
+  **Elçinin haberleri** de tek bir kalıba bağlı kalmaz: tek cümlelik haberlerin
+  (hediye, nezaket elçisi, ittifak ve barış kabulü, sabotajlar, fidye, kraliçenin
+  dönüşü, bozulan ittifak, biten haraç, casuslar, hakaret, sınırdaki ordu,
+  püskürtülen yağma, savaş başı, kuleler, sona eren kuşatma, kopan ve dayanan
+  kasaba, devriyenin bahşişi, boş mağara, kaçan ya da dağılmış çete ve korsan,
+  temizlenen yollar ve sular, taçların gerginliği ve barışı, taraf değiştiren
+  lord, kaybedilen yük) dört söylenişi vardır; hangisi olduğu haberin
+  numarasından seçilir (`Envoy.tsx` → `vary`), aynı haber her açılışta ve "Sen
+  yokken" raporunda aynı okunur. Başlıklar değişmez (özet ve rapor onlara göre
+  toplar). **Öğretici:** yeni lordda açık başlar; adımlar durumdan anlaşılır
   ve bitince elçi kutlayıp sonrakine geçer: saray → oduncu kampı → ev →
   tarla → tüccara mal → 6 yapı → biat → 2. seviye saray → kışla → kraliçe →
   casus evi → 3. seviye saray → üniversite → ilk araştırma → tapınak →

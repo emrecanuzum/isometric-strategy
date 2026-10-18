@@ -14,6 +14,7 @@ import {
   tileToScreen,
   screenToTile,
   tileRule,
+  caveSpots,
 } from '@game/shared'
 import type { Point, Rect, RiverKeep, World } from '@game/shared'
 import { Application, BlurFilter, Container, Graphics, ImageSource, Sprite, Text, Texture } from 'pixi.js'
@@ -25,9 +26,13 @@ import type { MapArmy, MapBattle } from './armies'
 import { createCaravans } from './caravans'
 import { cityArea, cityAreaAt, cityAt, cityInfo, cityStructures, cityTrails } from './cities'
 import { BUILDER_SPRITES, CHIMNEYS, VILLAGER_SPRITES, linkWalls, structureParts } from './buildingSprites'
+import type { StructureLook } from './buildingSprites'
 import { animOf } from './buildingKit'
 import type { Anim } from './buildingKit'
 import { openGate } from './wallSprites'
+import { caveLook } from './caveSprites'
+import { handCursor } from '../lib/cursors'
+import type { IconName } from '../ui/icons'
 import { Canvas, SPRITES, lightsOf, outlineOf, rgb, silhouetteOf } from './sprites'
 import { daylight, nightness, sunShadow } from './daylight'
 import { createShadows } from './shadows'
@@ -100,6 +105,45 @@ const HIGHLIGHT = 0xf2d16b
 const DEMOLISH_HIGHLIGHT = 0xff4a3a
 const MOVE_HIGHLIGHT = 0x7ad0ff
 // A pixel hammer for the pointer while tearing down, its head's corner on the spot.
+// The icon the pointer's hand carries over each kind of building (lib/cursors.ts): what it makes or what it is for.
+const LOOK_ICONS: Partial<Record<StructureLook, IconName>> = {
+  palace: 'crown',
+  tradePost: 'trade',
+  tradePostRuined: 'trade',
+  house: 'house',
+  farm: 'wheat',
+  lumberCamp: 'axe',
+  dock: 'fish',
+  jetty: 'anchor',
+  fisherHut: 'fish',
+  forge: 'anvil',
+  market: 'gold',
+  barracks: 'swords',
+  spyHouse: 'eye',
+  watchtower: 'bow',
+  wall: 'shield',
+  gate: 'shield',
+  gateY: 'shield',
+  towerWall: 'shield',
+  brokenWall: 'shield',
+  university: 'book',
+  hospital: 'heal',
+  temple: 'temple',
+  cathedral: 'temple',
+  warehouse: 'chest',
+  treasury: 'gold',
+  tavern: 'music',
+  prison: 'lock',
+  prisonFull: 'lock',
+  shipyard: 'ship',
+  citadel: 'shield',
+  memorial: 'star',
+  monument: 'star',
+  guildHall: 'scroll',
+  scaffold: 'build',
+  road: 'map',
+}
+
 const HAMMER_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
   "<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' shape-rendering='crispEdges'><g transform='rotate(-45 16 16)'><rect x='14.5' y='11.5' width='4' height='19' fill='#8a6440' stroke='#1a0f08'/><rect x='15.5' y='12' width='1' height='18' fill='#b08a5a'/><rect x='7.5' y='4.5' width='18' height='8' fill='#8a949c' stroke='#1a0f08'/><rect x='8' y='5' width='17' height='2' fill='#d8dee2'/><rect x='8' y='10' width='17' height='2' fill='#5a646c'/></g></svg>",
 )}") 6 6, crosshair`
@@ -210,6 +254,8 @@ export interface AimMark {
 export interface WorldView {
   world: World
   centerOn(tile: Point): void
+  // An army or a fleet is being sent somewhere: the tile under the pointer is marked (not while just looking round).
+  setTargeting(on: boolean): void
   // Detail animations (swaying trees close up) on or off; the chunks on screen are painted again.
   setDetail(on: boolean): void
   // Power saving (CLAUDE.md §12): lower frame rates, no birds, clouds or night glow, a coarser canvas on dense screens.
@@ -1139,17 +1185,20 @@ export async function createWorld(
     pickedBuilding = undefined
     pickedInn = undefined
     pickedCity = undefined
-    if (!inside) return onHover(null)
+    if (!inside) {
+      pointWith(null)
+      return onHover(null)
+    }
     const i = tile.y * world.size + tile.x
     // A building is picked by the pixels it covers on screen, nearest first, not by the ground behind its roof.
     const wx = (at.x - camera.x) / camera.scale.x
     const wy = (at.y - camera.y) / camera.scale.y
     const hit = placement && tool !== 'move'
       ? undefined
-      : hits.find(({ sprite, sx, sy, owner, inn, city }) => {
-          // Other kingdoms' buildings, the inns and the free cities only show what they are, never while tearing down
-          // or moving.
-          if ((owner || inn || city) && tool) return false
+      : hits.find(({ sprite, sx, sy, owner, inn, city, cave }) => {
+          // Other kingdoms' buildings, the inns, the caves and the free cities only show what they are, never while
+          // tearing down or moving.
+          if ((owner || inn || city || cave) && tool) return false
           const px = Math.floor(wx - sx + sprite.anchorX)
           const py = Math.floor(wy - sy + sprite.anchorY)
           return px >= 0 && py >= 0 && px < sprite.width && py < sprite.height && sprite.pixels[py * sprite.width + px] >>> 24 === 0xff
@@ -1161,6 +1210,13 @@ export async function createWorld(
         .fill({ color: HOVER, alpha: 0.06 })
         .stroke({ width: 3 / camera.scale.x, color: HOVER, alpha: 0.9 })
     const townUnder = placement || tool ? undefined : townMarks.find(({ mark: { rect: r } }) => r && tile.x >= r.x && tile.y >= r.y && tile.x < r.x + r.size && tile.y < r.y + r.size)
+    // The pointer's hand carries what it is over: an army's swords, a field's sheaf, an inn's sign… (lib/cursors.ts).
+    if (!placement && !tool) {
+      const armyUnder = armies.pick({ x: wx, y: wy })
+      const shipUnder = armyUnder === undefined && !hit ? ambient.pickShip({ x: wx, y: wy }) : null
+      const cityUnder = armyUnder === undefined && !hit && (cityAt(world, tile) ?? cityAreaAt(world, tile)) !== undefined
+      pointWith(armyUnder !== undefined ? 'swords' : hit ? (hit.icon ?? null) : shipUnder ? 'ship' : townUnder ? 'banner' : cityUnder ? 'crown' : null)
+    }
     if (hit) {
       if (hit.city) outlineArea(cityArea(world, hit.id))
       else if (townUnder) outlineArea(townUnder.mark.rect!)
@@ -1175,6 +1231,14 @@ export async function createWorld(
         pickedCity = hit.id
         onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y), city: { index: hit.id, screen: top } })
         return tile
+      }
+      if (hit.cave) {
+        // The tile its mouth opens onto: a tap there opens the cave's sheet, an army sent there stands before it.
+        const c = caveSpots(world, world.seed)[hit.id]
+        const mouth = { x: Math.floor(c.mouth.x), y: Math.floor(c.mouth.y) }
+        const j = mouth.y * world.size + mouth.x
+        onHover({ tile: mouth, terrain: world.terrain[j], feature: world.feature[j], rule: tileRule(world, mouth.x, mouth.y) })
+        return mouth
       }
       if (hit.inn) {
         pickedInn = hit.id
@@ -1224,17 +1288,28 @@ export async function createWorld(
       if (row) row.forEach(ghost)
       else ghost(p.pinned ?? footprintOrigin(tile, p.size))
     } else {
-      // The tile grid is not drawn; only the tile under the pointer is outlined, lying on the slope.
+      // The tile grid is not drawn; only the tile under the pointer is outlined, lying on the slope: plainly while a
+      // destination is being picked, and as a faint ghost while just looking round the map.
+      const picking = targeting || tool
       cursor
         .poly(square(tile.x, tile.y, 1))
-        .fill({ color: HOVER, alpha: 0.12 })
-        .stroke({ width: 2 / camera.scale.x, color: HOVER, alpha: 0.9 })
+        .fill({ color: HOVER, alpha: picking ? 0.12 : 0.03 })
+        .stroke({ width: 2 / camera.scale.x, color: HOVER, alpha: picking ? 0.9 : 0.16 })
     }
     onHover({ tile, terrain: world.terrain[i], feature: world.feature[i], rule: tileRule(world, tile.x, tile.y) })
     return tile
   }
   let placement: Placement | null = null
   let tool: MapTool = null
+  let targeting = false
+  // The map's pointer: the gauntlet, with the icon of what it is over; the tools keep their own cursors.
+  let pointing: IconName | null | undefined
+  const pointWith = (icon: IconName | null) => {
+    if (tool || icon === pointing) return
+    pointing = icon
+    app.canvas.style.cursor = handCursor(icon)
+  }
+  app.canvas.style.cursor = handCursor(null)
   const toolTint = () => (tool === 'demolish' ? DEMOLISH_HIGHLIGHT : tool === 'move' ? MOVE_HIGHLIGHT : HIGHLIGHT)
   // A row being drawn by dragging: where it began and the footprints along it so far.
   let stroke: { start: Point; spots: Point[] } | null = null
@@ -1778,7 +1853,7 @@ export async function createWorld(
   }
   // The buildings as drawn (main sprite and its anchor in world pixels), nearest to the viewer first; other kingdoms'
   // carry their owner.
-  let hits: { id: number; sprite: Sprite_; sx: number; sy: number; depth: number; owner?: Structure['owner']; inn?: boolean; city?: boolean }[] = []
+  let hits: { id: number; sprite: Sprite_; sx: number; sy: number; depth: number; owner?: Structure['owner']; inn?: boolean; city?: boolean; cave?: boolean; icon?: IconName | null }[] = []
   // The inns answer to the pointer too (their id is their index in world.inns).
   const innHits = world.inns.map((p, index) => ({
     id: index,
@@ -1787,8 +1862,15 @@ export async function createWorld(
     sy: (p.x + p.y + 4) * (TILE_HEIGHT / 2) - heightAt(world, p.x + 1, p.y + 1),
     depth: p.x + p.y + 4,
     inn: true,
+    icon: 'inn' as const,
   }))
-  hits = innHits.slice().sort((a, b) => b.depth - a.depth)
+  // The caves too, by the same sprite the ground is painted with (their id is their index in caveSpots), so the pointer
+  // outlines them like a building instead of marking a tile on the rock.
+  const caveHits = caveSpots(world, world.seed).map((c) => {
+    const { body: sprite, at } = caveLook(world.seed, c)
+    return { id: c.idx, sprite, sx: (at.x - at.y) * (TILE_WIDTH / 2), sy: (at.x + at.y) * (TILE_HEIGHT / 2) - heightAt(world, at.x, at.y), depth: at.x + at.y, cave: true, icon: 'torch' as const }
+  })
+  hits = [...innHits, ...caveHits].sort((a, b) => b.depth - a.depth)
   let structureKeys = new Set<string>()
   let marked = new Map<number, 'demolish' | 'move'>()
   // The lords' fleets over their ships (see fleetRoutes above).
@@ -1956,9 +2038,9 @@ export async function createWorld(
         const parts = structureParts(world, s)
         const main = parts.filter((p) => p.solid).at(-1) ?? parts[0]
         const at = { sprite: main.sprite, sx: (main.fx - main.fy) * (TILE_WIDTH / 2), sy: (main.fx + main.fy) * (TILE_HEIGHT / 2) - main.z, depth: main.fx + main.fy }
-        return s.city !== undefined ? { id: s.city, ...at, city: true } : { id: s.id!, ...at, owner: s.owner }
+        return s.city !== undefined ? { id: s.city, ...at, city: true, icon: 'crown' as const } : { id: s.id!, ...at, owner: s.owner, icon: LOOK_ICONS[s.look] ?? null }
       })
-      .concat(innHits)
+      .concat(innHits, caveHits)
       .sort((a, b) => b.depth - a.depth)
     placeMarks()
     placeClogs()
@@ -2082,10 +2164,15 @@ export async function createWorld(
       marked = new Map(list.map((m) => [m.id, m.tone]))
       placeMarks()
     },
+    setTargeting(on) {
+      targeting = on
+      if (lastPointer) pick(lastPointer)
+    },
     setTool(next) {
       tool = next
       highlight.tint = toolTint()
-      app.canvas.style.cursor = tool === 'demolish' ? HAMMER_CURSOR : tool === 'move' ? 'grab' : ''
+      pointing = undefined
+      app.canvas.style.cursor = tool === 'demolish' ? HAMMER_CURSOR : tool === 'move' ? 'grab' : handCursor(null)
       if (lastPointer) pick(lastPointer)
     },
     setTown: (errands, merchants) =>

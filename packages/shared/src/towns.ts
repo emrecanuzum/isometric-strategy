@@ -80,8 +80,15 @@ export interface LostTown {
   at: number
 }
 
-const NAME_HEADS = ['Ak', 'Kara', 'Gök', 'Sarı', 'Kızıl', 'Yeşil', 'Uzun', 'Eski', 'Yeni', 'Çam', 'Söğüt', 'Kavak', 'Taş', 'Değirmen', 'Kuyu', 'Bakır', 'Ceviz', 'Elma', 'Pınar', 'Kırk']
-const NAME_TAILS = ['köy', 'ören', 'yurt', 'oba', 'pınar', 'dere', 'tepe', 'alan', 'bük', 'çay', 'yayla', 'kuyu', 'hisar', 'ova']
+const NAME_HEADS = [
+  'Ak', 'Kara', 'Gök', 'Sarı', 'Kızıl', 'Yeşil', 'Uzun', 'Eski', 'Yeni', 'Çam', 'Söğüt', 'Kavak', 'Taş', 'Değirmen',
+  'Kuyu', 'Bakır', 'Ceviz', 'Elma', 'Pınar', 'Kırk', 'Akça', 'Karaca', 'Boz', 'Ulu', 'Demir', 'Ardıç', 'Çınar',
+  'Meşe', 'Kuru', 'Tuz', 'Kum', 'Bostan', 'Saray', 'Kervan', 'Gümüş', 'Yedi', 'Üç', 'Koyun', 'Keçi', 'Kestane',
+]
+const NAME_TAILS = [
+  'köy', 'ören', 'yurt', 'oba', 'pınar', 'dere', 'tepe', 'alan', 'bük', 'çay', 'yayla', 'kuyu', 'hisar', 'ova',
+  'kent', 'kaya', 'su', 'göl', 'bel', 'kale', 'yaka', 'köprü', 'çayır', 'bağ', 'ağıl', 'pazar', 'kışla', 'bucak',
+]
 
 // A town's name: its own draw from the lobby seed, so neighbouring towns do not share their first word.
 export function townName(seed: number, idx: number) {

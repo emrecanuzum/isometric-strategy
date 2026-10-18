@@ -15,9 +15,9 @@ export function EnvoyNote({ quiet }: { quiet: boolean }) {
   quietRef.current = quiet
   useEffect(
     () =>
-      onCommandDone((command) => {
+      onCommandDone((command, answer) => {
         if (quietRef.current) return
-        const text = narrate(command)
+        const text = narrate(command, answer.kingdom?.state)
         if (!text) return
         setNote((old) => ({ text, n: (old?.n ?? 0) + 1 }))
         babble('lor', false)

@@ -343,12 +343,12 @@ export function Advisor({
     const wealth: Reply | null = wellStocked(c) ? { label: 'Malımızı nasıl değerlendirelim?', say: wealthAdvice(c, pick) } : null
     if (tip) {
       const said = tipSpeech(tip, c, pick)
-      return setSpeech({ ...said, replies: [...said.replies.slice(0, 2), wealth ?? { label: 'Bana oyunu anlat', topic: '' }] })
+      return setSpeech({ ...said, replies: [...said.replies.slice(0, 2), ...(wealth ? [wealth] : []), { label: 'Bana oyunu anlat', topic: '' }] })
     }
     const talk = pick('smallTalk', SMALL_TALK)
     setSpeech({
       text: pick('idle', IDLE_LINES),
-      replies: [wealth ?? { label: 'Bana oyunu anlat', topic: '' }, { label: talk.label, answer: pick(`talk:${talk.label}`, talk.answers) }, { label: 'Bir şey yok, sağ ol', answer: '' }],
+      replies: [...(wealth ? [wealth] : []), { label: 'Bana oyunu anlat', topic: '' }, { label: talk.label, answer: pick(`talk:${talk.label}`, talk.answers) }, { label: 'Bir şey yok, sağ ol', answer: '' }],
     })
     // Only the button calls him.
     // eslint-disable-next-line react-hooks/exhaustive-deps

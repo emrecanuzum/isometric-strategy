@@ -3,7 +3,7 @@ import type { Point, World } from '@game/shared'
 import { structureParts } from './buildingSprites'
 import type { Structure } from './buildingSprites'
 import { innLook } from './innSprites'
-import { caveSprites } from './caveSprites'
+import { caveLook } from './caveSprites'
 import { BAYER, SPRITES, castShadow, ramp } from './sprites'
 import type { Sprite } from './sprites'
 import type { SunShadow } from './daylight'
@@ -1279,8 +1279,8 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
       if (cave !== undefined) {
         if (cave !== 'clear' && cave.rock) {
           // The model stands on the mouth's land tile, its anchor that tile's front corner (caveSprites.ts).
-          const looks = cave.dx > 0 ? caveSprites().u : caveSprites().v
-          place(choose(looks, hash(x, y, seed + 45)), x + cave.dx + 1, y + cave.dy + 1, own)
+          const look = caveLook(seed, { x, y, dx: cave.dx, dy: cave.dy })
+          place(look.sprite, look.at.x, look.at.y, own)
         }
         continue
       }

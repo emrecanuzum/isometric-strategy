@@ -25,7 +25,7 @@ const CLIFF = 42
 const SIDE_LO = 20
 const SIDE_HI = 63
 
-function cave(seed: number, along: 'u' | 'v'): Sprite {
+function cave(seed: number, along: 'u' | 'v'): { sprite: Sprite; body: Sprite } {
   const { canvas, cx, base, m } = plot(2, 64)
   const r = (k: number) => hash(k, 17, seed)
   const at = (a: number, b: number): [number, number] => (along === 'u' ? [a, b] : [b, a])
@@ -147,6 +147,11 @@ function cave(seed: number, along: 'u' | 'v'): Sprite {
   boulder(CLIFF + 7, mid + half + 1, 0, 1.8)
   boulder(CLIFF + 9, mid - half + 1, 0, 1.4)
 
+  // The rock alone, without the earth and gravel spilling before it: what the pointer outlines (a ring round loose
+  // gravel would be a dotted mess).
+  const body = canvas.sprite(cx, base, 1)
+  const bodyPixels = body.pixels.slice()
+
   // Before the hollow: the ground trodden a shade darker, fading out, gravel and a few stones on it.
   for (let a = CLIFF; a <= 64; a += 0.5) {
     for (let b = mid - 20; b <= mid + 20; b += 0.5) {
@@ -162,10 +167,18 @@ function cave(seed: number, along: 'u' | 'v'): Sprite {
       else put(a, b, 0, dith(ROCK, FLAT - 0.9 + d * 0.6 + (g - 0.5) * 0.6, x, y), -1)
     }
   }
-  return canvas.sprite(cx, base, 1)
+  return { sprite: canvas.sprite(cx, base, 1), body: { ...body, pixels: bodyPixels, shadow: 0 } }
 }
 
 // Mouths opening toward the lower right (along +u) and toward the lower left (along +v), a few of each.
 const variants = (along: 'u' | 'v') => Array.from({ length: 3 }, (_, i) => cave(i * 7919 + 101 + (along === 'u' ? 0 : 13), along))
-let made: { u: Sprite[]; v: Sprite[] } | undefined
+let made: { u: { sprite: Sprite; body: Sprite }[]; v: { sprite: Sprite; body: Sprite }[] } | undefined
 export const caveSprites = () => (made ??= { u: variants('u'), v: variants('v') })
+
+// The look of a cave on the map, and where it stands: the tile point its anchor sits on (the mouth tile's front corner).
+// The chunk painter draws it there and the map's pointer outlines the same sprite (createWorld.ts).
+export function caveLook(seed: number, cave: { x: number; y: number; dx: number; dy: number }) {
+  const looks = cave.dx > 0 ? caveSprites().u : caveSprites().v
+  const look = looks[Math.floor(hash(cave.x, cave.y, seed + 45) * looks.length)]
+  return { sprite: look.sprite, body: look.body, at: { x: cave.x + cave.dx + 1, y: cave.y + cave.dy + 1 } }
+}

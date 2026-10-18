@@ -73,12 +73,19 @@ function Work({ kingdom, id, now, online }: { kingdom: Kingdom; id: ProjectId; n
   const gift = projectGift(kingdom, id, now)
   const error = projectError(kingdom, id, now)
   return (
-    <li className={finished ? 'done' : undefined}>
-      <Icon name={t.icon} size={24} />
-      <div>
+    <li className={finished ? 'project done' : 'project'}>
+      <div className="project-head">
+        <Icon name={t.icon} size={24} />
         <b>
           {t.name} <small>· {done} / {stages} aşama</small>
         </b>
+        <span className="medals" aria-label={`${done} / ${stages} aşama`}>
+          {Array.from({ length: stages }, (_, i) => (
+            <i key={i} className={i < done ? 'on t2' : ''} />
+          ))}
+        </span>
+      </div>
+      <div className="project-body">
         <small>{t.text}</small>
         <small className="up">
           {done > 0 ? `Şu an: ${t.bonus(done)}` : 'Henüz bir aşaması yok.'}
@@ -112,7 +119,7 @@ function Work({ kingdom, id, now, online }: { kingdom: Kingdom; id: ProjectId; n
                 )
               })}
             </div>
-            <button className="btn small primary" disabled={error !== null} data-why={error === 'palace' ? `${W.minPalace}. seviye saray gerekir` : error === 'done' ? 'Bütün aşamalar tamam' : error === 'building' ? 'Ustalar bu aşamayı yapıyor; bitmesini bekle' : 'Aktaracak fazlan yok: ambarların ve hazinenin bir payı yedekte kalır'} onClick={() => online?.act({ type: 'project', action: 'give', id })}>
+            <button className="btn small primary project-give" disabled={error !== null} data-why={error === 'palace' ? `${W.minPalace}. seviye saray gerekir` : error === 'done' ? 'Bütün aşamalar tamam' : error === 'building' ? 'Ustalar bu aşamayı yapıyor; bitmesini bekle' : 'Aktaracak fazlan yok: ambarların ve hazinenin bir payı yedekte kalır'} onClick={() => online?.act({ type: 'project', action: 'give', id })}>
               <span>Depodan aktar</span>
               {error === null && <CostList cost={gift} />}
             </button>
@@ -125,11 +132,6 @@ function Work({ kingdom, id, now, online }: { kingdom: Kingdom; id: ProjectId; n
           </>
         )}
       </div>
-      <span className="medals" aria-label={`${done} / ${stages} aşama`}>
-        {Array.from({ length: stages }, (_, i) => (
-          <i key={i} className={i < done ? 'on t2' : ''} />
-        ))}
-      </span>
     </li>
   )
 }

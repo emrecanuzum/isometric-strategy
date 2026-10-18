@@ -117,6 +117,8 @@ import { Advisor, AdvisorSettings } from './ui/advisor/Advisor'
 import type { AdvisorAction } from './ui/advisor/lines'
 import { EnvoyPortrait } from './ui/advisor/EnvoyPortrait'
 import { EnvoyNote } from './ui/advisor/EnvoyNote'
+import { CrownColumnSheet } from './ui/hud/crownColumn'
+import type { CrownColumn } from './ui/hud/crownColumn'
 import { AwayReport, awaySince } from './ui/AwayReport'
 import { CrownIntro, introSeen } from './ui/CrownIntro'
 import { FortuneDialog } from './ui/FortuneDialog'
@@ -150,6 +152,7 @@ import { InnTip, MapTip } from './ui/hud/MapTip'
 import { InnSheet } from './ui/hud/inns'
 import { CitySheet, CityTip, CrownBanner } from './ui/hud/cities'
 import { TownSheet } from './ui/hud/towns'
+import { showPalacePart } from './ui/hud/tabs'
 import type { HudData } from './ui/hud/tabs'
 import { GoodPicker, SitePicker, missingText } from './ui/panels'
 import type { SiteAccess } from './ui/panels'
@@ -1126,6 +1129,8 @@ function App({
   const [innOpen, setInnOpen] = useState<number | null>(null)
   // The free city whose sheet is open (its index in world.cities).
   const [cityOpen, setCityOpen] = useState<number | null>(null)
+  // A crown column's sheet (a patrol or tribute collectors; CLAUDE.md §7.8).
+  const [columnOpen, setColumnOpen] = useState<CrownColumn | null>(null)
   // The town whose sheet is open (its id).
   const [townOpen, setTownOpen] = useState<number | null>(null)
   const toggleTab = useCallback((tab: TabId) => {
@@ -1173,6 +1178,7 @@ function App({
   const [tool, setTool] = useState<MapTool>(null)
   const holding = placingKind !== null || moving !== null || tool !== null
   useEffect(() => view?.setTool(placingKind ? null : tool), [view, tool, placingKind])
+  useEffect(() => view?.setTargeting(aiming !== null || sailing !== null), [view, aiming, sailing])
   const [preview, setPreview] = useState<Point | null>(null)
   // A row drawn by dragging (walls, houses), awaiting confirmation.
   const [previewMany, setPreviewMany] = useState<Point[] | null>(null)
@@ -1473,6 +1479,41 @@ function App({
       else setOutlawOpen({ kind: 'cave', idx: caveHere!.idx })
       return
     }
+    // A crown's patrol or its tribute collectors: who they are and where they ride (CLAUDE.md §7.8).
+    const column = army !== undefined ? crownColumns.current.get(army) : undefined
+    if (column && !placingKind && !tool && aiming === null) {
+      setSelected(null)
+      setPanel(null)
+      setInnOpen(null)
+      setCityOpen(null)
+      setTownOpen(null)
+      setOutlawOpen(null)
+      play('click')
+      setColumnOpen(column)
+      return
+    }
+    // A town's rebels at its gate: the town's sheet.
+    if (army !== undefined && army <= -REBELS_ID && army > -TRIBUTE_ID && !placingKind && !tool && aiming === null) {
+      setSelected(null)
+      setPanel(null)
+      play('click')
+      setTownOpen(-army - REBELS_ID)
+      return
+    }
+    // A pretender's camp: its lord's page (the player's own in the palace's dynasty part).
+    if (army !== undefined && army <= -CAMP_ID && army > -BAND_ID && !placingKind && !tool && aiming === null) {
+      const lord = -army - CAMP_ID
+      setSelected(null)
+      play('click')
+      if (lord === mine.id) {
+        showPalacePart('house')
+        setPanel('kingdom')
+      } else {
+        setFocus(lord)
+        setPanel('diplomacy')
+      }
+      return
+    }
     // A band of bandits: its sheet, with "Takip et" for the player's armies (CLAUDE.md §7.9).
     if (army !== undefined && army <= -BAND_ID && army > -CAVE_ID && !placingKind && !tool && aiming === null) {
       setSelected(null)
@@ -1763,6 +1804,8 @@ function App({
     return () => clearTimeout(id)
   }, [patrolStep])
   const patrolRoutes = useRef(new Map<string, { route: Point[]; gather: Point[] } | null>())
+  // What each crown column on the map is, by its map id (for the sheet a tap on one opens).
+  const crownColumns = useRef(new Map<number, CrownColumn>())
   const patrols = useMemo((): MapArmy[] => {
     if (!view || view.world.cities.length === 0) return []
     const t = serverNow()
@@ -1771,6 +1814,7 @@ function App({
     const lords: Lord[] = JSON.parse(lordsKey).map(([id, liege]: [number, number | null]) => ({ id, liege }))
     const towns = new Map<number, TownBuilding[]>([[mine.id, (shown?.buildings ?? []) as TownBuilding[]], ...rivals.map((r) => [r.id, r.buildings] as [number, TownBuilding[]])])
     const out: MapArmy[] = []
+    const lordNameOf = (id: number) => (id === mine.id ? (shown?.name ?? null) : (rivals.find((r) => r.id === id)?.name ?? null))
     // What stands in the way (every lord's buildings, walls and gates included), as a short fingerprint: a route worked
     // out before a wall went up, or before the other lords had loaded, is worked out again rather than kept.
     let blockPrint = 0
@@ -1806,6 +1850,7 @@ function App({
           const { route, gather } = ride0
           const back = t >= arrive + wait
           const [path, departAt, arriveAt] = back ? [[...route].reverse(), arrive + wait, arrive + wait + ride] : [route, arrive - ride, arrive]
+          crownColumns.current.set(-(TRIBUTE_ID + lord.id * 8 + crown), { kind: 'tribute', crown, lord: back ? null : lord.id, lordName: back ? null : lordNameOf(lord.id) })
           out.push({ id: -(TRIBUTE_ID + lord.id * 8 + crown), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 3, catapult: false, train: 2, size: 1.3, trainAhead: back, gather, tag: `${cityInfo(view.world, crown).capital} haraççıları`, tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
         }
       }
@@ -1827,6 +1872,7 @@ function App({
         // Through the stay the column stands gathered round the building's front, then rides back the way it came.
         const back = t >= times.leave
         const [path, departAt, arriveAt] = back ? [[...route].reverse(), times.leave, times.home] : [route, times.start, times.arrive]
+        crownColumns.current.set(-(crown * 16 + p + 1), { kind: 'patrol', crown, lord: back ? null : target, lordName: back ? null : lordNameOf(target) })
         out.push({ id: -(crown * 16 + p + 1), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 4, catapult: false, train: 5, size: 1.6, trainAhead: back, gather, tag: `${cityInfo(view.world, crown).capital} devriyesi`, tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
       }
     })
@@ -2594,6 +2640,21 @@ function App({
           />
         )
       })()}
+      {view && kingdom && !holding && columnOpen !== null && !panel && !selectedBuilding && (
+        <CrownColumnSheet
+          world={view.world}
+          kingdom={kingdom}
+          column={columnOpen}
+          online={online}
+          now={now}
+          onCrown={(crown) => {
+            setColumnOpen(null)
+            setCityOpen(crown)
+            view.centerOn(cityCenter(view.world.cities[crown]))
+          }}
+          onClose={() => setColumnOpen(null)}
+        />
+      )}
       {view && kingdom && !holding && outlawOpen !== null && !panel && !selectedBuilding && (
         <OutlawSheet world={view.world} pick={outlawOpen} online={online} kingdom={kingdom} now={now} onShow={(at) => view.centerOn({ x: Math.floor(at.x), y: Math.floor(at.y) })} onClose={closeTab} />
       )}

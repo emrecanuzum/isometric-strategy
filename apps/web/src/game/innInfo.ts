@@ -26,10 +26,16 @@ const PLACES = [
   'Akçay', 'Karapınar', 'Yeşilova', 'Kızılkaya', 'Değirmendere', 'Taşköprü', 'Söğütlü', 'Çamlıbel', 'Kuyucak',
   'Eskiyol', 'Gökdere', 'Ilıca', 'Narlı', 'Bozkır', 'Sarıgöl', 'Kavaklı', 'Çınaraltı', 'Ayazma', 'Kurtbeli',
   'Dumanlı', 'Kervanyolu', 'Ulupınar', 'Yelkaya', 'Ardıçlı', 'Saraçlı', 'Kemerli', 'Güvercinlik', 'Boğazağzı',
+  'Akpınar', 'Karaağaç', 'Çamlıca', 'Taşlıyurt', 'Yenice', 'Eskikale', 'Kuyulu', 'Sazlıdere', 'Bozdağ',
+  'Gökçeova', 'Çeşmeli', 'Kayalı', 'Sarıyar', 'Değirmenli', 'Pınarbaşı', 'Ortaköy', 'Köprübaşı', 'Dereboyu',
+  'Yaylacık', 'Elmalı', 'Cevizli', 'Bademli', 'Kırkgöz', 'Beşkonak', 'Kırkpınar', 'Delikkaya', 'Atlıbel',
+  'Yalnızçam',
 ]
 const KEEPERS = [
   'Hancı Mehmet', 'Hancı Ayşe', 'Yaşlı Rıza', 'Topal Hasan', 'Kara Fatma', 'Dilsiz Ömer', 'Gezgin Selim',
   'Hatice Kadın', 'Koca Yusuf', 'Ağzı Sıkı Nuri', 'Saz Çalan Kemal', 'Emine Ana',
+  'Hancı Zeynep', 'Kel Mahmut', 'Şişman Bekir', 'Hacı Osman', 'Sarı Mustafa', 'Kör Ahmet', 'Fadime Bacı',
+  'Deli Durmuş', 'Gözü Pek Halil', 'Topal Şerife', 'İhtiyar Süleyman', 'Kadir Usta',
 ]
 
 export interface InnInfo {

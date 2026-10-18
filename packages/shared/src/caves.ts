@@ -118,6 +118,14 @@ export function caveSpots(world: Ground, seed: number): CaveSpot[] {
   return spots
 }
 
+// The cave whose model stands on a tile (its rock or the mouth's land tile, CLAUDE.md §7.9.1), if any: an army sent
+// onto it stands before the mouth instead (`front`), never on the rock.
+export function caveOnTile(caves: CaveSpot[], tile: Point): CaveSpot | undefined {
+  const x = Math.floor(tile.x)
+  const y = Math.floor(tile.y)
+  return caves.find((c) => (c.x === x && c.y === y) || (Math.floor(c.mouth.x) === x && Math.floor(c.mouth.y) === y))
+}
+
 // The cave whose mouth or rock is at (or right by) a tile, if any.
 export function caveAt(caves: CaveSpot[], tile: Point, reach = C().pickTiles) {
   let best: CaveSpot | undefined
@@ -167,8 +175,15 @@ export interface Clan {
   cave: number | null
 }
 
-const CLAN_FIRST = ['Kurt', 'Kara', 'Demir', 'Kızıl', 'Kanlı', 'Boz', 'Yırtıcı', 'Taş', 'Gece', 'Sırtlan', 'Akbaba', 'Kuzgun', 'Yılan', 'Çakal']
-const CLAN_SECOND = ['pençe', 'diş', 'yele', 'kaya', 'kemik', 'balta', 'mağara', 'pusu', 'gölge', 'tırnak', 'boyun', 'yürek']
+const CLAN_FIRST = [
+  'Kurt', 'Kara', 'Demir', 'Kızıl', 'Kanlı', 'Boz', 'Yırtıcı', 'Taş', 'Gece', 'Sırtlan', 'Akbaba', 'Kuzgun',
+  'Yılan', 'Çakal', 'Ayı', 'Kaplan', 'Akrep', 'Çelik', 'Kül', 'Duman', 'Ateş', 'Kartal', 'Pars', 'Tilki', 'Engerek',
+  'Karga', 'Baykuş', 'Fırtına',
+]
+const CLAN_SECOND = [
+  'pençe', 'diş', 'yele', 'kaya', 'kemik', 'balta', 'mağara', 'pusu', 'gölge', 'tırnak', 'boyun', 'yürek', 'kanat',
+  'gaga', 'baş', 'yumruk', 'kılıç', 'mızrak', 'zincir', 'kuyruk', 'göz', 'kan', 'kor', 'iz',
+]
 const CLAN_COLORS = [0x6b2a1e, 0x3b3f2a, 0x4a2a4a, 0x2a3a4a, 0x5a4a1e, 0x3a1e1e]
 const pick = <T>(list: T[], r: number) => list[Math.floor(r * list.length) % list.length]
 

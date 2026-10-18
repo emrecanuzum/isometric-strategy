@@ -6586,7 +6586,39 @@ input:not([type='range']):focus-visible {
   gap: calc(var(--px) * 2);
 }
 
-.projects .btn {
-  justify-self: start;
-  align-self: flex-start;
+/* A great work: its name and stage marks in a header row, then its text, the delivery and the button across the whole
+   card (the generic goals layout squeezed it into a narrow middle column). */
+.goals.projects li.project {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--px) * 3);
+}
+
+.goals.projects .project-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+}
+
+.goals.projects .project-body {
+  display: grid;
+  gap: calc(var(--px) * 2);
+}
+
+.project-goods span small {
+  min-width: 7.5em;
+}
+
+.project-give {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--px) * 2) calc(var(--px) * 5);
+  width: 100%;
+}
+
+.project-give > span:first-child {
+  white-space: nowrap;
 }
