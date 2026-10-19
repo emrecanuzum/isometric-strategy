@@ -3410,9 +3410,17 @@ button[data-busy]::after {
   gap: var(--px);
 }
 
+.chat-tabs {
+  min-width: 0;
+}
+
 .chat-tabs .btn {
   --face: var(--panel-2);
   color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+  padding-inline: calc(var(--px) * 3);
 }
 
 .chat-tabs .btn[aria-selected='true'] {
@@ -5464,6 +5472,15 @@ kbd {
   font-size: 13px;
 }
 
+/* A choice's effects: good ones blue, bad ones red (FortuneDialog.tsx → Effects). */
+.fx-good {
+  color: #7fb8ff;
+}
+
+.fx-bad {
+  color: #ff7a6b;
+}
+
 .rivalry-side > b,
 .rivalry-side > small {
   display: block;
@@ -5711,9 +5728,10 @@ kbd {
   color: var(--gold);
 }
 
-/* Six parts or more (the tavern's games): two rows of four, so no name is cut off at the sheet's edge. */
+/* Six parts or more: two even rows (6 → 3 + 3, 8 → 4 + 4), so no name is cut off at the sheet's edge and no row is left
+   half empty. */
 .palace-tabs.wide {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
 }
 
 /* Four parts or more: the icon over a smaller name, so the row still fits the sheet. */
@@ -6561,6 +6579,22 @@ input:not([type='range']):focus-visible {
   justify-content: center;
 }
 
+.dialog-foot.alone {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.dialog-foot.alone .dialog-foot-left,
+.dialog-foot.alone .dialog-step,
+.dialog-foot.alone > span:empty {
+  display: none;
+}
+
+.dialog-foot.alone .dialog-next {
+  justify-self: stretch;
+  min-height: calc(var(--control-small) + var(--px) * 6);
+  font-size: 18px;
+}
+
 .closed-summary .away-lines,
 .closed-summary .hint,
 .closed-summary .dialog-foot {
@@ -6989,9 +7023,7 @@ input:not([type='range']):focus-visible {
 
 .sheet.frame .sheet-head,
 .dialog.frame > .sheet-head {
-  background:
-    repeating-linear-gradient(90deg, transparent 0 calc(var(--px) * 23), rgb(0 0 0 / 18%) calc(var(--px) * 23) calc(var(--px) * 24)),
-    linear-gradient(180deg, var(--wood-2) 0%, var(--wood-1) 100%);
+  background: linear-gradient(180deg, var(--wood-2) 0%, var(--wood-1) 100%);
   box-shadow:
     inset 0 var(--px) 0 0 var(--wood-3),
     inset 0 calc(var(--px) * -1) 0 0 var(--ink),

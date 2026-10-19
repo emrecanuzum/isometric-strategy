@@ -83,6 +83,23 @@ const setLobbyParam = (id: string | null) => {
   history.replaceState(null, '', url)
 }
 
+/** The menu's subtitle: the envoy, as ever, with news nobody asked for. One per visit. */
+const ENVOY_QUIPS = [
+  'Lordum, haberler var. Çoğu kötü.',
+  'Lordum, mühürü ben kırmadım. Kendiliğinden kırıldı.',
+  'Lordum, rakip taç yine haraç istiyor. Ben "lordum evde yok" dedim, inanmadılar.',
+  'Lordum, ambar fareleri sendika kurmuş. Talepleri var.',
+  'Lordum, savaş ilan edildi. Ama iyi tarafından bakın: artık sıkılmayacağız.',
+  'Lordum, kardeşiniz size bakıyor. Pek sevgiyle değil.',
+  'Lordum, yağmacılar tüccarımızı soydu. Tüccar da onlara indirim yaptı.',
+  'Lordum, ben sadece haberi getiririm. Haberin kendisinden sorumlu değilim.',
+  'Lordum, size iki haberim var: biri kötü, öbürü daha kötü.',
+  'Lordum, tahtınız sağlam. Şimdilik. Muhtemelen.',
+  'Lordum, kraliçe nerede diye sormayın. Ben de bilmiyorum, casuslar biliyor.',
+  'Lordum, halk vergileri sevdiğini söyledi. Ben yazdım, onlar imzaladı.',
+]
+const envoyQuip = ENVOY_QUIPS[Math.floor(Math.random() * ENVOY_QUIPS.length)]
+
 export default function Root() {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' })
   // Fetch the game's chunk while the player looks at the menu, so entering a lobby does not wait for it.
@@ -94,6 +111,17 @@ export default function Root() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const { settings, update: updateSettings, load: loadSettings } = useSettings()
   const [tab, setTab] = useState<Tab>('lobbies')
+  // The menu opens on the scene alone: one button, so the landscape can be watched before the lobbies cover it.
+  const [splash, setSplash] = useState(true)
+  const opening = splash && phase.kind === 'home'
+  useEffect(() => {
+    if (!opening) return
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') setSplash(false)
+    }
+    addEventListener('keydown', key)
+    return () => removeEventListener('keydown', key)
+  }, [opening])
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Softer in the menus than on the map.
@@ -209,6 +237,7 @@ export default function Root() {
           sound('leave')
           setLobbyParam(null)
           setTab('lobbies')
+          setSplash(false)
           setPhase({ kind: 'home' })
         }}
       />
@@ -221,9 +250,9 @@ export default function Root() {
       <MenuBackdrop />
       <header className="home-title">
         <MenuCrown />
-        <h1>Krallıklar</h1>
+        <h1>Crownherald</h1>
         <i className="home-rule" aria-hidden />
-        <p>İki haftalık sezonlarda şehrini kur, komşularınla yarış</p>
+        <p>{envoyQuip}</p>
       </header>
       {phase.kind === 'loading' && (
         <div className="spinner big" role="status" aria-label="Yükleniyor">
@@ -233,7 +262,14 @@ export default function Root() {
         </div>
       )}
       {phase.kind === 'auth' && <AuthScreen />}
-      {phase.kind === 'home' && profile && (
+      {phase.kind === 'home' && profile && splash && (
+        <div className="home-continue">
+          <button className="btn" onClick={() => setSplash(false)}>
+            Devam et
+          </button>
+        </div>
+      )}
+      {phase.kind === 'home' && profile && !splash && (
         <section className="home-card frame">
           <div className="home-tabs" role="tablist">
             {TABS.map((t) => (

@@ -54,7 +54,7 @@ export function usePart<P extends string>(key: string, ids: readonly P[], first:
 
 export function Subtabs<P extends string>({ label, parts, part, onPart }: { label: string; parts: Part<P>[]; part: P; onPart: (part: P) => void }) {
   return (
-    <div className={parts.length > 5 ? 'palace-tabs many wide' : parts.length > 3 ? 'palace-tabs many' : 'palace-tabs'} role="tablist" aria-label={label} style={{ ['--parts' as string]: parts.length }}>
+    <div className={parts.length > 5 ? 'palace-tabs many wide' : parts.length > 3 ? 'palace-tabs many' : 'palace-tabs'} role="tablist" aria-label={label} style={{ ['--parts' as string]: parts.length, ['--cols' as string]: Math.ceil(parts.length / 2) }}>
       {parts.map((p) => (
         <button key={p.id} className="btn small" role="tab" aria-selected={part === p.id} aria-pressed={part === p.id} onClick={() => onPart(p.id)}>
           <Icon name={p.icon} size={16} />

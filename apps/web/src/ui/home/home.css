@@ -318,3 +318,47 @@ main.home-screen:has(> .menu-backdrop) {
     font-size: 14px;
   }
 }
+
+/* The opening scene: a single gilded button low on the screen, the landscape left clear around it. */
+.home-screen .home-continue {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: max(24px, 10vh);
+}
+
+.home-screen .home-continue .btn {
+  --face: #5a3d1c;
+  --hi: #f2d16b;
+  --lo: #3a2608;
+  min-width: 220px;
+  min-height: calc(var(--control-small) * 2);
+  padding: 0 calc(var(--px) * 16);
+  font-size: 22px;
+  letter-spacing: 1px;
+  color: #fff4c0;
+  text-shadow: 0 var(--px) 0 var(--ink);
+  border: calc(var(--px) * 4) solid transparent;
+  border-image: var(--slim-frame) 4 / calc(var(--px) * 4) round;
+  background-clip: padding-box;
+  box-shadow: var(--bevel), inset 0 calc(var(--px) * 2) 0 0 #d9aa3e, 0 calc(var(--px) * 4) 0 0 rgb(0 0 0 / 45%);
+  animation: home-continue-glow 2.4s steps(6) infinite;
+}
+
+.home-screen .home-continue .btn:hover:not(:disabled) {
+  --face: #6e4b22;
+  color: #fff;
+}
+
+@keyframes home-continue-glow {
+  50% {
+    filter: brightness(1.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-screen .home-continue .btn {
+    animation: none;
+  }
+}

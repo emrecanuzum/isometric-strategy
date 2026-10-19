@@ -1,4 +1,4 @@
-# CLAUDE.md — İzometrik Çok Oyunculu Strateji Oyunu
+# CLAUDE.md — Crownherald (İzometrik Çok Oyunculu Strateji Oyunu)
 
 Bu dosya, projenin **oyun tasarım belgesi (GDD)** ve Claude için çalışma rehberidir.
 Projede kod yazılırken burada tanımlanan oyun mantığı esas alınır. Bir mekanik
@@ -10,6 +10,10 @@ değişirse önce bu dosya güncellenir, sonra kod.
 ---
 
 ## 1. Oyunun Özeti
+
+Oyunun adı **Crownherald**'dır ("taç habercisi"): oyuncunun tek muhatabı,
+her haberi mühürlü parşömenle getiren **elçidir** (§9.8). Ad ana menüde ve
+sekmenin başlığında yazar.
 
 İzometrik görünümlü, tarayıcı/istemci üzerinden **online** oynanan, **kalıcı
 lobi** tabanlı bir şehir kurma + strateji oyunu.
@@ -1183,7 +1187,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     devriyeler, maaşlar, kasaba bakımı; boşa giden altın).
 - **Alt sekmeler:** Uzun sekmeler Saray'daki gibi alt sekmelere bölünür
   (`apps/web/src/ui/hud/Subtabs.tsx`; son bakılan bölüm tarayıcıda
-  hatırlanır, kırmızı nokta bekleyen bir şeyi gösterir): **Halk** → Nüfus /
+  hatırlanır, kırmızı nokta bekleyen bir şeyi gösterir; altı ve daha çok
+  bölüm iki eşit satıra dizilir, 6 → 3 + 3, 8 → 4 + 4): **Halk** → Nüfus /
   Mutluluk (vergi, gece mesaisi) / Sağlık ve din (hastalık, şifahane,
   tapınak, vaaz) / Kraliçe; **Ticaret** → Tüccar / Pazar / Siparişler /
   Hâkimler; **Depo** → Mallar / Hazine (gelir-gider, sezonun defteri) /
@@ -2743,6 +2748,10 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   düşer. Ölüm yaşını çoktan geçmiş biri varsa `graceHours` (2 saat) daha
   yaşar; hiçbir lordluk yıl değişir değişmez hükümdarını kaybetmez. Kahırdan
   ölüm zamanını korur.
+  Ölüm nedeni tek yerden yazılır (`dynasty.tsx` → `deathOf`): nedeni
+  olmayan ya da "yaşlılık" yazılı eski kayıtlarda ölüm yaşı en küçük
+  ölüm yaşının (58) altındaysa "hastalıktan" öldü yazar; 28 yaşında
+  prens yaşlılıktan ölmez.
   Saray sekmesinin **Hanedan** bölümü hanedanı **hükümdara göre** gösterir:
   **Ebeveynler** (ölü babası, yaşıyorsa kraliçe ana), hükümdar ve kraliçesi,
   **Kardeşler** (babasının öbür çocukları), **Çocuklar** (hükümdarın kendi
@@ -3558,7 +3567,9 @@ krallıkta birer tane olur ve 3 seviyelidir.
   **orduyu seferber et** (zarar önlenir; garnizondan 1, %25 ihtimalle 2
   asker ölür ve ordu 5 dakika sefere çıkamaz; en az 2 asker gerekir) ya da
   **bir şey yapma** (olayın kötü etkisi tam yaşanır). Karar için 2 dakika
-  vardır; cevap verilmezse bir şey yapılmamış sayılır. Krizlerin anlık
+  vardır; cevap verilmezse bir şey yapılmamış sayılır. Seçeneklerin altındaki
+  etkiler renklidir: iyi etkiler mavi, kötüler kırmızı (`FortuneDialog.tsx` →
+  `Effects`; ikiyollu olaylarda da). Krizlerin anlık
   zararı (yanan yemek, hastalanan halk) bu yüzden olay başlayınca değil,
   karar süresi dolunca gelir; önlenmişse gelmez, süren etkileri de
   (üretim düşüşü vb.) uygulanmaz. Cevap krallık durumunda saklanır
@@ -3620,7 +3631,9 @@ krallıkta birer tane olur ve 3 seviyelidir.
   düğmeleri ve (arkada başka pencere varsa) **"Tümünü kapat"**, ortada
   sıradaki yeri ("2 / 5"; sıra boşalınca sayaç sıfırlanır), sağ uçta hep
   aynı yerde ileri düğmesi (arkada pencere varsa **"İleri"**, sonuncuda
-  "Tamam"). Bu pencerelerin hepsi (olaylar, krizler ve seçimler, elçi ve
+  "Tamam"). Alt çubukta başka hiçbir şey yoksa (tek pencere, kendi düğmesi
+  yok) "Tamam" bütün genişliği kaplar, büyük bir düğme olur (`.dialog-foot.alone`).
+  Bu pencerelerin hepsi (olaylar, krizler ve seçimler, elçi ve
   hanedan haberleri, "Sen yokken", sefer raporu, özetler) **aynı boydadır**
   (600 piksel genişlik, ekrana sığdığınca 700 piksel yükseklik; düğmeler hep
   en altta), sıradaki tam öncekinin yerine gelir. Arkada bekleyen pencere
@@ -3757,7 +3770,11 @@ krallıkta birer tane olur ve 3 seviyelidir.
   karargâhı gece tepelerdeki düşman çadırlarıyla, bastırılan isyan
   ayaklanmanın bitişiyle, saray kuşatması, korunan ve kaybedilen taht kuşatma
   sahnesiyle.
-- **Elçi (danışman ve öğretici)** (`apps/web/src/ui/advisor/`): Elçinin kodla
+- **Elçi (danışman ve öğretici)** (`apps/web/src/ui/advisor/`): Elçi oyunun **komik unsurudur** (oyun
+  adını ondan alır): kendini beğenmiş, yaşlı, dizleri ağrıyan, dedikoducu bir
+  saray elçisi; kötü haberi neşeyle verir, fikirleri kendine mal eder, savaşı
+  "arkadan, stratejik olarak" izler. Her söz bilgiyi eksiksiz taşır, şaka onu
+  sarar. Elçinin kodla
   çizilmiş bir portresi vardır (tüylü şapka, fırfırlı yaka, sivri ak sakal,
   bir kaşı kalkık, elinde mühürlü parşömen; göz kırpar, konuşurken ağzı
   oynar; `EnvoyPortrait.tsx`). Sohbet düğmesinin hemen sağındaki
@@ -4048,11 +4065,18 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   sancaklar, dönen değirmen kanatları, ateş böcekleri; sekme gizliyken durur,
   "hareketi azalt" tercihinde tek kare kalır. Başlıkta kodla çizilmiş taç
   (kadife başlık, inciler, yakut ve safirler; ara sıra parlar), altın bantlı ve
-  mürekkep kenarlı "Krallıklar", ortasında baklava olan altın çizgi ve uçları
-  çentikli koyu bir şerit üstünde alt başlık; panel üst çubuğun çerçevesindedir
+  mürekkep kenarlı "Crownherald", ortasında baklava olan altın çizgi ve uçları
+  çentikli koyu bir şerit üstünde alt başlık (elçinin şakalarından biri, her
+  açılışta rastgele: "Lordum, haberler var. Çoğu kötü."; `Root.tsx` →
+  `ENVOY_QUIPS`); panel üst çubuğun çerçevesindedir
   (`--bar-frame`: yaldızlı pervaz, perçinli meşe bant, koyu tahta), sekmeler
   simgeli koyu meşe (seçili olan yaldızlı), lobi satırları köşeleri altın
   perçinli meşe levhalardır (devam edilen lobi altın şeritli).
+  **Açılış:** giriş yapmış oyuncu menüyü önce yalnızca başlık ve ekranın
+  altında, ince çerçeveli, yavaşça parlayan yaldızlı bir **"Devam et"**
+  düğmesiyle görür; manzara açık kalır, izlenebilir. Düğme (ya da Enter /
+  Boşluk) lobiler panelini açar. Oyundan ana menüye dönen oyuncu doğrudan
+  paneli görür (`Root.tsx` → `splash`, `home.css` → `.home-continue`).
 - **Kapalı düğmeler nedenini söyler:** Devre dışı (disabled) her düğme,
   üstüne gelince (dokunmatikte dokununca, birkaç saniye) neden kapalı
   olduğunu küçük bir parşömen balonda yazar: "Ordu sarayın önünde
@@ -4122,7 +4146,7 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   zeminlidir.
   **Bütün kutular aynı dildedir:** sekme sayfaları, pencereler, sohbet ve
   elçinin paneli aynı tam çerçeveyi koyu tahta (yatay kalaslar) zemin üstünde
-  taşır, başlık şeritleri ceviz tahtasıdır; küçük kutular (uyarılar, süren
+  taşır, başlık şeritleri düz (kalas çizgisiz) ceviz tahtasıdır; küçük kutular (uyarılar, süren
   işler, görevler, elçinin notu, menüler, ipuçları, yerleştirme ve plan
   şeritleri) aynı çerçevenin 4 piksellik ince kesimini (`--slim-frame`: siyah
   çizgi, yaldızlı boncuk, altın perçinli meşe pervaz, köşede altın topuz)

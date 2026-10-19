@@ -77,6 +77,24 @@ const clock = (ms: number) => {
 }
 
 // A prince or a princess by sex (never "Prens" for a daughter).
+/** How someone died, as the house's pages say it. Old records carry no cause (or "age") for anyone; nobody dies of old age before the
+ * youngest death age, so those early deaths read as an illness. `long` is the fuller phrasing of the news windows. */
+export function deathOf(p: Person, at: number, long = false): string {
+  switch (p.cause) {
+    case 'battle':
+      return long ? 'ordusunun başında savaşırken' : 'savaşta düşerek'
+    case 'grief':
+      return long ? 'kaybedilen savaşın kahrından' : 'kahrından'
+    case 'rebel':
+      return 'isyanı bastırılırken'
+    case 'deposed':
+      return 'tahttan indirilerek'
+    case 'sickness':
+      return long ? 'salgına yakalanıp hastalıktan' : 'hastalıktan'
+  }
+  return ageOf(p, p.diedAt ?? at) < balance.dynasty.death.atAge[0] ? (long ? 'ansızın gelen bir hastalıktan' : 'hastalıktan') : 'yaşlılıktan'
+}
+
 export const titleOf = (p: Pick<Person, 'sex'>) => (p.sex === 'm' ? 'Prens' : 'Prenses')
 const roleOfPortrait = (p: Pick<Person, 'sex'>) => (p.sex === 'm' ? 'prince' : 'princess')
 
@@ -593,7 +611,7 @@ export function DynastySection({ kingdom, now, online, onShow }: { kingdom: King
                   <span>
                     {p.ruled === false ? `${p.sex === 'm' ? 'Prens' : 'Prenses'} ` : 'Hükümdar '}
                     {p.name} · {Math.floor(ageOf(p, p.diedAt ?? now))} yaşında{' '}
-                    {p.cause === 'battle' ? 'savaşta düşerek' : p.cause === 'grief' ? 'kahrından' : p.cause === 'rebel' ? 'isyanı bastırılırken' : p.cause === 'deposed' ? 'tahttan indirilerek' : 'yaşlılıktan'} öldü
+                    {deathOf(p, now)} öldü
                   </span>
                 </li>
               ))}
@@ -709,7 +727,7 @@ export function HouseDialog({ news, kingdom, now, online, onClose }: { news: Hou
     news.kind === 'birth'
       ? `Kraliçe ${d?.queen?.name ?? ''} bir ${p.sex === 'm' ? 'oğlan' : 'kız'} doğurdu! Halk sevinçle kutluyor. Ona bir ad koy; hükümdar yaşadıkça eğitimini Saray sekmesinin Hanedan bölümünden seçebilirsin.`
       : news.kind === 'death'
-        ? `Hükümdar ${p.name}, ${Math.floor(ageOf(p, p.diedAt ?? now))} yaşında ${p.cause === 'battle' ? 'ordusunun başında savaşırken' : p.cause === 'grief' ? 'kaybedilen savaşın kahrından' : p.cause === 'sickness' ? 'salgına yakalanıp hastalıktan' : 'yaşlılıktan'} öldü. ${
+        ? `Hükümdar ${p.name}, ${Math.floor(ageOf(p, p.diedAt ?? now))} yaşında ${deathOf(p, now, true)} öldü. ${
             d?.regnant && d.queen
               ? `Ne oğlu ne kardeşi kaldı; lordluğu şimdilik Kraliçe ${d.queen.name} yönetiyor, ama evlenmesi şart.`
               : news.heir && !d?.council
@@ -725,7 +743,7 @@ export function HouseDialog({ news, kingdom, now, online, onClose }: { news: Hou
             : news.kind === 'ofAge'
               ? `${titleOf(p)} ${p.name}${sibling ? ', hükümdarın kardeşi,' : ''} ${balance.dynasty.comingOfAge} yaşına girdi ve reşit oldu.${p.education ? ` Hocalarının emeği karşılığını verdi: ${SKILL_NAMES[p.education].toLowerCase()} yeteneği arttı.` : ''}${p.sex === 'f' ? ' Artık evlendirilebilir.' : ''}`
               : news.kind === 'passing'
-                ? `${titleOf(p)} ${p.name}, ${Math.floor(ageOf(p, p.diedAt ?? now))} yaşında ${p.cause === 'sickness' ? 'hastalıktan' : 'yaşlılıktan'} öldü. Hanedan yasta.`
+                ? `${titleOf(p)} ${p.name}, ${Math.floor(ageOf(p, p.diedAt ?? now))} yaşında ${deathOf(p, now)} öldü. Hanedan yasta.`
                 : news.kind === 'regnant'
                   ? regnantText(p.name, d?.kinsmanAt, now)
                   : `Kraliçe ${p.name} saraya geldi. Halk düğünü günlerce kutladı; hükümdarın çocukları onunla doğacak.`

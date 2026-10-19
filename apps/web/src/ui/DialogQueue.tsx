@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react'
+import { Children, createContext, useContext, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Icon } from './icons'
 import type { IconName } from './icons'
@@ -23,8 +23,10 @@ export const useQueue = () => useContext(QueueContext)
 export function DialogFoot({ children, onNext, label, disabled, why }: { children?: ReactNode; onNext: () => void; label?: string; disabled?: boolean; why?: string }) {
   const { pos, total, closeAll } = useQueue()
   const more = total > pos
+  // Nothing but the closing button: it takes the whole width, so a short dialog does not end on an empty bar.
+  const alone = Children.toArray(children).length === 0 && !(more && closeAll) && total <= 1
   return (
-    <div className="dialog-foot">
+    <div className={alone ? 'dialog-foot alone' : 'dialog-foot'}>
       <div className="dialog-foot-left">
         {children}
         {more && closeAll && (
