@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
+import { PHONE_OFF } from '../../net/settings'
 import type { Cut, Pace, Profile, Settings, WeatherMode } from '../../net/settings'
-import { usePowerSave } from '../../lib/power'
+import { usePhone, usePowerSave } from '../../lib/power'
 import type { PowerMode } from '../../lib/power'
 import { Icon } from '../icons'
 import type { IconName } from '../icons'
@@ -67,11 +68,18 @@ function Toggle({ on, onClick, disabled, why }: { on: boolean; onClick: () => vo
   )
 }
 
-function Choice<T extends string>({ value, options, onPick }: { value: T; options: { id: T; label: string }[]; onPick: (v: T) => void }) {
+function Choice<T extends string>({ value, options, onPick, locked }: { value: T; options: { id: T; label: string }[]; onPick: (v: T) => void; locked?: { allowed: T[]; why: string } }) {
   return (
     <span className="row settings-choice">
       {options.map((o) => (
-        <button key={o.id} className="btn small" aria-pressed={value === o.id} onClick={() => onPick(o.id)}>
+        <button
+          key={o.id}
+          className="btn small"
+          aria-pressed={value === o.id}
+          disabled={locked && !locked.allowed.includes(o.id)}
+          data-why={locked && !locked.allowed.includes(o.id) ? locked.why : undefined}
+          onClick={() => onPick(o.id)}
+        >
           {o.label}
         </button>
       ))}
@@ -127,6 +135,8 @@ export function SoundSettings({ settings, onChange }: { settings: Settings; onCh
   )
 }
 
+const PHONE_WHY = 'Telefonda hep kapalı (pil ve bellek için)'
+
 const WEATHER: { id: WeatherMode; label: string }[] = [
   { id: 'full', label: 'Tam' },
   { id: 'lite', label: 'Sade' },
@@ -136,7 +146,9 @@ const WEATHER: { id: WeatherMode; label: string }[] = [
 // What the map draws. A row power saving turns down says so while it does.
 export function PictureSettings({ settings, onChange }: { settings: Settings; onChange: Change }) {
   const saving = usePowerSave(settings.power)
-  const cutNote = (k: Cut) => (saving && settings.cuts[k] ? ' Güç tasarrufu şu an bunu kısıyor.' : '')
+  const phone = usePhone()
+  const cutNote = (k: Cut) => (saving && settings.cuts[k] && !(phone && PHONE_OFF.includes(k)) ? ' Güç tasarrufu şu an bunu kısıyor.' : '')
+  const off = (k: Cut) => phone && PHONE_OFF.includes(k)
   const rows: { label: string; hint: string; key: Flag & Cut; icon: IconName }[] = [
     { label: 'Detay animasyonları', hint: 'Yakında rüzgârda sallanan ağaçlar ve hareketli binalar (ekin, demirci, bayraklar).', key: 'detail', icon: 'leaf' },
     { label: 'Canlı gölgeler', hint: 'Binaların, yürüyenlerin ve orduların güneşle dönen gölgeleri. Zemine boyalı gölgeler kalır.', key: 'shadows', icon: 'sun' },
@@ -148,12 +160,17 @@ export function PictureSettings({ settings, onChange }: { settings: Settings; on
   return (
     <div className="settings-list">
       {rows.map((r) => (
-        <Row key={r.key} label={r.label} hint={r.hint + cutNote(r.key)} icon={r.icon}>
-          <Toggle on={settings[r.key]} onClick={() => onChange({ [r.key]: !settings[r.key] })} />
+        <Row key={r.key} label={r.label} hint={r.hint + cutNote(r.key) + (off(r.key) ? ' Telefonda hep kapalı.' : '')} icon={r.icon}>
+          <Toggle on={settings[r.key] && !off(r.key)} disabled={off(r.key)} why={PHONE_WHY} onClick={() => onChange({ [r.key]: !settings[r.key] })} />
         </Row>
       ))}
-      <Row label="Hava efektleri" hint={'Tam: yağmur, kar, bulut gölgeleri ve damla sıçramaları. Sade: daha az damla, gölge ve sıçrama yok. Kapalı: hava hiç çizilmez.' + cutNote('weather')} icon="snow">
-        <Choice value={settings.weather} options={WEATHER} onPick={(weather) => onChange({ weather })} />
+      <Row label="Hava efektleri" hint={'Tam: yağmur, kar, bulut gölgeleri ve damla sıçramaları. Sade: daha az damla, gölge ve sıçrama yok. Kapalı: hava hiç çizilmez.' + cutNote('weather') + (phone ? ' Telefonda en çok Sade.' : '')} icon="snow">
+        <Choice
+          value={phone && settings.weather === 'full' ? 'lite' : settings.weather}
+          options={WEATHER}
+          onPick={(weather) => onChange({ weather })}
+          locked={phone ? { allowed: ['lite', 'off'], why: PHONE_WHY } : undefined}
+        />
       </Row>
     </div>
   )
@@ -191,9 +208,14 @@ const CUTS: { key: Cut; label: string }[] = [
 // How often the map is drawn, and power saving with what it turns down (CLAUDE.md §12).
 export function PerformanceSettings({ settings, onChange }: { settings: Settings; onChange: Change }) {
   const saving = usePowerSave(settings.power)
+  const phone = usePhone()
   return (
     <div className="settings-list">
-      <Row label="Kare hızı" hint={PACE_HINTS[settings.pace] + ' Bir pencere haritayı örtünce daha da yavaşlar; sekme gizliyken hiç çizilmez.'} icon="time">
+      <Row
+        label="Kare hızı"
+        hint={PACE_HINTS[settings.pace] + ' Bir pencere haritayı örtünce daha da yavaşlar; sekme gizliyken hiç çizilmez.' + (phone ? ' Telefonda güç tasarrufu bunu değiştirmez, seçtiğin geçerlidir.' : '')}
+        icon="time"
+      >
         <Choice value={settings.pace} options={PACES} onPick={(pace) => onChange({ pace })} />
       </Row>
       <Row
@@ -212,7 +234,15 @@ export function PerformanceSettings({ settings, onChange }: { settings: Settings
       <div className="settings-cuts">
         <b>Güç tasarrufu açıkken</b>
         {CUTS.map((c) => (
-          <button key={c.key} className="pixel-check" role="checkbox" aria-checked={settings.cuts[c.key]} onClick={() => onChange({ cuts: { ...settings.cuts, [c.key]: !settings.cuts[c.key] } })}>
+          <button
+            key={c.key}
+            className="pixel-check"
+            role="checkbox"
+            aria-checked={phone && c.key !== 'pace' && c.key !== 'shadows' ? true : phone && c.key === 'pace' ? false : settings.cuts[c.key]}
+            disabled={phone && (PHONE_OFF.includes(c.key) || c.key === 'pace' || c.key === 'weather')}
+            data-why={phone ? (c.key === 'pace' ? 'Telefonda kare hızını sen seçersin' : PHONE_WHY) : undefined}
+            onClick={() => onChange({ cuts: { ...settings.cuts, [c.key]: !settings.cuts[c.key] } })}
+          >
             <span className="box" aria-hidden>
               <svg viewBox="0 0 8 8" shapeRendering="crispEdges">
                 <path d="M1 4h1v1h-1zM2 5h1v1h-1zM3 6h1v1h-1zM4 5h1v1h-1zM5 4h1v1h-1zM6 3h1v1h-1zM7 2h1v1h-1zM2 4h1v1h-1zM3 5h1v1h-1zM4 4h1v1h-1zM5 3h1v1h-1zM6 2h1v1h-1z" />

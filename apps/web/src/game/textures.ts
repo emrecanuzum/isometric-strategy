@@ -139,6 +139,7 @@ if (import.meta.env.DEV) {
   ;(globalThis as { __atlas?: () => unknown }).__atlas = () => ({
     cached: cache.size,
     own: [...cache.values()].filter((e) => !e.page).length,
+    spriteMB: Math.round([...cache.keys()].reduce((n, s) => n + s.pixels.byteLength + (s.lift?.byteLength ?? 0) + ((s as { up?: ArrayBufferView }).up?.byteLength ?? 0), 0) / 1e6),
     pools: Object.fromEntries([...pools].map(([k, v]) => [k, v.map((p) => p.live)])),
   })
 }

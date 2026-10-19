@@ -42,3 +42,20 @@ export function usePowerSave(mode: PowerMode): boolean {
   }, [mode])
   return mode === 'on' || (mode === 'auto' && (device || onBattery))
 }
+
+// A phone's screen (CLAUDE.md §11 Ayarlar): narrow, or a touch screen held sideways. There some details are always off
+// (see PHONE_OFF in net/settings.ts); how smooth the map is stays the player's choice.
+const PHONE_QUERY = '(max-width: 719px), (pointer: coarse) and (max-height: 540px)'
+export const phoneScreen = () => window.matchMedia?.(PHONE_QUERY).matches ?? false
+
+export function usePhone(): boolean {
+  const [phone, setPhone] = useState(phoneScreen)
+  useEffect(() => {
+    const q = window.matchMedia?.(PHONE_QUERY)
+    if (!q) return
+    const on = () => setPhone(q.matches)
+    q.addEventListener?.('change', on)
+    return () => q.removeEventListener?.('change', on)
+  }, [])
+  return phone
+}

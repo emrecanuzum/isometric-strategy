@@ -188,7 +188,12 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   rampası vardır; tonlar arası geçiş **dither** ile yapılır, yumuşak
   gradyan/bulanıklık kullanılmaz.
 - **Yakınlaştırma kademelidir** (⅛×, ¼×, ½×, 1×, 2×, 3×); dokular en yakın
-  komşu ile ölçeklenir, pikseller bozulmaz. Ağaçlar, kayalar, hanlar ve binalar en uzak
+  komşu ile ölçeklenir, pikseller bozulmaz. Dokunmatik ekranda **iki parmakla**
+  sıkıştırarak yakınlaştırılır: parmakların açıklığına en yakın kademeye
+  geçilir (tekerlek gibi), harita da parmakların ortasıyla kayar. İki
+  parmaklı bir dokunuş hiçbir zaman tıklama sayılmaz (bir şey seçmez,
+  pencere açmaz); bir parmak kalkınca öbürü haritayı sıçramadan sürüklemeye
+  devam eder (`createWorld.ts` → `pinch`). Ağaçlar, kayalar, hanlar ve binalar en uzak
   kademede de çizilir (yürüyenler, kervanlar ve hayvanlar ½× altında
   gizlenir). Kamera haritanın dışına çıkamaz: ekranın ortası haritanın
   kenarından en fazla 24 karo içeride, kenardaki dağ halkasının üstünde
@@ -4214,6 +4219,15 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
     bulutlar, keskin çizim (uzaklaşınca ekranın tam yoğunluğu) aç/kapa; **hava
     efektleri** Tam / Sade (daha az damla, bulut gölgesi ve sıçrama yok) /
     Kapalı (hava hiç çizilmez ve duyulmaz).
+  - **Telefon ekranında zorunlu olanlar** (`lib/power.ts` → `usePhone`:
+    720 pikselden dar ya da yatay tutulmuş dokunmatik ekran; `net/settings.ts`
+    → `PHONE_OFF`): detay animasyonları, kuşlar, bulutlar, gece ışıltısı ve
+    keskin çizim hep kapalıdır, hava en çok Sade çizilir. Bu satırlar Görüntü
+    sekmesinde ve güç tasarrufunun listesinde kapalı (disabled) görünür,
+    üstüne gelince "Telefonda hep kapalı (pil ve bellek için)" yazar; oyuncunun
+    seçimi profilde kalır, büyük ekranda yine geçerlidir. **Kare hızı zorunlu
+    değildir:** telefonda da Akıcı / Dengeli / Pil dostu seçilir ve güç
+    tasarrufu onu Pil dostuna çekmez. Canlı gölgeler oyuncunun seçimindedir.
   - **Performans:** **kare hızı** Akıcı / Dengeli / Pil dostu (§12) ve **güç
     tasarrufu** Otomatik / Açık / Kapalı; altında **güç tasarrufu açıkken**
     neyin kısılacağı tek tek seçilir (piksel onay kutuları: kare hızını Pil
@@ -4407,6 +4421,22 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
   gölgelenir (`shadows.ts` → `REGION`: 1024 dünya pikseline yuvarlanmış
   görüş alanı ve bir hücre pay; kaydırınca yalnızca yeni gelenler
   gölgelenir, alandan çıkanların kaplaması serbest kalır).
+- **Ekran dışı binalar ve bellek** (`createWorld.ts` → `cullBuildings`,
+  `LOW_MEMORY`): ekranın dışındaki binalar (ağaçların payıyla), hareketli
+  kareleri, gece pencereleri, gölgeleri ve üstlerine düşen gölge kaplamaları
+  Pixi'nin `culled` bayrağıyla çizimden çıkarılır (`visible`'a dokunulmaz);
+  gölgesi yalnızca geri gelince yeniden hesaplanır. Dolu bir lobide binlerce
+  bina her kare toplanıp GPU'ya gidiyordu. Yürüyenlerin binalarla
+  karşılaştırılması (kim kimin arkasında, hangi kapı açık) ekran ızgarasıyla
+  yapılır (256 piksel hücreler; `sortWalkers`): her yürüyen yalnızca
+  çevresindeki binalarla sınanır (önce haritadaki bütün binalarla, boşta
+  karenin en pahalı işiydi). İş yokken bina gölgesi taraması 15 karede bir
+  yapılır. Telefon ve 4 GB ve altı cihazlar (`LOW_MEMORY`: dokunmatik ya da
+  `deviceMemory` ≤ 4) ekran dışındaki chunk'lardan en çok 64 MB tutar
+  (masaüstü 192 MB; önce 320 MB) ve 2 boyama işçisi açar (masaüstü 4; her
+  işçi dünyanın bir kopyasını ve kendi sprite'larını, ~40 MB, tutar).
+  Ölçüm (geliştirme sürümü, dolu lobi, boşta): ana iş parçacığı %19 → %15
+  (kalanın üçte biri geliştirme sürümünün React'i).
 - **Filtreler:** gölge katmanının saydamlık filtresi ve gece ışıltısının
   bulanıklığı ekranın gördüğü alanla sınırlıdır (`filterArea`, her kare kamera
   koordinatında): her karede bütün ışıkların ve gölgelerin sınırları

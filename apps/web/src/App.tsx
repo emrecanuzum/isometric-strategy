@@ -111,7 +111,7 @@ import type { Spot } from './ui/MinimapCorners'
 import { play } from './audio/sfx'
 import type { Cue } from './audio/sfx'
 import { SettingsTabs } from './ui/home/SettingsPanel'
-import { usePowerSave } from './lib/power'
+import { usePhone, usePowerSave } from './lib/power'
 import { WarTargets } from './ui/hud/WarTargets'
 import { EnvoyDialog, describe as describeNotice } from './ui/Envoy'
 import { Advisor, AdvisorSettings } from './ui/advisor/Advisor'
@@ -597,7 +597,8 @@ function App({
   const muted = !settings.music
   // What the map draws: the picture settings, with what power saving turns down while on (CLAUDE.md §12).
   const saving = usePowerSave(settings.power)
-  const video = videoOf(settings, saving)
+  const phone = usePhone()
+  const video = videoOf(settings, saving, phone)
   const videoKey = JSON.stringify(video)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => view?.setVideo(video), [view, videoKey])

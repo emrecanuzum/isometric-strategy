@@ -84,7 +84,18 @@ export function createShadows(): Shadows {
   // A building's pixel is in shade when the line from it toward the sun passes through another building's solids.
   // Walls do not shade walls: a run of wall is lit as one model already.
   let region = ''
+  let idleFrames = 0
   function shadeBuildings(casters: Container, sunMoved: boolean, alpha: number, view?: View) {
+    // With nothing being shaded and the sun still, the buildings are looked over a few times a second, not every frame
+    // (gathering them from the layer costs as much as the rest of the shadows together).
+    if (!sunMoved && !job && queue.length === 0 && ++idleFrames % 15 !== 0) {
+      for (const [building, entry] of shaded) {
+        if (!entry.overlay) continue
+        entry.overlay.alpha = alpha
+        entry.overlay.culled = building.culled
+      }
+      return
+    }
     let near = (_: PixiSprite) => true
     let key = ''
     if (view) {
@@ -121,7 +132,11 @@ export function createShadows(): Shadows {
         if (entry && entry.look !== lookOf(building.texture) && !queue.includes(building)) queue.push(building)
       }
     }
-    for (const entry of shaded.values()) if (entry.overlay) entry.overlay.alpha = alpha
+    for (const [building, entry] of shaded) {
+      if (!entry.overlay) continue
+      entry.overlay.alpha = alpha
+      entry.overlay.culled = building.culled
+    }
     const deadline = performance.now() + BUDGET_MS
     while (performance.now() < deadline) {
       if (!job) {
@@ -219,6 +234,10 @@ export function createShadows(): Shadows {
         }
         entry.frame = frame
         const { shade } = entry
+        // A caster left out of the drawing (off screen, createWorld → cullBuildings) leaves its shadow out too; it is
+        // cast again only once it comes back.
+        shade.culled = child.culled
+        if (child.culled) continue
         const size = footprints.get(child) ?? 0
         const raise = raises.get(child) ?? 0
         if (
@@ -277,6 +296,15 @@ export function createShadows(): Shadows {
         const look = lookOf(child.texture)
         const baseLook = base && !base.destroyed ? lookOf(base.texture) : undefined
         if (!base || !look || !baseLook || (raises.get(child) ?? 0) <= 0) continue
+        // Off screen: its overlay (if any) waits, left out of the drawing; worked out again once it is back.
+        if (child.culled) {
+          const was = onBase.get(child)
+          if (was) {
+            was.overlay.culled = true
+            kept.add(child)
+          }
+          continue
+        }
         kept.add(child)
         const dx = Math.round(child.x - look.anchorX - (base.x - baseLook.anchorX))
         const dy = Math.round(child.y - look.anchorY - (base.y - baseLook.anchorY))
@@ -321,6 +349,7 @@ export function createShadows(): Shadows {
         overlay.alpha = filter.alpha
         // Just above the base, just below the building (whose zIndex is a little above its base's).
         overlay.zIndex = base.zIndex + 0.001
+        overlay.culled = child.culled
       }
       for (const [child, entry] of onBase) {
         if (kept.has(child)) continue

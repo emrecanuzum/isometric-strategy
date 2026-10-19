@@ -84,8 +84,15 @@ const WHEEL_COOLDOWN_MS = 220
 const TAP_SLOP = 10
 // How long a move order's mark stays on the ground.
 const MARK_SECONDS = 0.9
-const TEXTURE_BUDGET_BYTES = 320 * 1024 * 1024
-const MAX_WORKERS = 4
+// Phones and small machines (CLAUDE.md §12): a touch-only screen or at most 4 GB of memory. iOS kills a tab that holds
+// too much canvas and texture memory, so they keep fewer painted chunks and fewer painting workers (each holds a copy
+// of the world and its own sprites, ~40 MB).
+const LOW_MEMORY =
+  typeof window !== 'undefined' &&
+  ((window.matchMedia?.('(pointer: coarse) and (hover: none)').matches ?? false) || ((navigator as { deviceMemory?: number }).deviceMemory ?? 8) <= 4)
+// Painted chunks kept off screen until this much is held (a chunk at full detail is ~10 MB).
+const TEXTURE_BUDGET_BYTES = (LOW_MEMORY ? 64 : 192) * 1024 * 1024
+const MAX_WORKERS = LOW_MEMORY ? 2 : 4
 // Caravans are too small to make out below this zoom.
 const CARAVAN_MIN_ZOOM = 0.5
 // How often the camera's place is told to the interface while the map moves, in milliseconds.
@@ -769,6 +776,8 @@ export async function createWorld(
   })
 
   const chunks = new Map<number, Chunk>()
+  // Set once the buildings' layer exists (cullBuildings, below): the first refresh runs before it.
+  let cull: ((r: ReturnType<typeof treeView>) => void) | null = null
   let visible = new Set<number>()
   let wanted: number[] = []
   let textureBytes = 0
@@ -992,6 +1001,7 @@ export async function createWorld(
       for (const tree of chunk.trees) tree.visible = chunk.sprite.visible && treeShown(tree, treeRect)
       if (!chunk.sprite.visible && textureBytes > TEXTURE_BUDGET_BYTES) drop(key)
     }
+    cull?.(treeRect)
     dispatch()
     report()
     const view = [middle, toTile({ x: 0, y: 0 }), toTile({ x: width, y: 0 }), toTile({ x: width, y: height }), toTile({ x: 0, y: height })]
@@ -1378,10 +1388,15 @@ export async function createWorld(
   let pickedCity: number | undefined
   let lastPointer: Point | null = null
 
-  // One finger (or the mouse) drags; zoom is on the buttons and the wheel only, so extra fingers are
-  // ignored. A press that barely moves is a tap: on touch screens only a tap picks a tile, so panning
-  // the map never changes the selection.
+  // One finger (or the mouse) drags; two fingers pinch to zoom (snapping to the zoom steps, like the wheel) and move the
+  // map with their midpoint. A press that barely moves is a tap: on touch screens only a tap picks a tile, so panning
+  // the map never changes the selection, and a touch that ever had two fingers is never a tap.
   const touches = new Map<number, Point>()
+  let pinch: { distance: number; index: number; mid: Point } | null = null
+  const twoFingers = () => {
+    const [a, b] = [...touches.values()]
+    return { distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }
+  }
 
   let press: { start: Point; camera: Point; moved: boolean } | null = null
   // A right button press (the mouse only): it never drags the map; released where it was pressed, it is a right tap.
@@ -1401,6 +1416,15 @@ export async function createWorld(
     if (touches.size > 1) {
       // A multi-finger touch is never a tap, even after the other fingers lift.
       if (press) press.moved = true
+      if (touches.size === 2 && !stroke) {
+        const { distance, mid } = twoFingers()
+        pinch = { distance, index: zoomIndex, mid }
+        if (followTarget) {
+          followTarget = null
+          followStop?.()
+          followStop = null
+        }
+      }
       return
     }
     press = { start: { x: e.global.x, y: e.global.y }, camera: { x: camera.x, y: camera.y }, moved: false }
@@ -1423,7 +1447,15 @@ export async function createWorld(
     }
     if (e.pointerType === 'mouse' && e.button !== 0) return
     touches.delete(e.pointerId)
-    if (touches.size > 0) return
+    if (touches.size < 2) pinch = null
+    if (touches.size > 0) {
+      // Out of a pinch with one finger still down: it drags on from where it is, without a jump.
+      if (touches.size === 1 && press) {
+        const [rest] = [...touches.values()]
+        press = { start: { ...rest }, camera: { x: camera.x, y: camera.y }, moved: true }
+      }
+      return
+    }
     if (stroke) {
       const spots = stroke.spots
       stroke = null
@@ -1475,6 +1507,19 @@ export async function createWorld(
       const end = footprintOrigin(tileAt({ x: e.global.x, y: e.global.y }), placement.size)
       stroke.spots = rowOf(stroke.start, end, placement.size)
       pick({ x: e.global.x, y: e.global.y })
+      return
+    }
+    if (pinch && touches.size === 2 && touches.has(e.pointerId)) {
+      const { distance, mid } = twoFingers()
+      // The map follows the fingers' midpoint, and zooms to the step nearest the fingers' spread.
+      camera.x = Math.round(camera.x + mid.x - pinch.mid.x)
+      camera.y = Math.round(camera.y + mid.y - pinch.mid.y)
+      pinch.mid = mid
+      const want = Math.log(ZOOMS[pinch.index] * (distance / pinch.distance))
+      let index = zoomIndex
+      for (let i = 0; i < ZOOMS.length; i++) if (Math.abs(Math.log(ZOOMS[i]) - want) < Math.abs(Math.log(ZOOMS[index]) - want)) index = i
+      if (index !== zoomIndex) zoomTo(index, mid)
+      else refresh()
       return
     }
     if (press && touches.size === 1) {
@@ -1597,6 +1642,17 @@ export async function createWorld(
       m.sprite.anchor.set(look.anchorX / look.width, look.anchorY / look.height)
     }
   })
+  // Buildings off screen (with the trees' margins, for their long shadows) are left out of the drawing (Pixi's
+  // `culled`, apart from `visible`, which other code sets): a full lobby has thousands of them, every one gathered,
+  // batched and sent to the GPU each frame though few are on screen (CLAUDE.md §12). Their moving parts and lit windows
+  // alike; the shadows follow their casters (shadows.ts).
+  function cullBuildings(r: ReturnType<typeof treeView>) {
+    for (const o of occluders) o.sprite.culled = o.right < r.left || o.left > r.right || o.sy < r.top || o.top > r.bottom
+    const off = (c: Container) => c.x < r.left || c.x > r.right || c.y < r.top || c.y > r.bottom + 160
+    for (const m of moving) m.sprite.culled = off(m.sprite)
+    for (const w of windows) w.culled = off(w)
+  }
+  cull = cullBuildings
   function placeOccluders(structures: Structure[]) {
     for (const m of moving) m.sprite.destroy()
     moving = []
@@ -1853,28 +1909,53 @@ export async function createWorld(
     }
   }
 
+  // The occluders bucketed by the screen cells their box covers (gates by their reach too), so each walker is tested only
+  // against the buildings around it (CLAUDE.md §12): testing every walker against every building on the map (two
+  // thousand and more in a full lobby) was the largest cost of an idle frame.
+  const CELL = 256
+  let grid = new Map<number, Occluder[]>()
+  let gridOf: Occluder[] | null = null
+  const cellKey = (cx: number, cy: number) => (cy + 4096) * 8192 + (cx + 4096)
+  function bucket() {
+    gridOf = occluders
+    grid = new Map()
+    gateOccluders = occluders.filter((o) => o.gate)
+    const reach = GATE_REACH * TILE_WIDTH
+    for (const o of occluders) {
+      const pad = o.gate ? reach : 0
+      for (let cy = Math.floor((o.top - pad) / CELL); cy <= Math.floor((o.sy + 2 + pad) / CELL); cy++) {
+        for (let cx = Math.floor((o.left - pad) / CELL); cx <= Math.floor((o.right + pad) / CELL); cx++) {
+          const key = cellKey(cx, cy)
+          const list = grid.get(key)
+          if (list) list.push(o)
+          else grid.set(key, [o])
+        }
+      }
+    }
+  }
+  const NOT_WALKER = new Set(['occluder', 'anim', 'shade', 'army-ring', 'tree', 'inn', 'builder'])
+  const opened = new Set<Occluder>()
+  let gateOccluders: Occluder[] = []
+
   function sortWalkers() {
     if (occluders.length === 0) return
-    const walkers = caravans.layer.children.filter((c) => c.visible && c.label !== 'occluder' && c.label !== 'anim' && c.label !== 'shade' && c.label !== 'army-ring' && c.label !== 'tree' && c.label !== 'inn' && c.label !== 'builder')
-    for (const o of occluders) {
-      if (!o.gate) continue
-      const open = walkers.some(({ position: { x: px, y: py } }) => {
+    if (gridOf !== occluders) bucket()
+    opened.clear()
+    for (const child of caravans.layer.children) {
+      if (!child.visible || NOT_WALKER.has(child.label)) continue
+      const { x: px, y: py } = child.position
+      const near = grid.get(cellKey(Math.floor(px / CELL), Math.floor(py / CELL)))
+      if (!near) continue
+      // A gate opens while someone is in or right by its gateway.
+      for (const o of near) {
+        if (!o.gate || opened.has(o)) continue
         const a = px / (TILE_WIDTH / 2)
         const b = (py + o.lift) / (TILE_HEIGHT / 2)
         const tx = (a + b) / 2
         const ty = (b - a) / 2
-        return tx > o.x - GATE_REACH && ty > o.y - GATE_REACH && tx < o.x + o.size + GATE_REACH && ty < o.y + o.size + GATE_REACH
-      })
-      const look = open ? o.gate.open : o.gate.closed
-      if (o.look !== look) {
-        o.look = look
-        o.sprite.texture = textureOf(snowOf(look, paintedSnow))
+        if (tx > o.x - GATE_REACH && ty > o.y - GATE_REACH && tx < o.x + o.size + GATE_REACH && ty < o.y + o.size + GATE_REACH) opened.add(o)
       }
-    }
-    for (const child of caravans.layer.children) {
-      if (!child.visible || child.label === 'occluder' || child.label === 'anim' || child.label === 'shade' || child.label === 'army-ring' || child.label === 'tree' || child.label === 'inn' || child.label === 'builder') continue
-      const { x: px, y: py } = child.position
-      for (const o of occluders) {
+      for (const o of near) {
         if (o.walked || px < o.left || px > o.right || py < o.top || py > o.sy + 2) continue
         // The ground point under the walker's feet, taking the building's own ground height.
         const a = px / (TILE_WIDTH / 2)
@@ -1889,6 +1970,13 @@ export async function createWorld(
         // screen than its front corner (walking past a side wall).
         if (tx < o.x + o.size && ty < o.y + o.size) child.zIndex = Math.min(child.zIndex, o.sy - 0.5)
         else child.zIndex = Math.max(child.zIndex, o.sy + 0.5)
+      }
+    }
+    for (const o of gateOccluders) {
+      const look = opened.has(o) ? o.gate!.open : o.gate!.closed
+      if (o.look !== look) {
+        o.look = look
+        o.sprite.texture = textureOf(snowOf(look, paintedSnow))
       }
     }
   }

@@ -82,17 +82,22 @@ export interface Video {
   pace: Pace
 }
 
-export function videoOf(s: Settings, saving: boolean): Video {
-  const cut = (k: Cut) => saving && s.cuts[k]
+// On a phone's screen these are always off, whatever was chosen (CLAUDE.md §11 Ayarlar): they cost the most battery and
+// memory for the least on a small screen. The weather is drawn plain there. The frame rate is not among them.
+export const PHONE_OFF: readonly Cut[] = ['detail', 'birds', 'clouds', 'glow', 'sharp']
+
+export function videoOf(s: Settings, saving: boolean, phone = false): Video {
+  const cut = (k: Cut) => (phone && PHONE_OFF.includes(k)) || (saving && s.cuts[k])
   return {
     detail: s.detail && !cut('detail'),
     birds: s.birds && !cut('birds'),
     clouds: s.clouds && !cut('clouds'),
     glow: s.glow && !cut('glow'),
     shadows: s.shadows && !cut('shadows'),
-    weather: cut('weather') && s.weather === 'full' ? 'lite' : s.weather,
+    weather: (phone || cut('weather')) && s.weather === 'full' ? 'lite' : s.weather,
     sharp: s.sharp && !cut('sharp'),
-    pace: cut('pace') ? 'saver' : s.pace,
+    // On a phone the frame rate is the player's own choice: power saving does not turn it down there.
+    pace: !phone && cut('pace') ? 'saver' : s.pace,
   }
 }
 
