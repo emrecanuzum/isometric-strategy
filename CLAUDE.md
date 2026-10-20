@@ -1720,7 +1720,7 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   hesaplanır. Ordu sancakları gölge düşürmez (yüksekten düşen uzun gölge
   bölüğü havadaymış gibi gösteriyordu; `sprites.ts` → `NO_SHADOW`).
   - **Kendi tacının devriyesi** lordun **eğlence merkezine** uğrar, içer,
-    eğlenir ve **25 altın bahşiş** bırakır (lordun bir kardeşi devriyenin
+    eğlenir ve **60 altın bahşiş** bırakır (lordun bir kardeşi devriyenin
     başındaysa daha fazla; §9.1.1). Eğlence merkezi yoksa sarayın
     önüne gelip geçer, bahşiş bırakmaz; ama elçi "Taç devriyesi uğradı"
     haberini getirir (`patrol_visit`), lord kapısındaki askerleri sessizce
@@ -1742,7 +1742,8 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     ister (`share`, `min`; 7000 altında 560, 1000 altında 150; hazinede daha az
     varsa hepsini); ilişki ve güç bunu değiştirmez. **Taçlar lorda kazandırmaz,
     kaybettirir:** kendi tacının saatte en çok 2 devriyesi bahşiş ve armağanla en
-    çok ~100–160 altın ve ~100 birim mal bırakır, rakip tacın saatte 2 haraççısı ise en az 300 altın
+    çok ~150–250 altın ve ~100 birim mal bırakır (bahşiş 25'ken ~100–160 idi;
+    devriye hiç hissedilmiyordu, 60'a çıktı), rakip tacın saatte 2 haraççısı ise en az 300 altın
     (7.000'lik hazinede ~1.100) götürür. Lord parasını tüccarla, kasabalarla,
     seferlerle ve ganimetle kazanır. (Önce bahşiş 120, armağanlar 60/150/300
     altın, haraç %5'ti; orta hazineli bir lord taçtan haraçtan fazla alıyordu.
