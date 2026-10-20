@@ -213,7 +213,7 @@ export function forge(variant = 0, level = 1): Sprite {
 function forgeFrame(v: number, level: number, f: number): Sprite {
   const { canvas, cx, base, m } = plot(2, 62 + level * 12)
   const tops: Top[] = []
-  paveArea(m, 3, 22, 61, 61, v === 2 ? 'dirt' : 'cobble', 31 + v)
+  paveArea(m, 3, 22, 61, 61, v === 2 ? 'dirt' : 'gravel', 31 + v)
   const walls = v === 0 ? mat.ashlar(BASALT, 3.5, 6) : v === 1 ? mat.rubble(GRANITE) : mat.framed(PLASTER, OAK, 9)
   const roof = [
     { kind: 'slate' as const, r: SLATE_TILE },

@@ -917,8 +917,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   (`dockPier`); üstünde kıyı ucunda sandıklar ve fıçı, ortada kangal
   halat ve balık sepeti, kenarından sarkan kurumaya asılmış ağ, öbür
   ucunda direkte bir fener durur.
-- **Eğim:** Yokuşa kurulan yapı, en yüksek köşesi hizasında düz bir taş
-  kaide üzerinde durur (tarlada toprak set); kaide aşağıdaki zemine iner.
+- **Eğim:** Yokuşa kurulan yapı (köşeleri arasında en az 6 piksel fark), en
+  yüksek köşesi hizasında düz bir kaide üzerinde durur (köy yapılarında toprak
+  set, tarlada toprak bank, büyük yapılarda kesme taş; aşağıda); kaide aşağıdaki zemine iner.
   Sur, kapı ve çitler bundan ayrıdır: kaidesiz, eğime göre kaydırılarak
   kesintisiz uzanır (§4.2.1).
   Kıyı yapıları (iskele binası, balıkçı kulübesi) kaideye çıkmaz: dik
@@ -989,6 +990,40 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   çalılar (böğürtlen de) serpilir; patika kenarında daha sıktır. Çölde
   seyrektir: kuru ot tutamı, çakıl, bodur çalı. Binanın oturduğu karoya ve
   patikanın üstüne bir şey konmaz (`chunkPainter.ts`).
+- **Kaide, avlu, aşınma ve köy süsleri** (`buildingSprites.ts` → `bank`,
+  `buildingKit.ts` → `paveArea`, `villageProps.ts` → `planVillage`; yalnızca
+  görsel): köşeleri arasında 6 pikselden az fark olan yapı kaidesiz oturur
+  (yamaca bir iki piksel gömülür). Gerçek yokuşta köy yapıları yamaca yarı
+  yarıya gömülür (alçak ve yüksek köşenin %45'i) ve **toprak setin** üstünde
+  durur: set dik yüzler değil, yapının çevresinde dışa doğru alçalan, gerçek
+  zemine değdiği yerde biten eğimli, çoğu çimli bir eteklik; dibi yamacı izler,
+  köşeleri yuvarlaktır; yüksek kesimlerinde taşlı, kökli toprak bantları görünür,
+  çim kenarından sarkar ve dibinden tırmanır.
+  Kesme taş kaide yalnız saray, hisar, tapınak, anıt, lonca konağı, hazine,
+  üniversite, hapishane ve taç yapılarındadır, onlar da %60'a gömülür, kaideleri
+  alçaktır (gözcü kulesi kendi kaba taşında,
+  tarla toprak bankında kalır). Toprak, çakıl ve çim avluların kenarı yoktur:
+  geniş, lekeli bir bantta incelip çimene karışır, ortasında yer yer çim kalır;
+  kesme taş, arnavut kaldırımı ve tahta kenarını korur (demirhane ve 2. seviye
+  ticaret noktası çakıllıdır). Lordluğun zemini **yaşanmış görünür**: sarayın,
+  evlerin ve patikaların çevresinde çim lekeler hâlinde kuruyup sararır (dither
+  ile), en çok çiğnenen yerlerde bir iki karoluk çıplak toprak açılır, kenara
+  doğru yeşile döner; aşınma yapılar değişince karo başına bir kez hesaplanır.
+  Binaların arasına zemine boyanan **köy süsleri** kendiliğinden konur, hepsi
+  binalar gibi model setinden (`buildingKit`) ışıkla ve dither ile çizilir:
+  evlerin yarısında evin duvarına bitişik (önce sağ yanında, yoksa arkasında;
+  boşta duran bahçe olmaz) küçük, düzensiz bir **sebze bahçesi** (çapalanmış
+  sıralarda iki üç tonlu lahana, marul, pırasa, havuç; köşede fasulye sırığı,
+  ışık alan dikmeli çit, kapıya bakan bir aralık ve patika), bazılarında çamaşır
+  ipi; odun yığınları (kesik uçları, kütük ve balta); ambarın yanında
+  saman yığınları; oduncuda odun istifleri; pazar ve ticaret noktasında araba,
+  fıçı, sandık (iki büyük parmaklı tekerlekli, tahtaları görünen, çuval, saman
+  ya da fıçı yüklü araba); birkaç evde bir kuyu; düz tarlaların arka kenarında çit ya da
+  kuru taş duvar; yer yer genç meyve ağaçları. Yapı, yol, patika ve su üstüne
+  konmazlar; uzun olanlar binanın, surun ve yürüyenlerin önüne düşmez, surdan 3
+  karo uzak durur; karda bahçeler ve taş duvarlar gömülür. Hepsi zemine
+  boyandığı için kareye maliyeti yoktur (parça boyaması ~%8 uzadı). Çayırın
+  yeşili ~%10 soluklaştırıldı, açık tonları hafifçe sarıya çalar.
 - **Köy hayatı** (yalnızca görsel, saatten ve tohumdan;
   `apps/web/src/game/villageLife.ts`): lordlukların yapıları arasında nüfusla
   artan bir kalabalık dolaşır: her 3,5 köylüye bir figür (en çok 40).

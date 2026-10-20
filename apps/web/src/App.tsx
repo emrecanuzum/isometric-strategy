@@ -1145,7 +1145,7 @@ function App({
   // people are known; another lord's are guessed from the room his homes give (his stores and folk are his own business).
   const tenSeconds = Math.floor(now / 10_000)
   const ownPeople = useMemo(() => (kingdom ? Math.round(population(kingdom, serverNow()).villagers / 4) * 4 : 0), [kingdom, tenSeconds])
-  const rivalHomes = JSON.stringify(rivals.map((r) => [r.id, r.buildings.length, r.buildings.filter((b) => b.doneAt <= now).length]))
+  const rivalHomes = JSON.stringify(rivals.map((r) => [r.id, r.buildings.filter((b) => b.doneAt <= now).map((b) => `${b.kind}:${b.x},${b.y}:${b.level ?? 1}`)]))
   useEffect(() => {
     if (!view) return
     const time = serverNow()

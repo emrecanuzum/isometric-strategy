@@ -1,12 +1,12 @@
-import { TILE_HEIGHT, TILE_WIDTH, hash, heightAt } from '@game/shared'
+import { TILE_HEIGHT, TILE_WIDTH, hash, heightAt, valueNoise } from '@game/shared'
 // The worker never sets the language, so the names stay Turkish there; only the main thread shows them.
 import { L } from '@game/shared/lang'
 import type { BuildingKind, KingdomColorId, World } from '@game/shared'
-import { BARK, Canvas, CLOTH, GLASS, ROOF, SACK, STONE, TIMBER, WALL, diamondAt, ellipseAt, pick, ramp, rgb, shadeBlobs, shadow } from './sprites'
+import { BARK, BAYER, Canvas, CLOTH, GLASS, ROOF, SACK, STONE, TIMBER, WALL, diamondAt, ellipseAt, pick, ramp, rgb, shadeBlobs, shadow } from './sprites'
 import type { Sprite } from './sprites'
 import { WALL_KINDS, wallLinks, wallLook } from './wallSprites'
 import type { WallKind } from './wallSprites'
-import { CHIMNEYS, smoky, stillOf } from './buildingKit'
+import { CHIMNEYS, Model, lum, smoky, stillOf, toneOf } from './buildingKit'
 import { farm, farmProps } from './farms'
 import { house } from './houses'
 import { palaceModel } from './castle'
@@ -782,6 +782,68 @@ function plinth(tiles: number, left: number, front: number, right: number, top: 
   return canvas.sprite(cx, base, 0)
 }
 
+// Levelled earth under a building on sloping ground: the terrace is cut into the hill and its spoil banked up in
+// front, so on the downhill sides the ground runs up to it as a battered slope (no upright faces, no box): a skirt round
+// the footprint whose surface drops `BATTER` pixels per unit outward and ends wherever it meets the real ground, so its
+// foot follows the hillside and its corners come out rounded. Turf covers most of it, spilling over the lip and
+// creeping up from the foot; raw earth shows in torn bands on the taller stretches, a stone or a root in it. Uphill the
+// skirt lies under the ground and is not drawn. A village's houses and workshops stand like this; only the great stone
+// buildings sit on dressed stone (see plinth).
+const BANK_EARTH = ramp(0x2c1f15, 0x3c2b1d, 0x503a27, 0x664a31, 0x7a5b3c, 0x8c6c48)
+const BANK_GRASS = ramp(0x265038, 0x32633c, 0x407940, 0x558d46, 0x6ca04b, 0x85b253)
+const BANK_DRY = ramp(0x2b4d30, 0x3b6038, 0x547547, 0x6b894f, 0x839b55, 0x9caa60)
+const ROOT = rgb(0x24180e)
+const BATTER = 0.85
+// `top`: the terrace's height over the front corner's ground; `ground(u, v)`: the ground's height there (model units
+// from the footprint's back corner, 32 to a tile), over the front corner's too.
+function bank(tiles: number, top: number, ground: (u: number, v: number) => number, seed: number): Sprite {
+  const N = tiles * 32
+  const reach = Math.ceil(Math.max(0, top - Math.min(ground(N, 0), ground(0, N), ground(N, N)) + 4) / BATTER) + 2
+  const w = (tiles * TILE_WIDTH) / 2
+  const h = w / 2
+  const canvas = new Canvas(w * 2 + reach * 2 + 8, h * 2 + Math.ceil(top) + reach + 16)
+  const cx = canvas.width >> 1
+  const base = canvas.height - 4 - Math.ceil(reach / 2)
+  const m = new Model(canvas, cx, base - h * 2)
+  const dist = (u: number, v: number) => Math.hypot(Math.max(0, -u, u - N), Math.max(0, -v, v - N))
+  const surface = (u: number, v: number) => {
+    const d = dist(u, v)
+    if (d === 0) return top
+    const z = top - d * BATTER
+    return z > ground(u, v) + 0.25 ? z : null
+  }
+  const dither = (x: number, y: number) => BAYER[(Math.round(x) & 3) | ((Math.round(y) & 3) << 2)] - 0.5
+  m.surface(-reach, -reach, N + reach, N + reach, surface, (u, v, z, x, y) => {
+    const d = dist(u, v)
+    if (d === 0) {
+      // The terrace's own turf, a little trodden like the ground round the buildings.
+      const n = valueNoise(x * 0.2, y * 0.4, seed + 9)
+      return pick(n > 0.4 ? BANK_DRY : BANK_GRASS, 2.6 + (n - 0.5) * 1.6 + dither(x, y) * 0.9)
+    }
+    // The slope's light: its outward normal tilted up by the batter.
+    const nu = Math.max(0, -u, u - N) * Math.sign(u - N / 2)
+    const nv = Math.max(0, -v, v - N) * Math.sign(v - N / 2)
+    const l = lum((nu / d) * BATTER, (nv / d) * BATTER, 1)
+    const above = z - ground(u, v)
+    const tone = toneOf(6, l)
+    // Turf spills over the lip and creeps up from the foot; between, torn earth where the bank stands tall.
+    const lip = d < 1.5 + hash(Math.round(u), Math.round(v), seed) * 2.5
+    const foot = above < 1.5 + valueNoise(u * 0.3, v * 0.3, seed + 3) * 2.5
+    const torn = valueNoise(u * 0.16 + v * 0.16, z * 0.45, seed + 7) > 0.66 - Math.min(0.2, above * 0.012)
+    if (lip || foot || !torn) {
+      const dry = valueNoise(u * 0.12, v * 0.12, seed + 5) > 0.55
+      return pick(dry ? BANK_DRY : BANK_GRASS, tone + 0.2 + dither(x, y) * 0.9 + (lip && d < 1 ? 0.6 : 0))
+    }
+    const k = hash(Math.round(u), Math.round(z * 2), seed + 8)
+    if (k > 0.975) return pick(STONE, tone + 1)
+    if (k < 0.03) return ROOT
+    const stratum = valueNoise(z * 0.5, (u - v) * 0.05, seed + 11) > 0.6 ? -0.8 : 0
+    return pick(BANK_EARTH, tone + 0.4 + stratum + dither(x, y) * 0.8)
+  })
+  canvas.solid(diamondAt(cx, base - h, w), 0, top)
+  return canvas.sprite(cx, base, 0)
+}
+
 // A building site: posts, beams and braces over levelled ground.
 function scaffold(tiles: number): Sprite {
   const { canvas, cx, base, w, h } = footprint(tiles, 30 + tiles * 18)
@@ -950,14 +1012,20 @@ function builder(frame: number, tunic: Uint32Array, cap: Uint32Array): Sprite {
   return canvas.sprite(cx, base, 0)
 }
 
-// A flat paved yard over a footprint's diamond.
-function yard(canvas: Canvas, cx: number, base: number, h: number, colors: Uint32Array, seed: number) {
+// A flat yard of trodden earth over a footprint's diamond, gravel strewn on it when `gravel`: no edge of its own, it
+// thins out into the grass round it in blotches (see buildingKit → paveArea).
+function yard(canvas: Canvas, cx: number, base: number, h: number, gravel: boolean, seed: number) {
   canvas.paving = true
   for (let y = base - h * 2; y <= base; y++) {
     for (let x = cx - (h * 2 - 4); x <= cx + (h * 2 - 4); x++) {
       const a = (x - cx) / (h * 2 - 6)
       const b = (y - (base - h)) / (h - 3)
-      if (Math.abs(a) + Math.abs(b) <= 1) canvas.set(x, y, pick(colors, 1.2 + (((x >> 2) + (y >> 1)) % 2) * 0.8 + (hash(x, y, seed) - 0.5)))
+      const d = Math.abs(a) + Math.abs(b)
+      if (d > 1) continue
+      const thin = (1 - d) * 3.2 + (valueNoise(x * 0.11, y * 0.22, seed + 5) - 0.5) * 1.1 + (hash(x >> 1, y, seed + 9) - 0.5) * 0.45
+      if (thin < 0.55) continue
+      const stones = gravel && hash(x, y, seed + 3) < 0.4
+      canvas.set(x, y, stones ? pick(KEEP, 1 + hash(x, y, seed + 4) * 2) : pick(SOIL, 1.6 + (hash(x >> 1, y, seed) - 0.5) * 1.4 + (hash(x >> 2, y >> 1, seed + 1) > 0.85 ? 1 : 0)))
     }
   }
   canvas.paving = false
@@ -1071,7 +1139,7 @@ function bale(canvas: Canvas, x: number, base: number) {
 function warehouse(variant = 0, level = 1): Sprite {
   const v = variant % 2
   const { canvas, cx, base, h } = footprint(2, 80 + (level - 1) * 16)
-  yard(canvas, cx, base, h, level === 1 ? SOIL : KEEP, 53)
+  yard(canvas, cx, base, h, level > 1, 53)
   const reds = v ? BARN_OLD : BARN_RED
   const size = [
     { a: 30, b: 40, wall: 20, peak: 18, windows: 1 },
@@ -1552,8 +1620,12 @@ export const BUILDER_SPRITES = [
 const FOUNDATION = ramp(0x4a4650, 0x625e68, 0x7a7680, 0x928e96, 0xaaa6aa)
 const BANK = ramp(0x3a2818, 0x4e3620, 0x64472a, 0x7a5834, 0x5f8c3a)
 const FOOTING = ramp(0x26242c, 0x34323c, 0x46444e, 0x54525c, 0x5f8c3a)
-// Below this difference between its corners (pixels) a building just sits on the ground.
-const LEVEL_TOLERANCE = 3
+// Below this difference between its corners (pixels) a building just sits on the ground: sunk a pixel or two into
+// the slope behind it, standing a little proud of it in front, which reads better than a raised base under every
+// cottage on a gentle rise.
+const LEVEL_TOLERANCE = 6
+// The great stone buildings stand on a base of dressed stone; everything else on banked earth (see bank).
+const STONE_BASED = new Set<string>(['palace', 'citadel', 'temple', 'memorial', 'guildHall', 'treasury', 'university', 'prison', 'cathedral', 'monument'])
 
 // One sprite of a structure and where it stands: the front corner (tile coordinates) and its height in pixels.
 export interface Part {
@@ -1622,11 +1694,17 @@ export function structureParts(world: World, s: Structure): Part[] {
   const shore = s.look === 'dock' || s.look === 'fisherHut'
   if (shore && high - low >= LEVEL_TOLERANCE) z = low + 1
   else if (high - low >= LEVEL_TOLERANCE) {
-    z = high + 1
+    // The watchtower stands on rough stone like its own footing, not on a paved slab; a field on an earth bank; the
+    // great stone buildings on dressed stone; the rest on a terrace of banked earth.
+    const style = flat ? 'field' : s.look === 'watchtower' ? 'footing' : STONE_BASED.has(s.look) ? 'stone' : 'earth'
+    // A terrace is dug halfway into the hill (the building sinks into the uphill side), so its bank is half as tall;
+    // a great building's stone base is cut in a little less deep; a field (painted flat into the ground) and the
+    // watchtower's footing stand up to the highest corner.
+    z = style === 'earth' ? Math.round(low + (high - low) * 0.45) + 1 : style === 'stone' ? Math.round(low + (high - low) * 0.6) + 1 : high + 1
     const key = `plinth:${s.size}:${left}:${front}:${right}:${z}:${flat}`
-    // The watchtower stands on rough stone like its own footing, not on a paved slab.
-    const colors = flat ? BANK : s.look === 'watchtower' ? FOOTING : FOUNDATION
-    const base = once(`${key}:${s.look === 'watchtower'}`, () => plinth(s.size, left, front, right, z, colors, flat || s.look === 'watchtower' ? 0 : 3))
+    const base = style === 'earth'
+      ? once(`bank:${s.x}:${s.y}:${s.size}:${z}`, () => bank(s.size, z - front, (u, v) => heightAt(world, s.x + u / 32, s.y + v / 32) - front, s.x * 31 + s.y * 17))
+      : once(`${key}:${style}`, () => plinth(s.size, left, front, right, z, style === 'field' ? BANK : style === 'footing' ? FOOTING : FOUNDATION, style === 'stone' ? 3 : 0))
     parts.push({ sprite: base, fx, fy, z: front, solid: !flat })
   }
   // What moves on the map (see buildingKit → animate) shows its still look, the moving parts laid over it.

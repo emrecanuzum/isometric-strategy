@@ -1,4 +1,4 @@
-import { TILE_HEIGHT, TILE_WIDTH, hash } from '@game/shared'
+import { TILE_HEIGHT, TILE_WIDTH, hash, valueNoise } from '@game/shared'
 import type { Point } from '@game/shared'
 import { BAYER, Canvas, ramp, rgb } from './sprites'
 import type { Sprite } from './sprites'
@@ -885,14 +885,23 @@ export type Top = { x: number; y: number; chimney: boolean }
 
 export type Ground = 'flagstone' | 'cobble' | 'dirt' | 'gravel' | 'planks' | 'grass' | 'sand'
 // The ground of a plot (flat, see Canvas.paving) over a rectangle of model space, with its edge broken into the grass
-// around it.
+// around it. Trodden ground (dirt, gravel, a lawn) has no edge at all: it thins out over a wide, blotchy band and
+// grass shows through it in patches, so a working yard melts into the land instead of lying on it like a tile; laid
+// stone (flagstones, cobbles, planks) keeps a crisp, slightly broken edge.
 export function paveArea(m: Model, u0: number, v0: number, u1: number, v1: number, kind: Ground, seed = 1, ragged = true) {
   const c = m.canvas
   c.paving = true
+  const trodden = ragged && (kind === 'dirt' || kind === 'gravel' || kind === 'grass')
+  const band = Math.min(12, (u1 - u0) / 3, (v1 - v0) / 3)
   for (let u = u0; u <= u1; u += 0.5) {
     for (let v = v0; v <= v1; v += 0.5) {
       const edge = Math.min(u - u0, u1 - u, v - v0, v1 - v)
-      if (ragged && edge < 2.5 && hash(Math.floor(u), Math.floor(v), seed + 9) > edge / 2.5) continue
+      if (trodden) {
+        const thin = edge / band + (valueNoise(u * 0.13, v * 0.13, seed + 5) - 0.5) * 1.1 + (hash(Math.floor(u), Math.floor(v), seed + 9) - 0.5) * 0.45
+        if (thin < 0.55) continue
+        // Grass holding on in the middle of the yard, here and there.
+        if (kind !== 'grass' && valueNoise(u * 0.2 + 7, v * 0.2, seed + 11) > 0.8) continue
+      } else if (ragged && edge < 2.5 && hash(Math.floor(u), Math.floor(v), seed + 9) > edge / 2.5) continue
       const x = m.sx(u, v)
       const y = m.sy(u, v, 0)
       let color: number

@@ -26,6 +26,7 @@ type BedKind = 'wind' | 'water' | 'forest' | 'village'
 interface Bed {
   src: AudioBufferSourceNode
   filter: BiquadFilterNode
+  shape: BiquadFilterNode
   gain: GainNode
   // When the bed went quiet (0 while it sounds): it is stopped a little after.
   quietAt: number
@@ -170,14 +171,15 @@ export function createSoundscape(world: World): Soundscape {
     gain.gain.value = 0.0001
     src.connect(filter).connect(shape).connect(gain).connect(a.out)
     src.start(c.currentTime, Math.random() * 1.5)
-    return (beds[kind] = { src, filter, gain, quietAt: 0 })
+    return (beds[kind] = { src, filter, shape, gain, quietAt: 0 })
   }
 
   const stopBed = (kind: BedKind) => {
     const bed = beds[kind]
     if (!bed) return
     bed.src.stop()
-    bed.src.disconnect()
+    // The whole chain comes off the output, or every bed started as the view moves would stay wired to it.
+    for (const node of [bed.src, bed.filter, bed.shape, bed.gain]) node.disconnect()
     delete beds[kind]
   }
 
@@ -201,6 +203,8 @@ export function createSoundscape(world: World): Soundscape {
 
   const silence = () => {
     active = false
+    // An hour turned while silent rings no bell on coming back.
+    lastHour = -1
     // Faded on the beds' own context, without waking it (ambience may just have been turned off).
     for (const bed of Object.values(beds)) bed.gain.gain.setTargetAtTime(0.0001, bed.gain.context.currentTime, 0.3)
     clearTimeout(timer)
@@ -213,13 +217,18 @@ export function createSoundscape(world: World): Soundscape {
   // ---- One-shots ---------------------------------------------------------------------------------------------------
 
   // Every one-shot goes through a panner somewhere left or right, and a lowpass for distance.
-  const shot = (c: AudioContext, out: GainNode, far: number) => {
+  const shot = (c: AudioContext, out: GainNode, far: number, lasts = 2.5) => {
     const pan = c.createStereoPanner()
     pan.pan.value = (Math.random() * 2 - 1) * 0.7
     const lp = c.createBiquadFilter()
     lp.type = 'lowpass'
     lp.frequency.value = 9000 - far * 6500
     lp.connect(pan).connect(out)
+    // Off the output once the sound (`lasts` seconds at most) is over: nodes left wired to it are never freed.
+    window.setTimeout(() => {
+      lp.disconnect()
+      pan.disconnect()
+    }, (lasts + 0.5) * 1000)
     return lp
   }
   const blip = (c: AudioContext, to: AudioNode, hz: number, at: number, length: number, gain: number, slide = 1, type: OscillatorType = 'sine') => {
@@ -232,6 +241,7 @@ export function createSoundscape(world: World): Soundscape {
     g.gain.exponentialRampToValueAtTime(gain, at + Math.min(0.012, length * 0.3))
     g.gain.exponentialRampToValueAtTime(0.0001, at + length)
     osc.connect(g).connect(to)
+    osc.onended = () => g.disconnect()
     osc.start(at)
     osc.stop(at + length + 0.03)
   }
@@ -246,6 +256,10 @@ export function createSoundscape(world: World): Soundscape {
     g.gain.exponentialRampToValueAtTime(gain, at + Math.min(0.006, length * 0.3))
     g.gain.exponentialRampToValueAtTime(0.0001, at + length)
     src.connect(f).connect(g).connect(to)
+    src.onended = () => {
+      f.disconnect()
+      g.disconnect()
+    }
     src.start(at, Math.random() * 1.5)
     src.stop(at + length + 0.03)
   }
@@ -286,12 +300,17 @@ export function createSoundscape(world: World): Soundscape {
         const g = c.createGain()
         osc.frequency.value = 4300 + Math.random() * 600
         const pulses = 3 + Math.floor(Math.random() * 2)
+        // Short ramps on each pulse's edges: hard steps would click at the tone's pitch.
         g.gain.setValueAtTime(0, t)
         for (let i = 0; i < pulses; i++) {
-          g.gain.setValueAtTime(0.02, t + i * 0.045)
-          g.gain.setValueAtTime(0, t + i * 0.045 + 0.022)
+          const p = t + i * 0.045
+          g.gain.linearRampToValueAtTime(0, p)
+          g.gain.linearRampToValueAtTime(0.02, p + 0.005)
+          g.gain.setValueAtTime(0.02, p + 0.017)
+          g.gain.linearRampToValueAtTime(0, p + 0.022)
         }
         osc.connect(g).connect(to)
+        osc.onended = () => g.disconnect()
         osc.start(t)
         osc.stop(t + pulses * 0.045 + 0.05)
         break
@@ -315,6 +334,7 @@ export function createSoundscape(world: World): Soundscape {
         g.gain.exponentialRampToValueAtTime(0.03, t + 0.4)
         g.gain.exponentialRampToValueAtTime(0.0001, t + 1.9)
         osc.connect(g).connect(to)
+        osc.onended = () => g.disconnect()
         osc.start(t)
         osc.stop(t + 2)
         break
@@ -370,7 +390,7 @@ export function createSoundscape(world: World): Soundscape {
     const a = ambienceAudio()
     if (!a) return
     const { c } = a
-    const to = shot(c, a.out, 0.7)
+    const to = shot(c, a.out, 0.7, 5.2)
     for (let i = 0; i < 3; i++) {
       const at = c.currentTime + 0.05 + i * 1.6
       for (const [ratio, g] of [[1, 0.04], [2.0, 0.018], [2.4, 0.012], [3.0, 0.008]] as const) blip(c, to, 330 * ratio, at, 1.8, g)
@@ -390,7 +410,7 @@ export function createSoundscape(world: World): Soundscape {
         if (!m.winter && roll(0.012 * m.forest, dt)) playShot('cuckoo')
         if (roll(0.012 * (0.3 + m.open), dt)) playShot('crow')
       }
-      if ((night || m.phase === 'dusk') && !m.winter && roll(1.4 * m.wild * (0.3 + 0.7 * m.near), dt)) playShot('crickets')
+      if ((night || m.phase === 'dusk') && !m.winter && roll(0.22 * m.wild * (0.3 + 0.7 * m.near), dt)) playShot('crickets')
     }
     if (night) {
       if (roll(0.02 * (m.forest + 0.2), dt)) playShot('owl')
@@ -435,14 +455,14 @@ export function createSoundscape(world: World): Soundscape {
       sample(time, cam, width, height, weather)
       const at = a.c.currentTime
       // Gusts: the wind's target wanders each sample, eased slowly by setBed. The gains are worked out for the beds'
-      // filtered noise (a narrow band of white noise is far quieter than the noise): the wind about −47 dB, more out
-      // far and in the mountains; the water up to about −38 dB; the leaves and the village's murmur in the −45s.
+      // filtered noise (a narrow band of white noise is far quieter than the noise): the wind about −53 dB, more out
+      // far and in the mountains; the water up to about −41 dB; the leaves and the village's murmur in the −48s.
       gust = Math.min(1.2, Math.max(0.35, gust + (Math.random() - 0.5) * 0.3))
-      setBed('wind', 1.0 * mix.wind * gust, now, at, (mix.winter ? 900 : 380) * (0.8 + gust * 0.35))
-      setBed('water', 0.6 * mix.water, now, at, 600 + Math.random() * 300)
-      setBed('forest', 0.13 * mix.forest * (0.5 + gust * 0.6), now, at)
+      setBed('wind', 0.5 * mix.wind * gust, now, at, (mix.winter ? 900 : 380) * (0.8 + gust * 0.35))
+      setBed('water', 0.4 * mix.water, now, at, 600 + Math.random() * 300)
+      setBed('forest', 0.09 * mix.forest * (0.5 + gust * 0.6), now, at)
       // A crowd's murmur rises and falls from moment to moment.
-      setBed('village', 0.4 * mix.village * (0.6 + Math.random() * 0.6), now, at)
+      setBed('village', 0.3 * mix.village * (0.6 + Math.random() * 0.6), now, at)
       if (beds.wind && mix.winter !== (beds.wind.filter.type === 'bandpass')) beds.wind.filter.type = mix.winter ? 'bandpass' : 'lowpass'
       shots(dt)
       // The bell at the top of every game hour, if a temple or a cathedral is in view.

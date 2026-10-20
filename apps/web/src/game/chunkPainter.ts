@@ -7,6 +7,8 @@ import { caveLook } from './caveSprites'
 import { BAYER, SPRITES, castShadow, ramp, snowOf } from './sprites'
 import type { Sprite } from './sprites'
 import type { SunShadow } from './daylight'
+import { PROP_BURIED, planVillage, villageProps } from './villageProps'
+import type { PropAt } from './villageProps'
 
 // This module has no DOM dependency: it runs in a worker (and in headless previews) and returns raw pixels.
 
@@ -60,6 +62,11 @@ export interface PaintContext {
   // beside it), so the road bends round in smooth, rounded joints.
   lane: Uint8Array
   laneNear: Map<number, number[]>
+  // Per tile, how worn a lordship's ground is (0..255; null with no lordship), and the small things its people leave
+  // about, keyed by the tile that paints them (villageProps.ts → planVillage).
+  heat: Uint8Array | null
+  bare: Uint8Array | null
+  props: Map<number, PropAt[]>
 }
 
 export type { Structure }
@@ -183,6 +190,10 @@ export function setStructures(context: PaintContext, structures: Structure[], tr
       }
     }
   }
+  const village = planVillage({ world: context.world, structures, footprint: context.footprint, trail: context.trail, road: context.road, lane: context.lane, roadClear: ROAD_HALF, trailClear: TRAIL_HALF + 0.55 })
+  context.heat = village.heat
+  context.bare = village.bare
+  context.props = village.props
 }
 
 // The roads laid by the lords: each road tile joined to the road tiles beside it (straight neighbours, and diagonal
@@ -272,12 +283,18 @@ export interface Bridge {
   stone?: boolean
 }
 
-const GRASS = ramp(0x16382c, 0x1c4433, 0x24523a, 0x2f663d, 0x3d7c40, 0x4f9142, 0x66a546, 0x80b74e, 0x9cc85a, 0xb9d86e)
+// A touch less saturated than a lawn, the light tones leaning a little toward yellow.
+const GRASS = ramp(0x18362a, 0x1e4231, 0x265038, 0x32633c, 0x407940, 0x558d46, 0x6ca04b, 0x85b253, 0xa0c260, 0xbbd373)
+// The same grass trodden and dried where a lordship's people come and go (PaintContext.heat), tone for tone; and the
+// bare earth showing through it where it is worn most.
+const DRY = ramp(0x1b3423, 0x224029, 0x2b4d30, 0x3b6038, 0x547547, 0x6b894f, 0x839b55, 0x9caa60, 0xb5ba6d, 0xcbc881)
+const TRODDEN = ramp(0x3e3022, 0x54412c, 0x6c5638, 0x846c48, 0x9a8258, 0xae9868)
 const SAND = ramp(0x8a6844, 0xa98250, 0xc39b5e, 0xd6b471, 0xe4c988, 0xefdba3, 0xf7eac0)
 const ROCK = ramp(0x2e2c3d, 0x423f50, 0x595563, 0x726d78, 0x8c878c, 0xa6a19f, 0xbfbab1, 0xd8d3c5)
 const SNOW = ramp(0x7f93bd, 0xa7b8d8, 0xc9d6ea, 0xe6edf7, 0xffffff)
 // The low growth and stones the snow buries (see paintChunk's `snow`).
 const BURIED = new Set<Sprite>([...SPRITES.tallGrass, ...SPRITES.wildflowers.flat(), ...SPRITES.tuft, ...SPRITES.pebbles])
+let buriedProps = false
 // How much of the open ground the snow covers at each depth (see paintChunk's `snow`).
 const SNOW_COVER = [0, 0.32, 0.7, 0.94]
 const WATER = ramp(0x8fd6dc, 0x6cc0d4, 0x4fa6cc, 0x3c8cc0, 0x2f73b0, 0x275c9c, 0x214884, 0x1b376b)
@@ -390,7 +407,7 @@ export function preparePaint(world: World): PaintContext {
     }
   }
   for (let i = 0; i < road.length; i++) if (road[i] === Infinity) road[i] = reach + 1
-  return { world, lit, patch, road, bridges, structures: [], occupied: new Uint8Array(size * size), footprint: new Uint8Array(size * size), trail: new Float32Array(size * size).fill(TRAIL_REACH + 1), trailNear: new Map(), lane: new Uint8Array(size * size), laneNear: new Map() }
+  return { world, lit, patch, road, bridges, structures: [], occupied: new Uint8Array(size * size), footprint: new Uint8Array(size * size), trail: new Float32Array(size * size).fill(TRAIL_REACH + 1), trailNear: new Map(), lane: new Uint8Array(size * size), laneNear: new Map(), heat: null, bare: null, props: new Map() }
 }
 
 // How a biome border looks around a point: finely dithered, in blotches and islands, or in frayed fibres. The
@@ -953,7 +970,11 @@ function shadowOf(sprite: Sprite, foot: number, sun: SunShadow) {
 // `snow`: how deep the snow lies (weather.ts → snowCover, 0..3): it whitens the open ground (less on roads, paths and
 // sand, none on water) and the trees, rocks, inns and buildings painted in (sprites.ts → snowOf).
 export function paintChunk(context: PaintContext, cx: number, cy: number, k: number, lift = false, sun: SunShadow = NOON, liftedNear: number[] | 'all' = 'all', snow = 0): ChunkImage {
-  const { world, lit, patch, road, bridges, structures, occupied, footprint, trail, trailNear, lane, laneNear } = context
+  const { world, lit, patch, road, bridges, structures, occupied, footprint, trail, trailNear, lane, laneNear, heat, bare, props } = context
+  if (snow >= 2 && !buriedProps && props.size > 0) {
+    buriedProps = true
+    for (const kind of PROP_BURIED) for (const sprite of villageProps()[kind]) BURIED.add(sprite)
+  }
   const { size, seed, elevation, moisture, height, levels } = world
   const S = balance.map.chunkSize
   const chunkCount = size / S
@@ -1163,6 +1184,23 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
             colors = SAND
             tone = 3 + light * 6
           }
+          // A lordship's ground is lived on: round the palace, the houses and along the paths the grass is trodden
+          // dry and yellowed in patches, bare earth showing where it is worn most; green again toward the edges.
+          if (heat && bare && colors === GRASS) {
+            const hv = heat[i00] * w00 + heat[i00 + 1] * w01 + heat[i10] * w10 + heat[i10 + 1] * w11
+            if (hv > 3) {
+              const worn = hv / 255
+              // Bare earth in patches a tile or two across, their edges dithered into the dry grass; a stray fleck.
+              const earth = (bare[i00] * w00 + bare[i00 + 1] * w01 + bare[i10] * w10 + bare[i10 + 1] * w11) / 128 + mid * 0.3 + dither * 0.05 + (clump - 0.5) * 0.1
+              if (earth > 1.24 || (worn > 0.6 && hash(gx >> 1, gy >> 1, seed + 163) < (worn - 0.6) * 0.025)) {
+                colors = TRODDEN
+                tone = 2.4 + broad * 1.5 + light * 6 + grain * 0.6 + (earth > 1.3 ? 0.5 : 0)
+              } else if (worn + dither * 0.4 + (clump - 0.5) * 0.35 > 0.3) {
+                colors = DRY
+                tone -= worn * 0.4
+              }
+            }
+          }
         }
       }
 
@@ -1178,7 +1216,7 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
         }
         // Snow over the open ground, patchy until it lies deep; trodden thin on roads and paths, thin on sand.
         if (snow > 0 && colors !== WATER && colors !== FOAM && colors !== POOL && colors !== SNOW) {
-          const lies = SNOW_COVER[snow] * (colors === ROAD || colors === LANE ? 0.5 : colors === SAND ? 0.4 : 1) * (1 - (wear / TRAIL_ALPHA) * 0.6)
+          const lies = SNOW_COVER[snow] * (colors === ROAD || colors === LANE || colors === TRODDEN ? 0.5 : colors === SAND ? 0.4 : 1) * (1 - (wear / TRAIL_ALPHA) * 0.6)
           if (valueNoise(wx * 0.6, wy * 0.6, seed + 301) * 0.6 + (d + 0.5) * 0.4 < lies) {
             const t = Math.floor(2.6 + light * 6 + d * 0.7)
             color = SNOW[t < 0 ? 0 : t >= SNOW.length ? SNOW.length - 1 : t]
@@ -1301,6 +1339,13 @@ export function paintChunk(context: PaintContext, cx: number, cy: number, k: num
           const look = caveLook(seed, { x, y, dx: cave.dx, dy: cave.dy })
           place(look.sprite, look.at.x, look.at.y, own)
         }
+        continue
+      }
+      // The things a lordship's people leave about (villageProps.ts): in place of the usual growth on their tile.
+      const things = props.get(i)
+      if (things) {
+        const kit = villageProps()
+        for (const p of things) place(kit[p.kind][p.index], p.x, p.y, own)
         continue
       }
       if (!clear(x, y)) {

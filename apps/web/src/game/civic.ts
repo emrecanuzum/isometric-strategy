@@ -75,7 +75,7 @@ export function tradePost(variant: number, level: number): Sprite {
   const b = variant % 2 === 1
   const { canvas, cx, base, m } = plot(2, 48 + level * 22)
   const tops: Top[] = []
-  paveArea(m, 4, 4, 60, 60, level === 1 ? 'dirt' : 'cobble', 41 + level + (b ? 3 : 0))
+  paveArea(m, 4, 4, 60, 60, level === 1 ? 'dirt' : level === 2 ? 'gravel' : 'cobble', 41 + level + (b ? 3 : 0))
   if (level === 1) {
     openShed(m, 10, 10, 44, 30, 12, { form: 'gable-u', rise: 8, oh: 2, style: { kind: b ? 'shingle' : 'thatch', r: b ? SHINGLE_ROOF : THATCH_ROOF, seed: 44 } })
     awning(m, 12, 30, 42, 38, 11, 8, b ? CLOTH_BLUE : CLOTH_RED)
