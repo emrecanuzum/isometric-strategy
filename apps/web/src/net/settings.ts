@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { startMusic, TRACKS } from '../audio/music'
-import { setBattleMusicLevel, setRain, setSfx, setVoice, unlockSfx } from '../audio/sfx'
+import { setAmbience, setBattleMusicLevel, setRain, setSfx, setVoice, unlockSfx } from '../audio/sfx'
 import type { Music, TrackId } from '../audio/music'
 import type { PowerMode } from '../lib/power'
 import { supabase } from '../lib/supabase'
@@ -16,7 +16,7 @@ export type Cut = 'pace' | 'detail' | 'birds' | 'clouds' | 'glow' | 'shadows' | 
 
 export interface Settings {
   // Sound (volumes 0..100), each kind with its own switch: the tavern music, the battle music while a battle is
-  // watched, the cues (the envoy's news, the day's events), the buttons' clicks, the rain and thunder, the envoy's voice.
+  // watched, the cues (the envoy's news, the day's events), the buttons' clicks, the rain and thunder, the envoy's voice, the world's ambience (wind, water, birds, the village).
   music: boolean
   musicVolume: number
   // Which of the music's pieces take turns (at least one).
@@ -30,6 +30,8 @@ export interface Settings {
   rainVolume: number
   voice: boolean
   voiceVolume: number
+  ambience: boolean
+  ambienceVolume: number
   // Picture: swaying trees and moving buildings, birds, clouds, the glow round lit windows at night, live shadows (of
   // buildings, walkers and armies), the weather, and the screen's full density when zoomed out.
   detail: boolean
@@ -61,6 +63,8 @@ export const DEFAULT_SETTINGS: Settings = {
   rainVolume: 70,
   voice: true,
   voiceVolume: 70,
+  ambience: true,
+  ambienceVolume: 60,
   detail: true,
   birds: true,
   clouds: true,
@@ -227,6 +231,7 @@ export function useMusic(settings: Settings, quiet = 1) {
   useEffect(() => setSfx(settings.sfx, settings.sfxVolume / 100, settings.clicks), [settings.sfx, settings.sfxVolume, settings.clicks])
   useEffect(() => setVoice(settings.voice, settings.voiceVolume / 100), [settings.voice, settings.voiceVolume])
   useEffect(() => setRain(settings.rain, settings.rainVolume / 100), [settings.rain, settings.rainVolume])
+  useEffect(() => setAmbience(settings.ambience, settings.ambienceVolume / 100), [settings.ambience, settings.ambienceVolume])
 }
 
 // Settings change at once on screen and are written to the profile a moment after the last change. `load` takes the

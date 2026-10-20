@@ -454,6 +454,24 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
     çatılara, derinleştikçe dik çatılara oturur, duvarlara hiç; öbür
     sprite'lar şekillerinin üst kenarından kar tutar. Kar pikselin
     ışığını korur (gölgedeki çatı mavi-gri, ışıktaki beyaz).
+- **Ortam sesleri** (`apps/web/src/audio/ambience.ts`; Ayarlar → Ses'te kendi
+  düğmesi ve ses düzeyi, varsayılan açık, %60): dünya kameranın baktığı yere
+  göre kısık ve seyrek seslenir, hepsi tarayıcıda sentezlenir. Ortak gürültüden
+  süzülen en çok dört döngü birbirine geçer: hep hafif esen, uzaklaştıkça ve
+  dağda güçlenen, ara ara savrulan **rüzgâr** (kışın daha ince ve soğuk);
+  ekranda nehir ya da göl varsa **akan su**; orman baskınsa **yaprak
+  hışırtısı**; ½× ve yakında binalar varsa **köyün uğultusu**. Üstüne ara sıra
+  tek sesler düşer: gündüz **kuş cıvıltıları** (ormanda ve çayırda daha çok,
+  kışın az), uzakta guguk kuşu ve karga; akşam ve gece **cırcır böcekleri**
+  (kışın yok), baykuş, nadiren uzak bir kurt uluması; köyde silah atölyesi
+  varsa örse inen çekiç, oduncuda balta, köpek havlaması, şafakta (tarla varsa
+  daha sık) horoz; ekranda tapınak ya da katedral varsa her oyun saatinin
+  başında üç vuruşluk uzak bir çan; suda ördek ve şıpırtı. Yağmurda, sulu karda
+  ve kar yağarken kuşlar ve böcekler susar (yağmurun kendi sesi vardır).
+  Görünüm 10×10 karoluk bir ızgarada ve 16 karoluk hücrelerde sayılan
+  binalardan saniyede ~3 kez örneklenir, her karede değil. Ortam sesi çalarken
+  efekt ses motoru uyumaz; kapalıyken, sekme gizliyken ya da harita
+  çizilmiyorken döngüler söner, motor yine 4 saniyede uyur (§12).
 - **Su** derinliğe göre bantlı renk değiştirir, kıyıda köpük ve kumsal
   (kumsal kıyı boyunca genişleyip daralır, bazı kesimlerde hiç yoktur ve
   çim suya iner),
@@ -971,6 +989,25 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   çalılar (böğürtlen de) serpilir; patika kenarında daha sıktır. Çölde
   seyrektir: kuru ot tutamı, çakıl, bodur çalı. Binanın oturduğu karoya ve
   patikanın üstüne bir şey konmaz (`chunkPainter.ts`).
+- **Köy hayatı** (yalnızca görsel, saatten ve tohumdan;
+  `apps/web/src/game/villageLife.ts`): lordlukların yapıları arasında nüfusla
+  artan bir kalabalık dolaşır: her 3,5 köylüye bir figür (en çok 40).
+  Kasabalılar yakın yapılar arasında patikalardan gezip kapı önünde durur;
+  sarayın ve pazarın önünde ikişer kişi sohbet eder; kadınlar kovayla evinin
+  yakınındaki bir yere gidip döner; evlerin dibinde üçer çocuk koşup zıplar;
+  bir iki köpek koşturur. Tarlaların ve ambarın yanındaki açık çayırda inek ve
+  koyun sürüleri otlar, ambar ve bazı evlerin önünde tavuklar eşinir (en çok 30
+  hayvan, yapıların ve suyun üstüne çıkmaz). Bir öküz arabası ambar ya da tarla
+  ile pazar ya da saray arasında gidip gelir; 2× ve yakında pazarın ve ticaret
+  noktasının önünde bir kalabalık kaynaşır. Gece yalnızca birkaç kişi ve
+  köpekler dışarıdadır, hayvanlar yattığı yerde durur. Oyuncunun nüfusu gerçek
+  sayısından, başkalarınınki evlerinin barınağından tahmin edilir (en çok 120).
+  Bir lordluğun planı (yollar, yerler) ekrana ilk girdiğinde bir kez kurulur
+  (karede en çok bir lordluk), yalnızca ekrandaki lordluklar ve figürler
+  çizilir, hepsi 200 sprite'lık ortak bir havuzdan; ½× altında hiçbiri yoktur.
+  Detay animasyonları kapalıyken (telefon, güç tasarrufu) lordluk başına
+  yalnızca 6 kişi, köpekler, araba ve 12 hayvan kalır. Ölçüm: yoğun bir
+  lordlukta kare başına ~6–8 µs.
 - **Yol (inşa edilen):** 1. seviye sarayda açılır; 1×1, çok ucuzdur (1 altın
   + 1 yapı malzemesi, 2 sn; `economy.json` → `buildings.road`), inşaat
   sırasına girmez, işçi istemez, iskelesi yoktur. Sur ve ev gibi basılı tutup
@@ -4266,10 +4303,11 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   ayarın adı ve ne yaptığı solda, düğmesi sağda; seçili seçenek altın zeminlidir.
   - **Ses:** müzik, **savaş müziği** (savaş izlerken), **ses efektleri**
     (elçinin haberleri, olaylar, inşaat, pencereler) ve altında **düğme
-    sesleri** (tık), **yağmur ve gök gürültüsü**, **elçinin sesi** (elçi ve
+    sesleri** (tık), **yağmur ve gök gürültüsü**, **ortam sesleri** (rüzgâr,
+    su, kuşlar, köy; §4.2.1), **elçinin sesi** (elçi ve
     haraççıbaşının mırıltısı): her biri ayrı açılıp kapanır ve ayrı ses
     düzeyindedir (`sfx.ts` → `setSfx`, `setVoice`, `setRain`,
-    `setBattleMusicLevel`; her türün kendi kazanç düğümü, hepsi sıkıştırıcıdan
+    `setAmbience`, `setBattleMusicLevel`; her türün kendi kazanç düğümü, hepsi sıkıştırıcıdan
     geçer). Ayrılmadan önce kaydedilmiş profillerde elçinin sesi ve yağmur efekt
     ayarını, savaş müziği müzik ayarını alır (`fromSaved`).
   - **Görüntü:** detay animasyonları, canlı gölgeler, gece ışıltısı, kuşlar,

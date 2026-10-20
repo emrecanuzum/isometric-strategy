@@ -26,6 +26,8 @@ export interface WeatherLayer {
   // The light of the hour as the rain sees it: darker and greyer while it rains.
   light(color: number): number
   update(time: number, camera: { x: number; y: number; scale: number }, width: number, height: number): void
+  // The weather now (as last worked out by update), for the ambience's birds and crickets (audio/ambience.ts).
+  current(): Weather
   destroy(): void
 }
 
@@ -331,6 +333,7 @@ export function createWeather(world: World): WeatherLayer {
       const ch = (shift: number, k: number) => Math.min(255, Math.round((((color >> shift) & 0xff) * (1 - g * 0.5) + grey[k] * g * 0.5) * dark))
       return (ch(16, 0) << 16) | (ch(8, 1) << 8) | ch(0, 2)
     },
+    current: () => weather,
     update(time, cam, width, height) {
       if (off) return
       const now = performance.now()

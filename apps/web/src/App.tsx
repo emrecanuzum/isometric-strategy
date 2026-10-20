@@ -106,6 +106,7 @@ import type { OutlawPick } from './ui/hud/outlaws'
 import { SHIP_LENGTHS } from './game/fleetShips'
 import { bandAt, bandChangeAt, bandLeg, boatAt, havenGuards, havenSpots, havensOf, caveAt, caveSpots, clansOf, outlawUp, raidTargetsOf, roadHeld, seaHeld, setRaidTargets, trailOf } from '@game/shared'
 import { lobbyKeyOf } from '@game/shared'
+import { levelSpec, population } from '@game/shared'
 import type { Spot } from './ui/MinimapCorners'
 
 import { play } from './audio/sfx'
@@ -1139,6 +1140,27 @@ function App({
     }
     view.setTown(townErrands(buildings ?? [], time), merchants)
   }, [view, buildings, departedAt, ownTripMs, doneCount, rivalTrade])
+
+  // The lordships' everyday life round their buildings (villageLife.ts): as many about as live there. The player's own
+  // people are known; another lord's are guessed from the room his homes give (his stores and folk are his own business).
+  const tenSeconds = Math.floor(now / 10_000)
+  const ownPeople = useMemo(() => (kingdom ? Math.round(population(kingdom, serverNow()).villagers / 4) * 4 : 0), [kingdom, tenSeconds])
+  const rivalHomes = JSON.stringify(rivals.map((r) => [r.id, r.buildings.length, r.buildings.filter((b) => b.doneAt <= now).length]))
+  useEffect(() => {
+    if (!view) return
+    const time = serverNow()
+    const hamlet = (id: number, town: TownBuilding[], people: number) => ({
+      id,
+      people,
+      buildings: town.filter((b) => b.doneAt <= time).map(({ kind, x, y, size }) => ({ kind, x, y, size })),
+    })
+    const housed = (town: TownBuilding[]) =>
+      Math.min(120, town.reduce((n, b) => n + (b.doneAt <= time ? (levelSpec(b.kind, b.level ?? 1).villagers ?? 0) : 0), 0))
+    view.setVillages([
+      ...(kingdom ? [hamlet(mine.id, kingdom.buildings, ownPeople)] : []),
+      ...rivalsRef.current.map((r) => hamlet(r.id, r.buildings, housed(r.buildings))),
+    ])
+  }, [view, buildings, doneCount, ownPeople, rivalHomes])
 
   // ---- Commands ----
 

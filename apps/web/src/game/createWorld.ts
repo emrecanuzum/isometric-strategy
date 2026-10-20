@@ -40,6 +40,7 @@ import { Canvas, SPRITES, lightsOf, outlineOf, rgb, silhouetteOf, snowOf } from 
 import { daylight, nightness, sunShadow } from './daylight'
 import { createShadows } from './shadows'
 import { createWeather } from './weather'
+import { createSoundscape } from '../audio/ambience'
 import { createPacer } from './pacing'
 import { innLook } from './innSprites'
 import type { Sprite as Sprite_ } from './sprites'
@@ -48,6 +49,8 @@ import type { LiftedTree, Structure } from './chunkPainter'
 import type { PaintRequest, PaintResult } from './paintWorker'
 import { flushTextures, freeTexture, textureOf } from './textures'
 import { createTown, tilesAlong } from './town'
+import { createVillageLife } from './villageLife'
+import type { Hamlet } from './villageLife'
 import type { Errand, MerchantTrip } from './town'
 import type { FederatedPointerEvent } from 'pixi.js'
 
@@ -302,6 +305,8 @@ export interface WorldView {
   // The player's buildings whose work goes nowhere ("üretim ağı tıkandı"): a warning sign bobs over each.
   setClogged(ids: { id: number; tone: 'armory' | 'store' }[]): void
   setTown(errands: Errand[], merchants: MerchantTrip[]): void
+  // The lordships' everyday life round their buildings (villageLife.ts): townsfolk, children, livestock, the cart.
+  setVillages(hamlets: Hamlet[]): void
   // The towns' names over them (in their holder's colour) and, while one is besieged, how far the siege has come.
   setTowns(marks: TownMark[]): void
   // Progress bars over buildings going up and palaces under siege or shielded.
@@ -420,6 +425,7 @@ export async function createWorld(
   const caravans = createCaravans(world)
   const ambient = createAmbient(world, caravans.layer)
   const town = createTown(world, caravans.layer)
+  const village = createVillageLife(world, caravans.layer)
   const floats = new Container()
   const shadows = createShadows()
   // Plot names float above their outlines at a fixed screen size.
@@ -543,6 +549,8 @@ export async function createWorld(
   app.stage.addChild(light, above)
   // Rain (see weather.ts): splashes on the ground under the buildings, the grey and the falling rain under the light.
   const weather = createWeather(world)
+  // The world's ambience (audio/ambience.ts): wind, water, birds, the village, from where the camera looks.
+  const soundscape = createSoundscape(world)
   camera.addChildAt(weather.ground, camera.getChildIndex(shadows.layer) + 1)
   app.stage.addChildAt(weather.screen, app.stage.getChildIndex(light))
   app.stage.addChildAt(weather.flash, app.stage.getChildIndex(light) + 1)
@@ -723,7 +731,9 @@ export async function createWorld(
       for (const key of chunks.keys()) staleSince.set(key, version)
       refresh()
     }
-    weather.update(clock(), { x: camera.x, y: camera.y, scale: camera.scale.x }, app.screen.width, app.screen.height)
+    const cam = { x: camera.x, y: camera.y, scale: camera.scale.x }
+    weather.update(clock(), cam, app.screen.width, app.screen.height)
+    soundscape.update(clock(), cam, app.screen.width, app.screen.height, weather.current())
     const color = weather.light(daylight(hour))
     if (color === lightColor && light.width === app.screen.width && light.height === app.screen.height) return
     lightColor = color
@@ -772,6 +782,7 @@ export async function createWorld(
     }
     caravans.update(seconds, padded)
     town.update(time, padded)
+    village.update(time, padded, scale)
     updateBuilders(time / 1000, padded)
     sortWalkers()
   })
@@ -2161,6 +2172,15 @@ export async function createWorld(
   let worn = new Set<number>()
   // Tiles of the roads the lords laid: walkers keep to them as to the footpaths.
   let laid = new Set<number>()
+  // Where the townsfolk cannot walk, and the worn ground they keep to (see findPath).
+  const walkBlocked = (x: number, y: number) => {
+    if ((solid.has(y * world.size + x) && !gates.has(y * world.size + x)) || x < 0 || y < 0 || x >= world.size || y >= world.size) return true
+    const t = world.terrain[y * world.size + x]
+    // Bridges carry walkers over the water.
+    if (world.feature[y * world.size + x] === Feature.Bridge) return false
+    return t === Terrain.Lake || t === Terrain.River || t === Terrain.Mountain
+  }
+  const walkWorn = (x: number, y: number) => worn.has(y * world.size + x) || laid.has(y * world.size + x)
   function setStructures(placed: Structure[], townTrails: Point[][]) {
     laid = new Set(placed.filter((s) => s.look === 'road').map((s) => s.y * world.size + s.x))
     const trails = [...cityTrails(world), ...townTrails]
@@ -2174,6 +2194,7 @@ export async function createWorld(
       !lands.some((r) => s.x < r.x + r.size && r.x < s.x + s.size && s.y < r.y + r.size && r.y < s.y + s.size) &&
       ![...Array(s.size * s.size).keys()].some((k) => held.has((s.y + Math.floor(k / s.size)) * world.size + s.x + (k % s.size)))
     const structures = linkWalls([...cityStructures(world).filter((s) => !s.suburb || clearOf(s)), ...placed])
+    soundscape.setStructures(structures)
     hits = structures
       .filter((s) => s.id !== undefined || s.city !== undefined)
       .map((s): (typeof hits)[number] => {
@@ -2267,6 +2288,7 @@ export async function createWorld(
       shadows.setEnabled(next.shadows)
       fitResolution()
       detail = next.detail
+      village.setDetail(next.detail)
       if (next.detail !== was.detail) {
         // Paint the chunks again, with or without their trees lifted out.
         version++
@@ -2313,14 +2335,8 @@ export async function createWorld(
       app.canvas.style.cursor = tool === 'demolish' ? HAMMER_CURSOR : tool === 'move' ? 'grab' : handCursor(null)
       if (lastPointer) pick(lastPointer)
     },
-    setTown: (errands, merchants) =>
-      town.set(errands, merchants, (x, y) => {
-        if ((solid.has(y * world.size + x) && !gates.has(y * world.size + x)) || x < 0 || y < 0 || x >= world.size || y >= world.size) return true
-        const t = world.terrain[y * world.size + x]
-        // Bridges carry walkers over the water.
-        if (world.feature[y * world.size + x] === Feature.Bridge) return false
-        return t === Terrain.Lake || t === Terrain.River || t === Terrain.Mountain
-      }, (x, y) => worn.has(y * world.size + x) || laid.has(y * world.size + x)),
+    setTown: (errands, merchants) => town.set(errands, merchants, walkBlocked, walkWorn),
+    setVillages: (hamlets) => village.set(hamlets, walkBlocked, walkWorn),
     blocksWalkers: (x, y) => solid.has(y * world.size + x),
     setAimMark(mark) {
       aim = mark
@@ -2397,6 +2413,7 @@ export async function createWorld(
     destroy() {
       pacer.destroy()
       weather.destroy()
+      soundscape.destroy()
       clearTimeout(cameraTimer)
       app.canvas.removeEventListener('wheel', onWheel)
       app.canvas.removeEventListener('pointerleave', leaveMap)

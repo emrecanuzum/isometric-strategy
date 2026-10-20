@@ -15,16 +15,19 @@ const LEVEL = 0.35
 // The envoy's mumble and the rain sit lower than the cues at the same setting.
 const VOICE_LEVEL = 0.35
 const RAIN_LEVEL = 0.35
+// The world's ambience (ambience.ts) sits lowest of all: atmosphere under everything else.
+const AMB_LEVEL = 0.3
 // An idle audio context still runs its thread (and the compressor) for silence: after this long with nothing playing
 // it is put to sleep, and woken by the next sound (CLAUDE.md §12).
 const IDLE_MS = 4000
 
 let ctx: AudioContext | null = null
 // One output per kind of sound, each with its own switch and volume (CLAUDE.md §11 Ayarlar): the cues, the envoy's
-// voice, the rain and thunder. All go through the compressor.
+// voice, the rain and thunder, the world's ambience. All go through the compressor.
 let out: GainNode | null = null
 let voiceOut: GainNode | null = null
 let rainOut: GainNode | null = null
+let ambOut: GainNode | null = null
 // Where the helpers below connect what they make; the envoy's voice and the thunder route it elsewhere for a moment.
 let route: GainNode | null = null
 const lane = () => route ?? out!
@@ -35,6 +38,8 @@ let voiceOn = true
 let voiceVolume = 0.7
 let rainOn = true
 let rainVolume = 0.7
+let ambOn = true
+let ambVolume = 0.6
 
 export function setSfx(on: boolean, level: number, buttonClicks = true) {
   enabled = on
@@ -56,6 +61,27 @@ export function setRain(on: boolean, level: number) {
   if (!on) setRainSound(0)
 }
 
+export function setAmbience(on: boolean, level: number) {
+  ambOn = on
+  ambVolume = Math.min(1, Math.max(0, level))
+  if (ambOut) ambOut.gain.value = AMB_LEVEL * ambVolume
+}
+
+// What the ambience engine (ambience.ts) plays through: the context (woken if asleep), its output and the shared noise.
+// Null while ambience is off or turned down, or before a gesture unlocked audio; then it never wakes the context.
+export function ambienceAudio(): { c: AudioContext; out: GainNode; noise: () => AudioBufferSourceNode } | null {
+  if (!ambOn || ambVolume <= 0 || !ready()) return null
+  return { c: ctx!, out: ambOut!, noise: noiseSource }
+}
+
+// While the ambience's loops play the context must not sleep; released, it sleeps after IDLE_MS as before.
+let ambHeld = false
+export function holdAwake(on: boolean) {
+  if (ambHeld === on) return
+  ambHeld = on
+  if (!on) rest()
+}
+
 // Sleeping while idle: `asleep` is set only when this module suspended the context itself (never before the first
 // gesture unlocked it).
 let asleep = false
@@ -64,7 +90,7 @@ let battles = 0
 function rest() {
   clearTimeout(idleTimer)
   idleTimer = window.setTimeout(() => {
-    if (!ctx || rain || battles > 0 || ctx.state !== 'running') return
+    if (!ctx || rain || ambHeld || battles > 0 || ctx.state !== 'running') return
     asleep = true
     void ctx.suspend()
   }, IDLE_MS)
@@ -92,6 +118,8 @@ export function unlockSfx() {
     voiceOut.gain.value = VOICE_LEVEL * voiceVolume
     rainOut = ctx.createGain()
     rainOut.gain.value = RAIN_LEVEL * rainVolume
+    ambOut = ctx.createGain()
+    ambOut.gain.value = AMB_LEVEL * ambVolume
     // A gentle compressor evens the cues out: a drum roll and a music-box chime come out about as loud.
     const comp = ctx.createDynamicsCompressor()
     comp.threshold.value = -16
@@ -100,7 +128,7 @@ export function unlockSfx() {
     comp.attack.value = 0.004
     comp.release.value = 0.2
     comp.connect(ctx.destination)
-    for (const g of [out, voiceOut, rainOut]) g.connect(comp)
+    for (const g of [out, voiceOut, rainOut, ambOut]) g.connect(comp)
   }
   if (ctx.state === 'suspended') {
     asleep = false

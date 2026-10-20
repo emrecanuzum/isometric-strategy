@@ -1314,7 +1314,7 @@ export function walker(frame: number, robe: Uint32Array, guard: boolean): Sprite
 }
 
 // Four-legged grazers, facing screen right. Frames: two strides, then grazing with the head down.
-interface BeastShape {
+export interface BeastShape {
   colors: Uint32Array
   // Scale of the deer-sized body plan.
   size: number
@@ -1327,7 +1327,7 @@ interface BeastShape {
   legs?: number
 }
 
-function beast(shape: BeastShape, frame: number): Sprite {
+export function beast(shape: BeastShape, frame: number): Sprite {
   const { colors, size, brush } = shape
   const canvas = new Canvas(Math.ceil(22 * size) + 2, Math.ceil(20 * size) + 3)
   const base = canvas.height - 2

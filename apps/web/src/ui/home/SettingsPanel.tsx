@@ -134,6 +134,7 @@ export function SoundSettings({ settings, onChange }: { settings: Settings; onCh
     { label: L('Savaş müziği', 'Battle music'), hint: L('Bir savaşı izlerken davullar ve borular.', 'Drums and horns while you watch a battle.'), on: 'battle', volume: 'battleVolume', icon: 'swords' },
     { label: L('Ses efektleri', 'Sound effects'), hint: L('Elçinin haberleri, olaylar, inşaat ve pencerelerin sesleri.', 'The sounds of the envoy\'s news, events, construction and windows.'), on: 'sfx', volume: 'sfxVolume', icon: 'bell' },
     { label: L('Yağmur ve gök gürültüsü', 'Rain and thunder'), hint: L('Yağmurun hışırtısı ve şimşekten sonra gürleme.', 'The patter of rain and the rumble after lightning.'), on: 'rain', volume: 'rainVolume', icon: 'snow' },
+    { label: L('Ortam sesleri', 'Ambient sounds'), hint: L('Rüzgâr, akan su, yaprak hışırtısı, kuşlar ve cırcır böcekleri, köyün uğultusu; haritada baktığın yere göre.', 'Wind, running water, rustling leaves, birds and crickets, the hum of a village; from where you look on the map.'), on: 'ambience', volume: 'ambienceVolume', icon: 'leaf' },
     { label: L('Elçinin sesi', 'The envoy\'s voice'), hint: L('Elçi ve haraççıbaşı konuşurken mırıldanır.', 'The envoy and the chief tribute collector mumble as they talk.'), on: 'voice', volume: 'voiceVolume', icon: 'scroll' },
   ]
   return (
