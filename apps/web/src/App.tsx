@@ -2008,6 +2008,40 @@ function App({
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bands, bandStep, layer.battles, layer.outlaws, kingdom?.caveTrail, view])
+
+  // An army of the player's chasing a band (CLAUDE.md §7.9): the server only looks for the meeting at its minute's
+  // tick, so the two marched through each other for up to a minute. The moment they come within reach is worked out
+  // here from the same clocks, and the server is nudged then; the battle starts as they meet.
+  const chaseNudge = useRef(0)
+  useEffect(() => {
+    if (!view) return
+    const t = serverNow()
+    const reach = balance.outlaws.bands.chase.contactTiles
+    let meet = Infinity
+    for (const a of layer.armies) {
+      if (a.kingdom_id !== mine.id || a.goal.kind !== 'chase') continue
+      const band = bands.find((b) => b.idx === (a.goal as { band: number }).band)
+      if (!band || band.battle !== null || !outlawUp(band, t)) continue
+      for (let s = t; s < t + 180_000; s += 400) {
+        const p = armyAt(a, s)
+        const q = bandAt(band, s)
+        if (Math.hypot(p.x - q.x, p.y - q.y) <= reach) {
+          meet = Math.min(meet, s)
+          break
+        }
+      }
+    }
+    if (!Number.isFinite(meet)) return
+    // Already within reach: nudged at most every 10 s, in case the server has not caught up yet.
+    const at = Math.max(meet + 300, chaseNudge.current + 10_000)
+    const id = window.setTimeout(() => {
+      if (document.hidden) return
+      chaseNudge.current = serverNow()
+      settle(lobby.id).then(() => refreshAll())
+    }, Math.max(0, at - t))
+    return () => clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, layer.armies, bands, bandStep, mine.id])
   useEffect(() => {
     const t = serverNow()
     const ends = banditSquads.filter((a) => !a.battle && a.arriveAt > t).map((a) => a.arriveAt)

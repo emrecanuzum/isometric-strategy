@@ -2,14 +2,16 @@
 // minutes long, with a breath of silence between them. Nothing is stored; every piece is generated as it plays from
 // its key, its chords and its instruments, so every loop is slightly different.
 //
-// - Han: the slow, soft tavern tune in D dorian, 6/8, a lute over a quiet drone (the first piece, always).
-// - Kudüs yolu: crusader roads in D hijaz, an oud and a ney over a strong drone, a frame drum in 3+3+2.
-// - Kralın yolu: medieval England in G mixolydian, 3/4, recorder and lute, a soft tabor.
-// - Ufuk: a slow campaign mood in A aeolian, string pads, a distant horn, a harp and a far timpani.
-// - Sarhoş Ejder: a fantasy tavern jig in E dorian, a fiddle, a strummed lute and a bodhrán.
+// - Ocak Başında (hearth): the slow, soft tavern tune in D dorian, 6/8, a lute over a quiet drone (first, if chosen).
+// - Kudüs Yolunda (crusade): crusader roads in D hijaz, an oud and a ney over a strong drone, a frame drum in 3+3+2.
+// - Kralın Çayırları (england): medieval England in G mixolydian, 3/4, recorder and lute, a soft tabor.
+// - Ufuktaki Sancaklar (horizon): a slow campaign mood in A aeolian, string pads, a distant horn, a harp, a timpani.
+// - Sarhoş Ejder Hanı (jig): a fantasy tavern jig in E dorian, a fiddle, a strummed lute and a bodhrán.
 //
 // Cost (CLAUDE.md §12): one shared reverb (mono impulse), one shared noise buffer for the drums, a handful of short-lived
 // oscillators per bar scheduled 0.6 s ahead from a 150 ms timer; hidden tabs and muted music suspend the audio.
+
+import { L } from '../lib/i18n'
 
 const VOLUME = 0.1
 const FADE_IN_S = 5
@@ -17,11 +19,21 @@ const LOOKAHEAD_S = 0.6
 const TICK_MS = 150
 const GAP_S = 3 // silence between two pieces
 
+// The pieces, named after their spirit; the player picks which of them play (Ayarlar → Ses).
+export type TrackId = 'hearth' | 'crusade' | 'england' | 'horizon' | 'jig'
+export const TRACKS: { id: TrackId; name: string; hint: string }[] = [
+  { id: 'hearth', name: L('Ocak Başında', 'By the Hearth'), hint: L('Lavta, flüt ve dron; sakin bir meyhane gecesi.', 'Lute, recorder and drone; a quiet night at the inn.') },
+  { id: 'crusade', name: L('Kudüs Yolunda', 'The Road to Jerusalem'), hint: L('Ud, ney ve def; haçlıların doğuya giden yolu.', 'Oud, ney and frame drum; the crusaders\' road east.') },
+  { id: 'england', name: L('Kralın Çayırları', "The King's Meadows"), hint: L('Blok flüt, lavta ve tabor; ortaçağ İngilteresinde bir dans.', 'Recorder, lute and tabor; a dance in medieval England.') },
+  { id: 'horizon', name: L('Ufuktaki Sancaklar', 'Banners on the Horizon'), hint: L('Yaylılar, uzak bir boru ve timpani; seferin havası.', 'Strings, a distant horn and timpani; the air of a campaign.') },
+  { id: 'jig', name: L('Sarhoş Ejder Hanı', 'The Drunken Dragon Inn'), hint: L('Keman, lavta ve bodhrán; fantastik bir meyhanede jig.', 'Fiddle, lute and bodhrán; a jig in a fantasy tavern.') },
+]
+
 type Voice = 'lute' | 'oud' | 'flute' | 'ney' | 'fiddle' | 'horn' | 'harp'
 type Hit = 'low' | 'high' | 'timpani' | null
 
 interface Piece {
-  name: string
+  name: TrackId
   tonic: number // MIDI note of the scale's degree 0 (the melody's middle)
   scale: number[] // semitones above the tonic
   stepS: number // one step of the bar, in seconds
@@ -66,10 +78,19 @@ export interface Music {
   setMuted(muted: boolean): void
   /** Loudness from 0 to 1 of the full level. */
   setVolume(volume: number): void
+  /** Which pieces may play; the one playing gives way at its next bar if it is left out. */
+  setTracks(tracks: TrackId[]): void
+  /** Plays this piece now (from its next bar), then the turns go on as before. */
+  play(track: TrackId): void
+  /** The piece playing now, and a listener told whenever another begins. */
+  current(): TrackId
+  onTrack(listen: (track: TrackId) => void): () => void
   destroy(): void
 }
 
-export function startMusic(muted: boolean, volume = 1): Music {
+export function startMusic(muted: boolean, volume = 1, tracks: TrackId[] = TRACKS.map((t) => t.id)): Music {
+  let allowed = new Set(tracks)
+  const listeners = new Set<(track: TrackId) => void>()
   let level = VOLUME * Math.min(1, Math.max(0, volume))
   // iOS 17+: play through the ringer/silent switch like a media player instead of being muted by it.
   const session = (navigator as { audioSession?: { type: string } }).audioSession
@@ -271,7 +292,7 @@ export function startMusic(muted: boolean, volume = 1): Music {
 
   // Han: the tavern tune the game began with.
   const tavern: Piece = {
-    name: 'Han',
+    name: 'hearth',
     tonic: 62,
     scale: [0, 2, 3, 5, 7, 9, 10],
     stepS: 60 / 66 / 3,
@@ -296,7 +317,7 @@ export function startMusic(muted: boolean, volume = 1): Music {
 
   // Kudüs yolu: the crusaders' road through the east; the hijaz's augmented second on an oud, a ney above.
   const crusade: Piece = {
-    name: 'Kudüs yolu',
+    name: 'crusade',
     tonic: 62,
     scale: [0, 1, 4, 5, 7, 8, 10],
     stepS: 60 / 76 / 2,
@@ -322,7 +343,7 @@ export function startMusic(muted: boolean, volume = 1): Music {
 
   // Kralın yolu: an English court and country dance, a recorder over lute and tabor.
   const england: Piece = {
-    name: 'Kralın yolu',
+    name: 'england',
     tonic: 67,
     scale: [0, 2, 4, 5, 7, 9, 10],
     stepS: 60 / 96 / 2,
@@ -349,7 +370,7 @@ export function startMusic(muted: boolean, volume = 1): Music {
 
   // Ufuk: the long view over the realm, slow strings and a far horn.
   const horizon: Piece = {
-    name: 'Ufuk',
+    name: 'horizon',
     tonic: 57,
     scale: [0, 2, 3, 5, 7, 8, 10],
     stepS: 60 / 54,
@@ -376,7 +397,7 @@ export function startMusic(muted: boolean, volume = 1): Music {
 
   // Sarhoş Ejder: a fantasy tavern jig, a fiddle running over a strummed lute and a bodhrán.
   const jig: Piece = {
-    name: 'Sarhoş Ejder',
+    name: 'jig',
     tonic: 64,
     scale: [0, 2, 3, 5, 7, 9, 10],
     stepS: 60 / 112 / 3,
@@ -438,7 +459,9 @@ export function startMusic(muted: boolean, volume = 1): Music {
   // The pieces take turns, never the same one twice in a row; the tavern tune opens (`?music=0..4` picks the first in
   // development, to hear one).
   const asked = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get('music') ?? NaN) : NaN
-  let piece = pieces[asked] ?? tavern
+  const choices = () => pieces.filter((p) => allowed.has(p.name))
+  let piece = pieces[asked] ?? choices()[0] ?? tavern
+  let wanted: Piece | null = null // asked for by the player: plays from the next bar
   out.gain.value = piece.loud ?? 1
   let pieceStart = ctx.currentTime + 0.2
   let bar = 0
@@ -447,10 +470,13 @@ export function startMusic(muted: boolean, volume = 1): Music {
   let section: [Voice, number, number] = piece.voices[0]
   startDrone(piece, pieceStart)
 
-  const nextPiece = () => {
+  const nextPiece = (gap = GAP_S) => {
     stopDrone(barStart)
-    piece = pick(pieces.filter((p) => p !== piece))
-    barStart += GAP_S
+    const others = choices().filter((p) => p !== piece)
+    piece = wanted ?? (others.length ? pick(others) : choices()[0] ?? piece)
+    wanted = null
+    for (const listen of listeners) listen(piece.name)
+    barStart += gap
     // A fresh gain for the next piece; the last one's notes ring out through their own.
     const last = out
     setTimeout(() => last.disconnect(), 15_000)
@@ -501,6 +527,11 @@ export function startMusic(muted: boolean, volume = 1): Music {
     while (barStart < ctx.currentTime + LOOKAHEAD_S) {
       // After the tab was throttled, skip ahead instead of playing a pile of late bars at once.
       if (barStart < ctx.currentTime) barStart = ctx.currentTime + 0.05
+      if (wanted || !allowed.has(piece.name)) {
+        // The player picked another piece, or left this one out: it gives way now, with a short breath.
+        nextPiece(1)
+        continue
+      }
       if (bar > 0 && bar % piece.progression.length === 0 && barStart - pieceStart >= piece.seconds) {
         nextPiece()
         continue
@@ -552,8 +583,24 @@ export function startMusic(muted: boolean, volume = 1): Music {
       level = VOLUME * Math.min(1, Math.max(0, value))
       if (!muted) fadeTo(level, 0.2)
     },
+    setTracks(next) {
+      allowed = new Set(next.length ? next : [piece.name])
+    },
+    play(track) {
+      const p = pieces.find((x) => x.name === track)
+      if (!p) return
+      allowed.add(track)
+      wanted = p
+      for (const listen of listeners) listen(track)
+    },
+    current: () => wanted?.name ?? piece.name,
+    onTrack(listen) {
+      listeners.add(listen)
+      return () => listeners.delete(listen)
+    },
     destroy() {
       clearInterval(timer)
+      listeners.clear()
       clearTimeout(hold)
       document.removeEventListener('visibilitychange', onVisibility)
       breath.stop()

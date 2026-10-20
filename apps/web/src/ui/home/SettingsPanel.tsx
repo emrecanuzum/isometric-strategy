@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { PHONE_OFF } from '../../net/settings'
+import { PHONE_OFF, playTrack, useNowPlaying } from '../../net/settings'
+import { TRACKS } from '../../audio/music'
 import type { Cut, Pace, Profile, Settings, WeatherMode } from '../../net/settings'
 import { usePhone, usePowerSave } from '../../lib/power'
 import type { PowerMode } from '../../lib/power'
@@ -148,6 +149,7 @@ export function SoundSettings({ settings, onChange }: { settings: Settings; onCh
             </span>
             <input type="range" min={0} max={100} step={5} value={settings[r.volume]} disabled={!settings[r.on]} onChange={(e) => onChange({ [r.volume]: Number(e.target.value) })} />
           </label>
+          {r.on === 'music' && <TrackList settings={settings} onChange={onChange} />}
           {r.on === 'sfx' && (
             <Row label={L('Düğme sesleri', 'Button sounds')} hint={L('Düğmelere basınca hafif bir tık.', 'A soft click when you press buttons.')}>
               <Toggle on={settings.clicks} disabled={!settings.sfx} why={L('Ses efektleri kapalı', 'Sound effects are off')} onClick={() => onChange({ clicks: !settings.clicks })} />
@@ -155,6 +157,53 @@ export function SoundSettings({ settings, onChange }: { settings: Settings; onCh
           )}
         </div>
       ))}
+    </div>
+  )
+}
+
+// The music's pieces (CLAUDE.md §11 Ayarlar): each ticked plays in its turn; "Çal" plays it now. One stays on.
+function TrackList({ settings, onChange }: { settings: Settings; onChange: Change }) {
+  const now = useNowPlaying()
+  const on = TRACKS.filter((t) => settings.tracks[t.id]).length
+  return (
+    <div className="settings-cuts track-list">
+      <b>{L('Çalacak parçalar', 'Pieces to play')}</b>
+      {TRACKS.map((t) => {
+        const ticked = settings.tracks[t.id]
+        return (
+          <div key={t.id} className={`track-row${now === t.id && settings.music ? ' playing' : ''}`}>
+            <button
+              className="pixel-check"
+              role="checkbox"
+              aria-checked={ticked}
+              disabled={ticked && on <= 1}
+              data-why={L('En az bir parça seçili kalmalı', 'At least one piece must stay chosen')}
+              onClick={() => onChange({ tracks: { ...settings.tracks, [t.id]: !ticked } })}
+            >
+              <span className="box" aria-hidden>
+                <svg viewBox="0 0 8 8" shapeRendering="crispEdges">
+                  <path d="M1 4h1v1h-1zM2 5h1v1h-1zM3 6h1v1h-1zM4 5h1v1h-1zM5 4h1v1h-1zM6 3h1v1h-1zM7 2h1v1h-1zM2 4h1v1h-1zM3 5h1v1h-1zM4 4h1v1h-1zM5 3h1v1h-1zM6 2h1v1h-1z" />
+                </svg>
+              </span>
+              <span>
+                {t.name}
+                <small>{now === t.id && settings.music ? L('Şimdi çalıyor · ', 'Now playing · ') : ''}{t.hint}</small>
+              </span>
+            </button>
+            <button
+              className="btn small"
+              disabled={!settings.music || (now === t.id)}
+              data-why={!settings.music ? L('Müzik kapalı', 'Music is off') : L('Zaten çalıyor', 'Already playing')}
+              onClick={() => {
+                if (!ticked) onChange({ tracks: { ...settings.tracks, [t.id]: true } })
+                playTrack(t.id)
+              }}
+            >
+              <Icon name="music" size={14} /> {L('Çal', 'Play')}
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }

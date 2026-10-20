@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { startMusic } from '../audio/music'
+import { startMusic, TRACKS } from '../audio/music'
 import { setBattleMusicLevel, setRain, setSfx, setVoice, unlockSfx } from '../audio/sfx'
-import type { Music } from '../audio/music'
+import type { Music, TrackId } from '../audio/music'
 import type { PowerMode } from '../lib/power'
 import { supabase } from '../lib/supabase'
 
@@ -19,6 +19,8 @@ export interface Settings {
   // watched, the cues (the envoy's news, the day's events), the buttons' clicks, the rain and thunder, the envoy's voice.
   music: boolean
   musicVolume: number
+  // Which of the music's pieces take turns (at least one).
+  tracks: Record<TrackId, boolean>
   battle: boolean
   battleVolume: number
   sfx: boolean
@@ -49,6 +51,7 @@ export const DEFAULT_CUTS: Record<Cut, boolean> = { pace: true, detail: true, bi
 export const DEFAULT_SETTINGS: Settings = {
   music: true,
   musicVolume: 70,
+  tracks: { hearth: true, crusade: true, england: true, horizon: true, jig: true },
   battle: true,
   battleVolume: 70,
   sfx: true,
@@ -111,7 +114,7 @@ function fromSaved(saved: Partial<Settings> | undefined): Settings {
   s.rainVolume ??= s.sfxVolume
   s.battle ??= s.music
   s.battleVolume ??= s.musicVolume
-  return { ...DEFAULT_SETTINGS, ...s, cuts: { ...DEFAULT_CUTS, ...s.cuts } } as Settings
+  return { ...DEFAULT_SETTINGS, ...s, cuts: { ...DEFAULT_CUTS, ...s.cuts }, tracks: { ...DEFAULT_SETTINGS.tracks, ...s.tracks } } as Settings
 }
 
 export interface Profile {
@@ -153,6 +156,35 @@ export function duckMusic(on: boolean) {
   for (const listen of duckers) listen(duck)
 }
 
+const chosen = (s: Settings) => TRACKS.map((t) => t.id).filter((id) => s.tracks[id])
+
+// The music playing now, for the settings' list of pieces: which is on, and "play this one now".
+let playing: Music | null = null
+const playingListeners = new Set<() => void>()
+const setPlaying = (m: Music | null) => {
+  playing = m
+  for (const listen of playingListeners) listen()
+}
+export const playTrack = (track: TrackId) => playing?.play(track)
+export function useNowPlaying(): TrackId | null {
+  const [now, setNow] = useState<TrackId | null>(() => playing?.current() ?? null)
+  useEffect(() => {
+    let off = () => {}
+    const follow = () => {
+      off()
+      setNow(playing?.current() ?? null)
+      off = playing ? (playing.onTrack(setNow) as () => void) : () => {}
+    }
+    playingListeners.add(follow)
+    follow()
+    return () => {
+      off()
+      playingListeners.delete(follow)
+    }
+  }, [])
+  return now
+}
+
 // `quiet`: a share of the volume while away from the map (the main menu plays it softer).
 export function useMusic(settings: Settings, quiet = 1) {
   const [ducked, setDucked] = useState(duck)
@@ -170,7 +202,10 @@ export function useMusic(settings: Settings, quiet = 1) {
   useEffect(() => {
     const events = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'] as const
     const unlock = () => {
-      music.current ??= startMusic(!current.current.music, (current.current.musicVolume / 100) * quietRef.current)
+      if (!music.current) {
+        music.current = startMusic(!current.current.music, (current.current.musicVolume / 100) * quietRef.current, chosen(current.current))
+        setPlaying(music.current)
+      }
       const sfx = unlockSfx()
       if (music.current.unlock() && sfx) for (const type of events) window.removeEventListener(type, unlock)
     }
@@ -178,6 +213,7 @@ export function useMusic(settings: Settings, quiet = 1) {
     return () => {
       for (const type of events) window.removeEventListener(type, unlock)
       music.current?.destroy()
+      if (playing === music.current) setPlaying(null)
       music.current = null
     }
   }, [])
@@ -185,6 +221,8 @@ export function useMusic(settings: Settings, quiet = 1) {
     music.current?.setMuted(!settings.music)
     music.current?.setVolume((settings.musicVolume / 100) * quiet * ducked)
   }, [settings.music, settings.musicVolume, quiet, ducked])
+  const tracksKey = chosen(settings).join()
+  useEffect(() => music.current?.setTracks(chosen(current.current)), [tracksKey])
   useEffect(() => setBattleMusicLevel(settings.battle, settings.battleVolume / 100), [settings.battle, settings.battleVolume])
   useEffect(() => setSfx(settings.sfx, settings.sfxVolume / 100, settings.clicks), [settings.sfx, settings.sfxVolume, settings.clicks])
   useEffect(() => setVoice(settings.voice, settings.voiceVolume / 100), [settings.voice, settings.voiceVolume])

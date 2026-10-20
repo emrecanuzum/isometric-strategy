@@ -4,7 +4,7 @@ import { babble } from '../../audio/sfx'
 import { EnvoyPortrait } from './EnvoyPortrait'
 import { L } from '../../lib/i18n'
 import {
-  ADVISOR_EVERY_MINUTES, IDLE_LINES, LATER, LATER_ANSWERS, SKIP_ANSWERS, SMALL_TALK, SNOOZE_MINUTES, STEPS, TIPS, TOPICS, TOPICS_ASK, TUTORIAL_DONE,
+  ADVISOR_EVERY_MINUTES, IDLE_LINES, LATER, LATER_ANSWERS, SKIP_ANSWERS, SHOWN_MINUTES, SMALL_TALK, SNOOZE_MINUTES, STEPS, TIPS, TOPICS, TOPICS_ASK, TUTORIAL_DONE,
   TOPIC_GROUPS, TUTORIAL_OFF_ANSWERS, wealthAdvice, wellStocked,
 } from './lines'
 import type { AdvisorAction, AdvisorCtx, Reply, Step, Tip, Topic } from './lines'
@@ -368,13 +368,14 @@ export function Advisor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [summon])
 
-  // Coming on his own: every few minutes of play while nothing else is open.
+  // Coming on his own: every few minutes of play. The minutes count while a tab or a dialog is open too (players spend
+  // much of their time in the tabs, and he never came); he only waits for them to close before he speaks.
   const played = useRef(0)
   useEffect(() => {
     const id = window.setInterval(() => {
-      if (document.visibilityState !== 'visible' || blocked || busy || speech || memory.muted) return
+      if (document.visibilityState !== 'visible' || speech || memory.muted) return
       played.current += 5
-      if (played.current < ADVISOR_EVERY_MINUTES * 60) return
+      if (played.current < ADVISOR_EVERY_MINUTES * 60 || blocked || busy) return
       const c = ctxRef.current
       if (step) {
         played.current = 0
@@ -383,11 +384,12 @@ export function Advisor({
       const tip = tipFor(c, memory.snoozed ?? {})
       if (tip) {
         played.current = 0
+        update({ snoozed: { ...(memory.snoozed ?? {}), [tip.id]: Math.max(memory.snoozed?.[tip.id] ?? 0, c.now + SHOWN_MINUTES * 60_000) } })
         setSpeech(tipSpeech(tip, c, pick))
       } else played.current = ADVISOR_EVERY_MINUTES * 60 * 0.75
     }, 5000)
     return () => clearInterval(id)
-  }, [blocked, busy, speech, memory.muted, memory.snoozed, step, stepIndex, pick])
+  }, [blocked, busy, speech, memory.muted, memory.snoozed, step, stepIndex, pick, update])
 
   const reply = (r: Reply) => {
     if (r.snooze && r.id) update({ snoozed: { ...(memory.snoozed ?? {}), [r.id]: ctxRef.current.now + r.snooze * 60_000 } })

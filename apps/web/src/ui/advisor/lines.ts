@@ -108,8 +108,10 @@ export const TOPIC_GROUPS: { id: TopicGroup; name: string }[] = [
 ]
 
 // How often he comes on his own while the lord plays (minutes of play), and how long "later" lasts.
-export const ADVISOR_EVERY_MINUTES = 4
-export const SNOOZE_MINUTES = 20
+export const ADVISOR_EVERY_MINUTES = 3
+export const SNOOZE_MINUTES = 15
+// A tip he has brought up on his own rests this long even if it is only closed, so the next visit brings another.
+export const SHOWN_MINUTES = 9
 
 const n = (v: number) => Math.round(v).toLocaleString(locale())
 const pct = (v: number) => L(`%${Math.round(v * 100)}`, `${Math.round(v * 100)}%`)

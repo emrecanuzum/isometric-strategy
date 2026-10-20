@@ -930,7 +930,7 @@ export const showPeoplePart = (part: PeoplePart) => showPart('people', part)
 export function PeopleTab(data: HudData) {
   const { kingdom, now, online } = data
   const [part, setPart] = usePart('people', PEOPLE_PARTS, 'people')
-  const { villagers, soldiers, cap, housing, jobs, efficiency, away } = population(kingdom, now)
+  const { villagers, soldiers, sailors, cap, housing, jobs, efficiency, away } = population(kingdom, now)
   const food = flows(kingdom, now).food
   const houses = kingdom.buildings.filter((b) => b.kind === 'house' && b.doneAt <= now).length
   // How the people are doing, read off the state of the kingdom: fed and put to work. A shrinking granary only
@@ -996,8 +996,8 @@ export function PeopleTab(data: HudData) {
             <Stat label={L('Yemek tüketimi', 'Food eaten')} value={L(`${signed(-food.used)} / tur`, `${signed(-food.used)} / round`)} />
           </Section>
           <PopulationPanel kingdom={kingdom} now={now} online={online} />
-          <Section title={L('Nüfus sınırı', 'Population limit')} icon="villager" aside={`${villagers + soldiers} / ${cap}`}>
-            <Meter value={cap ? (villagers + soldiers) / cap : 0} tone={villagers + soldiers >= cap ? 'down' : 'gold'} label={L('Nüfus', 'Population')} segments={16} />
+          <Section title={L('Nüfus sınırı', 'Population limit')} icon="villager" aside={`${villagers + soldiers + sailors} / ${cap}`}>
+            <Meter value={cap ? (villagers + soldiers + sailors) / cap : 0} tone={villagers + soldiers + sailors >= cap ? 'down' : 'gold'} label={L('Nüfus', 'Population')} segments={16} />
             <p className="hint">
               {L(
                 `Sarayın her seviyesi ${balance.society.popCapPerPalaceLevel} kişilik yer açar. Evlerin ${housing} kişilik yeri var${housing > cap ? `; ${housing - cap} kişi sığmıyor, sarayı yükselt` : ''}. Askerler de bu sınırdan sayılır.`,

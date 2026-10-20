@@ -698,10 +698,14 @@ değerler `society.json` → `growth`). Tur başına gelen: (0,08 + boş yerin
   çarpanı nedeniyle ve dolmaya kalan süreyi gösterir. Büyümenin yanındaki
   **(i)** düğmesi büyümenin nasıl işlediğini lordun kendi sayılarıyla
   anlatır (`GrowthExplained`: yer, boş yer, formül, mutluluk çarpanı, göç,
-  hizmetliler). Üst çubuktaki nüfus kartı **nüfus / sınır** yazar (köylü + asker,
-  saray seviyesinin nüfus sınırı; sınırdayken kırmızı); açılan kartı da
-  saatlik büyümeyi, yerleşimi (köylü / yer, dolmaya kalan süre),
-  denizcileri ve **inşaat ustalarını** (aynı anda yürüyebilecek inşaat
+  hizmetliler). Üst çubuktaki nüfus kartı **nüfus / sınır** yazar (köylü + asker +
+  denizci, saray seviyesinin nüfus sınırı; sınırdayken kırmızı); açılan kartı
+  da saatlik büyümeyi, yerleşimi (köylü / yer, dolmaya kalan süre),
+  **barınağı** (evlerin ve sarayın verdiği, sınırla kesilmiş yer ve kaç
+  yapıdan geldiği), askerleri, denizcileri ve altında bunları açıklayan kısa
+  bir notu ("Askerler ve denizciler de barınakta yatar: 120 yerden köylülere
+  96 kalır"; evler sınırdan fazla yer veriyorsa onu da söyler) ve **inşaat
+  ustalarını** (aynı anda yürüyebilecek inşaat
   sayısı ve kaçının çalıştığı) gösterir.
 - Sunucu, savaşta olan lordları (`atWar`) savaş ilanında, barışta ve her
   tick'te işaretler; kuşatılan sarayın `besiegedUntil` değeri kuşatma
@@ -2019,7 +2023,11 @@ Değerler `config/balance/outlaws.json` → `bands`, `road`; mantık
   ki orduya düz çizgi × 1,35 kadar yakın). Sunucu her tick'te ordunun ve
   çetenin geçen saniyelerdeki yerlerini karşılaştırır; **4 karoya
   yaklaştıkları an** muharebe başlar (tür `outlaw`, olağan zar turları,
-  izlenebilir; çete bir anda tek orduyla çarpışır). Ordu varıp çeteyi
+  izlenebilir; çete bir anda tek orduyla çarpışır). Sunucu bunu ancak tick'te
+  görürdü, ordu ile çete bir dakikaya kadar iç içe yürüyordu: istemci,
+  takipteki kendi ordusunun çeteye 4 karo yaklaşacağı anı aynı saatlerden
+  hesaplar ve sunucuyu o anda dürter (`settle`; zaten yakınsa en sık 10 sn'de
+  bir; `App.tsx` → `chaseNudge`). Ordu varıp çeteyi
   bulamazsa yeniden önünü keser; **20 dakikada** yakalayamazsa takibi bırakır
   ve elçi haber getirir. Çete başkası tarafından dağıtılırsa takip biter.
 - **Sonuç:** Kazanan ordu yerinde kalır; çete **45 dakika** dağılır
@@ -3784,8 +3792,13 @@ krallıkta birer tane olur ve 3 seviyelidir.
   oynar; `EnvoyPortrait.tsx`). Sohbet düğmesinin hemen sağındaki
   **Elçi** düğmesi onu çağırır. Elçi haritayı kapatmayan küçük bir konuşma
   panelinde gelir: portre, harf harf yazılan söz ve 1–3 cevap. Kendiliğinden
-  oynanan her birkaç dakikada bir gelir (başka bir pencere açıkken, bir şey
-  yerleştirilirken ya da bir sekme açıkken gelmez, üst üste binmez); lordun
+  oynanan her 3 dakikada bir gelir (`ADVISOR_EVERY_MINUTES`). Süre bir sekme
+  ya da pencere açıkken de işler, ama elçi konuşmak için onların kapanmasını
+  bekler (bir şey yerleştirilirken de gelmez, üst üste binmez; önce süre
+  sekme açıkken duruyordu ve elçi neredeyse hiç gelmiyordu). Kendiliğinden
+  açtığı bir öğüt yalnızca kapatılsa da 9 dakika dinlenir (`SHOWN_MINUTES`),
+  sonraki gelişinde başka bir şey söyler; "Sonra" denen öğüt 15 dakika
+  (`SNOOZE_MINUTES`, öğüdün kendi süresi yoksa) ertelenir. Lordun
   eksiklerine ya da düzeltebileceklerine göre biraz şakacı bir öğüt verir
   (yemek azalıyor, tarla yok, ambar ya da hazine dolu, tüccar boşta, saray
   yükseltilebilir, biat edilmedi, kraliçe yok, kışla/casus evi/pazar/ambar/
@@ -4285,7 +4298,7 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   ve tokmak, bina bitince çekiç, günün olayları için arp.
   **Müzik** (`audio/music.ts`) de sentezlenir ve beş parça sırayla çalar (her
   biri 2,5–3,5 dk, sonu bir geçişin bitiminde; aralarında 3 sn sessizlik; aynı
-  parça art arda gelmez; açılışta hep Han): **Han** (D dorian, 6/8, lavta ve
+  parça art arda gelmez; açılışta seçiliyse hep Han): **Han** (D dorian, 6/8, lavta ve
   dron; ilk meyhane ezgisi), **Kudüs yolu** (haçlı yolu, D hicaz, ud, ney, güçlü
   dron, 3+3+2 def), **Kralın yolu** (ortaçağ İngilteresi, G miksolidyen, 3/4,
   blok flüt, lavta, tabor), **Ufuk** (EU4 tarzı sefer havası, A eolyen, yaylı
@@ -4293,6 +4306,13 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   jig'i, E dorian, keman, tıngırdatılan lavta, bodhrán). Hepsi aynı yankıyı
   (tek kanallı) ve davullar tek bir gürültü tamponunu paylaşır; notalar kısa
   ömürlü osilatörlerdir, 150 ms'lik zamanlayıcıyla 0,6 sn önceden kurulur.
+  Adları ruhlarına göredir: **Ocak Başında** (Han), **Kudüs Yolunda**, **Kralın
+  Çayırları**, **Ufuktaki Sancaklar**, **Sarhoş Ejder Hanı** (`TRACKS`).
+  Ayarlar → Ses'te müziğin altında **Çalacak parçalar** listesi vardır: işaretli
+  parçalar sırayla çalar (en az biri işaretli kalır; `Settings.tracks`,
+  profilde), her satırın **Çal** düğmesi o parçayı bir sonraki ölçüden başlatır
+  (işaretli değilse işaretler), çalan parça altın renkte "Şimdi çalıyor" yazar.
+  Çalan parçanın işareti kaldırılırsa bir sonraki ölçüde başka parçaya geçilir.
   Geliştirmede `?music=0..4` ilk parçayı seçer.
   Kapatılan müzik sessizce çalmaya devam etmez: sesi kısıldıktan sonra ses
   motoru durdurulur, açılınca yeniden başlar (`music.ts` → `setMuted`). Efekt

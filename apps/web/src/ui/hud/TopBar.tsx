@@ -33,8 +33,8 @@ interface Props {
 
 export function TopBar({ kingdom, now, seasonStart, history, onOpen, market, menu }: Props) {
   const flow = flows(kingdom, now, market)
-  const { villagers, soldiers, cap } = population(kingdom, now)
-  const people = villagers + soldiers
+  const { villagers, soldiers, sailors, cap } = population(kingdom, now)
+  const people = villagers + soldiers + sailors
   const [open, setOpen] = useState<string | null>(null)
   const bar = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -222,6 +222,8 @@ function ResourceCard({ resource: r, kingdom, now, history, market }: { resource
 function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
   const { villagers, jobs, efficiency, cap, soldiers, sailors, housing, sick, healthy } = population(kingdom, now)
   const homes = kingdom.buildings.filter((b) => b.doneAt <= now && (BUILDINGS[b.kind].villagers ?? 0) > 0).length
+  // The beds the houses and the palace give, as far as the palace's limit lets them be used.
+  const shelter = Math.min(housing, cap)
   // How fast the people grow into their room (CLAUDE.md §5.2).
   const grow = growthTerms(kingdom, now)
   const fill = timeToFill(kingdom, now)
@@ -261,8 +263,14 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
         </li>
         <li>
           <span>{L('Nüfus / sınır', 'Population / limit')}</span>
-          <b className={villagers + soldiers >= cap ? 'down' : undefined}>
-            {villagers + soldiers} / {cap}
+          <b className={villagers + soldiers + sailors >= cap ? 'down' : undefined}>
+            {villagers + soldiers + sailors} / {cap}
+          </b>
+        </li>
+        <li>
+          <span>{L('Barınak', 'Housing')}</span>
+          <b>
+            {L(`${shelter} yer · ${homes} yapı`, `${shelter} beds · ${homes} buildings`)}
           </b>
         </li>
         {soldiers > 0 && (
@@ -273,8 +281,24 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
         )}
         {sailors > 0 && (
           <li>
-            <span>{L('Denizci (yerden düşer)', 'Sailors (take up room)')}</span>
+            <span>{L('Denizci', 'Sailors')}</span>
             <b>{sailors}</b>
+          </li>
+        )}
+        {soldiers + sailors > 0 && (
+          <li className="pop-note">
+            {L(
+              `Askerler${sailors > 0 ? ' ve denizciler' : ''} de barınakta yatar: ${shelter} yerden köylülere ${grow.room} kalır.`,
+              `Soldiers${sailors > 0 ? ' and sailors' : ''} sleep in the housing too: of ${shelter} beds, ${grow.room} are left for villagers.`,
+            )}
+          </li>
+        )}
+        {housing > cap && (
+          <li className="pop-note">
+            {L(
+              `Evler ${housing} kişilik ama sarayın nüfus sınırı ${cap}: fazlası boş kalır.`,
+              `The houses sleep ${housing}, but the palace's population limit is ${cap}: the rest stand empty.`,
+            )}
           </li>
         )}
         {sick >= 0.5 && (
@@ -283,12 +307,6 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
             <b className="down">{Math.round(sick)}</b>
           </li>
         )}
-        <li>
-          <span>{L('Barınak (ev, saray)', 'Housing (houses, palace)')}</span>
-          <b>
-            {homes} · {L(`${housing} kişilik`, `room for ${housing}`)}
-          </b>
-        </li>
         <li>
           <span>{L('İnşaat ustası', 'Builders')}</span>
           <b>
