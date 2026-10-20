@@ -110,10 +110,12 @@ function showerIn(lobbyKey: number, index: number) {
   const s = W.showers
   const windowMs = s.windowSeconds * 1000
   const season = weatherSeason(index * windowMs + windowMs / 2)
-  const odds = s.seasons[season]
+  const odds: { chance: number; storm: number; minSeconds?: number; maxSeconds?: number } = s.seasons[season]
   if (mix(lobbyKey, index, 11) >= odds.chance) return null
-  const length = (s.minSeconds + mix(lobbyKey, index, 12) * (s.maxSeconds - s.minSeconds)) * 1000
   const lead = W.gatherSeconds * 1000
+  // A season may hold its showers longer (snow in winter, rain in autumn), never past the window's room.
+  const [shortest, longest] = [odds.minSeconds ?? s.minSeconds, odds.maxSeconds ?? s.maxSeconds]
+  const length = Math.min(windowMs - 2 * lead, (shortest + mix(lobbyKey, index, 12) * (longest - shortest)) * 1000)
   const start = index * windowMs + lead + Math.floor(mix(lobbyKey, index, 13) * (windowMs - length - 2 * lead))
   const storm = mix(lobbyKey, index, 15) < odds.storm
   const [min, max] = storm ? [s.storm.minRain, s.storm.maxRain] : [s.minRain, s.maxRain]

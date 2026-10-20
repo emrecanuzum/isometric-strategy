@@ -6699,8 +6699,59 @@ input:not([type='range']):focus-visible {
   transform: translate(calc(-50% + var(--stack-shift, 0px)), calc(-50% + var(--stack-shift, 0px)));
 }
 
+/* On a short screen the forward button must never fall off the bottom: the banner stays, the picture gives up its
+   height first (cropped from the middle, never below a strip), the news scrolls and the footer sticks to its foot. */
+.modal .dialog.fortune-dialog {
+  overflow: hidden;
+}
+
+.modal .dialog.fortune-dialog > .fortune-banner {
+  flex: none;
+}
+
+.modal .dialog.fortune-dialog > .fortune-art {
+  flex: 0 1 auto;
+  min-height: min(96px, 18%);
+  max-height: 45%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.modal .dialog.fortune-dialog > .fortune-art > * {
+  flex: none;
+}
+
 .modal .dialog.fortune-dialog .fortune-body {
-  flex: 1 0 auto;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 0;
+}
+
+/* The other dialogs in the line (the house's news, the reports, the summaries) scroll whole when they do not fit;
+   their footer (or the page buttons, or a name field) sticks to the bottom over the scrolled picture and text. */
+.modal .dialog.away > :is(.dialog-foot, .away-nav, .name-edit):last-child,
+.modal .dialog.closed-summary > .dialog-foot:last-child {
+  position: sticky;
+  bottom: calc(var(--px) * -6);
+  z-index: 1;
+  margin-inline: 0;
+  margin-bottom: calc(var(--px) * -6);
+  padding: calc(var(--px) * 4) calc(var(--px) * 6) calc(var(--px) * 6);
+  background: #1c140f;
+  box-shadow: 0 calc(var(--px) * -2) 0 0 rgb(0 0 0 / 35%);
+}
+
+.modal .dialog.fortune-dialog .fortune-body .dialog-foot:last-child {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin-inline: calc(var(--px) * -7);
+  padding: calc(var(--px) * 4) calc(var(--px) * 7) calc(var(--px) * 6);
+  background: #1c140f;
+  box-shadow: 0 calc(var(--px) * -2) 0 0 rgb(0 0 0 / 35%);
 }
 
 .modal .dialog.fortune-dialog .fortune-body > :last-child:not(:first-child),

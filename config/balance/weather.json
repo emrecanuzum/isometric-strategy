@@ -16,8 +16,8 @@
     "seasons": {
       "spring": { "chance": 0.3, "storm": 0.25 },
       "summer": { "chance": 0.03, "storm": 0.6 },
-      "autumn": { "chance": 0.6, "storm": 0.4 },
-      "winter": { "chance": 0.45, "storm": 0 }
+      "autumn": { "chance": 0.85, "storm": 0.4, "minSeconds": 200, "maxSeconds": 480 },
+      "winter": { "chance": 0.85, "storm": 0, "minSeconds": 240, "maxSeconds": 500 }
     },
     "storm": { "minRain": 0.75, "maxRain": 1, "grey": 0.9, "wind": 0.5 }
   },

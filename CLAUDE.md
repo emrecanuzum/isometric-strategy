@@ -407,11 +407,13 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
     sulu kar). Bunların dışında da lobi tohumundan ara sıra geçici
     sağanaklar olur: 10 dakikalık her pencerede, pencerenin ortasındaki
     mevsime göre bir olasılıkla 2,5–7 dk (`showers.seasons`: ilkbahar %30,
-    yaz %3, sonbahar %60, kış %45). Sağanakların bir kısmı **şimşekli
+    yaz %3, sonbahar %85 ve 3,3–8 dk, kış %85 ve 4–8,3 dk; mevsim kendi
+    süresini `minSeconds`/`maxSeconds` ile verebilir). Sağanakların bir kısmı **şimşekli
     fırtınadır** (ilkbahar %25, yaz %60, sonbahar %40; daha sert yağmur,
     daha koyu gök, şimşek ve gök gürültüsü). Ölçülen (lobi olaylarıyla
     birlikte, zamanın yüzdesi): yaz %12,5 (çoğu lobi olaylarından),
-    ilkbahar %20, kış %30 (kar), sonbahar %32; şimşekli fırtına sonbaharda
+    ilkbahar %20, kış %66 (kar), sonbahar %48 (önce kış %36, sonbahar %31;
+    `bun scripts/rain-share.ts`); şimşekli fırtına sonbaharda
     %9, ilkbaharda %5, yazın %4. **Kışın** (`snowSeasons`) yağan her şey
     **kardır**: beyaz, yavaş, salınarak düşen taneler (1–3 piksel), sıçrama
     ve ses yok, şimşek yok, grilik açık soğuk bir pus. Kuraklık, dolunay, kutup ışıkları, tutulma, gökkuşağı ve kuyruklu
@@ -3636,7 +3638,9 @@ krallıkta birer tane olur ve 3 seviyelidir.
   Bu pencerelerin hepsi (olaylar, krizler ve seçimler, elçi ve
   hanedan haberleri, "Sen yokken", sefer raporu, özetler) **aynı boydadır**
   (600 piksel genişlik, ekrana sığdığınca 700 piksel yükseklik; düğmeler hep
-  en altta), sıradaki tam öncekinin yerine gelir. Arkada bekleyen pencere
+  en altta; kısa ekranda alt çubuk hiç kaybolmaz: olay ve elçi pencerelerinde
+  resim ortasından kırpılarak küçülür ve metin kayar, hanedan haberi ve
+  raporlarda pencere kayar, alt çubuk en altta yapışık kalır), sıradaki tam öncekinin yerine gelir. Arkada bekleyen pencere
   varsa, masaüstündeki üst üste pencereler gibi en çok üçü sol üste doğru
   çapraz kayarak öndekinin arkasından görünür (`index.css` →
   `.dialog-stack`, `data-behind`); telefonda (720 pikselden dar) yığın çizilmez,
@@ -4279,6 +4283,17 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   Efektler tarayıcıda sentezlenir (`apps/web/src/audio/sfx.ts`): savaş davulu
   ve boru, savaş ilanı, elçi borusu, kötü haber çanı, inşaat başlarken testere
   ve tokmak, bina bitince çekiç, günün olayları için arp.
+  **Müzik** (`audio/music.ts`) de sentezlenir ve beş parça sırayla çalar (her
+  biri 2,5–3,5 dk, sonu bir geçişin bitiminde; aralarında 3 sn sessizlik; aynı
+  parça art arda gelmez; açılışta hep Han): **Han** (D dorian, 6/8, lavta ve
+  dron; ilk meyhane ezgisi), **Kudüs yolu** (haçlı yolu, D hicaz, ud, ney, güçlü
+  dron, 3+3+2 def), **Kralın yolu** (ortaçağ İngilteresi, G miksolidyen, 3/4,
+  blok flüt, lavta, tabor), **Ufuk** (EU4 tarzı sefer havası, A eolyen, yaylı
+  pad, uzak boru, arp, uzak timpani) ve **Sarhoş Ejder** (fantastik meyhane
+  jig'i, E dorian, keman, tıngırdatılan lavta, bodhrán). Hepsi aynı yankıyı
+  (tek kanallı) ve davullar tek bir gürültü tamponunu paylaşır; notalar kısa
+  ömürlü osilatörlerdir, 150 ms'lik zamanlayıcıyla 0,6 sn önceden kurulur.
+  Geliştirmede `?music=0..4` ilk parçayı seçer.
   Kapatılan müzik sessizce çalmaya devam etmez: sesi kısıldıktan sonra ses
   motoru durdurulur, açılınca yeniden başlar (`music.ts` → `setMuted`). Efekt
   ses motoru da 4 saniye bir şey çalmayınca uyutulur, ilk seste uyanır (yağmur
