@@ -1,4 +1,6 @@
 import { TILE_HEIGHT, TILE_WIDTH, hash, heightAt } from '@game/shared'
+// The worker never sets the language, so the names stay Turkish there; only the main thread shows them.
+import { L } from '@game/shared/lang'
 import type { BuildingKind, KingdomColorId, World } from '@game/shared'
 import { BARK, Canvas, CLOTH, GLASS, ROOF, SACK, STONE, TIMBER, WALL, diamondAt, ellipseAt, pick, ramp, rgb, shadeBlobs, shadow } from './sprites'
 import type { Sprite } from './sprites'
@@ -36,26 +38,26 @@ function tones(name: string, base: number) {
 
 // The kingdom's colour, chosen at founding: the palace's roofs are tiled in it. `swatch` is for the interface.
 export const KINGDOM_COLORS = {
-  royal: { name: 'Lacivert', roofs: ROYAL, swatch: '#3758a4' },
-  crimson: { name: 'Kızıl', roofs: ramp(0x3a0c12, 0x5a1420, 0x7e1e2a, 0xa42c34, 0xc8463e, 0xe0684e), swatch: '#a42c34' },
-  emerald: { name: 'Zümrüt', roofs: ramp(0x0c2a1e, 0x123e2a, 0x1c5a38, 0x2a7a48, 0x3e9a58, 0x62b86c), swatch: '#2a7a48' },
-  violet: { name: 'Mor', roofs: ramp(0x2a1240, 0x3c1c5a, 0x542a7a, 0x6e3c9a, 0x8a56b8, 0xa878d0), swatch: '#6e3c9a' },
-  amber: { name: 'Kehribar', roofs: ramp(0x4a2408, 0x6e3a0c, 0x965214, 0xbc7020, 0xd89032, 0xecb04e), swatch: '#bc7020' },
-  teal: { name: 'Turkuaz', roofs: ramp(0x0a2e36, 0x10444e, 0x186068, 0x22808a, 0x34a0a8, 0x5cc0c4), swatch: '#22808a' },
-  coal: { name: 'Kömür', roofs: ramp(0x1a1a20, 0x26262e, 0x34343e, 0x464652, 0x5c5c6a, 0x7a7a88), swatch: '#464652' },
-  gold: tones('Altın', 0xd4ac2a),
-  rose: tones('Gül', 0xd0688a),
-  sky: tones('Gök', 0x4a9ed6),
-  olive: tones('Zeytin', 0x7c7a2c),
-  rust: tones('Pas', 0x9a4622),
-  plum: tones('Erik', 0x7a2a5c),
-  lime: tones('Fıstık', 0x8cc23a),
-  ivory: tones('Fildişi', 0xd8ceac),
-  cocoa: tones('Kahve', 0x6a4830),
-  orange: tones('Turuncu', 0xf0862a),
-  pine: tones('Çam', 0x1e4c3c),
-  mint: tones('Nane', 0x7ed6b0),
-  peach: tones('Şeftali', 0xf2a07a),
+  royal: { name: L('Lacivert', 'Navy'), roofs: ROYAL, swatch: '#3758a4' },
+  crimson: { name: L('Kızıl', 'Crimson'), roofs: ramp(0x3a0c12, 0x5a1420, 0x7e1e2a, 0xa42c34, 0xc8463e, 0xe0684e), swatch: '#a42c34' },
+  emerald: { name: L('Zümrüt', 'Emerald'), roofs: ramp(0x0c2a1e, 0x123e2a, 0x1c5a38, 0x2a7a48, 0x3e9a58, 0x62b86c), swatch: '#2a7a48' },
+  violet: { name: L('Mor', 'Violet'), roofs: ramp(0x2a1240, 0x3c1c5a, 0x542a7a, 0x6e3c9a, 0x8a56b8, 0xa878d0), swatch: '#6e3c9a' },
+  amber: { name: L('Kehribar', 'Amber'), roofs: ramp(0x4a2408, 0x6e3a0c, 0x965214, 0xbc7020, 0xd89032, 0xecb04e), swatch: '#bc7020' },
+  teal: { name: L('Turkuaz', 'Turquoise'), roofs: ramp(0x0a2e36, 0x10444e, 0x186068, 0x22808a, 0x34a0a8, 0x5cc0c4), swatch: '#22808a' },
+  coal: { name: L('Kömür', 'Coal'), roofs: ramp(0x1a1a20, 0x26262e, 0x34343e, 0x464652, 0x5c5c6a, 0x7a7a88), swatch: '#464652' },
+  gold: tones(L('Altın', 'Gold'), 0xd4ac2a),
+  rose: tones(L('Gül', 'Rose'), 0xd0688a),
+  sky: tones(L('Gök', 'Sky'), 0x4a9ed6),
+  olive: tones(L('Zeytin', 'Olive'), 0x7c7a2c),
+  rust: tones(L('Pas', 'Rust'), 0x9a4622),
+  plum: tones(L('Erik', 'Plum'), 0x7a2a5c),
+  lime: tones(L('Fıstık', 'Pistachio'), 0x8cc23a),
+  ivory: tones(L('Fildişi', 'Ivory'), 0xd8ceac),
+  cocoa: tones(L('Kahve', 'Cocoa'), 0x6a4830),
+  orange: tones(L('Turuncu', 'Orange'), 0xf0862a),
+  pine: tones(L('Çam', 'Pine'), 0x1e4c3c),
+  mint: tones(L('Nane', 'Mint'), 0x7ed6b0),
+  peach: tones(L('Şeftali', 'Peach'), 0xf2a07a),
 } satisfies Record<KingdomColorId, { name: string; roofs: Uint32Array; swatch: string }>
 export type KingdomColor = KingdomColorId
 const KEEP = ramp(0x6a6672, 0x868290, 0xa8a4ac, 0xc8c4c4, 0xdedad2)

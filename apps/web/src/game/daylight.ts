@@ -1,4 +1,5 @@
 import { balance } from '@game/shared'
+import { L } from '../lib/i18n'
 
 // The light over the map through the day: a colour the scene is multiplied by, white at noon, warm at dawn and dusk,
 // dim blue at night (never so dark that the map cannot be read), and the name of that part of the day.
@@ -46,12 +47,12 @@ export function dayPhase(hour: number): DayPhase {
 }
 
 export const PHASE_NAMES: Record<DayPhase, string> = {
-  night: 'Gece',
-  dawn: 'Şafak',
-  morning: 'Sabah',
-  noon: 'Öğle',
-  afternoon: 'İkindi',
-  dusk: 'Akşam',
+  night: L('Gece', 'Night'),
+  dawn: L('Şafak', 'Dawn'),
+  morning: L('Sabah', 'Morning'),
+  noon: L('Öğle', 'Noon'),
+  afternoon: L('İkindi', 'Afternoon'),
+  dusk: L('Akşam', 'Evening'),
 }
 
 export const isNight = (hour: number) => dayPhase(hour) === 'night'

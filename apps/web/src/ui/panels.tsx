@@ -8,10 +8,11 @@ import { Icon } from './icons'
 import type { IconName } from './icons'
 import { BUILDING_NAMES, RESOURCE_ICONS, RESOURCE_NAMES } from './names'
 import { Meter, SpriteView, fmt, times } from './hud/primitives'
+import { L, locale } from '../lib/i18n'
 
 export function CostList({ cost, stock }: { cost?: Cost; stock?: Kingdom['stock'] }) {
   const entries = Object.entries(cost ?? {}) as [Resource, number][]
-  if (entries.length === 0) return <span className="cost free">Ücretsiz</span>
+  if (entries.length === 0) return <span className="cost free">{L('Ücretsiz', 'Free')}</span>
   return (
     <span className="cost">
       {entries.map(([r, v]) => (
@@ -28,7 +29,8 @@ export function CostList({ cost, stock }: { cost?: Cost; stock?: Kingdom['stock'
 export function missingText(cost: Cost | undefined, stock: Kingdom['stock']) {
   const short = (Object.entries(cost ?? {}) as [Resource, number][]).filter(([r, v]) => stock[r] < v)
   if (short.length === 0) return null
-  return `Eksik: ${short.map(([r, v]) => `${fmt(Math.ceil(v - stock[r]))} ${RESOURCE_NAMES[r].toLowerCase()} (sende ${fmt(Math.floor(stock[r]))})`).join(', ')}`
+  const list = short.map(([r, v]) => L(`${fmt(Math.ceil(v - stock[r]))} ${RESOURCE_NAMES[r].toLowerCase()} (sende ${fmt(Math.floor(stock[r]))})`, `${fmt(Math.ceil(v - stock[r]))} ${RESOURCE_NAMES[r].toLowerCase()} (you have ${fmt(Math.floor(stock[r]))})`)).join(', ')
+  return L(`Eksik: ${list}`, `Missing: ${list}`)
 }
 
 export function Missing({ cost, stock }: { cost?: Cost; stock: Kingdom['stock'] }) {
@@ -41,7 +43,7 @@ export function Constructions({ kingdom, now }: { kingdom: Kingdom; now: number 
   const list = constructing(kingdom, now).filter((b) => b.kind !== 'road')
   if (list.length === 0) return null
   return (
-    <div className="queue frame" aria-label="İnşaatlar">
+    <div className="queue frame" aria-label={L('İnşaatlar', 'Constructions')}>
       {list.map((b) => {
         const total = (BUILDINGS[b.kind].buildSeconds ?? 1) * 1000
         const left = b.doneAt - now
@@ -49,8 +51,8 @@ export function Constructions({ kingdom, now }: { kingdom: Kingdom; now: number 
           <div key={b.id} className="queue-item">
             <Icon name="build" size={16} />
             <span>{BUILDING_NAMES[b.kind]}</span>
-            <Meter value={1 - left / total} label={`${BUILDING_NAMES[b.kind]} ilerleme`} segments={8} />
-            <small>{Math.ceil(left / 1000)} sn</small>
+            <Meter value={1 - left / total} label={L(`${BUILDING_NAMES[b.kind]} ilerleme`, `${BUILDING_NAMES[b.kind]} progress`)} segments={8} />
+            <small>{Math.ceil(left / 1000)} {L('sn', 's')}</small>
           </div>
         )
       })}
@@ -77,7 +79,7 @@ export function GoodChoice({
   const bonus = (1 + researchEffects(kingdom, now).trade + fortuneEffects(kingdom, now).trade + guildOf(kingdom, now).trade + projectEffects(kingdom, now).trade) * idleFactor(kingdom, now)
   const idle = selected === null && !!kingdom.trade.idle
   return (
-    <div className="goods choices" role="radiogroup" aria-label="Satılacak mal">
+    <div className="goods choices" role="radiogroup" aria-label={L('Satılacak mal', 'Good to sell')}>
       {GOODS.map((good) => {
         const price = tradePrice(kingdom, good, market, now)
         const base = basePrice(good, market)
@@ -86,20 +88,20 @@ export function GoodChoice({
           <button key={good} role="radio" aria-checked={good === selected} className={good === selected ? 'good active' : 'good'} onClick={() => onGood(good)}>
             <Icon name={RESOURCE_ICONS[good]} size={24} />
             <b>{RESOURCE_NAMES[good]}</b>
-            <small>Stok {fmt(kingdom.stock[good])}</small>
+            <small>{L('Stok', 'Stock')} {fmt(kingdom.stock[good])}</small>
             <small className={price < base * 0.98 ? 'down' : price > base * 1.02 ? 'up' : undefined}>
-              Birimi {price.toFixed(2).replace('.', ',')} altın{atFloor(priceAt(market, good, now), good, market) ? ' · dipte' : ''}
+              {L(`Birimi ${price.toFixed(2).replace('.', ',')} altın`, `${price.toFixed(2)} gold each`)}{atFloor(priceAt(market, good, now), good, market) ? L(' · dipte', ' · at the floor') : ''}
             </small>
             <small className="up">
-              +{Math.round(units * price * bonus)} <Icon name="gold" size={8} /> / sefer ({units} birim)
+              +{Math.round(units * price * bonus)} <Icon name="gold" size={8} /> {L(`/ sefer (${units} birim)`, `/ trip (${units} units)`)}
             </small>
           </button>
         )
       })}
       <button role="radio" aria-checked={idle} className={idle ? 'good none active' : 'good none'} onClick={() => onGood(null)}>
         <Icon name="close" size={16} />
-        <b>Hiçbir şey satma</b>
-        <small>Tüccar evde bekler, stoklar korunur</small>
+        <b>{L('Hiçbir şey satma', 'Sell nothing')}</b>
+        <small>{L('Tüccar evde bekler, stoklar korunur', 'The merchant waits at home, stocks are kept')}</small>
       </button>
     </div>
   )
@@ -113,17 +115,21 @@ export function GoodPicker({ kingdom, onGood, market, now }: { kingdom: Kingdom;
         <header className="sheet-head">
           <Icon name="trade" size={32} />
           <div>
-            <h2 id="good-picker-title">Ticaret noktan kuruldu</h2>
-            <small>Her şey parayla başlar</small>
+            <h2 id="good-picker-title">{L('Ticaret noktan kuruldu', 'Your trading post stands')}</h2>
+            <small>{L('Her şey parayla başlar', 'Everything starts with money')}</small>
           </div>
         </header>
         <p className="hint">
-          Tüccarın hangi malı satsın? Her {Math.round(lobbyTripMs(kingdom.buildings) / 1000)} saniyede bir seçtiğin maldan götürüp altın
-          getirir. Sonradan Ticaret sekmesinden değiştirebilirsin.
+          {L(
+            `Tüccarın hangi malı satsın? Her ${Math.round(lobbyTripMs(kingdom.buildings) / 1000)} saniyede bir seçtiğin maldan götürüp altın getirir. Sonradan Ticaret sekmesinden değiştirebilirsin.`,
+            `Which good should your merchant sell? Every ${Math.round(lobbyTripMs(kingdom.buildings) / 1000)} seconds he takes some of it away and brings back gold. You can change it later in the Trade tab.`,
+          )}
         </p>
         <p className="hint">
-          Dikkat: yapı malzemesi her inşaatta harcanır; onu satarsan tüccar birkaç seferde stoğu bitirir ve ilk binaların için malzeme
-          kalmaz. Başlangıçta savaş malzemesi satmak en güvenlisidir.
+          {L(
+            'Dikkat: yapı malzemesi her inşaatta harcanır; onu satarsan tüccar birkaç seferde stoğu bitirir ve ilk binaların için malzeme kalmaz. Başlangıçta savaş malzemesi satmak en güvenlisidir.',
+            'Careful: building materials go into every construction; sell them and the merchant empties the stock in a few trips, leaving nothing for your first buildings. At the start, selling war materials is safest.',
+          )}
         </p>
         <GoodChoice kingdom={kingdom} selected={null} onGood={onGood} market={market} now={now} />
       </div>
@@ -132,18 +138,18 @@ export function GoodPicker({ kingdom, onGood, market, now }: { kingdom: Kingdom;
 }
 
 const LAND: [keyof Omit<Survey, 'yields'>, string][] = [
-  ['water', 'Nehir / göl'],
-  ['grass', 'Çayır'],
-  ['forest', 'Orman'],
-  ['mountain', 'Dağ'],
-  ['swamp', 'Bataklık'],
-  ['desert', 'Kurak'],
+  ['water', L('Nehir / göl', 'River / lake')],
+  ['grass', L('Çayır', 'Meadow')],
+  ['forest', L('Orman', 'Forest')],
+  ['mountain', L('Dağ', 'Mountain')],
+  ['swamp', L('Bataklık', 'Swamp')],
+  ['desert', L('Kurak', 'Arid')],
 ]
 
 const WHY: Record<Good, string> = {
-  food: 'Balık ve tarla: nehir, göl ve çayır',
-  materials: 'Kereste: orman',
-  arms: 'Maden: dağ',
+  food: L('Balık ve tarla: nehir, göl ve çayır', 'Fish and fields: river, lake and meadow'),
+  materials: L('Kereste: orman', 'Timber: forest'),
+  arms: L('Maden: dağ', 'Ore: mountain'),
 }
 
 const NAME_MAX = 24
@@ -178,17 +184,20 @@ const NAME_SKIP = new Set([
   'Pazarpazar', 'Ağaağıl', 'Ağaada', 'Ağaalan', 'Ataada', 'Ataalan', 'Ataağıl', 'Paşaağıl', 'Tanyatak',
 ])
 // A lord's lands, never a kingdom: the two crown kingdoms are the only kingdoms (CLAUDE.md §7.8).
+// In English the title follows the root too ("Ulupınar Barony"), so the root is always the name's first word.
 const NAME_KINDS = [
-  'Beyliği', 'Diyarı', 'Hanedanı', 'Sancağı', 'Yurdu', 'Malikânesi', 'Lordluğu', 'Hisarı',
-  'Tımarı', 'Zeameti', 'Toprakları', 'Vilayeti', 'Kalesi', 'Obası', 'Ocağı', 'Ağalığı',
+  L('Beyliği', 'Barony'), L('Diyarı', 'Realm'), L('Hanedanı', 'House'), L('Sancağı', 'Banner'), L('Yurdu', 'Homeland'),
+  L('Malikânesi', 'Manor'), L('Lordluğu', 'Lordship'), L('Hisarı', 'Keep'), L('Tımarı', 'Fief'), L('Zeameti', 'Holding'),
+  L('Toprakları', 'Lands'), L('Vilayeti', 'Province'), L('Kalesi', 'Castle'), L('Obası', 'Steading'), L('Ocağı', 'Hearth'),
+  L('Ağalığı', 'Domain'),
 ]
 const pick = <T,>(list: readonly T[]) => list[Math.floor(Math.random() * list.length)]
 // A name to start from, unlike any the lobby's other kingdoms already carry; the player may type their own.
 const suggestName = (taken: ReadonlySet<string> = new Set()) => {
-  const used = new Set([...taken].map((n) => n.split(' ')[0].toLocaleLowerCase('tr-TR')))
+  const used = new Set([...taken].map((n) => n.split(' ')[0].toLocaleLowerCase(locale())))
   for (let tries = 0; ; tries++) {
     const root = pick(NAME_HEADS) + pick(NAME_TAILS)
-    if (NAME_SKIP.has(root) || (used.has(root.toLocaleLowerCase('tr-TR')) && tries < 50)) continue
+    if (NAME_SKIP.has(root) || (used.has(root.toLocaleLowerCase(locale())) && tries < 50)) continue
     const name = `${root} ${pick(NAME_KINDS)}`
     if (name.length <= NAME_MAX) return name
   }
@@ -209,18 +218,18 @@ function SiteDistances({ access }: { access: SiteAccess }) {
   const rows: { icon: IconName; label: string; value: number; text: string; note: string }[] = []
   if (access.trade) {
     const seconds = Math.round(access.trade.tripMs / 1000)
-    rows.push({ icon: 'trade', label: 'Ticaret noktası', value: base / access.trade.tripMs, text: `${access.trade.tiles} karo`, note: `sefer ${seconds} sn${access.trade.outside ? ' · hudut dışı' : ''}` })
-  } else rows.push({ icon: 'trade', label: 'Ticaret noktası', value: 0, text: 'yok', note: 'yakında yol yok' })
+    rows.push({ icon: 'trade', label: L('Ticaret noktası', 'Trading post'), value: base / access.trade.tripMs, text: L(`${access.trade.tiles} karo`, `${access.trade.tiles} tiles`), note: L(`sefer ${seconds} sn${access.trade.outside ? ' · hudut dışı' : ''}`, `trip ${seconds} s${access.trade.outside ? ' · outside the border' : ''}`) })
+  } else rows.push({ icon: 'trade', label: L('Ticaret noktası', 'Trading post'), value: 0, text: L('yok', 'none'), note: L('yakında yol yok', 'no road nearby') })
   if (access.dock) {
-    rows.push({ icon: 'pin', label: 'İskele', value: Math.max(0.05, 1 - access.dock.tiles / 60), text: `${access.dock.tiles} karo`, note: access.dock.outside ? 'hudut dışı, ek alanlı' : 'hudut içinde' })
-  } else rows.push({ icon: 'pin', label: 'İskele', value: 0, text: 'yok', note: 'yakında su yok' })
+    rows.push({ icon: 'pin', label: L('İskele', 'Dock'), value: Math.max(0.05, 1 - access.dock.tiles / 60), text: L(`${access.dock.tiles} karo`, `${access.dock.tiles} tiles`), note: access.dock.outside ? L('hudut dışı, ek alanlı', 'outside the border, with an annex') : L('hudut içinde', 'inside the border') })
+  } else rows.push({ icon: 'pin', label: L('İskele', 'Dock'), value: 0, text: L('yok', 'none'), note: L('yakında su yok', 'no water nearby') })
   return (
     <>
       {rows.map((r) => (
         <span key={r.label} className="site-distance" title={`${r.label}: ${r.text}, ${r.note}`}>
           <span className="site-yield">
             <Icon name={r.icon} size={16} />
-            <Meter value={Math.max(0, Math.min(1, r.value))} tone={r.value >= 0.6 ? 'up' : 'down'} label={`${r.label} uzaklığı`} segments={6} />
+            <Meter value={Math.max(0, Math.min(1, r.value))} tone={r.value >= 0.6 ? 'up' : 'down'} label={L(`${r.label} uzaklığı`, `${r.label} distance`)} segments={6} />
             <b className={r.value >= 0.6 ? 'up' : 'down'}>{r.text}</b>
           </span>
           <small className="site-note">
@@ -265,85 +274,87 @@ export function SitePicker({
       <header className="sheet-head">
         <Icon name="crown" size={32} />
         <div>
-          <h2 id="site-title">Lordluğunu nereye kuracaksın?</h2>
-          <small>Arazi, üretim çarpanlarını belirler</small>
+          <h2 id="site-title">{L('Lordluğunu nereye kuracaksın?', 'Where will you found your lordship?')}</h2>
+          <small>{L('Arazi, üretim çarpanlarını belirler', 'The land sets the production multipliers')}</small>
         </div>
       </header>
       {surveys.length === 0 ? (
-        <p className="hint">Uygun yerler aranıyor…</p>
+        <p className="hint">{L('Uygun yerler aranıyor…', 'Searching for suitable sites…')}</p>
       ) : (
         <>
-          <p className="hint">Sana {surveys.length} yer gösterildi; birini seç. Seçtiğin yer haritada görünür.</p>
-          <div className="site-cards" role="radiogroup" aria-label="Keşfedilen yerler">
+          <p className="hint">{L(`Sana ${surveys.length} yer gösterildi; birini seç. Seçtiğin yer haritada görünür.`, `You have been shown ${surveys.length} sites; pick one. The chosen site shows on the map.`)}</p>
+          <div className="site-cards" role="radiogroup" aria-label={L('Keşfedilen yerler', 'Discovered sites')}>
             {surveys.map((s, i) => (
               <button key={i} role="radio" aria-checked={i === selected} className={i === selected ? 'site-card active' : 'site-card'} onClick={() => onSelect(i)}>
-                <b>{i + 1}. yer</b>
+                <b>{L(`${i + 1}. yer`, `Site ${i + 1}`)}</b>
                 {GOODS.map((good) => (
                   <span key={good} className="site-yield" title={WHY[good]}>
                     <Icon name={RESOURCE_ICONS[good]} size={16} />
-                    <Meter value={s.yields[good] / balance.economy.yield.max} tone={s.yields[good] >= 1 ? 'up' : 'down'} label={`${RESOURCE_NAMES[good]} çarpanı`} segments={6} />
+                    <Meter value={s.yields[good] / balance.economy.yield.max} tone={s.yields[good] >= 1 ? 'up' : 'down'} label={L(`${RESOURCE_NAMES[good]} çarpanı`, `${RESOURCE_NAMES[good]} multiplier`)} segments={6} />
                     <b className={s.yields[good] >= 1 ? 'up' : 'down'}>{times(s.yields[good])}</b>
                   </span>
                 ))}
                 {access[i] && <SiteDistances access={access[i]} />}
                 <small>
                   {LAND.filter(([k]) => s[k] >= 0.05)
-                    .map(([k, name]) => `${name} %${Math.round(s[k] * 100)}`)
+                    .map(([k, name]) => L(`${name} %${Math.round(s[k] * 100)}`, `${name} ${Math.round(s[k] * 100)}%`))
                     .join(' · ')}
                 </small>
               </button>
             ))}
           </div>
           <p className="hint site-why">
-            Nehir ve çayır yemeği, orman yapı malzemesini, dağ savaş malzemesini artırır; bataklık hepsini biraz düşürür. Ticaret noktası saraydan uzaksa tüccarın
-            seferi uzar, daha az satar. İskele hududun dışındaysa çevresinde küçük bir ek alan verilir; köylüler oraya yürür.
+            {L(
+              'Nehir ve çayır yemeği, orman yapı malzemesini, dağ savaş malzemesini artırır; bataklık hepsini biraz düşürür. Ticaret noktası saraydan uzaksa tüccarın seferi uzar, daha az satar. İskele hududun dışındaysa çevresinde küçük bir ek alan verilir; köylüler oraya yürür.',
+              'Rivers and meadows raise food, forests building materials, mountains war materials; swamps lower everything a little. If the trading post lies far from the palace, the merchant\'s trips are longer and he sells less. If the dock lies outside the border, a small annex is granted around it; villagers walk there.',
+            )}
           </p>
         </>
       )}
       <label className="name-field">
-        <span>Lordluğunun adı</span>
+        <span>{L('Lordluğunun adı', 'Your lordship\'s name')}</span>
         <span className="name-row">
           <input
             value={name}
             maxLength={NAME_MAX}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && survey && trimmed && color && onFound(trimmed, color)}
-            placeholder="Ör. Akdere Beyliği"
+            placeholder={L('Ör. Akdere Beyliği', 'E.g. Akdere Barony')}
             autoComplete="off"
             spellCheck={false}
           />
-          <button type="button" className="btn icon-only" onClick={() => setName(suggestName(new Set(names)))} aria-label="Rastgele ad öner" title="Rastgele ad öner">
+          <button type="button" className="btn icon-only" onClick={() => setName(suggestName(new Set(names)))} aria-label={L('Rastgele ad öner', 'Suggest a random name')} title={L('Rastgele ad öner', 'Suggest a random name')}>
             <Icon name="crown" size={16} />
           </button>
         </span>
       </label>
       <div className="color-field">
-        <span>Lordluğunun rengi</span>
+        <span>{L('Lordluğunun rengi', 'Your lordship\'s colour')}</span>
         <div className="color-row">
-          <div className="swatches" role="radiogroup" aria-label="Lordluk rengi">
+          <div className="swatches" role="radiogroup" aria-label={L('Lordluk rengi', 'Lordship colour')}>
             {colors.map((c) => (
               <button
                 key={c}
                 type="button"
                 role="radio"
                 aria-checked={c === color}
-                aria-label={taken.has(c) ? `${KINGDOM_COLORS[c].name} (alınmış)` : KINGDOM_COLORS[c].name}
-                title={taken.has(c) ? `${KINGDOM_COLORS[c].name} — başka bir lordun` : KINGDOM_COLORS[c].name}
+                aria-label={taken.has(c) ? L(`${KINGDOM_COLORS[c].name} (alınmış)`, `${KINGDOM_COLORS[c].name} (taken)`) : KINGDOM_COLORS[c].name}
+                title={taken.has(c) ? L(`${KINGDOM_COLORS[c].name} — başka bir lordun`, `${KINGDOM_COLORS[c].name} — another lord's`) : KINGDOM_COLORS[c].name}
                 className={c === color ? 'swatch active' : 'swatch'}
                 style={{ '--swatch': KINGDOM_COLORS[c].swatch } as React.CSSProperties}
                 disabled={taken.has(c)}
-                data-why={`${KINGDOM_COLORS[c].name} başka bir lordun; bir renk lobide yalnızca bir lordundur`}
+                data-why={L(`${KINGDOM_COLORS[c].name} başka bir lordun; bir renk lobide yalnızca bir lordundur`, `${KINGDOM_COLORS[c].name} belongs to another lord; each colour belongs to one lord per lobby`)}
                 onClick={() => setColor(c)}
               />
             ))}
           </div>
           <span className="slot palace-preview">
-            {color && <SpriteView sprite={palaceIn(color)} scale={0.25} label={`${KINGDOM_COLORS[color].name} saray`} />}
+            {color && <SpriteView sprite={palaceIn(color)} scale={0.25} label={L(`${KINGDOM_COLORS[color].name} saray`, `${KINGDOM_COLORS[color].name} palace`)} />}
           </span>
         </div>
       </div>
-      <button className="btn primary wide" disabled={!survey || !trimmed || !color} data-why={!survey ? 'Önce bir yer seç' : !trimmed ? 'Lordluğuna bir ad ver' : 'Bir renk seç'} onClick={() => color && onFound(trimmed, color)}>
-        <Icon name="crown" size={16} /> Burada kur
+      <button className="btn primary wide" disabled={!survey || !trimmed || !color} data-why={!survey ? L('Önce bir yer seç', 'Pick a site first') : !trimmed ? L('Lordluğuna bir ad ver', 'Give your lordship a name') : L('Bir renk seç', 'Pick a colour')} onClick={() => color && onFound(trimmed, color)}>
+        <Icon name="crown" size={16} /> {L('Burada kur', 'Found here')}
       </button>
     </section>
   )

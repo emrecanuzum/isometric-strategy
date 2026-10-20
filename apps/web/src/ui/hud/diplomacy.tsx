@@ -34,6 +34,7 @@ import { innLook, isCaravanserai } from '../../game/innSprites'
 import { cityInfo } from '../../game/cities'
 import type { Estimate } from '../../net/online'
 import { Icon } from '../icons'
+import { L } from '../../lib/i18n'
 import { RESOURCE_NAMES, UNIT_NAMES } from '../names'
 import { waitWhy } from '../why'
 import type { HudData } from './tabs'
@@ -42,6 +43,7 @@ import { kingdomName, lastSeen, relationTermsIn } from './online'
 import { CrownBanner, CrownsPanel } from './cities'
 import { Meter, Placeholder, Section, SpriteView, Stat, fmt } from './primitives'
 import { PixelSelect } from './PixelSelect'
+import { NameNote } from '../NameNote'
 
 // The diplomacy tab (CLAUDE.md §9.7): the kingdoms of the lobby and the player's standing with each, a kingdom
 // looked at closely (EU4-like: its relations, alliances and wars, and what the spies can tell), and the spies.
@@ -52,53 +54,56 @@ const signedInt = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(
 const relationTone = (v: number) => (v >= d.alliance.minRelation ? 'up' : v <= d.war.maxRelation ? 'down' : 'gold')
 
 export const ENVOY_NAMES: Record<Envoy['kind'], string> = {
-  improve: 'İlişki geliştirme',
-  gift: 'Hediye',
-  tribute: 'Haraç isteği',
-  alliance: 'İttifak teklifi',
-  peace: 'Barış teklifi',
-  insult: 'Hakaret',
-  marriage: 'Evlilik teklifi',
+  improve: L('İlişki geliştirme', 'Improve relations'),
+  gift: L('Hediye', 'Gift'),
+  tribute: L('Haraç isteği', 'Tribute demand'),
+  alliance: L('İttifak teklifi', 'Alliance offer'),
+  peace: L('Barış teklifi', 'Peace offer'),
+  insult: L('Hakaret', 'Insult'),
+  marriage: L('Evlilik teklifi', 'Marriage proposal'),
 }
-export const TOPIC_NAMES: Record<SpyTopic, string> = { stores: 'Hammadde', army: 'Ordu', diplomacy: 'Diplomasi' }
+export const TOPIC_NAMES: Record<SpyTopic, string> = { stores: L('Hammadde', 'Stores'), army: L('Ordu', 'Army'), diplomacy: L('Diplomasi', 'Diplomacy') }
 export const OPERATION_NAMES: Record<Operation, string> = {
-  burn: 'Depoları yak',
-  delay: 'İnşaatları geciktir',
-  kidnap: 'Kraliçeyi kaçır',
-  revolt: 'İsyan kışkırt',
-  townRevolt: 'Kasabada isyan kışkırt',
+  burn: L('Depoları yak', 'Burn the stores'),
+  delay: L('İnşaatları geciktir', 'Delay construction'),
+  kidnap: L('Kraliçeyi kaçır', 'Kidnap the queen'),
+  revolt: L('İsyan kışkırt', 'Incite a revolt'),
+  townRevolt: L('Kasabada isyan kışkırt', 'Incite a town revolt'),
 }
 const OPERATION_NOTES: Record<Operation, string> = {
-  burn: 'Yemek ve yapı malzemesinin dörtte biri yanar',
-  delay: 'Süren inşaatlar uzar',
-  kidnap: 'Kraliçe senin elinde kalır; halkı yasa boğulur, fidye ister',
-  revolt: 'On dakika üretimi yarıya iner, halk huzursuzlanır',
-  townRevolt: `Seçtiğin kasabasının sadakati ${-balance.espionage.operations.townRevolt.loyalty} düşer; çok düşerse kasaba ayaklanır, sonunda kopar`,
+  burn: L('Yemek ve yapı malzemesinin dörtte biri yanar', 'A quarter of their food and building materials burns'),
+  delay: L('Süren inşaatlar uzar', 'Their ongoing construction takes longer'),
+  kidnap: L('Kraliçe senin elinde kalır; halkı yasa boğulur, fidye ister', 'The queen stays in your hands, her people sink into mourning, and you can ask a ransom'),
+  revolt: L('On dakika üretimi yarıya iner, halk huzursuzlanır', 'For ten minutes their production is halved and the people grow restless'),
+  townRevolt: L(
+    `Seçtiğin kasabasının sadakati ${-balance.espionage.operations.townRevolt.loyalty} düşer; çok düşerse kasaba ayaklanır, sonunda kopar`,
+    `The chosen town's loyalty drops by ${-balance.espionage.operations.townRevolt.loyalty}; if it falls far enough the town revolts and finally breaks away`,
+  ),
 }
 export const CLAIM_NAMES: Record<string, string> = {
-  spy: 'casus yakalandı',
-  tribute: 'haraç reddedildi',
-  renege: 'haraç kesildi',
-  alliance: 'ittifak bozuldu',
-  kidnap: 'kraliçe kaçırıldı',
-  sabotage: 'sabotaj',
-  insult: 'hakarete uğradı',
-  raid: 'ticaret yolu yağmalandı',
+  spy: L('casus yakalandı', 'spy caught'),
+  tribute: L('haraç reddedildi', 'tribute refused'),
+  renege: L('haraç kesildi', 'tribute stopped'),
+  alliance: L('ittifak bozuldu', 'alliance broken'),
+  kidnap: L('kraliçe kaçırıldı', 'queen kidnapped'),
+  sabotage: L('sabotaj', 'sabotage'),
+  insult: L('hakarete uğradı', 'insulted'),
+  raid: L('ticaret yolu yağmalandı', 'trade route raided'),
 }
 export const TERMS_NAMES: Record<PeaceTerms['kind'], string> = {
-  white: 'Beyaz barış',
-  gold: 'Altın iste',
-  tribute: 'Haraç iste',
-  offer: 'Altın öde',
+  white: L('Beyaz barış', 'White peace'),
+  gold: L('Altın iste', 'Demand gold'),
+  tribute: L('Haraç iste', 'Demand tribute'),
+  offer: L('Altın öde', 'Pay gold'),
 }
 export const describeTerms = (t: PeaceTerms | null | undefined) =>
   !t || t.kind === 'white'
-    ? 'beyaz barış (kimse bir şey ödemez)'
+    ? L('beyaz barış (kimse bir şey ödemez)', 'white peace (nobody pays anything)')
     : t.kind === 'gold'
-      ? `onlara ${t.gold} altın ödemen karşılığında`
+      ? L(`onlara ${t.gold} altın ödemen karşılığında`, `in return for you paying them ${t.gold} gold`)
       : t.kind === 'tribute'
-        ? `onlara her turda ${t.gold} altın haraç vermen karşılığında`
-        : `sana ${t.gold} altın vermeleri karşılığında`
+        ? L(`onlara her turda ${t.gold} altın haraç vermen karşılığında`, `in return for you paying them ${t.gold} gold tribute every round`)
+        : L(`sana ${t.gold} altın vermeleri karşılığında`, `in return for them giving you ${t.gold} gold`)
 
 export function Dot({ color }: { color: string | null | undefined }) {
   return <i className="kingdom-dot" style={{ background: swatchOf(color) }} aria-hidden />
@@ -107,7 +112,7 @@ export function Dot({ color }: { color: string | null | undefined }) {
 function RelationBar({ value }: { value: number }) {
   return (
     <span className="relation">
-      <Meter value={(value + 100) / 200} tone={relationTone(value)} label="İlişki" segments={10} />
+      <Meter value={(value + 100) / 200} tone={relationTone(value)} label={L('İlişki', 'Relations')} segments={10} />
       <b className={relationTone(value) === 'gold' ? undefined : relationTone(value)}>{signedInt(value)}</b>
     </span>
   )
@@ -115,10 +120,10 @@ function RelationBar({ value }: { value: number }) {
 
 const stateChips = (online: Online, id: number) => {
   const chips: { label: string; tone?: 'up' | 'down' }[] = []
-  if (allied(online.pacts, online.me, id)) chips.push({ label: 'Müttefik', tone: 'up' })
-  if (atWar(online.pacts, online.me, id)) chips.push({ label: 'Savaşta', tone: 'down' })
-  if (tributeBetween(online.pacts, online.me, id)) chips.push({ label: 'Haraç veriyor' })
-  if (tributeBetween(online.pacts, id, online.me)) chips.push({ label: 'Haraç alıyor' })
+  if (allied(online.pacts, online.me, id)) chips.push({ label: L('Müttefik', 'Ally'), tone: 'up' })
+  if (atWar(online.pacts, online.me, id)) chips.push({ label: L('Savaşta', 'At war'), tone: 'down' })
+  if (tributeBetween(online.pacts, online.me, id)) chips.push({ label: L('Haraç veriyor', 'Pays tribute') })
+  if (tributeBetween(online.pacts, id, online.me)) chips.push({ label: L('Haraç alıyor', 'Takes tribute') })
   return chips
 }
 
@@ -139,13 +144,13 @@ export function DiplomacyTab(data: HudData) {
   return (
     <>
       <Subtabs
-        label="Diplomasi"
+        label={L('Diplomasi', 'Diplomacy')}
         part={view}
         onPart={setView}
         parts={[
-          { id: 'kingdoms', name: 'Lordlar', icon: 'banner', dot: incoming > 0 },
-          { id: 'crowns', name: 'Krallık', icon: 'crown', dot: crownReady },
-          { id: 'spies', name: 'Casusluk', icon: 'eye', count: active },
+          { id: 'kingdoms', name: L('Lordlar', 'Lords'), icon: 'banner', dot: incoming > 0 },
+          { id: 'crowns', name: L('Krallık', 'Kingdom'), icon: 'crown', dot: crownReady },
+          { id: 'spies', name: L('Casusluk', 'Espionage'), icon: 'eye', count: active },
         ]}
       />
       {view === 'kingdoms' && <KingdomList data={data} online={online} />}
@@ -170,7 +175,8 @@ function KingdomList({ data, online }: { data: HudData; online: Online }) {
             <CrownBanner world={data.world} liege={k.liege} /> {k.name}
           </b>
           <small>
-            {k.username ?? '—'} · {k.palace}. seviye saray{k.queen ? ' · kraliçe' : ''}
+            {k.username ?? '—'} · {L(`${k.palace}. seviye saray`, `level ${k.palace} palace`)}
+            {k.queen ? L(' · kraliçe', ' · queen') : ''}
             {k.id !== online.me && <> · {lastSeen(k.seenAt, data.now)}</>}
           </small>
           <span className="chips">
@@ -192,23 +198,23 @@ function KingdomList({ data, online }: { data: HudData; online: Online }) {
   return (
     <>
       {incoming.length > 0 && <Proposals online={online} envoys={incoming} />}
-      <Section title="Müttefikler" icon="shield" aside={`${allies.length}`}>
+      <Section title={L('Müttefikler', 'Allies')} icon="shield" aside={`${allies.length}`}>
         {allies.length === 0 ? (
-          <p className="hint">Müttefikin yok. İttifak için ilişkin en az +{d.alliance.minRelation} olmalı.</p>
+          <p className="hint">{L(`Müttefikin yok. İttifak için ilişkin en az +${d.alliance.minRelation} olmalı.`, `You have no allies. An alliance needs relations of at least +${d.alliance.minRelation}.`)}</p>
         ) : (
           <ul className="places">{allies.map(row)}</ul>
         )}
       </Section>
-      <Section title="Lordlar" icon="banner" aside={`${rest.length}`}>
+      <Section title={L('Lordlar', 'Lords')} icon="banner" aside={`${rest.length}`}>
         {others.length === 0 ? (
-          <Placeholder icon="banner" title="Lobide başka lord yok">
-            Biri katılınca burada görünecek.
+          <Placeholder icon="banner" title={L('Lobide başka lord yok', 'No other lord in the lobby')}>
+            {L('Biri katılınca burada görünecek.', 'They will show up here once someone joins.')}
           </Placeholder>
         ) : (
           <ul className="places">{rest.map(row)}</ul>
         )}
       </Section>
-      <Section title="Tarafsız hanlar" icon="inn" aside="ordular burada moral toplar">
+      <Section title={L('Tarafsız hanlar', 'Neutral inns')} icon="inn" aside={L('ordular burada moral toplar', 'armies regain morale here')}>
         <ul className="places">
           {inns.map(({ p, index, distance }) => {
             const info = innInfo(world, index, isCaravanserai(world, p))
@@ -218,10 +224,10 @@ function KingdomList({ data, online }: { data: HudData; online: Online }) {
               <span>
                 <b>{info.name}</b>
                 <small>
-                  {INN_KIND_NAMES[info.kind]} · {distance} karo uzakta
+                  {INN_KIND_NAMES[info.kind]} · {L(`${distance} karo uzakta`, `${distance} tiles away`)}
                 </small>
               </span>
-              <button className="btn icon-only" onClick={() => onShow({ x: p.x + 1, y: p.y + 1 })} aria-label="Haritada göster">
+              <button className="btn icon-only" onClick={() => onShow({ x: p.x + 1, y: p.y + 1 })} aria-label={L('Haritada göster', 'Show on map')}>
                 <Icon name="pin" size={16} />
               </button>
             </li>
@@ -235,7 +241,7 @@ function KingdomList({ data, online }: { data: HudData; online: Online }) {
 
 export function Proposals({ online, envoys }: { online: Online; envoys: Envoy[] }) {
   return (
-    <Section title="Bekleyen teklifler" icon="scroll" aside={`${envoys.length}`}>
+    <Section title={L('Bekleyen teklifler', 'Pending proposals')} icon="scroll" aside={`${envoys.length}`}>
       <ul className="places">
         {envoys.map((e) => (
           <li key={e.id}>
@@ -246,19 +252,25 @@ export function Proposals({ online, envoys }: { online: Online; envoys: Envoy[] 
               </b>
               <small>
                 {e.kind === 'tribute'
-                  ? `Her turda ${e.gold} altın istiyor. Reddetmek ilişkiyi ${-d.tribute.reject} düşürür ve onlara savaş gerekçesi verir.`
+                  ? L(
+                      `Her turda ${e.gold} altın istiyor. Reddetmek ilişkiyi ${-d.tribute.reject} düşürür ve onlara savaş gerekçesi verir.`,
+                      `Demands ${e.gold} gold every round. Refusing lowers relations by ${-d.tribute.reject} and gives them a casus belli.`,
+                    )
                   : e.kind === 'alliance'
-                    ? 'Müttefik olmak istiyor.'
+                    ? L('Müttefik olmak istiyor.', 'Wants to become your ally.')
                     : e.terms?.kind === 'marriage'
-                      ? `${e.terms.name} adlı prensesini hanedanına gelin vermek istiyor. Kabul edersen ilişkiniz +${balance.dynasty.intrigue.marriage.lord.relation} artar.`
-                      : `Barış: ${describeTerms(e.terms as PeaceTerms | null)}.`}
+                      ? L(
+                          `${e.terms.name} adlı prensesini hanedanına gelin vermek istiyor. Kabul edersen ilişkiniz +${balance.dynasty.intrigue.marriage.lord.relation} artar.`,
+                          `Offers Princess ${e.terms.name} as a bride for your house. Accept and your relations rise by +${balance.dynasty.intrigue.marriage.lord.relation}.`,
+                        )
+                      : L(`Barış: ${describeTerms(e.terms as PeaceTerms | null)}.`, `Peace: ${describeTerms(e.terms as PeaceTerms | null)}.`)}
               </small>
             </span>
             <button className="btn small" onClick={() => online.act({ type: 'respond', envoy: e.id, accept: true })}>
-              Kabul
+              {L('Kabul', 'Accept')}
             </button>
             <button className="btn small danger" onClick={() => online.act({ type: 'respond', envoy: e.id, accept: false })}>
-              Ret
+              {L('Ret', 'Refuse')}
             </button>
           </li>
         ))}
@@ -269,7 +281,7 @@ export function Proposals({ online, envoys }: { online: Online; envoys: Envoy[] 
 
 function Range({ label, value, unit }: { label: string; value: Estimate | null | undefined; unit?: string }) {
   // Turkish puts the percent sign first: %90–95.
-  return <Stat label={label} value={value ? (unit === '%' ? `%${fmt(value.lo)}–${fmt(value.hi)}` : `${fmt(value.lo)}–${fmt(value.hi)}${unit ?? ''}`) : '?'} />
+  return <Stat label={label} value={value ? (unit === '%' ? L(`%${fmt(value.lo)}–${fmt(value.hi)}`, `${fmt(value.lo)}–${fmt(value.hi)}%`) : `${fmt(value.lo)}–${fmt(value.hi)}${unit ?? ''}`) : '?'} />
 }
 
 type LordPart = 'relation' | 'envoy' | 'pacts' | 'hostile' | 'spies'
@@ -326,16 +338,16 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
   const best = intel ? Math.max(...Object.values(intel.strength)) : 0
   const spiesThere = online.missions.filter((m) => m.owner_id === me && m.target_id === target.id && !m.ended_at).length
   const parts: Part<LordPart>[] = [
-    { id: 'relation', name: 'İlişki', icon: 'banner' },
-    { id: 'envoy', name: 'Elçi', icon: 'scroll', count: travelling.length || undefined },
-    { id: 'pacts', name: 'Anlaşmalar', icon: 'crown', dot: war },
-    { id: 'hostile', name: 'Düşmanlık', icon: 'swords' },
-    { id: 'spies', name: 'Casusluk', icon: 'eye', count: spiesThere || undefined },
+    { id: 'relation', name: L('İlişki', 'Relations'), icon: 'banner' },
+    { id: 'envoy', name: L('Elçi', 'Envoy'), icon: 'scroll', count: travelling.length || undefined },
+    { id: 'pacts', name: L('Anlaşmalar', 'Treaties'), icon: 'crown', dot: war },
+    { id: 'hostile', name: L('Düşmanlık', 'Hostility'), icon: 'swords' },
+    { id: 'spies', name: L('Casusluk', 'Espionage'), icon: 'eye', count: spiesThere || undefined },
   ]
   return (
     <>
       <button className="btn small back" onClick={() => online.setFocus(null)}>
-        ← Lordlar
+        ← {L('Lordlar', 'Lords')}
       </button>
       <div className="feature kingdom-head">
         <Dot color={target.color} />
@@ -343,41 +355,57 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
           <b>
             <CrownBanner world={data.world} liege={target.liege} /> {target.name}
           </b>
+          <NameNote name={target.name} />
           <p className="hint">
-            {target.username ?? '—'} · {target.palace}. seviye saray{target.queen ? ' · kraliçesi var' : ''} · {lastSeen(target.seenAt, now)}
+            {target.username ?? '—'} · {L(`${target.palace}. seviye saray`, `level ${target.palace} palace`)}
+            {target.queen ? L(' · kraliçesi var', ' · has a queen') : ''} · {lastSeen(target.seenAt, now)}
           </p>
           <p className="hint">
-            {target.liege != null && data.world.cities[target.liege] ? `${cityInfo(data.world, target.liege).name} lordu` : 'Henüz bir taca biat etmedi'}
-            {bond.max < 100 && ` · rakip taçların lordlarısınız: ilişki ${bond.rest} başlar, en fazla +${bond.max} olur${d.alliance.minRelation > bond.max ? ', ittifak kurulamaz' : ''}`}
+            {target.liege != null && data.world.cities[target.liege]
+              ? L(`${cityInfo(data.world, target.liege).name} lordu`, `A lord of the ${cityInfo(data.world, target.liege).name}`)
+              : L('Henüz bir taca biat etmedi', 'Has not yet sworn fealty to a crown')}
+            {bond.max < 100 &&
+              L(
+                ` · rakip taçların lordlarısınız: ilişki ${bond.rest} başlar, en fazla +${bond.max} olur${d.alliance.minRelation > bond.max ? ', ittifak kurulamaz' : ''}`,
+                ` · you serve rival crowns: relations start at ${bond.rest} and reach at most +${bond.max}${d.alliance.minRelation > bond.max ? '; no alliance is possible' : ''}`,
+              )}
           </p>
         </div>
-        <button className="btn icon-only" onClick={() => data.onShow(target.site)} aria-label="Haritada göster">
+        <button className="btn icon-only" onClick={() => data.onShow(target.site)} aria-label={L('Haritada göster', 'Show on map')}>
           <Icon name="pin" size={16} />
         </button>
       </div>
-      <Subtabs label={`${target.name} ile`} parts={parts} part={part} onPart={setPart} />
+      <Subtabs label={L(`${target.name} ile`, `With ${target.name}`)} parts={parts} part={part} onPart={setPart} />
       {part === 'relation' && (
         <>
-        <Section title="Seninle ilişkisi" icon="banner">
+        <Section title={L('Seninle ilişkisi', 'Relations with you')} icon="banner">
           <RelationBar value={relation} />
           {(target.shieldUntil ?? 0) > now && (
             <p className="hint">
-              <Icon name="shield" size={16} /> Yakın zamanda kuşatıldı: sonraki kuşatmaya {Math.ceil(((target.shieldUntil ?? 0) - now) / 60000)} dk var.
+              <Icon name="shield" size={16} />{' '}
+              {L(
+                `Yakın zamanda kuşatıldı: sonraki kuşatmaya ${Math.ceil(((target.shieldUntil ?? 0) - now) / 60000)} dk var.`,
+                `Besieged recently: ${Math.ceil(((target.shieldUntil ?? 0) - now) / 60000)} min until the next siege.`,
+              )}
             </p>
           )}
           {warPact && (
             <div className="sign">
-              <span>Savaş puanı</span>
-              <Meter value={(score + 100) / 200} tone={score > 0 ? 'up' : score < 0 ? 'down' : 'gold'} label="Savaş puanı" segments={10} />
+              <span>{L('Savaş puanı', 'War score')}</span>
+              <Meter value={(score + 100) / 200} tone={score > 0 ? 'up' : score < 0 ? 'down' : 'gold'} label={L('Savaş puanı', 'War score')} segments={10} />
               <b className={score > 0 ? 'up' : score < 0 ? 'down' : undefined}>{signedInt(score)}</b>
             </div>
           )}
           {myClaims.map((c) => (
             <p key={c.expires_at + c.reason} className="hint">
-              <Icon name="swords" size={16} /> Savaş gerekçen var: {CLAIM_NAMES[c.reason] ?? c.reason} ({Math.ceil((Date.parse(c.expires_at) - now) / 60000)} dk)
+              <Icon name="swords" size={16} />{' '}
+              {L(
+                `Savaş gerekçen var: ${CLAIM_NAMES[c.reason] ?? c.reason} (${Math.ceil((Date.parse(c.expires_at) - now) / 60000)} dk)`,
+                `You have a casus belli: ${CLAIM_NAMES[c.reason] ?? c.reason} (${Math.ceil((Date.parse(c.expires_at) - now) / 60000)} min)`,
+              )}
             </p>
           ))}
-          {theirClaim && <p className="hint">Onların da sana karşı bir savaş gerekçesi var.</p>}
+          {theirClaim && <p className="hint">{L('Onların da sana karşı bir savaş gerekçesi var.', 'They also hold a casus belli against you.')}</p>}
           <span className="chips">
             {stateChips(online, target.id).map((c) => (
               <span key={c.label} className={`chip ${c.tone ?? ''}`}>
@@ -386,8 +414,10 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
             ))}
           </span>
           <p className="hint">
-            İttifak için en az +{d.alliance.minRelation} gerekir. Savaş ilanı için ilişki en fazla {d.war.maxRelation} olmalı; savaş gerekçen varsa{' '}
-            {d.casusBelli.maxRelation} yeter. Gerekçesiz savaş açan, diğer bütün lordlarla {d.casusBelli.infamy} ilişki kaybeder.
+            {L(
+              `İttifak için en az +${d.alliance.minRelation} gerekir. Savaş ilanı için ilişki en fazla ${d.war.maxRelation} olmalı; savaş gerekçen varsa ${d.casusBelli.maxRelation} yeter. Gerekçesiz savaş açan, diğer bütün lordlarla ${d.casusBelli.infamy} ilişki kaybeder.`,
+              `An alliance needs at least +${d.alliance.minRelation}. Declaring war needs relations of at most ${d.war.maxRelation}; with a casus belli ${d.casusBelli.maxRelation} is enough. Whoever starts a war without one loses ${d.casusBelli.infamy} relations with every other lord.`,
+            )}
           </p>
         </Section>
         </>
@@ -399,69 +429,89 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
       )}
       {part === 'envoy' && (
         <>
-        <Section title="Elçi gönder" icon="scroll" aside={`${d.envoySeconds} sn yol`}>
-          {war && <p className="hint">Savaştayken elçiler yalnızca barış götürür.</p>}
+        <Section title={L('Elçi gönder', 'Send an envoy')} icon="scroll" aside={L(`${d.envoySeconds} sn yol`, `${d.envoySeconds} s on the road`)}>
+          {war && <p className="hint">{L('Savaştayken elçiler yalnızca barış götürür.', 'In wartime envoys carry only peace offers.')}</p>}
           {standing < 0.995 && (
             <p className="hint">
-              <Icon name="warn" size={16} /> İtibarın %{Math.round(standing * 100)}: başka lordlarla aran kötü olduğu için ilişki geliştirme ve hediyeler daha az
-              etkili.
+              <Icon name="warn" size={16} />{' '}
+              {L(
+                `İtibarın %${Math.round(standing * 100)}: başka lordlarla aran kötü olduğu için ilişki geliştirme ve hediyeler daha az etkili.`,
+                `Your reputation is ${Math.round(standing * 100)}%: because you are on bad terms with other lords, improving relations and gifts work less well.`,
+              )}
             </p>
           )}
           {relation < 0 && (
-            <p className="hint">Sana kötü gözle baktıkları için buradaki casus ağın daha yavaş kurulur ve casusların daha çabuk yakalanır.</p>
+            <p className="hint">
+              {L(
+                'Sana kötü gözle baktıkları için buradaki casus ağın daha yavaş kurulur ve casusların daha çabuk yakalanır.',
+                'Because they look on you with suspicion, your spy network here grows more slowly and your spies are caught sooner.',
+              )}
+            </p>
           )}
           <div className="actions">
             {!war && (
             <button
               className="btn small"
               disabled={sending('improve') || cooling > 0 || kingdom.stock.gold < d.improve.cost.gold}
-              data-why={sending('improve') ? 'Elçin zaten yolda' : cooling > 0 ? waitWhy(cooling, 'Elçin yeni döndü; ') : `Yeterli altın yok (eksik: ${Math.ceil(d.improve.cost.gold - kingdom.stock.gold)})`}
+              data-why={
+                sending('improve')
+                  ? L('Elçin zaten yolda', 'Your envoy is already on the road')
+                  : cooling > 0
+                    ? waitWhy(cooling, L('Elçin yeni döndü; ', 'Your envoy has just come back; '))
+                    : L(`Yeterli altın yok (eksik: ${Math.ceil(d.improve.cost.gold - kingdom.stock.gold)})`, `Not enough gold (short: ${Math.ceil(d.improve.cost.gold - kingdom.stock.gold)})`)
+              }
               onClick={() => envoy('improve')}
-              title={cooling > 0 ? `${Math.ceil(cooling / 1000)} sn sonra yeniden` : undefined}
+              title={cooling > 0 ? L(`${Math.ceil(cooling / 1000)} sn sonra yeniden`, `Again in ${Math.ceil(cooling / 1000)} s`) : undefined}
             >
-              İlişki geliştir · {d.improve.cost.gold} altın (+{Math.round(d.improve.gain * standing)})
+              {L(`İlişki geliştir · ${d.improve.cost.gold} altın (+${Math.round(d.improve.gain * standing)})`, `Improve relations · ${d.improve.cost.gold} gold (+${Math.round(d.improve.gain * standing)})`)}
             </button>
             )}
             {!war && (
             <span className="stepper">
-              <button className="btn icon-only" disabled={gift <= d.gift.minGold} data-why={`Hediye en az ${d.gift.minGold} altın`} onClick={() => setGift(Math.max(d.gift.minGold, gift - 10))} aria-label="Azalt">
+              <button className="btn icon-only" disabled={gift <= d.gift.minGold} data-why={L(`Hediye en az ${d.gift.minGold} altın`, `A gift must be at least ${d.gift.minGold} gold`)} onClick={() => setGift(Math.max(d.gift.minGold, gift - 10))} aria-label={L('Azalt', 'Decrease')}>
                 <Icon name="minus" size={16} />
               </button>
               <span className="stepper-value">
-                <b>{gift}</b> altın
+                <b>{gift}</b> {L('altın', 'gold')}
               </span>
-              <button className="btn icon-only" onClick={() => setGift(gift + 10)} aria-label="Artır">
+              <button className="btn icon-only" onClick={() => setGift(gift + 10)} aria-label={L('Artır', 'Increase')}>
                 <Icon name="plus" size={16} />
               </button>
-              <button className="btn small" disabled={kingdom.stock.gold < gift || sending('gift')} data-why={sending('gift') ? 'Hediye elçin zaten yolda' : `Yeterli altın yok (eksik: ${Math.ceil(gift - kingdom.stock.gold)})`} onClick={() => envoy('gift', { gold: gift })}>
-                Hediye (+{Math.min(d.gift.maxGain, Math.round(gift * d.gift.relationPerGold))})
+              <button className="btn small" disabled={kingdom.stock.gold < gift || sending('gift')} data-why={sending('gift') ? L('Hediye elçin zaten yolda', 'Your gift envoy is already on the road') : L(`Yeterli altın yok (eksik: ${Math.ceil(gift - kingdom.stock.gold)})`, `Not enough gold (short: ${Math.ceil(gift - kingdom.stock.gold)})`)} onClick={() => envoy('gift', { gold: gift })}>
+                {L('Hediye', 'Gift')} (+{Math.min(d.gift.maxGain, Math.round(gift * d.gift.relationPerGold))})
               </button>
             </span>
             )}
             {!war && !ally && !theyPay && (
               <span className="stepper">
-                <button className="btn icon-only" disabled={tribute <= d.tribute.minGold} data-why={`Haraç en az ${d.tribute.minGold} altın/tur`} onClick={() => setTribute(tribute - 1)} aria-label="Azalt">
+                <button className="btn icon-only" disabled={tribute <= d.tribute.minGold} data-why={L(`Haraç en az ${d.tribute.minGold} altın/tur`, `Tribute must be at least ${d.tribute.minGold} gold/round`)} onClick={() => setTribute(tribute - 1)} aria-label={L('Azalt', 'Decrease')}>
                   <Icon name="minus" size={16} />
                 </button>
                 <span className="stepper-value">
-                  <b>{tribute}</b> altın/tur
+                  <b>{tribute}</b> {L('altın/tur', 'gold/round')}
                 </span>
-                <button className="btn icon-only" disabled={tribute >= d.tribute.maxGold} data-why={`Haraç en fazla ${d.tribute.maxGold} altın/tur`} onClick={() => setTribute(tribute + 1)} aria-label="Artır">
+                <button className="btn icon-only" disabled={tribute >= d.tribute.maxGold} data-why={L(`Haraç en fazla ${d.tribute.maxGold} altın/tur`, `Tribute can be at most ${d.tribute.maxGold} gold/round`)} onClick={() => setTribute(tribute + 1)} aria-label={L('Artır', 'Increase')}>
                   <Icon name="plus" size={16} />
                 </button>
-                <button className="btn small" disabled={sending('tribute')} data-why="Haraç elçin zaten yolda" onClick={() => envoy('tribute', { gold: tribute })}>
-                  Haraç iste
+                <button className="btn small" disabled={sending('tribute')} data-why={L('Haraç elçin zaten yolda', 'Your tribute envoy is already on the road')} onClick={() => envoy('tribute', { gold: tribute })}>
+                  {L('Haraç iste', 'Demand tribute')}
                 </button>
               </span>
             )}
             {!ally && !war && (
-              <button className="btn small" disabled={relation < d.alliance.minRelation || sending('alliance')} data-why={sending('alliance') ? 'İttifak elçin zaten yolda' : `İttifak için ilişki en az +${d.alliance.minRelation} olmalı (şu an ${Math.round(relation)})`} onClick={() => envoy('alliance')}>
-                İttifak teklif et {relation < d.alliance.minRelation ? `(+${d.alliance.minRelation} gerekir)` : ''}
+              <button className="btn small" disabled={relation < d.alliance.minRelation || sending('alliance')} data-why={
+                  sending('alliance')
+                    ? L('İttifak elçin zaten yolda', 'Your alliance envoy is already on the road')
+                    : L(`İttifak için ilişki en az +${d.alliance.minRelation} olmalı (şu an ${Math.round(relation)})`, `An alliance needs relations of at least +${d.alliance.minRelation} (now ${Math.round(relation)})`)
+                }
+                onClick={() => envoy('alliance')}
+              >
+                {L('İttifak teklif et', 'Offer an alliance')} {relation < d.alliance.minRelation ? L(`(+${d.alliance.minRelation} gerekir)`, `(needs +${d.alliance.minRelation})`) : ''}
               </button>
             )}
             {war && (
               <div className="peace">
-                <div className="segmented choices" role="radiogroup" aria-label="Barış şartları">
+                <div className="segmented choices" role="radiogroup" aria-label={L('Barış şartları', 'Peace terms')}>
                   {(Object.keys(TERMS_NAMES) as PeaceTerms['kind'][]).map((k) => (
                     <button key={k} className="btn small" role="radio" aria-checked={terms === k} onClick={() => (setTerms(k), k === 'tribute' && setTermsGold((g) => Math.min(g, balance.diplomacy.tribute.maxGold)))}>
                       {TERMS_NAMES[k]}
@@ -470,18 +520,18 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                 </div>
                 {terms !== 'white' && (
                   <span className="stepper">
-                    <button className="btn icon-only" disabled={termsGold <= (terms === 'tribute' ? 1 : 10)} data-why="Daha az istenemez" onClick={() => setTermsGold(Math.max(1, termsGold - (terms === 'tribute' ? 1 : 50)))} aria-label="Azalt">
+                    <button className="btn icon-only" disabled={termsGold <= (terms === 'tribute' ? 1 : 10)} data-why={L('Daha az istenemez', 'Cannot ask for less')} onClick={() => setTermsGold(Math.max(1, termsGold - (terms === 'tribute' ? 1 : 50)))} aria-label={L('Azalt', 'Decrease')}>
                       <Icon name="minus" size={16} />
                     </button>
                     <span className="stepper-value">
-                      <b>{termsGold}</b> {terms === 'tribute' ? 'altın/tur' : 'altın'}
+                      <b>{termsGold}</b> {terms === 'tribute' ? L('altın/tur', 'gold/round') : L('altın', 'gold')}
                     </span>
                     <button
                       className="btn icon-only"
                       disabled={terms === 'tribute' && termsGold >= balance.diplomacy.tribute.maxGold}
-                      data-why={`Haraç en fazla ${balance.diplomacy.tribute.maxGold} altın/tur`}
+                      data-why={L(`Haraç en fazla ${balance.diplomacy.tribute.maxGold} altın/tur`, `Tribute can be at most ${balance.diplomacy.tribute.maxGold} gold/round`)}
                       onClick={() => setTermsGold(termsGold + (terms === 'tribute' ? 1 : 50))}
-                      aria-label="Artır"
+                      aria-label={L('Artır', 'Increase')}
                     >
                       <Icon name="plus" size={16} />
                     </button>
@@ -489,16 +539,30 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                 )}
                 <p className="hint">
                   {terms === 'gold'
-                    ? `Her ${balance.diplomacy.peace.goldPerScore} altın 1 savaş puanı ister.`
+                    ? L(`Her ${balance.diplomacy.peace.goldPerScore} altın 1 savaş puanı ister.`, `Every ${balance.diplomacy.peace.goldPerScore} gold costs 1 war score.`)
                     : terms === 'tribute'
-                      ? `Haraç için en az ${balance.diplomacy.peace.tributeMinScore} savaş puanı gerekir; tur başına en fazla ${balance.diplomacy.tribute.maxGold} altın istenebilir.`
+                      ? L(
+                          `Haraç için en az ${balance.diplomacy.peace.tributeMinScore} savaş puanı gerekir; tur başına en fazla ${balance.diplomacy.tribute.maxGold} altın istenebilir.`,
+                          `Tribute needs a war score of at least ${balance.diplomacy.peace.tributeMinScore}; at most ${balance.diplomacy.tribute.maxGold} gold a round can be asked.`,
+                        )
                       : terms === 'offer'
-                        ? 'Altını sen ödersin; kabul etmeleri kolaylaşır.'
-                        : 'Kimse bir şey ödemez.'}{' '}
-                  Savaş puanın {balance.diplomacy.peace.enforceScore} olursa teklifin kabul edilmek zorundadır.
+                        ? L('Altını sen ödersin; kabul etmeleri kolaylaşır.', 'You pay the gold; that makes them likelier to accept.')
+                        : L('Kimse bir şey ödemez.', 'Nobody pays anything.')}{' '}
+                  {L(
+                    `Savaş puanın ${balance.diplomacy.peace.enforceScore} olursa teklifin kabul edilmek zorundadır.`,
+                    `At a war score of ${balance.diplomacy.peace.enforceScore} your offer must be accepted.`,
+                  )}
                 </p>
-                <button className="btn small" disabled={sending('peace') || !!termsWhy} data-why={sending('peace') ? 'Barış elçin zaten yolda' : termsWhy === 'score' ? 'Savaş puanın bu şartlar için yetmiyor' : 'Bir miktar seç'} onClick={() => envoy('peace', { terms: peaceTerms })}>
-                  Barış teklif et {termsWhy === 'score' ? '(savaş puanı yetmiyor)' : ''}
+                <button className="btn small" disabled={sending('peace') || !!termsWhy} data-why={
+                    sending('peace')
+                      ? L('Barış elçin zaten yolda', 'Your peace envoy is already on the road')
+                      : termsWhy === 'score'
+                        ? L('Savaş puanın bu şartlar için yetmiyor', 'Your war score is not enough for these terms')
+                        : L('Bir miktar seç', 'Choose an amount')
+                  }
+                  onClick={() => envoy('peace', { terms: peaceTerms })}
+                >
+                  {L('Barış teklif et', 'Offer peace')} {termsWhy === 'score' ? L('(savaş puanı yetmiyor)', '(war score too low)') : ''}
                 </button>
               </div>
             )}
@@ -510,7 +574,10 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                   <Icon name="time" size={16} />
                   <span>
                     <small>
-                      {ENVOY_NAMES[e.kind]} · {e.status === 'traveling' ? `yolda, ${Math.max(0, Math.ceil((Date.parse(e.arrive_at) - now) / 1000))} sn` : 'cevap bekliyor'}
+                      {ENVOY_NAMES[e.kind]} ·{' '}
+                      {e.status === 'traveling'
+                        ? L(`yolda, ${Math.max(0, Math.ceil((Date.parse(e.arrive_at) - now) / 1000))} sn`, `on the road, ${Math.max(0, Math.ceil((Date.parse(e.arrive_at) - now) / 1000))} s`)
+                        : L('cevap bekliyor', 'awaiting an answer')}
                     </small>
                   </span>
                 </li>
@@ -522,47 +589,49 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
       )}
       {part === 'pacts' && (
         <>
-        <Section title="Anlaşmalar" icon="crown">
+        <Section title={L('Anlaşmalar', 'Treaties')} icon="crown">
           <div className="actions">
             {theyPay && (
               <button className="btn small" onClick={() => online.act({ type: 'endTribute', pact: theyPay.id })}>
-                Haracı bağışla (+{d.tribute.release})
+                {L(`Haracı bağışla (+${d.tribute.release})`, `Waive the tribute (+${d.tribute.release})`)}
               </button>
             )}
             {wePay && (
               <button className="btn small danger" onClick={() => online.act({ type: 'endTribute', pact: wePay.id })}>
-                Haracı kes ({d.tribute.renege} ilişki)
+                {L(`Haracı kes (${d.tribute.renege} ilişki)`, `Stop paying tribute (${d.tribute.renege} relations)`)}
               </button>
             )}
             {alliance && (
               <button className="btn small danger" onClick={() => online.act({ type: 'breakAlliance', pact: alliance.id })}>
-                İttifakı boz ({d.alliance.break} ilişki)
+                {L(`İttifakı boz (${d.alliance.break} ilişki)`, `Break the alliance (${d.alliance.break} relations)`)}
               </button>
             )}
             {!war && !ally && (
               <button
                 className={confirmWar ? 'btn small danger' : 'btn small'}
                 disabled={relation > threshold}
-                data-why={`Savaş ilanı için ilişki en fazla ${threshold} olmalı (şu an ${Math.round(relation)})`}
+                data-why={L(`Savaş ilanı için ilişki en fazla ${threshold} olmalı (şu an ${Math.round(relation)})`, `Declaring war needs relations of at most ${threshold} (now ${Math.round(relation)})`)}
                 onClick={() => (confirmWar ? (setConfirmWar(false), online.act({ type: 'declareWar', to: target.id })) : setConfirmWar(true))}
               >
                 <Icon name="swords" size={16} />{' '}
                 {confirmWar
                   ? claim
-                    ? 'Emin misin? Savaş ilan et'
-                    : `Emin misin? Gerekçesiz savaş (herkesle ${d.casusBelli.infamy})`
+                    ? L('Emin misin? Savaş ilan et', 'Are you sure? Declare war')
+                    : L(`Emin misin? Gerekçesiz savaş (herkesle ${d.casusBelli.infamy})`, `Are you sure? War without cause (${d.casusBelli.infamy} with everyone)`)
                   : relation > threshold
-                    ? `Savaş ilanı (${threshold} gerekir)`
-                    : 'Savaş ilan et'}
+                    ? L(`Savaş ilanı (${threshold} gerekir)`, `Declare war (needs ${threshold})`)
+                    : L('Savaş ilan et', 'Declare war')}
               </button>
             )}
             {!theyPay && !wePay && !alliance && (war || ally) ? null : null}
           </div>
-          {!theyPay && !wePay && !alliance && !war && <p className="hint">Aranızda anlaşma yok.</p>}
+          {!theyPay && !wePay && !alliance && !war && <p className="hint">{L('Aranızda anlaşma yok.', 'There are no treaties between you.')}</p>}
           {war && (
             <p className="hint">
-              Savaştasınız (savaş puanı {score > 0 ? '+' : ''}
-              {Math.round(score)}). Barışı Elçi bölümünden teklif edebilirsin.
+              {L(
+                `Savaştasınız (savaş puanı ${score > 0 ? '+' : ''}${Math.round(score)}). Barışı Elçi bölümünden teklif edebilirsin.`,
+                `You are at war (war score ${score > 0 ? '+' : ''}${Math.round(score)}). You can offer peace from the Envoy section.`,
+              )}
             </p>
           )}
         </Section>
@@ -570,11 +639,11 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
       )}
       {part === 'relation' && (
         <>
-        <Section title="Dış ilişkileri" icon="banner" aside="herkese açık">
-          <Stat label="Müttefikleri" value={theirAllies.length ? theirAllies.map((id) => kingdomName(online, id)).join(', ') : 'yok'} />
-          <Stat label="Savaşta olduğu" value={theirWars.length ? theirWars.map((id) => kingdomName(online, id)).join(', ') : 'yok'} />
+        <Section title={L('Dış ilişkileri', 'Foreign relations')} icon="banner" aside={L('herkese açık', 'public')}>
+          <Stat label={L('Müttefikleri', 'Allies')} value={theirAllies.length ? theirAllies.map((id) => kingdomName(online, id)).join(', ') : L('yok', 'none')} />
+          <Stat label={L('Savaşta olduğu', 'At war with')} value={theirWars.length ? theirWars.map((id) => kingdomName(online, id)).join(', ') : L('yok', 'none')} />
           {theirTributes.map((p) => (
-            <Stat key={p.id} label="Haraç" value={`${kingdomName(online, p.to_id)} → ${kingdomName(online, p.from_id)} · ${p.gold}/tur`} />
+            <Stat key={p.id} label={L('Haraç', 'Tribute')} value={L(`${kingdomName(online, p.to_id)} → ${kingdomName(online, p.from_id)} · ${p.gold}/tur`, `${kingdomName(online, p.to_id)} → ${kingdomName(online, p.from_id)} · ${p.gold}/round`)} />
           ))}
           {theirRelations.length > 0 && (
             <ul className="places compact">
@@ -594,20 +663,20 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
       )}
       {part === 'spies' && (
         <>
-        <Section title="İstihbarat" icon="eye" aside={intel ? 'casus ağından' : undefined}>
+        <Section title={L('İstihbarat', 'Intelligence')} icon="eye" aside={intel ? L('casus ağından', 'from the spy network') : undefined}>
           {intel === undefined ? (
             <button className="btn small" onClick={() => online.loadIntel(target.id)}>
-              Casus raporunu getir
+              {L('Casus raporunu getir', 'Fetch the spy report')}
             </button>
           ) : intel === null ? (
-            <p className="hint">Rapor alınamadı.</p>
+            <p className="hint">{L('Rapor alınamadı.', 'The report could not be fetched.')}</p>
           ) : (
             <>
               {(Object.keys(TOPIC_NAMES) as SpyTopic[]).map((t) => (
                 <span key={t} className="sign">
                   <span>{TOPIC_NAMES[t]}</span>
-                  <Meter value={intel.strength[t] / 100} tone="water" label={`${TOPIC_NAMES[t]} ağı`} segments={10} />
-                  <small>%{intel.strength[t]}</small>
+                  <Meter value={intel.strength[t] / 100} tone="water" label={L(`${TOPIC_NAMES[t]} ağı`, `${TOPIC_NAMES[t]} network`)} segments={10} />
+                  <small>{L(`%${intel.strength[t]}`, `${intel.strength[t]}%`)}</small>
                 </span>
               ))}
               {intel.strength.stores >= balance.espionage.minStrength && (
@@ -623,26 +692,30 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                     UNITS.map((u) => (
                       <Range key={u} label={`${UNIT_NAMES[u]}`} value={intel.army.units![u]} />
                     ))}
-                  <Range label="Garnizon" value={intel.army.garrison} />
-                  <Range label="Sahadaki asker" value={intel.army.field} />
-                  <Range label="Savaş gücü" value={intel.army.might} />
-                  <Range label="Halkın mutluluğu" value={intel.army.happiness} unit="%" />
+                  <Range label={L('Garnizon', 'Garrison')} value={intel.army.garrison} />
+                  <Range label={L('Sahadaki asker', 'Soldiers in the field')} value={intel.army.field} />
+                  <Range label={L('Savaş gücü', 'Military might')} value={intel.army.might} />
+                  <Range label={L('Halkın mutluluğu', "The people's happiness")} value={intel.army.happiness} unit="%" />
                 </>
               )}
               {intel.diplomacy && (
                 <>
                   {intel.diplomacy.envoys.map((e, i) => (
-                    <Stat key={i} label="Elçisi" value={`${e.to} · ${ENVOY_NAMES[e.kind as Envoy['kind']] ?? e.kind}`} />
+                    <Stat key={i} label={L('Elçisi', 'Their envoy')} value={`${e.to} · ${ENVOY_NAMES[e.kind as Envoy['kind']] ?? e.kind}`} />
                   ))}
                   <Stat
-                    label="Casusları"
-                    value={intel.diplomacy.spies ? intel.diplomacy.spies.map((s) => `${s.target} (${TOPIC_NAMES[s.topic as SpyTopic]})`).join(', ') || 'yok' : `${intel.diplomacy.spyCount} casus (ağ %50 olunca hedefleri görünür)`}
+                    label={L('Casusları', 'Their spies')}
+                    value={
+                      intel.diplomacy.spies
+                        ? intel.diplomacy.spies.map((s) => `${s.target} (${TOPIC_NAMES[s.topic as SpyTopic]})`).join(', ') || L('yok', 'none')
+                        : L(`${intel.diplomacy.spyCount} casus (ağ %50 olunca hedefleri görünür)`, `${intel.diplomacy.spyCount} spy${intel.diplomacy.spyCount === 1 ? '' : 's'} (their targets show at 50% network)`)
+                    }
                   />
                 </>
               )}
-              {Object.values(intel.strength).every((s) => s < balance.espionage.minStrength) && <p className="hint">Ağın henüz zayıf; casusların orada kaldıkça rapor netleşir.</p>}
+              {Object.values(intel.strength).every((s) => s < balance.espionage.minStrength) && <p className="hint">{L('Ağın henüz zayıf; casusların orada kaldıkça rapor netleşir.', 'Your network is still weak; the report sharpens the longer your spies stay.')}</p>}
               <button className="btn small" onClick={() => online.loadIntel(target.id)}>
-                Raporu yenile
+                {L('Raporu yenile', 'Refresh the report')}
               </button>
             </>
           )}
@@ -654,27 +727,29 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                 <li key={t}>
                   <span>
                     <b>{TOPIC_NAMES[t]}</b>
-                    <small>{there > 0 ? `ağ %${intel ? Math.round(intel.strength[t] ?? 0) : '?'}` : 'casusun yok'}</small>
+                    <small>{there > 0 ? L(`ağ %${intel ? Math.round(intel.strength[t] ?? 0) : '?'}`, `network ${intel ? Math.round(intel.strength[t] ?? 0) : '?'}%`) : L('casusun yok', 'no spy of yours')}</small>
                   </span>
                   {there > 0 ? (
-                    <span className="chip up">Casusun orada</span>
+                    <span className="chip up">{L('Casusun orada', 'Your spy is there')}</span>
                   ) : (
-                    <button className="btn small" disabled={spiesHome < 1} data-why="Evde casusun yok; casus evi zamanla yetiştirir" onClick={() => online.act({ type: 'spy', target: target.id, topic: t })}>
-                      <Icon name="eye" size={16} /> Casus gönder
+                    <button className="btn small" disabled={spiesHome < 1} data-why={L('Evde casusun yok; casus evi zamanla yetiştirir', 'No spy at home; the spy house trains them over time')} onClick={() => online.act({ type: 'spy', target: target.id, topic: t })}>
+                      <Icon name="eye" size={16} /> {L('Casus gönder', 'Send a spy')}
                     </button>
                   )}
                 </li>
               )
             })}
           </ul>
-          <p className="hint">Bir lordun her konusuna bir casus gönderilebilir.</p>
-          {spiesHome < 1 && <p className="hint">Evde casusun yok. Casus evi zamanla casus yetiştirir.</p>}
+          <p className="hint">{L('Bir lordun her konusuna bir casus gönderilebilir.', 'You can send one spy to each of a lord\'s topics.')}</p>
+          {spiesHome < 1 && <p className="hint">{L('Evde casusun yok. Casus evi zamanla casus yetiştirir.', 'No spy at home. The spy house trains spies over time.')}</p>}
         </Section>
-        <Section title="Casus operasyonları" icon="eye" aside={intel ? `en güçlü ağın %${Math.round(best)}` : 'önce raporu getir'}>
+        <Section title={L('Casus operasyonları', 'Spy operations')} icon="eye" aside={intel ? L(`en güçlü ağın %${Math.round(best)}`, `strongest network ${Math.round(best)}%`) : L('önce raporu getir', 'fetch the report first')}>
           {outcome && <p className="alert">{outcome}</p>}
           <p className="hint">
-            Operasyonlar oradaki en güçlü ağından yapılır ve başarılı da olsa başarısız da olsa o ağdan istediği kadar puan harcar; ağ kalan güçten yeniden büyür. Başarısız
-            olan operasyon ayrıca casusunu kaybettirir ve kimin yaptığını ortaya çıkarır.
+            {L(
+              'Operasyonlar oradaki en güçlü ağından yapılır ve başarılı da olsa başarısız da olsa o ağdan istediği kadar puan harcar; ağ kalan güçten yeniden büyür. Başarısız olan operasyon ayrıca casusunu kaybettirir ve kimin yaptığını ortaya çıkarır.',
+              'Operations run from your strongest network there and, success or failure, spend as many points of it as they need; the network grows back from what is left. A failed operation also costs you the spy and reveals who was behind it.',
+            )}
           </p>
           <ul className="places">
             {OPERATIONS.map((op) => {
@@ -688,17 +763,27 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                   <span>
                     <b>{OPERATION_NAMES[op]}</b>
                     <small>
-                      {OPERATION_NOTES[op]} · ağ %{spec.minStrength} ister, ağdan {Math.round(operationNetworkCost(op))} puan harcar · {spec.cost.gold} altın
-                      {op === 'kidnap' && !target.queen ? ' · kraliçeleri yok' : ''}
-                      {noPrison ? ' · önce hapishane kur' : ''}
-                      {noTown ? ' · elinde kasaba yok' : ''}
+                      {OPERATION_NOTES[op]} ·{' '}
+                      {L(
+                        `ağ %${spec.minStrength} ister, ağdan ${Math.round(operationNetworkCost(op))} puan harcar · ${spec.cost.gold} altın`,
+                        `needs ${spec.minStrength}% network, spends ${Math.round(operationNetworkCost(op))} points of it · ${spec.cost.gold} gold`,
+                      )}
+                      {op === 'kidnap' && !target.queen ? L(' · kraliçeleri yok', ' · they have no queen') : ''}
+                      {noPrison ? L(' · önce hapishane kur', ' · build a prison first') : ''}
+                      {noTown ? L(' · elinde kasaba yok', ' · they hold no town') : ''}
                     </small>
                     {op === 'townRevolt' && theirTowns.length > 1 && (
-                      <PixelSelect small value={picked?.id} onChange={setTownPick} options={theirTowns.map((t) => ({ value: t.id, label: t.name }))} aria-label="Kışkırtılacak kasaba" />
+                      <PixelSelect small value={picked?.id} onChange={setTownPick} options={theirTowns.map((t) => ({ value: t.id, label: t.name }))} aria-label={L('Kışkırtılacak kasaba', 'Town to stir up')} />
                     )}
-                    {op === 'townRevolt' && theirTowns.length === 1 && <small>Kasaba: {picked!.name}</small>}
+                    {op === 'townRevolt' && theirTowns.length === 1 && <small>{L('Kasaba', 'Town')}: {picked!.name}</small>}
                     <small className={intel?.chances && best >= spec.minStrength ? (intel.chances[op] >= 50 ? 'up' : 'down') : undefined}>
-                      {!intel ? 'Başarı şansı: önce raporu getir' : !intel.chances ? 'Başarı şansı: raporu yenile' : best < spec.minStrength ? `Başarı şansı: ağ %${spec.minStrength} olunca` : `Başarı şansı ~%${intel.chances[op]}`}
+                      {!intel
+                        ? L('Başarı şansı: önce raporu getir', 'Chance of success: fetch the report first')
+                        : !intel.chances
+                          ? L('Başarı şansı: raporu yenile', 'Chance of success: refresh the report')
+                          : best < spec.minStrength
+                            ? L(`Başarı şansı: ağ %${spec.minStrength} olunca`, `Chance of success: once the network reaches ${spec.minStrength}%`)
+                            : L(`Başarı şansı ~%${intel.chances[op]}`, `Chance of success ~${intel.chances[op]}%`)}
                     </small>
                   </span>
                   <button
@@ -706,25 +791,25 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                     disabled={blocked}
                     data-why={
                       !intel
-                        ? 'Önce casus raporunu getir'
+                        ? L('Önce casus raporunu getir', 'Fetch the spy report first')
                         : best < spec.minStrength
-                          ? `Ağ en az %${spec.minStrength} olmalı (en güçlü ağın %${Math.round(best)})`
+                          ? L(`Ağ en az %${spec.minStrength} olmalı (en güçlü ağın %${Math.round(best)})`, `The network must be at least ${spec.minStrength}% (your strongest is ${Math.round(best)}%)`)
                           : op === 'kidnap' && !target.queen
-                            ? 'Kraliçeleri yok'
+                            ? L('Kraliçeleri yok', 'They have no queen')
                             : noPrison
-                              ? 'Önce hapishane kur (2. seviye saray)'
+                              ? L('Önce hapishane kur (2. seviye saray)', 'Build a prison first (level 2 palace)')
                               : noTown
-                                ? 'Elinde kasaba yok'
-                                : `Yeterli altın yok (eksik: ${Math.ceil((spec.cost.gold ?? 0) - kingdom.stock.gold)})`
+                                ? L('Elinde kasaba yok', 'They hold no town')
+                                : L(`Yeterli altın yok (eksik: ${Math.ceil((spec.cost.gold ?? 0) - kingdom.stock.gold)})`, `Not enough gold (short: ${Math.ceil((spec.cost.gold ?? 0) - kingdom.stock.gold)})`)
                     }
                     onClick={() =>
                       online.act<{ success: boolean }>({ type: 'operation', target: target.id, op, ...(op === 'townRevolt' && picked && { town: picked.id }) }).then((r) => {
-                        if (r) setOutcome(r.success ? `${OPERATION_NAMES[op]}: başarılı.` : `${OPERATION_NAMES[op]}: başarısız, casusun yakalandı.`)
+                        if (r) setOutcome(r.success ? L(`${OPERATION_NAMES[op]}: başarılı.`, `${OPERATION_NAMES[op]}: success.`) : L(`${OPERATION_NAMES[op]}: başarısız, casusun yakalandı.`, `${OPERATION_NAMES[op]}: failed, your spy was caught.`))
                         online.loadIntel(target.id)
                       })
                     }
                   >
-                    Dene
+                    {L('Dene', 'Attempt')}
                   </button>
                 </li>
               )
@@ -748,10 +833,12 @@ export function SpyPanel({ data, online, detail = true }: { data: HudData; onlin
   const news = data.journal.entries.filter((e) => e.icon === 'eye').slice(0, 5)
   if (capacity === 0 && active.length === 0) {
     return (
-      <Section title="Casusluk" icon="eye">
-        <Placeholder icon="lock" title="Casus evin yok">
-          Sarayı 2. seviyeye yükselt ve casus evi kur. Casus evi zamanla casus yetiştirir; casusları bir lorda bir konuda gönderirsin (hammadde,
-          ordu, diplomasi). Evde kalan casuslar karşı casusluk yapar.
+      <Section title={L('Casusluk', 'Espionage')} icon="eye">
+        <Placeholder icon="lock" title={L('Casus evin yok', 'You have no spy house')}>
+          {L(
+            'Sarayı 2. seviyeye yükselt ve casus evi kur. Casus evi zamanla casus yetiştirir; casusları bir lorda bir konuda gönderirsin (hammadde, ordu, diplomasi). Evde kalan casuslar karşı casusluk yapar.',
+            'Raise the palace to level 2 and build a spy house. It trains spies over time; you send them to a lord on one topic (stores, army, diplomacy). Spies kept at home work as counter-espionage.',
+          )}
         </Placeholder>
       </Section>
     )
@@ -759,15 +846,22 @@ export function SpyPanel({ data, online, detail = true }: { data: HudData; onlin
   const next = kingdom.nextSpyAt && (kingdom.spies ?? 0) + (kingdom.spiesAway ?? 0) < capacity ? kingdom.nextSpyAt - now : null
   return (
     <>
-      <Section title="Casuslar" icon="eye" aside={`kapasite ${capacity}`}>
-        <Stat label="Evde (karşı casusluk)" value={kingdom.spies ?? 0} />
-        <Stat label="Görevde" value={kingdom.spiesAway ?? 0} />
+      <Section title={L('Casuslar', 'Spies')} icon="eye" aside={L(`kapasite ${capacity}`, `capacity ${capacity}`)}>
+        <Stat label={L('Evde (karşı casusluk)', 'At home (counter-espionage)')} value={kingdom.spies ?? 0} />
+        <Stat label={L('Görevde', 'On missions')} value={kingdom.spiesAway ?? 0} />
         <SpyHouseEffects kingdom={kingdom} />
-        {next !== null && next > 0 && <Stat label="Sıradaki casus" value={`${Math.ceil(next / 1000)} sn`} note={`${balance.espionage.spyCost.gold} altın`} />}
-        <p className="hint">Bir lorda casus göndermek için {detail ? '' : 'Diplomasi sekmesindeki '}Lordlar listesinden lordu seç.</p>
+        {next !== null && next > 0 && (
+          <Stat label={L('Sıradaki casus', 'Next spy')} value={L(`${Math.ceil(next / 1000)} sn`, `${Math.ceil(next / 1000)} s`)} note={L(`${balance.espionage.spyCost.gold} altın`, `${balance.espionage.spyCost.gold} gold`)} />
+        )}
+        <p className="hint">
+          {L(
+            `Bir lorda casus göndermek için ${detail ? '' : 'Diplomasi sekmesindeki '}Lordlar listesinden lordu seç.`,
+            `To send a spy to a lord, pick the lord from the Lords list${detail ? '' : ' on the Diplomacy tab'}.`,
+          )}
+        </p>
       </Section>
-      <Section title="Görevler" icon="scroll" aside={`${active.length}`}>
-        {active.length === 0 && <p className="hint">Görevde casus yok.</p>}
+      <Section title={L('Görevler', 'Missions')} icon="scroll" aside={`${active.length}`}>
+        {active.length === 0 && <p className="hint">{L('Görevde casus yok.', 'No spies on missions.')}</p>}
         <ul className="places">
           {active.map((m) => (
             <li key={m.id}>
@@ -776,21 +870,26 @@ export function SpyPanel({ data, online, detail = true }: { data: HudData; onlin
                 <b>
                   {kingdomName(online, m.target_id)} · {TOPIC_NAMES[m.topic]}
                 </b>
-                <small>{Math.floor((now - Date.parse(m.started_at)) / 60000)} dakikadır orada</small>
+                <small>{L(`${Math.floor((now - Date.parse(m.started_at)) / 60000)} dakikadır orada`, `there for ${Math.floor((now - Date.parse(m.started_at)) / 60000)} min`)}</small>
                 {online.intel[m.target_id] ? (
                   <>
-                    <small>Ağ %{Math.round(online.intel[m.target_id]!.strength[m.topic])} (son rapora göre)</small>
-                    <Meter value={online.intel[m.target_id]!.strength[m.topic] / 100} tone="water" label={`${TOPIC_NAMES[m.topic]} ağı`} segments={10} />
+                    <small>
+                      {L(
+                        `Ağ %${Math.round(online.intel[m.target_id]!.strength[m.topic])} (son rapora göre)`,
+                        `Network ${Math.round(online.intel[m.target_id]!.strength[m.topic])}% (per the last report)`,
+                      )}
+                    </small>
+                    <Meter value={online.intel[m.target_id]!.strength[m.topic] / 100} tone="water" label={L(`${TOPIC_NAMES[m.topic]} ağı`, `${TOPIC_NAMES[m.topic]} network`)} segments={10} />
                   </>
                 ) : (
-                  <small>Ağın gücü için raporu getir.</small>
+                  <small>{L('Ağın gücü için raporu getir.', "Fetch the report for the network's strength.")}</small>
                 )}
               </span>
               <button className="btn small" onClick={() => (detail && online.setFocus(m.target_id), online.loadIntel(m.target_id))}>
-                {detail ? 'Rapor' : 'Ölç'}
+                {detail ? L('Rapor', 'Report') : L('Ölç', 'Measure')}
               </button>
               <button className="btn small" onClick={() => online.act({ type: 'recall', mission: m.id })}>
-                Geri çağır
+                {L('Geri çağır', 'Recall')}
               </button>
             </li>
           ))}
@@ -801,7 +900,7 @@ export function SpyPanel({ data, online, detail = true }: { data: HudData; onlin
               <li key={m.id}>
                 <span>
                   <small>
-                    {kingdomName(online, m.target_id)} · {TOPIC_NAMES[m.topic]} · {m.end_reason === 'caught' ? 'yakalandı' : 'geri çağrıldı'}
+                    {kingdomName(online, m.target_id)} · {TOPIC_NAMES[m.topic]} · {m.end_reason === 'caught' ? L('yakalandı', 'caught') : L('geri çağrıldı', 'recalled')}
                   </small>
                 </span>
               </li>
@@ -810,7 +909,7 @@ export function SpyPanel({ data, online, detail = true }: { data: HudData; onlin
         )}
       </Section>
       {news.length > 0 && (
-        <Section title="Casus haberleri" icon="scroll" aside="günlükten">
+        <Section title={L('Casus haberleri', 'Spy news')} icon="scroll" aside={L('günlükten', 'from the journal')}>
           <ul className="places compact">
             {news.map((e) => (
               <li key={e.id}>
@@ -844,38 +943,45 @@ function Hostility({ data, online, target }: { data: HudData; online: Online; ta
     setOutcome(
       res.success
         ? (res.loot?.units ?? 0) > 0
-          ? `Yağma başarılı: ${res.loot!.units} ${RESOURCE_NAMES[res.loot!.good as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? ''} getirildi, ${res.lost} asker kaybedildi. Ticaret noktaları harap.`
-          : `Yağma başarılı ama tüccarın taşıyacak malı yoktu (depoları boştu); ${res.lost} asker kaybedildi. Ticaret noktaları yine de harap.`
-        : `Yağmacılar püskürtüldü: ${res.lost} asker kaybedildi.`,
+          ? L(
+              `Yağma başarılı: ${res.loot!.units} ${RESOURCE_NAMES[res.loot!.good as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? ''} getirildi, ${res.lost} asker kaybedildi. Ticaret noktaları harap.`,
+              `Raid successful: ${res.loot!.units} ${RESOURCE_NAMES[res.loot!.good as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? ''} brought back, ${res.lost} soldier${res.lost === 1 ? '' : 's'} lost. Their trading post lies in ruins.`,
+            )
+          : L(
+              `Yağma başarılı ama tüccarın taşıyacak malı yoktu (depoları boştu); ${res.lost} asker kaybedildi. Ticaret noktaları yine de harap.`,
+              `Raid successful, but the merchant had nothing to carry (their stores were empty); ${res.lost} soldier${res.lost === 1 ? '' : 's'} lost. Their trading post lies in ruins all the same.`,
+            )
+        : L(`Yağmacılar püskürtüldü: ${res.lost} asker kaybedildi.`, `The raiders were driven off: ${res.lost} soldier${res.lost === 1 ? '' : 's'} lost.`),
     )
   }
   return (
-    <Section title="Düşmanlık" icon="swords">
+    <Section title={L('Düşmanlık', 'Hostility')} icon="swords">
       <div className="actions">
-        <button className="btn small danger" disabled={insulting} data-why="Hakaret elçin zaten yolda" onClick={() => online.act({ type: 'envoy', to: target.id, kind: 'insult' })}>
-          Hakaret et ({d.insult.relation} ilişki)
+        <button className="btn small danger" disabled={insulting} data-why={L('Hakaret elçin zaten yolda', 'Your envoy with the insult is already on the road')} onClick={() => online.act({ type: 'envoy', to: target.id, kind: 'insult' })}>
+          {L(`Hakaret et (${d.insult.relation} ilişki)`, `Insult (${d.insult.relation} relations)`)}
         </button>
         <button
           className="btn small danger"
           disabled={ally || (kingdom.soldiers ?? 0) < r.soldiers || raidReady > now || !(target.buildings ?? []).some((b) => b.kind === 'tradePost')}
           data-why={
             ally
-              ? 'Müttefikin yağmalanamaz'
+              ? L('Müttefikin yağmalanamaz', 'You cannot raid an ally')
               : (kingdom.soldiers ?? 0) < r.soldiers
-                ? `Garnizonda en az ${r.soldiers} asker olmalı (${kingdom.soldiers ?? 0} var)`
+                ? L(`Garnizonda en az ${r.soldiers} asker olmalı (${kingdom.soldiers ?? 0} var)`, `The garrison needs at least ${r.soldiers} soldiers (you have ${kingdom.soldiers ?? 0})`)
                 : raidReady > now
                   ? waitWhy(raidReady - now)
-                  : 'Ticaret noktaları yok'
+                  : L('Ticaret noktaları yok', 'They have no trading post')
           }
           onClick={raid}
         >
-          Ticaret yolunu yağmala · {r.soldiers} asker · şans %{Math.round(chance * 100)}
+          {L(`Ticaret yolunu yağmala · ${r.soldiers} asker · şans %${Math.round(chance * 100)}`, `Raid the trade route · ${r.soldiers} soldiers · ${Math.round(chance * 100)}% chance`)}
         </button>
       </div>
       <p className="hint">
-        Hakaret: elçin gider, ilişkiniz {d.insult.relation} düşer ve onlar sana karşı savaş gerekçesi kazanır. Yağma: garnizondan {r.soldiers} asker
-        tüccarlarını basar; başarırsa sattıkları maldan yüklü bir pay getirir ve ticaret noktaları onarılana kadar satış yapamaz. Ticaret noktasının
-        yakınındaki gözcü kuleleri ({towers}) şansı düşürür. Her durumda asker kaybedersin, ilişki {r.relation} düşer ve onlar savaş gerekçesi kazanır.
+        {L(
+          `Hakaret: elçin gider, ilişkiniz ${d.insult.relation} düşer ve onlar sana karşı savaş gerekçesi kazanır. Yağma: garnizondan ${r.soldiers} asker tüccarlarını basar; başarırsa sattıkları maldan yüklü bir pay getirir ve ticaret noktaları onarılana kadar satış yapamaz. Ticaret noktasının yakınındaki gözcü kuleleri (${towers}) şansı düşürür. Her durumda asker kaybedersin, ilişki ${r.relation} düşer ve onlar savaş gerekçesi kazanır.`,
+          `Insult: your envoy goes, your relations fall by ${Math.abs(d.insult.relation)} and they gain a casus belli against you. Raid: ${r.soldiers} soldiers from the garrison fall on their merchants; if it works they bring back a hefty share of the goods sold, and the trading post cannot sell until repaired. Watchtowers near the trading post (${towers}) lower the chance. Either way you lose soldiers, relations fall by ${Math.abs(r.relation)} and they gain a casus belli.`,
+        )}
       </p>
       {outcome && <p className="alert">{outcome}</p>}
     </Section>
@@ -890,20 +996,26 @@ function SpyHouseEffects({ kingdom }: { kingdom: Kingdom }) {
   const e = balance.espionage
   const level = house.level ?? 1
   const top = level < e.capacityByLevel.length
+  const dec = (v: number) => L(v.toFixed(2).replace('.', ','), v.toFixed(2))
   const speed = (l: number) => 1 + (l - 1) * e.networkSpeedPerLevel
-  const pct = (v: number) => `%${Math.round(v * 100)}`
+  const pct = (v: number) => L(`%${Math.round(v * 100)}`, `${Math.round(v * 100)}%`)
   return (
     <>
-      <Stat label="Ağ kurma hızın" value={`×${speed(level).toFixed(2).replace('.', ',')}`} note={top ? `${level + 1}. sv: ×${speed(level + 1).toFixed(2).replace('.', ',')}` : 'en yüksek seviye'} />
       <Stat
-        label="Casus evinin karşı casusluğu"
-        value={`+${(level * e.counterPerLevel).toFixed(2).replace('.', ',')}`}
-        note={top ? `${level + 1}. sv: +${((level + 1) * e.counterPerLevel).toFixed(2).replace('.', ',')}` : 'en yüksek seviye'}
+        label={L('Ağ kurma hızın', 'Network building speed')}
+        value={`×${dec(speed(level))}`}
+        note={top ? L(`${level + 1}. sv: ×${dec(speed(level + 1))}`, `Lv. ${level + 1}: ×${dec(speed(level + 1))}`) : L('en yüksek seviye', 'highest level')}
+      />
+      <Stat
+        label={L('Casus evinin karşı casusluğu', "The spy house's counter-espionage")}
+        value={`+${dec(level * e.counterPerLevel)}`}
+        note={top ? L(`${level + 1}. sv: +${dec((level + 1) * e.counterPerLevel)}`, `Lv. ${level + 1}: +${dec((level + 1) * e.counterPerLevel)}`) : L('en yüksek seviye', 'highest level')}
       />
       <p className="hint">
-        Karşı casusluk, başkalarının sende ağ kurmasını yavaşlatır (her 1 puan kurulma süresine {pct(1)} ekler), casuslarını daha çabuk yakalatır ve
-        operasyonlarının şansını puan başına {pct(e.operations.counterPenalty)} düşürür. Evde bekleyen her casus {String(e.counterPerSpy).replace('.', ',')} puan
-        katar.
+        {L(
+          `Karşı casusluk, başkalarının sende ağ kurmasını yavaşlatır (her 1 puan kurulma süresine ${pct(1)} ekler), casuslarını daha çabuk yakalatır ve operasyonlarının şansını puan başına ${pct(e.operations.counterPenalty)} düşürür. Evde bekleyen her casus ${String(e.counterPerSpy).replace('.', ',')} puan katar.`,
+          `Counter-espionage slows others building networks in your lands (each point adds ${pct(1)} to the time it takes), gets their spies caught sooner and lowers their operations' chances by ${pct(e.operations.counterPenalty)} a point. Each spy waiting at home adds ${e.counterPerSpy} points.`,
+        )}
       </p>
     </>
   )

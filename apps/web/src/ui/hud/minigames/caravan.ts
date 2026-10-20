@@ -1,4 +1,5 @@
 import { CARAVAN_H, CARAVAN_LIMIT, CARAVAN_W, balance, caravanGame } from '@game/shared'
+import { L } from '../../../lib/i18n'
 import type { CaravanState } from '@game/shared'
 import { play } from '../../../audio/sfx'
 import { H, PAL, W, bake, box, checker, halo, hash, oval, pline, ramp, rgb, ridge, scroll, text, tone } from './art'
@@ -140,7 +141,7 @@ function camel(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, s
 
 export const caravanScene: Scene<CaravanState> = {
   make: caravanGame,
-  controls: 'Basılı tut: yukarı · bırak: aşağı',
+  controls: L('Basılı tut: yukarı · bırak: aşağı', 'Hold: up · release: down'),
   score: (s) => s.score,
   left: (s) => 1 - s.step / CARAVAN_LIMIT,
   create() {
@@ -174,14 +175,14 @@ export const caravanScene: Scene<CaravanState> = {
             play('good')
             fx.burst(x, y, 18, { colors: ['#f2fbff', '#7ad0e8', '#2a6a8a'], speed: [30, 80], gravity: 20, life: [0.4, 0.9] })
             fx.float(`+${CV.gem}`, x, y - 14, '#7ad0e8', 13)
-            fx.float('Mücevher!', x, y - 28, '#f2fbff', 9)
+            fx.float(L('Mücevher!', 'A gem!'), x, y - 28, '#f2fbff', 9)
             fx.flash('#a6e4f2', 0.08)
           } else {
             play('miss')
             fx.shake(4, 0.3)
             fx.flash('#a8342e', 0.15)
             fx.float(`-${CV.rock}`, x, y - 14, '#ec7a5a', 12)
-            fx.float('Tökezledi!', cx, cy - 30, '#ec7a5a', 9)
+            fx.float(L('Tökezledi!', 'Stumbled!'), cx, cy - 30, '#ec7a5a', 9)
             fx.burst(x, y, 10, { colors: ['#8a827a', '#6a625a', '#c49a5a'], speed: [20, 60], angle: [-Math.PI, 0], gravity: 200 })
           }
         }

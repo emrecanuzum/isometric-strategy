@@ -4,6 +4,7 @@ import type { Kingdom, Market, Point, QuestKind, World } from '@game/shared'
 import { cityInfo } from '../../game/cities'
 import { serverNow } from '../../net/clock'
 import { Icon } from '../icons'
+import { L, getLang, locale } from '../../lib/i18n'
 import { RESOURCE_ICONS, RESOURCE_NAMES } from '../names'
 import { Meter, Section, Stat, fmt } from './primitives'
 import type { Online } from './online'
@@ -13,12 +14,13 @@ import { Portrait } from '../DynastyArt'
 import { innReach, innUnitPrice, tradeInnIndex } from './inns'
 import { innInfo } from '../../game/innInfo'
 import { isCaravanserai } from '../../game/innSprites'
+import { NameNote } from '../NameNote'
 
 // The free cities (CLAUDE.md §4.2, §7.6): what they are, and the merchant's choice between the lobby's market and a
 // free city's.
 
 const seconds = (ms: number) => Math.round(ms / 1000)
-const price = (n: number) => n.toFixed(2).replace('.', ',')
+const price = (n: number) => (getLang() === 'en' ? n.toFixed(2) : n.toFixed(2).replace('.', ','))
 
 // Where the merchant takes the goods: the lobby's market from the trade post, or one of the free cities.
 export function TradeDestination({ world, kingdom, market, now, online, onCity, onInn }: {
@@ -37,36 +39,38 @@ export function TradeDestination({ world, kingdom, market, now, online, onCity, 
   const { loadFactor, changeCooldownSeconds } = balance.cities.trade
   const premium = Math.round((balance.cities.trade.priceFactor - 1) * 100)
   // The city's price beside the lobby's: "lobi fiyatı", "lobi fiyatı +%5" or "lobi fiyatı −%5".
-  const pricing = premium === 0 ? 'lobi fiyatı' : `lobi fiyatı ${premium > 0 ? '+' : '−'}%${Math.abs(premium)}`
+  const pricing = premium === 0 ? L('lobi fiyatı', 'lobby price') : L(`lobi fiyatı ${premium > 0 ? '+' : '−'}%${Math.abs(premium)}`, `lobby price ${premium > 0 ? '+' : '−'}${Math.abs(premium)}%`)
   const impact = Math.round(balance.cities.trade.marketImpact * 100)
   const good = kingdom.trade.good
   return (
-    <Section title="Tüccar nereye gitsin" icon="trade" aside={wait > 0 ? `${wait} sn sonra değişir` : undefined}>
-      <div className="goods choices" role="radiogroup" aria-label="Tüccarın gideceği yer">
-        <button role="radio" aria-checked={current === null} className={current === null ? 'good active' : 'good'} disabled={wait > 0 && current !== null} data-why={`Hedef az önce değişti; ${wait} sn sonra yeniden değişir`} onClick={() => onCity(null)}>
+    <Section title={L('Tüccar nereye gitsin', 'Where the merchant should go')} icon="trade" aside={wait > 0 ? L(`${wait} sn sonra değişir`, `can change in ${wait}s`) : undefined}>
+      <div className="goods choices" role="radiogroup" aria-label={L('Tüccarın gideceği yer', 'The merchant\'s destination')}>
+        <button role="radio" aria-checked={current === null} className={current === null ? 'good active' : 'good'} disabled={wait > 0 && current !== null} data-why={L(`Hedef az önce değişti; ${wait} sn sonra yeniden değişir`, `The destination just changed; it can change again in ${wait}s`)} onClick={() => onCity(null)}>
           <Icon name="gold" size={24} />
-          <b>Lobi pazarı</b>
-          <small>{seconds(lobbyTripMs(kingdom.buildings))} sn sefer</small>
-          <small>{tradeUnits(kingdom)} birim, lobi fiyatı</small>
-          {good && <small>birimi {price(priceAt(market, good, now))} altın</small>}
+          <b>{L('Lobi pazarı', 'Lobby market')}</b>
+          <small>{L(`${seconds(lobbyTripMs(kingdom.buildings))} sn sefer`, `${seconds(lobbyTripMs(kingdom.buildings))}s trip`)}</small>
+          <small>{L(`${tradeUnits(kingdom)} birim, lobi fiyatı`, `${tradeUnits(kingdom)} units, lobby price`)}</small>
+          {good && <small>{L(`birimi ${price(priceAt(market, good, now))} altın`, `${price(priceAt(market, good, now))} gold a unit`)}</small>}
         </button>
         {world.cities.map((city, index) => {
           const trip = cityTripMs(kingdom, city)
           return (
-            <button key={index} role="radio" aria-checked={current === index} className={current === index ? 'good active' : 'good'} disabled={!trip || (wait > 0 && current !== index)} data-why={!trip ? 'Ticaret noktandan oraya yol yok' : `Hedef az önce değişti; ${wait} sn sonra yeniden değişir`} onClick={() => onCity(index)}>
+            <button key={index} role="radio" aria-checked={current === index} className={current === index ? 'good active' : 'good'} disabled={!trip || (wait > 0 && current !== index)} data-why={!trip ? L('Ticaret noktandan oraya yol yok', 'There is no road there from your trading post') : L(`Hedef az önce değişti; ${wait} sn sonra yeniden değişir`, `The destination just changed; it can change again in ${wait}s`)} onClick={() => onCity(index)}>
               <Icon name="crown" size={24} />
               <b>{cityInfo(world, index).name}</b>
-              <small>{trip ? `${seconds(trip)} sn sefer` : 'yol yok'}</small>
-              <small>{tradeUnits(kingdom) * loadFactor} birim, {pricing}</small>
-              {good && <small>birimi {price(cityPrice(good, market, now))} altın</small>}
+              <small>{trip ? L(`${seconds(trip)} sn sefer`, `${seconds(trip)}s trip`) : L('yol yok', 'no road')}</small>
+              <small>{L(`${tradeUnits(kingdom) * loadFactor} birim, ${pricing}`, `${tradeUnits(kingdom) * loadFactor} units, ${pricing}`)}</small>
+              {good && <small>{L(`birimi ${price(cityPrice(good, market, now))} altın`, `${price(cityPrice(good, market, now))} gold a unit`)}</small>}
             </button>
           )
         })}
       </div>
       {online && <InnChoices world={world} kingdom={kingdom} market={market} now={now} online={online} current={innAt} wait={wait} onInn={onInn} />}
       <p className="hint">
-        Taç başkenti {loadFactor} kat yük alır ve {premium === 0 ? 'lobinin o anki fiyatından öder' : `lobinin o anki fiyatının %${Math.abs(premium)} ${premium > 0 ? 'fazlasını' : 'eksiğini'} öder`}; bu satış lobi fiyatlarını da düşürür (lobi pazarındaki etkinin %{impact} kadarı). Ama yol uzundur: sefer başkentin uzaklığıyla uzar.
-        Değiştirince tüccar yeni sefere başlar; {Math.round(changeCooldownSeconds / 60)} dakika yeniden değiştiremezsin.
+        {L(
+          `Taç başkenti ${loadFactor} kat yük alır ve ${premium === 0 ? 'lobinin o anki fiyatından öder' : `lobinin o anki fiyatının %${Math.abs(premium)} ${premium > 0 ? 'fazlasını' : 'eksiğini'} öder`}; bu satış lobi fiyatlarını da düşürür (lobi pazarındaki etkinin %${impact} kadarı). Ama yol uzundur: sefer başkentin uzaklığıyla uzar. Değiştirince tüccar yeni sefere başlar; ${Math.round(changeCooldownSeconds / 60)} dakika yeniden değiştiremezsin.`,
+          `A crown capital takes ${loadFactor}× the load and ${premium === 0 ? 'pays the lobby\'s current price' : `pays ${Math.abs(premium)}% ${premium > 0 ? 'above' : 'below'} the lobby's current price`}; these sales also lower lobby prices (${impact}% of the lobby market's effect). But the road is long: the trip grows with the capital's distance. Change it and the merchant starts a new trip; you cannot change it again for ${Math.round(changeCooldownSeconds / 60)} minutes.`,
+        )}
       </p>
     </Section>
   )
@@ -94,11 +98,11 @@ function InnChoices({ world, kingdom, market, now, online, current, wait, onInn 
     .sort((a, b) => b.unit - a.unit || b.share - a.share)
   return (
     <>
-      <h4 className="sub-head">Hanlar</h4>
+      <h4 className="sub-head">{L('Hanlar', 'Inns')}</h4>
       {open.length === 0 ? (
-        <p className="hint">Hiçbir hanın pastasında yeterli payın yok (en az %{Math.round(spec.minShare * 100)}). Bir hanın {spec.reachTiles} karo yakınında bir kasaba al; hana tıklayıp fiyatlarına bak.</p>
+        <p className="hint">{L(`Hiçbir hanın pastasında yeterli payın yok (en az %${Math.round(spec.minShare * 100)}). Bir hanın ${spec.reachTiles} karo yakınında bir kasaba al; hana tıklayıp fiyatlarına bak.`, `You lack a big enough slice of any inn's pie (at least ${Math.round(spec.minShare * 100)}%). Take a town within ${spec.reachTiles} tiles of an inn; click an inn to see its prices.`)}</p>
       ) : (
-        <div className="goods choices" role="radiogroup" aria-label="Tüccarın gideceği han">
+        <div className="goods choices" role="radiogroup" aria-label={L('Tüccarın gideceği han', 'The inn the merchant goes to')}>
           {open.map(({ inn, index, share, unit }) => (
             <button
               key={index}
@@ -106,14 +110,14 @@ function InnChoices({ world, kingdom, market, now, online, current, wait, onInn 
               aria-checked={current === index}
               className={current === index ? 'good active' : 'good'}
               disabled={low || (wait > 0 && current !== index)}
-              data-why={low ? `Ticaret noktan ${spec.minLevel + 1}. seviye olmalı` : `Hedef az önce değişti; ${wait} sn sonra yeniden değişir`}
+              data-why={low ? L(`Ticaret noktan ${spec.minLevel + 1}. seviye olmalı`, `Your trading post must be level ${spec.minLevel + 1}`) : L(`Hedef az önce değişti; ${wait} sn sonra yeniden değişir`, `The destination just changed; it can change again in ${wait}s`)}
               onClick={() => onInn?.({ x: inn.x, y: inn.y })}
             >
               <Icon name="inn" size={24} />
               <b>{innInfo(world, index, isCaravanserai(world, inn)).name}</b>
-              <small>payın %{Math.round(share * 100)}</small>
-              <small>{seconds(lobbyTripMs(kingdom.buildings))} sn sefer</small>
-              {good && <small>birimi {price(unit)} altın</small>}
+              <small>{L(`payın %${Math.round(share * 100)}`, `your share ${Math.round(share * 100)}%`)}</small>
+              <small>{L(`${seconds(lobbyTripMs(kingdom.buildings))} sn sefer`, `${seconds(lobbyTripMs(kingdom.buildings))}s trip`)}</small>
+              {good && <small>{L(`birimi ${price(unit)} altın`, `${price(unit)} gold a unit`)}</small>}
             </button>
           ))}
         </div>
@@ -127,8 +131,9 @@ export function CityTip({ world, index, at }: { world: World; index: number; at:
   return (
     <div className="map-tip frame" style={{ left: at.x, top: at.y }} role="tooltip">
       <b style={{ color: cityInfo(world, index).color }}>{cityInfo(world, index).name}</b>
-      <small>Taç krallığı, başkent {cityInfo(world, index).capital} · güvenli bölge</small>
-      <em>tıkla</em>
+      <NameNote name={cityInfo(world, index).capital} />
+      <small>{L(`Taç krallığı, başkent ${cityInfo(world, index).capital} · güvenli bölge`, `Crown kingdom, capital ${cityInfo(world, index).capital} · safe zone`)}</small>
+      <em>{L('tıkla', 'click')}</em>
     </div>
   )
 }
@@ -162,14 +167,15 @@ export function CitySheet({ world, index, kingdom, online, market, now, onCity, 
           <h2 id="city-title" style={{ color: info.color }}>
             {info.name}
           </h2>
+          <NameNote name={info.capital} />
           <small>
-            Başkent {info.capital} · taç krallığı{distance !== null && ` · ${distance} karo uzakta`}
+            {L(`Başkent ${info.capital} · taç krallığı`, `Capital ${info.capital} · crown kingdom`)}{distance !== null && L(` · ${distance} karo uzakta`, ` · ${distance} tiles away`)}
           </small>
         </div>
-        <button className="btn icon-only" onClick={() => onShow(middle)} aria-label="Haritada göster" title="Haritada göster">
+        <button className="btn icon-only" onClick={() => onShow(middle)} aria-label={L('Haritada göster', 'Show on map')} title={L('Haritada göster', 'Show on map')}>
           <Icon name="pin" size={16} />
         </button>
-        <button className="btn icon-only" onClick={onClose} aria-label="Kapat (Esc)" title="Kapat (Esc)">
+        <button className="btn icon-only" onClick={onClose} aria-label={L('Kapat (Esc)', 'Close (Esc)')} title={L('Kapat (Esc)', 'Close (Esc)')}>
           <Icon name="close" size={16} />
         </button>
       </header>
@@ -179,45 +185,47 @@ export function CitySheet({ world, index, kingdom, online, market, now, onCity, 
           <div>
             <b>{info.ruler}</b>
             <small className="hint">
-              {info.capital} şehrinden hüküm sürer; lordlar ona biat eder. Surlarının çevresi güvenli bölgedir: {balance.cities.safeTiles} karo içinde muharebe olmaz. Ordular
-              yakınında handaki gibi moral toplar.
+              {L(
+                `${info.capital} şehrinden hüküm sürer; lordlar ona biat eder. Surlarının çevresi güvenli bölgedir: ${balance.cities.safeTiles} karo içinde muharebe olmaz. Ordular yakınında handaki gibi moral toplar.`,
+                `Rules from the city of ${info.capital}; lords swear fealty to this throne. The ground round its walls is a safe zone: no battles within ${balance.cities.safeTiles} tiles. Armies nearby regain morale as they would at an inn.`,
+              )}
             </small>
           </div>
         </div>
-        <Section title="Şehrin ödediği fiyat" icon="gold" aside={(() => { const p = Math.round((balance.cities.trade.priceFactor - 1) * 100); return p === 0 ? 'lobi fiyatı' : `lobi fiyatı ${p > 0 ? '+' : '−'}%${Math.abs(p)}` })()}>
+        <Section title={L('Şehrin ödediği fiyat', 'What the city pays')} icon="gold" aside={(() => { const p = Math.round((balance.cities.trade.priceFactor - 1) * 100); return p === 0 ? L('lobi fiyatı', 'lobby price') : L(`lobi fiyatı ${p > 0 ? '+' : '−'}%${Math.abs(p)}`, `lobby price ${p > 0 ? '+' : '−'}${Math.abs(p)}%`) })()}>
           <div className="price-row">
             {GOODS.map((g) => (
               <span key={g} className="price" title={RESOURCE_NAMES[g]}>
                 <Icon name={RESOURCE_ICONS[g]} size={16} />
                 <b>{price(cityPrice(g, market, now))}</b>
-                <small>lobide {price(priceAt(market, g, now))}</small>
+                <small>{L(`lobide ${price(priceAt(market, g, now))}`, `lobby ${price(priceAt(market, g, now))}`)}</small>
               </span>
             ))}
           </div>
-          <p className="hint">Tüccarın buraya seferde {loadFactor} kat yük götürür; buradaki satış lobi fiyatlarını lobi pazarının %{Math.round(balance.cities.trade.marketImpact * 100)} kadar düşürür.</p>
+          <p className="hint">{L(`Tüccarın buraya seferde ${loadFactor} kat yük götürür; buradaki satış lobi fiyatlarını lobi pazarının %${Math.round(balance.cities.trade.marketImpact * 100)} kadar düşürür.`, `Your merchant carries ${loadFactor}× the load here each trip; sales here lower lobby prices by ${Math.round(balance.cities.trade.marketImpact * 100)}% of what the lobby market's would.`)}</p>
         </Section>
         {kingdom && <CrownStanding world={world} index={index} kingdom={kingdom} />}
         <CrownRivalry world={world} online={online} />
         {kingdom && <Stewardship world={world} kingdom={kingdom} now={now} />}
         {kingdom && <Fealty world={world} kingdom={kingdom} now={now} only={index} onSwear={onSwear} />}
         {kingdom && (
-          <Section title="Tüccarın" icon="trade">
+          <Section title={L('Tüccarın', 'Your merchant')} icon="trade">
             {here ? (
               <>
-                <p className="hint">Tüccar şu an bu şehre gidip geliyor ({trip ? seconds(trip) : '?'} sn sefer).</p>
-                <button className="btn small" disabled={wait > 0} data-why={`Hedef az önce değişti; ${wait} sn bekle`} onClick={() => onCity(null)}>
-                  {wait > 0 ? `Lobi pazarına dönmek için ${wait} sn bekle` : 'Lobi pazarına dön'}
+                <p className="hint">{L(`Tüccar şu an bu şehre gidip geliyor (${trip ? seconds(trip) : '?'} sn sefer).`, `Your merchant is trading with this city now (${trip ? seconds(trip) : '?'}s trip).`)}</p>
+                <button className="btn small" disabled={wait > 0} data-why={L(`Hedef az önce değişti; ${wait} sn bekle`, `The destination just changed; wait ${wait}s`)} onClick={() => onCity(null)}>
+                  {wait > 0 ? L(`Lobi pazarına dönmek için ${wait} sn bekle`, `Wait ${wait}s to return to the lobby market`) : L('Lobi pazarına dön', 'Back to the lobby market')}
                 </button>
               </>
             ) : trip ? (
               <>
-                <p className="hint">Ticaret noktandan sefer {seconds(trip)} sn sürer.</p>
-                <button className="btn small" disabled={wait > 0} data-why={`Hedef az önce değişti; ${wait} sn bekle`} onClick={() => onCity(index)}>
-                  {wait > 0 ? `Göndermek için ${wait} sn bekle` : 'Tüccarı buraya gönder'}
+                <p className="hint">{L(`Ticaret noktandan sefer ${seconds(trip)} sn sürer.`, `From your trading post the trip takes ${seconds(trip)}s.`)}</p>
+                <button className="btn small" disabled={wait > 0} data-why={L(`Hedef az önce değişti; ${wait} sn bekle`, `The destination just changed; wait ${wait}s`)} onClick={() => onCity(index)}>
+                  {wait > 0 ? L(`Göndermek için ${wait} sn bekle`, `Wait ${wait}s to send`) : L('Tüccarı buraya gönder', 'Send the merchant here')}
                 </button>
               </>
             ) : (
-              <p className="hint">Önce bir ticaret noktan olmalı.</p>
+              <p className="hint">{L('Önce bir ticaret noktan olmalı.', 'You need a trading post first.')}</p>
             )}
           </Section>
         )}
@@ -237,13 +245,13 @@ export function Fealty({ world, kingdom, now, only, onSwear, onOpen }: { world: 
     const liege = cityInfo(world, kingdom.liege)
     // On the palace's tab: the liege as a large button that takes the lord to its court.
     if (onOpen) return (
-      <Section title="Bağlılık" icon="crown" aside="sezon boyunca">
+      <Section title={L('Bağlılık', 'Fealty')} icon="crown" aside={L('sezon boyunca', 'for the season')}>
         <button className="liege-button" style={{ borderColor: liege.color }} onClick={() => onOpen(kingdom.liege!)}>
           <CrownBanner world={world} liege={kingdom.liege} size={28} />
           <span>
-            <b style={{ color: liege.color }}>{liege.name.toLocaleUpperCase('tr-TR')}</b>
+            <b style={{ color: liege.color }}>{liege.name.toLocaleUpperCase(locale())}</b>
             <small>
-              Lordu olduğun taç · hükümdar {liege.ruler} · ilişkin {Math.round(crownRelation(kingdom, kingdom.liege))}
+              {L(`Lordu olduğun taç · hükümdar ${liege.ruler} · ilişkin ${Math.round(crownRelation(kingdom, kingdom.liege))}`, `Your liege crown · ruler ${liege.ruler} · relations ${Math.round(crownRelation(kingdom, kingdom.liege))}`)}
             </small>
           </span>
           <Icon name="pin" size={16} />
@@ -251,16 +259,16 @@ export function Fealty({ world, kingdom, now, only, onSwear, onOpen }: { world: 
       </Section>
     )
     if (only !== undefined && only !== kingdom.liege) return (
-      <Section title="Bağlılık" icon="crown">
+      <Section title={L('Bağlılık', 'Fealty')} icon="crown">
         <p className="hint">
-          Sen <b style={{ color: liege.color }}>{liege.name}</b> lordusun; bu tacın lordu değilsin.
+          {L('Sen ', 'You are a lord of the ')}<b style={{ color: liege.color }}>{liege.name}</b>{L(' lordusun; bu tacın lordu değilsin.', '; you are not this crown\'s lord.')}
         </p>
       </Section>
     )
     return (
-      <Section title="Bağlılık" icon="crown" aside="sezon boyunca">
+      <Section title={L('Bağlılık', 'Fealty')} icon="crown" aside={L('sezon boyunca', 'for the season')}>
         <p className="hint">
-          <b style={{ color: liege.color }}>{liege.name}</b> lordusun. Hükümdarın {liege.ruler}, başkentin {liege.capital}.
+          {L('', 'You are a lord of the ')}<b style={{ color: liege.color }}>{liege.name}</b>{L(` lordusun. Hükümdarın ${liege.ruler}, başkentin ${liege.capital}.`, `. Your ruler is ${liege.ruler}, your capital ${liege.capital}.`)}
         </p>
       </Section>
     )
@@ -268,20 +276,24 @@ export function Fealty({ world, kingdom, now, only, onSwear, onOpen }: { world: 
   const crowns = world.cities.map((_, index) => index).filter((index) => only === undefined || index === only)
   // The crowns take notice of a lord once it has grown a little (they are introduced then).
   if (!fealtyOpen(kingdom, now)) return (
-    <Section title="Bağlılık" icon="crown" aside="şu an uygun değil">
+    <Section title={L('Bağlılık', 'Fealty')} icon="crown" aside={L('şu an uygun değil', 'not available yet')}>
       <p className="hint">
-        Taç krallıkları henüz seninle ilgilenmiyor. Lordluğunu biraz büyüt: {doneBuildings(kingdom, now)} / {balance.cities.crown.intro.buildings} yapı. O zaman iki taç sana
-        kendini tanıtacak ve tarafını seçeceksin.
+        {L(
+          `Taç krallıkları henüz seninle ilgilenmiyor. Lordluğunu biraz büyüt: ${doneBuildings(kingdom, now)} / ${balance.cities.crown.intro.buildings} yapı. O zaman iki taç sana kendini tanıtacak ve tarafını seçeceksin.`,
+          `The crown kingdoms take no interest in you yet. Grow your lordship a little: ${doneBuildings(kingdom, now)} / ${balance.cities.crown.intro.buildings} buildings. Then the two crowns will introduce themselves and you will choose a side.`,
+        )}
       </p>
     </Section>
   )
   return (
-    <Section title="Bağlılık" icon="crown" aside="henüz biat etmedin">
+    <Section title={L('Bağlılık', 'Fealty')} icon="crown" aside={L('henüz biat etmedin', 'not sworn yet')}>
       <p className="hint">
-        Haritadaki iki şehir, iki taç krallığının başkentidir. Birine biat edip lordu olursun; biat sezon boyunca değişmez. Başlamak için gerekmez, ama sarayı{' '}
-        {level}. seviyeye yükseltmek için biat şarttır.
+        {L(
+          `Haritadaki iki şehir, iki taç krallığının başkentidir. Birine biat edip lordu olursun; biat sezon boyunca değişmez. Başlamak için gerekmez, ama sarayı ${level}. seviyeye yükseltmek için biat şarttır.`,
+          `The two cities on the map are the capitals of the two crown kingdoms. Swear fealty to one and you become its lord; fealty holds for the whole season. You need not do it to begin with, but you must to raise your palace to level ${level}.`,
+        )}
       </p>
-      <div className={crowns.length === 1 ? 'goods two' : 'goods'} role="group" aria-label="Taç krallıkları">
+      <div className={crowns.length === 1 ? 'goods two' : 'goods'} role="group" aria-label={L('Taç krallıkları', 'The crown kingdoms')}>
         {crowns.map((index) => {
           const info = cityInfo(world, index)
           const middle = cityCenter(world.cities[index])
@@ -291,19 +303,19 @@ export function Fealty({ world, kingdom, now, only, onSwear, onOpen }: { world: 
               <Icon name="crown" size={24} />
               <b style={{ color: info.color }}>{info.name}</b>
               <small>{info.ruler}</small>
-              <small>başkent {info.capital} · {distance} karo</small>
+              <small>{L(`başkent ${info.capital} · ${distance} karo`, `capital ${info.capital} · ${distance} tiles`)}</small>
               {asking === index ? (
                 <span className="row">
                   <button className="btn small" onClick={() => onSwear(index)}>
-                    Eminim, biat et
+                    {L('Eminim, biat et', 'I am sure, swear fealty')}
                   </button>
                   <button className="btn small" onClick={() => setAsking(null)}>
-                    Vazgeç
+                    {L('Vazgeç', 'Cancel')}
                   </button>
                 </span>
               ) : (
                 <button className="btn small" onClick={() => setAsking(index)}>
-                  Biat et
+                  {L('Biat et', 'Swear fealty')}
                 </button>
               )}
             </div>
@@ -320,8 +332,8 @@ export function CrownBanner({ world, liege, size = 14 }: { world: World; liege?:
   if (liege == null || !world.cities[liege]) return null
   const info = cityInfo(world, liege)
   return (
-    <svg className="crown-banner" width={size} height={size} viewBox="0 0 14 14" role="img" aria-label={`${info.name} lordu`}>
-      <title>{`${info.name} lordu`}</title>
+    <svg className="crown-banner" width={size} height={size} viewBox="0 0 14 14" role="img" aria-label={L(`${info.name} lordu`, `Lord of the ${info.name}`)}>
+      <title>{L(`${info.name} lordu`, `Lord of the ${info.name}`)}</title>
       <rect x="1" y="1" width="1.6" height="13" fill="#2a1c10" />
       <path d="M2.6 1.5 H13 L10.4 4.5 L13 7.5 H2.6 Z" fill={info.color} stroke="#120d0b" strokeWidth="0.8" />
     </svg>
@@ -331,7 +343,7 @@ export function CrownBanner({ world, liege, size = 14 }: { world: World; liege?:
 // ---- The crowns' politics (CLAUDE.md §7.8) -------------------------------------------------------------------------
 
 const signedInt = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(Math.round(v))}`
-const signedDec = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}`
+const signedDec = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toLocaleString(locale(), { maximumFractionDigits: 1 })}`
 
 // How a crown stands with the lord: the relation, where it drifts back to, what moves it, and the gifts its patrols
 // bring at each step.
@@ -346,24 +358,26 @@ function CrownStanding({ world, index, kingdom }: { world: World; index: number;
   const q = balance.cities.crown.quests
   const royal = balance.cities.crown.royal.relation
   return (
-    <Section title="Seninle ilişkisi" icon="happy" aside={signedInt(relation)}>
-      <Meter value={(relation + 100) / 200} tone={relation >= 30 ? 'up' : relation <= -30 ? 'down' : 'gold'} label={`${info.name} ile ilişki`} segments={20} />
+    <Section title={L('Seninle ilişkisi', 'Relations with you')} icon="happy" aside={signedInt(relation)}>
+      <Meter value={(relation + 100) / 200} tone={relation >= 30 ? 'up' : relation <= -30 ? 'down' : 'gold'} label={L(`${info.name} ile ilişki`, `Relations with the ${info.name}`)} segments={20} />
       <p className="hint">
-        Zamanla {signedInt(rest)} düzeyine döner ({sworn ? 'kendi tacın sana sıcak bakar' : kingdom.liege !== undefined ? 'rakip taç sana soğuk bakar' : 'henüz kimseye biat etmedin'}).
-        İlişkiyi artıranlar: tüccarını {info.capital} şehrine göndermek (her sefer {signedDec(r.cityTrip)}), siparişlerini göndermek ({signedDec(sworn ? o.relation.own : o.relation.other)}), görevlerini bitirmek ({signedInt(sworn ? q.relation.own : q.relation.other)})
+        {L(
+          `Zamanla ${signedInt(rest)} düzeyine döner (${sworn ? 'kendi tacın sana sıcak bakar' : kingdom.liege !== undefined ? 'rakip taç sana soğuk bakar' : 'henüz kimseye biat etmedin'}). İlişkiyi artıranlar: tüccarını ${info.capital} şehrine göndermek (her sefer ${signedDec(r.cityTrip)}), siparişlerini göndermek (${signedDec(sworn ? o.relation.own : o.relation.other)}), görevlerini bitirmek (${signedInt(sworn ? q.relation.own : q.relation.other)})`,
+          `Drifts back to ${signedInt(rest)} over time (${sworn ? 'your own crown looks warmly on you' : kingdom.liege !== undefined ? 'the rival crown looks coldly on you' : 'you have sworn to no one yet'}). Raised by: sending your merchant to ${info.capital} (${signedDec(r.cityTrip)} a trip), sending its orders (${signedDec(sworn ? o.relation.own : o.relation.other)}), finishing its tasks (${signedInt(sworn ? q.relation.own : q.relation.other)})`,
+        )}
         {sworn
-          ? `, devriyesini ağırlamak (${signedInt(r.visit)}), kraliyet isteklerini teslim etmek (${signedInt(royal.deliver)}). Azaltanlar: kraliyet isteğini geri çevirmek (${signedInt(royal.decline)}).`
-          : `, istediği haracı ödemek (${signedInt(r.tributePaid)}). Azaltanlar: haracı reddetmek (${signedInt(r.tributeRefused)}). Cevapsız kalan haraç kendiliğinden ödenir (oyundaysan fazlasıyla); ilişkiyi bozmaz.`}
+          ? L(`, devriyesini ağırlamak (${signedInt(r.visit)}), kraliyet isteklerini teslim etmek (${signedInt(royal.deliver)}). Azaltanlar: kraliyet isteğini geri çevirmek (${signedInt(royal.decline)}).`, `, hosting its patrol (${signedInt(r.visit)}), delivering royal requests (${signedInt(royal.deliver)}). Lowered by: turning down a royal request (${signedInt(royal.decline)}).`)
+          : L(`, istediği haracı ödemek (${signedInt(r.tributePaid)}). Azaltanlar: haracı reddetmek (${signedInt(r.tributeRefused)}). Cevapsız kalan haraç kendiliğinden ödenir (oyundaysan fazlasıyla); ilişkiyi bozmaz.`, `, paying the tribute it asks (${signedInt(r.tributePaid)}). Lowered by: refusing tribute (${signedInt(r.tributeRefused)}). Unanswered tribute is paid automatically (with a surcharge if you are in the game) and does not hurt relations.`)}
       </p>
       <ul className="tiers">
         {balance.cities.crown.gifts.map((g) => (
           <li key={g.at} className={relation >= g.at ? 'on' : undefined}>
             <Icon name="chest" size={16} />
             <span>
-              <b>{g.name}</b> · ilişki {g.at}+
+              <b>{L(g.name, g.nameEn ?? g.name)}</b> · {L('ilişki', 'relations')} {g.at}+
             </span>
             <small>
-              {fmt(g.gold)} altın{Object.entries(g.goods).map(([good, v]) => `, ${fmt(v as number)} ${RESOURCE_NAMES[good as keyof typeof RESOURCE_NAMES].toLowerCase()}`).join('')}
+              {fmt(g.gold)} {L('altın', 'gold')}{Object.entries(g.goods).map(([good, v]) => `, ${fmt(v as number)} ${RESOURCE_NAMES[good as keyof typeof RESOURCE_NAMES].toLowerCase()}`).join('')}
             </small>
           </li>
         ))}
@@ -371,9 +385,12 @@ function CrownStanding({ world, index, kingdom }: { world: World; index: number;
       <p className="hint">
         {sworn
           ? gift
-            ? `Devriyesi sana her uğradığında «${gift.name}» getirir (tacın gücüyle artar ya da azalır).`
-            : `İlişkin ${balance.cities.crown.gifts[0].at}'a ulaşınca devriyesi sana armağan getirmeye başlar.`
-          : `Rakip tacın haraççıları ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelip hazinenin ${pctText(tributeShareNow(crownKeyOf(kingdom), index, serverNow()))}'ini (en az ${balance.cities.crown.patrol.tribute.min} altın) ister${waysText(crownKeyOf(kingdom), index, serverNow(), 'tribute') ? ` (${waysText(crownKeyOf(kingdom), index, serverNow(), 'tribute')})` : ''}; armağan getirmezler.`}
+            ? L(`Devriyesi sana her uğradığında «${gift.name}» getirir (tacın gücüyle artar ya da azalır).`, `Each time its patrol calls on you it brings “${gift.nameEn ?? gift.name}” (more or less with the crown's power).`)
+            : L(`İlişkin ${balance.cities.crown.gifts[0].at}'a ulaşınca devriyesi sana armağan getirmeye başlar.`, `Once your relations reach ${balance.cities.crown.gifts[0].at}, its patrol starts bringing you gifts.`)
+          : L(
+              `Rakip tacın haraççıları ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelip hazinenin ${pctText(tributeShareNow(crownKeyOf(kingdom), index, serverNow()))}'ini (en az ${balance.cities.crown.patrol.tribute.min} altın) ister${waysText(crownKeyOf(kingdom), index, serverNow(), 'tribute') ? ` (${waysText(crownKeyOf(kingdom), index, serverNow(), 'tribute')})` : ''}; armağan getirmezler.`,
+              `The rival crown's tribute collectors come every ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} minutes and ask for ${pctText(tributeShareNow(crownKeyOf(kingdom), index, serverNow()))} of the treasury (at least ${balance.cities.crown.patrol.tribute.min} gold)${waysText(crownKeyOf(kingdom), index, serverNow(), 'tribute') ? ` (${waysText(crownKeyOf(kingdom), index, serverNow(), 'tribute')})` : ''}; they bring no gifts.`,
+            )}
       </p>
     </Section>
   )
@@ -398,9 +415,9 @@ export function CrownRivalry({ world, online }: { world: World; online: Online }
   })
   const unsworn = lords.filter((l) => l.liege === null).length
   return (
-    <Section title="Taçların gücü" icon="banner" aside={share.map((v) => `%${Math.round(v * 100)}`).join(' · ')}>
+    <Section title={L('Taçların gücü', 'The crowns\' power')} icon="banner" aside={share.map((v) => L(`%${Math.round(v * 100)}`, `${Math.round(v * 100)}%`)).join(' · ')}>
       <div className="rivalry">
-        <svg viewBox="0 0 100 100" className="pie" role="img" aria-label={infos.map((info, i) => `${info.name} %${Math.round(share[i] * 100)}`).join(', ')}>
+        <svg viewBox="0 0 100 100" className="pie" role="img" aria-label={infos.map((info, i) => L(`${info.name} %${Math.round(share[i] * 100)}`, `${info.name} ${Math.round(share[i] * 100)}%`)).join(', ')}>
           {slices}
         </svg>
         <div className="rivalry-sides">
@@ -411,7 +428,7 @@ export function CrownRivalry({ world, online }: { world: World; online: Online }
               <div key={i} className="rivalry-side">
                 <b style={{ color: info.color }}>{info.name}</b>
                 <small>
-                  güç {fmt(power[i])} · {mine.length} lord
+                  {L(`güç ${fmt(power[i])} · ${mine.length} lord`, `power ${fmt(power[i])} · ${mine.length} lord${mine.length === 1 ? '' : 's'}`)}
                 </small>
                 <ul>
                   {mine.map((l) => (
@@ -421,7 +438,7 @@ export function CrownRivalry({ world, online }: { world: World; online: Online }
                       <small>{fmt(l.score)}</small>
                     </li>
                   ))}
-                  {mine.length === 0 && <li className="hint">Henüz lordu yok</li>}
+                  {mine.length === 0 && <li className="hint">{L('Henüz lordu yok', 'No lords yet')}</li>}
                 </ul>
               </div>
             )
@@ -429,12 +446,15 @@ export function CrownRivalry({ world, online }: { world: World; online: Online }
         </div>
       </div>
       <p className="hint">
-        Bir tacın gücü kendi {fmt(p.base)} puanı ile ona bağlı lordların puanlarının toplamıdır; lordları geliştikçe tacı güçlenir. Güçlü taç kendi lordlarına daha
-        cömerttir (bahşiş ve armağanlar ×{byPower(1, p.favour).toFixed(1).replace('.', ',')}'e kadar). {unsworn > 0 && `${unsworn} lord henüz taraf seçmedi.`}
+        {L(
+          `Bir tacın gücü kendi ${fmt(p.base)} puanı ile ona bağlı lordların puanlarının toplamıdır; lordları geliştikçe tacı güçlenir. Güçlü taç kendi lordlarına daha cömerttir (bahşiş ve armağanlar ×${byPower(1, p.favour).toFixed(1).replace('.', ',')}'e kadar).`,
+          `A crown's power is its own ${fmt(p.base)} points plus the points of the lords sworn to it; as its lords grow, so does the crown. A strong crown is more generous to its lords (tips and gifts up to ×${byPower(1, p.favour).toFixed(1)}).`,
+        )}{' '}
+        {unsworn > 0 && L(`${unsworn} lord henüz taraf seçmedi.`, `${unsworn} lord${unsworn === 1 ? ' has' : 's have'} not chosen a side yet.`)}
       </p>
       <p className="hint">
-        Şimdi:{' '}
-        {infos.map((info, i) => `${info.name} bahşiş/armağan ×${byPower(share[i], p.favour).toFixed(2).replace('.', ',')}`).join(' · ')}
+        {L('Şimdi:', 'Now:')}{' '}
+        {infos.map((info, i) => L(`${info.name} bahşiş/armağan ×${byPower(share[i], p.favour).toFixed(2).replace('.', ',')}`, `${info.name} tips/gifts ×${byPower(share[i], p.favour).toFixed(2)}`)).join(' · ')}
       </p>
     </Section>
   )
@@ -448,7 +468,7 @@ function Stewardship({ world, kingdom, now }: { world: World; kingdom: Kingdom; 
   const s = balance.cities.crown.stewardship
   const minutes = Math.max(1, Math.ceil((endsAt - now) / 60_000))
   return (
-    <Section title="Taçların pazarı" icon="trade" aside={`${minutes} dk sonra değişir`}>
+    <Section title={L('Taçların pazarı', 'The crowns\' market')} icon="trade" aside={L(`${minutes} dk sonra değişir`, `changes in ${minutes} min`)}>
       <ul className="tiers">
         {goods.map((good, i) => {
           const info = cityInfo(world, i)
@@ -458,21 +478,22 @@ function Stewardship({ world, kingdom, now }: { world: World; kingdom: Kingdom; 
             <li key={i} className={f >= 1 ? 'on' : 'off'}>
               <Icon name={RESOURCE_ICONS[good]} size={16} />
               <span>
-                <b style={{ color: info.color }}>{info.name}</b> {RESOURCE_NAMES[good].toLowerCase()} ticaretini yönetiyor
+                {L('', 'The ')}<b style={{ color: info.color }}>{info.name}</b> {L(`${RESOURCE_NAMES[good].toLowerCase()} ticaretini yönetiyor`, `oversees the ${RESOURCE_NAMES[good].toLowerCase()} trade`)}
               </span>
               <small>
                 {relation <= s.refuseBelow
-                  ? `tüccarları senden almıyor: fiyatın %${Math.round((1 - f) * 100)} düşük`
-                  : `ilişkin ${signedInt(relation)} → satış fiyatın ${f >= 1 ? '+' : '−'}%${Math.round(Math.abs(f - 1) * 100)}`}
+                  ? L(`tüccarları senden almıyor: fiyatın %${Math.round((1 - f) * 100)} düşük`, `its merchants will not buy from you: your price is ${Math.round((1 - f) * 100)}% lower`)
+                  : L(`ilişkin ${signedInt(relation)} → satış fiyatın ${f >= 1 ? '+' : '−'}%${Math.round(Math.abs(f - 1) * 100)}`, `relations ${signedInt(relation)} → your selling price ${f >= 1 ? '+' : '−'}${Math.round(Math.abs(f - 1) * 100)}%`)}
               </small>
             </li>
           )
         })}
       </ul>
       <p className="hint">
-        Her taç dönem dönem bir malın ticaretini yönetir. O malı sattığında (lobi pazarında da, şehirde de) fiyatın taçla ilişkine göre değişir: en çok %
-        {Math.round(s.bonus * 100)} fazla ya da %{Math.round(s.penalty * 100)} az; ilişkin {signedInt(s.refuseBelow)}'nin altındaysa o tacın tüccarları seninle alışveriş etmez ve
-        fiyatın yarıya düşer.
+        {L(
+          `Her taç dönem dönem bir malın ticaretini yönetir. O malı sattığında (lobi pazarında da, şehirde de) fiyatın taçla ilişkine göre değişir: en çok %${Math.round(s.bonus * 100)} fazla ya da %${Math.round(s.penalty * 100)} az; ilişkin ${signedInt(s.refuseBelow)}'nin altındaysa o tacın tüccarları seninle alışveriş etmez ve fiyatın yarıya düşer.`,
+          `Each crown in turn oversees the trade in one good. When you sell that good (at the lobby market or in a city) your price moves with your relations to that crown: up to ${Math.round(s.bonus * 100)}% more or ${Math.round(s.penalty * 100)}% less; below ${signedInt(s.refuseBelow)} that crown's merchants will not deal with you and your price is halved.`,
+        )}
       </p>
     </Section>
   )
@@ -486,7 +507,7 @@ export function CrownOrders({ world, kingdom, now, online }: { world: World; kin
   const trips = (kingdom.orderTrips ?? []).filter((t) => t.arriveAt > now)
   const o = balance.cities.crown.orders
   return (
-    <Section title="Taç siparişleri" icon="scroll" aside="saatte bir yenilenir">
+    <Section title={L('Taç siparişleri', 'Crown orders')} icon="scroll" aside={L('saatte bir yenilenir', 'renewed every hour')}>
       <ul className="order-cards">
         {world.cities.map((city, crown) => {
           const info = cityInfo(world, crown)
@@ -496,26 +517,26 @@ export function CrownOrders({ world, kingdom, now, online }: { world: World; kin
           const trip = cityTripMs(kingdom, city)
           const have = Math.floor(kingdom.stock[order.good])
           const text =
-            why === 'done' ? 'Bu saatin siparişi gönderildi' : why === 'have' ? `Depoda ${fmt(have)} / ${fmt(order.units)} var` : why === 'relation' ? 'Taç seninle alışveriş etmiyor' : why === 'locked' ? `${o.minPalace}. seviye saray gerekir` : !trip ? 'Ticaret noktası yok' : 'Kervanla gönder'
+            why === 'done' ? L('Bu saatin siparişi gönderildi', 'This hour\'s order has been sent') : why === 'have' ? L(`Depoda ${fmt(have)} / ${fmt(order.units)} var`, `${fmt(have)} / ${fmt(order.units)} in store`) : why === 'relation' ? L('Taç seninle alışveriş etmiyor', 'The crown will not trade with you') : why === 'locked' ? L(`${o.minPalace}. seviye saray gerekir`, `Needs a level ${o.minPalace} palace`) : !trip ? L('Ticaret noktası yok', 'No trading post') : L('Kervanla gönder', 'Send by caravan')
           return (
             <li key={crown} className="order-card">
               <Icon name={RESOURCE_ICONS[order.good]} size={24} />
               <div className="order-body">
                 <b style={{ color: info.color }}>{info.name}</b>
                 <span>
-                  {fmt(order.units)} {RESOURCE_NAMES[order.good].toLowerCase()} istiyor
+                  {L(`${fmt(order.units)} ${RESOURCE_NAMES[order.good].toLowerCase()} istiyor`, `wants ${fmt(order.units)} ${RESOURCE_NAMES[order.good].toLowerCase()}`)}
                 </span>
                 <span className="order-meta">
                   <span>
-                    <Icon name="gold" size={16} /> {fmt(pay)} altın
+                    <Icon name="gold" size={16} /> {fmt(pay)} {L('altın', 'gold')}
                   </span>
                   <span>
-                    <Icon name="time" size={16} /> sefer {trip ? `${seconds(trip)} sn` : '—'}
+                    <Icon name="time" size={16} /> {L('sefer', 'trip')} {trip ? L(`${seconds(trip)} sn`, `${seconds(trip)}s`) : '—'}
                   </span>
-                  <span>{Math.ceil((order.endsAt - now) / 60_000)} dk kaldı</span>
+                  <span>{L(`${Math.ceil((order.endsAt - now) / 60_000)} dk kaldı`, `${Math.ceil((order.endsAt - now) / 60_000)} min left`)}</span>
                 </span>
               </div>
-              <button className="btn small order-send" disabled={!!why || !trip || !online} data-why={!online ? 'Sunucuya bağlı değil' : why ? (text === 'Kervanla gönder' ? 'Şu an gönderilemez' : text) : 'Önce bir ticaret noktan olmalı'} onClick={() => online?.act({ type: 'order', crown })}>
+              <button className="btn small order-send" disabled={!!why || !trip || !online} data-why={!online ? L('Sunucuya bağlı değil', 'Not connected to the server') : why ? (text === L('Kervanla gönder', 'Send by caravan') ? L('Şu an gönderilemez', 'Cannot be sent right now') : text) : L('Önce bir ticaret noktan olmalı', 'You need a trading post first')} onClick={() => online?.act({ type: 'order', crown })}>
                 {text}
               </button>
             </li>
@@ -523,22 +544,24 @@ export function CrownOrders({ world, kingdom, now, online }: { world: World; kin
         })}
       </ul>
       {trips.length > 0 && (
-        <ul className="order-trips" aria-label="Yoldaki kervanlar">
+        <ul className="order-trips" aria-label={L('Yoldaki kervanlar', 'Caravans on the road')}>
           {trips.map((t) => (
             <li key={`${t.crown}:${t.leftAt}`}>
               <Icon name="trade" size={16} />
               <span>
-                {fmt(t.units)} {RESOURCE_NAMES[t.good].toLowerCase()} → {cityInfo(world, t.crown).capital} · {fmt(t.gold)} altın
+                {fmt(t.units)} {RESOURCE_NAMES[t.good].toLowerCase()} → {cityInfo(world, t.crown).capital} · {fmt(t.gold)} {L('altın', 'gold')}
               </span>
-              <Meter value={Math.max(0, Math.min(1, (now - t.leftAt) / (t.arriveAt - t.leftAt)))} label="Kervan" segments={10} />
-              <small>{seconds(t.arriveAt - now)} sn</small>
+              <Meter value={Math.max(0, Math.min(1, (now - t.leftAt) / (t.arriveAt - t.leftAt)))} label={L('Kervan', 'Caravan')} segments={10} />
+              <small>{L(`${seconds(t.arriveAt - now)} sn`, `${seconds(t.arriveAt - now)}s`)}</small>
             </li>
           ))}
         </ul>
       )}
       <p className="hint">
-        Mallar depondan hemen çıkar ve kervanla tacın başkentine gider; ödeme kervan dönünce gelir (sefer, tüccarın o şehre gidip dönmesi kadar sürer). Taç malı gönderdiğin andaki lobi fiyatının %
-        {Math.round((o.payFactor - 1) * 100)} fazlasına alır (biat ettiğin taç %{Math.round(o.swornBonus * 100)} daha fazla öder), ilişkiniz iyileşir. Satış lobi fiyatlarına dokunmaz. Kervan dönerken hazine doluysa sığmayan altın boşa gider.
+        {L(
+          `Mallar depondan hemen çıkar ve kervanla tacın başkentine gider; ödeme kervan dönünce gelir (sefer, tüccarın o şehre gidip dönmesi kadar sürer). Taç malı gönderdiğin andaki lobi fiyatının %${Math.round((o.payFactor - 1) * 100)} fazlasına alır (biat ettiğin taç %${Math.round(o.swornBonus * 100)} daha fazla öder), ilişkiniz iyileşir. Satış lobi fiyatlarına dokunmaz. Kervan dönerken hazine doluysa sığmayan altın boşa gider.`,
+          `The goods leave your stores at once and go by caravan to the crown's capital; payment comes when the caravan returns (the trip takes as long as the merchant's round trip to that city). The crown pays ${Math.round((o.payFactor - 1) * 100)}% over the lobby price at the moment you send (the crown you are sworn to pays ${Math.round(o.swornBonus * 100)}% more), and relations improve. The sale does not touch lobby prices. If the treasury is full when the caravan returns, the gold that does not fit is wasted.`,
+        )}
       </p>
     </Section>
   )
@@ -549,39 +572,39 @@ export function CrownOrders({ world, kingdom, now, online }: { world: World; kin
 // its order of the hour, its patrols and tribute), the task it asks of the lord this hour, and the struggle for power
 // between the two.
 export const QUEST_TITLES: Record<QuestKind, string> = {
-  trade: 'Ticari üstünlük',
-  town: 'Kasaba ele geçir',
-  order: 'Siparişimizi gönder',
-  army: 'Ordunu büyüt',
-  bandit: 'Yolları temizle',
-  pirate: 'Korsan avı',
-  haven: 'Korsan limanını kuşat',
+  trade: L('Ticari üstünlük', 'Trade supremacy'),
+  town: L('Kasaba ele geçir', 'Take a town'),
+  order: L('Siparişimizi gönder', 'Send our order'),
+  army: L('Ordunu büyüt', 'Grow your army'),
+  bandit: L('Yolları temizle', 'Clear the roads'),
+  pirate: L('Korsan avı', 'Pirate hunt'),
+  haven: L('Korsan limanını kuşat', 'Blockade a pirate haven'),
 }
 
 function questText(kind: QuestKind, units: number | undefined, good: string | undefined, need: number) {
   switch (kind) {
     case 'trade':
-      return `Bu saat tüccarın ${fmt(units ?? 0)} birim ${good} satsın: pazarda sözümüz geçsin.`
+      return L(`Bu saat tüccarın ${fmt(units ?? 0)} birim ${good} satsın: pazarda sözümüz geçsin.`, `Have your merchant sell ${fmt(units ?? 0)} units of ${good} this hour: let our word carry weight in the market.`)
     case 'town':
-      return 'Bu saat bir kasabayı ele geçir ya da kuşatıp al.'
+      return L('Bu saat bir kasabayı ele geçir ya da kuşatıp al.', 'Take a town this hour, by siege or otherwise.')
     case 'order':
-      return 'Bu saatin siparişini (yukarıda; Ticaret → Siparişler) kervanla başkente gönder.'
+      return L('Bu saatin siparişini (yukarıda; Ticaret → Siparişler) kervanla başkente gönder.', 'Send this hour\'s order (above; Trade → Orders) to the capital by caravan.')
     case 'army':
-      return `Garnizonun ve sahadaki ordularınla en az ${fmt(need)} askere ulaş.`
+      return L(`Garnizonun ve sahadaki ordularınla en az ${fmt(need)} askere ulaş.`, `Reach at least ${fmt(need)} soldiers across your garrison and armies in the field.`)
     case 'bandit':
-      return 'Yollarda gezen yağmacı çetelerinden birini bu saat ortadan kaldır: haritada bir çeteye tıkla, bir orduyla takip et ve yen.'
+      return L('Yollarda gezen yağmacı çetelerinden birini bu saat ortadan kaldır: haritada bir çeteye tıkla, bir orduyla takip et ve yen.', 'Wipe out one of the bandit bands roaming the roads this hour: click a band on the map, give chase with an army and beat it.')
     case 'pirate':
-      return 'Göllerde dolaşan korsan teknelerinden birini bu saat batır: haritada bir korsan teknesine tıkla, savaş gemili bir filoyla takip et.'
+      return L('Göllerde dolaşan korsan teknelerinden birini bu saat batır: haritada bir korsan teknesine tıkla, savaş gemili bir filoyla takip et.', 'Sink one of the pirate boats prowling the lakes this hour: click a pirate boat on the map and chase it with a fleet of warships.')
     case 'haven':
-      return 'Bir korsan limanını bu saat ablukaya al: limana tıkla, savaş gemili bir filoyla git ve limanı koruyan çektirileri yen.'
+      return L('Bir korsan limanını bu saat ablukaya al: limana tıkla, savaş gemili bir filoyla git ve limanı koruyan çektirileri yen.', 'Blockade a pirate haven this hour: click the haven, sail there with a fleet of warships and beat the raiders guarding it.')
   }
 }
 
 const QUEST_WHY: Record<string, string> = {
-  locked: `${balance.cities.crown.quests.minPalace}. seviye saray gerekir`,
-  relation: 'İlişkiniz çok kötü: bu taç senden bir şey istemez',
-  notYet: 'Henüz tamamlanmadı',
-  done: 'Ödülü aldın',
+  locked: L(`${balance.cities.crown.quests.minPalace}. seviye saray gerekir`, `Needs a level ${balance.cities.crown.quests.minPalace} palace`),
+  relation: L('İlişkiniz çok kötü: bu taç senden bir şey istemez', 'Relations are too poor: this crown asks nothing of you'),
+  notYet: L('Henüz tamamlanmadı', 'Not finished yet'),
+  done: L('Ödülü aldın', 'Reward claimed'),
 }
 
 export function CrownsPanel({ world, kingdom, online, market, now }: { world: World; kingdom: Kingdom; online: Online; market?: Market | null; now: number }) {
@@ -591,7 +614,7 @@ export function CrownsPanel({ world, kingdom, online, market, now }: { world: Wo
   const ids = ['list', ...world.cities.map((_, i) => `c${i}`)]
   const [page, setPage] = usePart<string>('crowns', ids, 'list')
   const [inner, setInner] = usePart<CrownPart>('crown-part', CROWN_PARTS, 'house')
-  if (crowns === 0) return <p className="hint">Bu lobide taç krallığı yok.</p>
+  if (crowns === 0) return <p className="hint">{L('Bu lobide taç krallığı yok.', 'There are no crown kingdoms in this lobby.')}</p>
   const palace = palaceLevel(kingdom, now)
   const claimable = (i: number) => !!questProgress(kingdom, i, now).taken && !questError(kingdom, i, 'claim', now, crowns, palace)
   const crown = page === 'list' ? null : Number(page.slice(1))
@@ -607,31 +630,31 @@ export function CrownsPanel({ world, kingdom, online, market, now }: { world: Wo
     )
   const info = cityInfo(world, crown)
   const sections: { id: CrownPart; name: string; dot?: boolean }[] = [
-    { id: 'house', name: 'Hanedan' },
-    { id: 'court', name: 'Saray' },
-    { id: 'policy', name: 'Politika', dot: claimable(crown) },
+    { id: 'house', name: L('Hanedan', 'Dynasty') },
+    { id: 'court', name: L('Saray', 'Court') },
+    { id: 'policy', name: L('Politika', 'Policy'), dot: claimable(crown) },
   ]
   return (
     <>
       <BetrayalCard world={world} kingdom={kingdom} online={online} now={now} />
       <header className="crown-page-head" style={{ ['--crown' as string]: info.color }}>
-        <button className="btn small crown-back" onClick={() => setPage('list')} aria-label="Krallıklara dön">
-          ← Krallıklar
+        <button className="btn small crown-back" onClick={() => setPage('list')} aria-label={L('Krallıklara dön', 'Back to the kingdoms')}>
+          {L('← Krallıklar', '← Kingdoms')}
         </button>
         <CrownBanner world={world} liege={crown} size={24} />
         <div>
           <b style={{ color: info.ink }}>{info.name}</b>
           <small>
             {info.ruler}
-            {kingdom.liege === crown ? ' · biat ettiğin taç' : ''}
+            {kingdom.liege === crown ? L(' · biat ettiğin taç', ' · your liege crown') : ''}
           </small>
         </div>
       </header>
-      <nav className="crown-pills" aria-label="Tacın bölümleri">
+      <nav className="crown-pills" aria-label={L('Tacın bölümleri', 'The crown\'s sections')}>
         {sections.map((x) => (
           <button key={x.id} className={inner === x.id ? 'crown-pill on' : 'crown-pill'} aria-current={inner === x.id ? 'page' : undefined} onClick={() => setInner(x.id)}>
             {x.name}
-            {x.dot && <span className="dot" aria-label="Bekleyen bir şey var" />}
+            {x.dot && <span className="dot" aria-label={L('Bekleyen bir şey var', 'Something is waiting')} />}
           </button>
         ))}
       </nav>
@@ -661,31 +684,34 @@ function CrownCards({ world, kingdom, online, now, claimable, onOpen }: { world:
               <span className="crown-card-head">
                 <CrownBanner world={world} liege={i} size={20} />
                 <b style={{ color: info.ink }}>{info.name}</b>
-                {claimable(i) && <span className="dot" aria-label="Ödül bekliyor" />}
+                {claimable(i) && <span className="dot" aria-label={L('Ödül bekliyor', 'A reward is waiting')} />}
               </span>
               <Portrait seed={((key.lobbyKey ?? 0) % 100_000) * 7 + i * 104_729 + h.ruler.id * 977} sex={h.ruler.sex} age={crownAgeOf(h.ruler, now)} role={h.ruler.sex === 'm' ? 'king' : 'queen'} size={64} />
               <span className="crown-card-ruler">
                 {h.title}
                 <small>
-                  {Math.floor(crownAgeOf(h.ruler, now))} yaşında{h.regent ? ' · naip yönetiyor' : ''}
+                  {L(`${Math.floor(crownAgeOf(h.ruler, now))} yaşında`, `aged ${Math.floor(crownAgeOf(h.ruler, now))}`)}{h.regent ? L(' · naip yönetiyor', ' · a regent rules') : ''}
                 </small>
               </span>
-              <Meter value={(relation + 100) / 200} tone={relation >= 30 ? 'up' : relation <= -30 ? 'down' : 'gold'} label={`${info.name} ile ilişki`} segments={10} />
-              <small>ilişki {signedInt(Math.round(relation))}</small>
-              {sworn ? <span className="crown-badge">biat ettiğin taç</span> : kingdom.liege !== undefined && kingdom.liege !== null ? <span className="crown-badge rival">rakip taç</span> : null}
+              <Meter value={(relation + 100) / 200} tone={relation >= 30 ? 'up' : relation <= -30 ? 'down' : 'gold'} label={L(`${info.name} ile ilişki`, `Relations with the ${info.name}`)} segments={10} />
+              <small>{L('ilişki', 'relations')} {signedInt(Math.round(relation))}</small>
+              {sworn ? <span className="crown-badge">{L('biat ettiğin taç', 'your liege crown')}</span> : kingdom.liege !== undefined && kingdom.liege !== null ? <span className="crown-badge rival">{L('rakip taç', 'rival crown')}</span> : null}
             </button>
           )
         })}
       </div>
       {world.cities.length > 1 && (
-        <div className="crown-strip" role="img" aria-label={`Güç: ${world.cities.map((_, i) => `${cityInfo(world, i).name} %${Math.round(share[i] * 100)}`).join(', ')}`}>
+        <div className="crown-strip" role="img" aria-label={`${L('Güç', 'Power')}: ${world.cities.map((_, i) => L(`${cityInfo(world, i).name} %${Math.round(share[i] * 100)}`, `${cityInfo(world, i).name} ${Math.round(share[i] * 100)}%`)).join(', ')}`}>
           <div className="crown-strip-bar">
             {share.map((v, i) => (
               <i key={i} style={{ width: `${v * 100}%`, background: cityInfo(world, i).color }} />
             ))}
           </div>
           <small>
-            Güç %{Math.round(share[0] * 100)} · %{Math.round(share[1] * 100)} · taçlar {STANCE_NAMES[stance].toLocaleLowerCase('tr-TR')}
+            {L(
+              `Güç %${Math.round(share[0] * 100)} · %${Math.round(share[1] * 100)} · taçlar ${STANCE_NAMES[stance].toLocaleLowerCase(locale())}`,
+              `Power ${Math.round(share[0] * 100)}% · ${Math.round(share[1] * 100)}% · the crowns: ${STANCE_NAMES[stance].toLocaleLowerCase(locale())}`,
+            )}
           </small>
         </div>
       )}
@@ -704,7 +730,7 @@ function CrownPolicy({ world, kingdom, crown: i, online, market, now }: { world:
   const palace = palaceLevel(kingdom, now)
   const q = balance.cities.crown.quests
   const tribute = balance.cities.crown.patrol.tribute
-  const minutes = (ms: number) => `${Math.max(1, Math.ceil(ms / 60_000))} dk`
+  const minutes = (ms: number) => L(`${Math.max(1, Math.ceil(ms / 60_000))} dk`, `${Math.max(1, Math.ceil(ms / 60_000))} min`)
   const goldRoom = goldCap(kingdom, now) - kingdom.stock.gold
   const key = crownKeyOf(kingdom)
   const tipWhy = waysText(key, i, now, 'tip')
@@ -723,52 +749,56 @@ function CrownPolicy({ world, kingdom, crown: i, online, market, now }: { world:
         const sworn = kingdom.liege === i
         const goodName = (g: keyof typeof RESOURCE_NAMES) => RESOURCE_NAMES[g].toLowerCase()
         return (
-          <Section title={info.name} icon="crown" aside={`${sworn ? 'biat ettiğin taç · ' : ''}ilişki ${signedInt(Math.round(relation))}`}>
+          <Section title={info.name} icon="crown" aside={`${sworn ? L('biat ettiğin taç · ', 'your liege crown · ') : ''}${L('ilişki', 'relations')} ${signedInt(Math.round(relation))}`}>
             <div className="feature">
               <Icon name="crown" size={32} />
               <div>
                 <b style={{ color: info.color }}>{info.ruler}</b>
                 <small className="hint">
-                  {info.capital} şehrinden hüküm sürer. {sworn ? 'Sen onun lordusun.' : kingdom.liege !== undefined && kingdom.liege !== null ? 'Rakip tacın lordusun; sana soğuk bakar.' : 'Henüz kimseye biat etmedin.'}
+                  {L(`${info.capital} şehrinden hüküm sürer.`, `Rules from the city of ${info.capital}.`)} {sworn ? L('Sen onun lordusun.', 'You are its lord.') : kingdom.liege !== undefined && kingdom.liege !== null ? L('Rakip tacın lordusun; sana soğuk bakar.', 'You are the rival crown\'s lord; it looks coldly on you.') : L('Henüz kimseye biat etmedin.', 'You have not sworn to anyone yet.')}
                 </small>
               </div>
             </div>
-            <Meter value={(relation + 100) / 200} tone={relation >= 30 ? 'up' : relation <= -30 ? 'down' : 'gold'} label={`${info.name} ile ilişki`} segments={20} />
-            <b className="crown-sub">Politikaları</b>
-            <Stat label="Pazardan alıyor" value={goodName(buys.good)} note={`dakikada ${fmt(buys.perMinute)} birim, ucuzken · ${minutes(buys.until - now)} daha`} />
-            <Stat label="Yönettiği mal" value={goodName(goods[i])} note={`satarken senin fiyatın ×${price(stewardFactor(kingdom, goods[i], now))} · ${minutes(endsAt - now)} daha`} />
+            <Meter value={(relation + 100) / 200} tone={relation >= 30 ? 'up' : relation <= -30 ? 'down' : 'gold'} label={L(`${info.name} ile ilişki`, `Relations with the ${info.name}`)} segments={20} />
+            <b className="crown-sub">{L('Politikaları', 'Its policies')}</b>
+            <Stat label={L('Pazardan alıyor', 'Buying at market')} value={goodName(buys.good)} note={L(`dakikada ${fmt(buys.perMinute)} birim, ucuzken · ${minutes(buys.until - now)} daha`, `${fmt(buys.perMinute)} units a minute while cheap · ${minutes(buys.until - now)} more`)} />
+            <Stat label={L('Yönettiği mal', 'Good it oversees')} value={goodName(goods[i])} note={L(`satarken senin fiyatın ×${price(stewardFactor(kingdom, goods[i], now))} · ${minutes(endsAt - now)} daha`, `your selling price ×${price(stewardFactor(kingdom, goods[i], now))} · ${minutes(endsAt - now)} more`)} />
             <Stat
-              label="Siparişi"
+              label={L('Siparişi', 'Its order')}
               value={`${fmt(order.units)} ${goodName(order.good)}`}
-              note={`${fmt(orderPay(kingdom, order, market, now))} altın öder${orderSent ? ' · gönderdin' : ''} · Ticaret → Siparişler · ${minutes(order.endsAt - now)} daha`}
+              note={L(`${fmt(orderPay(kingdom, order, market, now))} altın öder${orderSent ? ' · gönderdin' : ''} · Ticaret → Siparişler · ${minutes(order.endsAt - now)} daha`, `pays ${fmt(orderPay(kingdom, order, market, now))} gold${orderSent ? ' · sent' : ''} · Trade → Orders · ${minutes(order.endsAt - now)} more`)}
             />
             <Stat
-              label="Devriye ve haraç"
-              value={sworn ? 'devriye' : kingdom.liege !== undefined && kingdom.liege !== null ? 'haraççı' : 'gelmez'}
+              label={L('Devriye ve haraç', 'Patrol and tribute')}
+              value={sworn ? L('devriye', 'patrol') : kingdom.liege !== undefined && kingdom.liege !== null ? L('haraççı', 'tribute collectors') : L('gelmez', 'none come')}
               note={
                 sworn
-                  ? `devriyesi eğlence merkezine uğrar, ~${fmt(tipPreview(kingdom, i, online, now))} altın bahşiş bırakır${tipWhy ? ` (${tipWhy})` : ''}`
+                  ? L(`devriyesi eğlence merkezine uğrar, ~${fmt(tipPreview(kingdom, i, online, now))} altın bahşiş bırakır${tipWhy ? ` (${tipWhy})` : ''}`, `its patrol calls at your entertainment hall and tips ~${fmt(tipPreview(kingdom, i, online, now))} gold${tipWhy ? ` (${tipWhy})` : ''}`)
                   : kingdom.liege !== undefined && kingdom.liege !== null
-                    ? `${Math.round(tribute.everySeconds / 60)} dakikada bir hazinenin ${pctText(tributeShareNow(key, i, now))}'ini (en az ${tribute.min} altın) ister${tributeWhy ? ` (${tributeWhy})` : ''}`
-                    : 'biat etmediğin için ne devriye ne haraççı gönderir'
+                    ? L(`${Math.round(tribute.everySeconds / 60)} dakikada bir hazinenin ${pctText(tributeShareNow(key, i, now))}'ini (en az ${tribute.min} altın) ister${tributeWhy ? ` (${tributeWhy})` : ''}`, `asks for ${pctText(tributeShareNow(key, i, now))} of the treasury every ${Math.round(tribute.everySeconds / 60)} minutes (at least ${tribute.min} gold)${tributeWhy ? ` (${tributeWhy})` : ''}`)
+                    : L('biat etmediğin için ne devriye ne haraççı gönderir', 'sends neither patrol nor collectors, since you are not sworn')
               }
             />
-            <b className="crown-sub">Senden istediği · {QUEST_TITLES[quest.kind]}</b>
+            <b className="crown-sub">{L('Senden istediği', 'What it asks of you')} · {QUEST_TITLES[quest.kind]}</b>
             <p className="hint">{questText(quest.kind, quest.units, quest.good && goodName(quest.good), need)}</p>
-            {taken && <Meter value={need ? Math.min(1, have / need) : 1} tone={have >= need ? 'up' : 'gold'} label="Görevin ilerlemesi" segments={10} />}
+            {taken && <Meter value={need ? Math.min(1, have / need) : 1} tone={have >= need ? 'up' : 'gold'} label={L('Görevin ilerlemesi', 'Task progress')} segments={10} />}
             <p className="hint">
-              {taken ? `${fmt(Math.min(have, need))} / ${fmt(need)} · ` : ''}Ödül: {fmt(quest.gold)} altın ve ilişki +{sworn ? q.relation.own : q.relation.other} · {minutes(quest.endsAt - now)} kaldı
+              {taken ? `${fmt(Math.min(have, need))} / ${fmt(need)} · ` : ''}
+              {L(
+                `Ödül: ${fmt(quest.gold)} altın ve ilişki +${sworn ? q.relation.own : q.relation.other} · ${minutes(quest.endsAt - now)} kaldı`,
+                `Reward: ${fmt(quest.gold)} gold and +${sworn ? q.relation.own : q.relation.other} relations · ${minutes(quest.endsAt - now)} left`,
+              )}
             </p>
             {taken && !claim && goldRoom < quest.gold && (
-              <p className="hint down">Hazinende {fmt(Math.max(0, goldRoom))} altınlık yer var: ödülün kalanı boşa gider. Önce biraz harca.</p>
+              <p className="hint down">{L(`Hazinende ${fmt(Math.max(0, goldRoom))} altınlık yer var: ödülün kalanı boşa gider. Önce biraz harca.`, `Your treasury has room for ${fmt(Math.max(0, goldRoom))} gold: the rest of the reward would go to waste. Spend a little first.`)}</p>
             )}
             {!taken ? (
-              <button className="btn small" disabled={!!take} data-why={take ? (QUEST_WHY[take] ?? 'Şu an alınamaz') : undefined} onClick={() => online.act({ type: 'quest', crown: i, action: 'take' })}>
-                <Icon name="scroll" size={16} /> {take ? QUEST_WHY[take] ?? 'Alınamaz' : 'Görevi al'}
+              <button className="btn small" disabled={!!take} data-why={take ? (QUEST_WHY[take] ?? L('Şu an alınamaz', 'Cannot be taken right now')) : undefined} onClick={() => online.act({ type: 'quest', crown: i, action: 'take' })}>
+                <Icon name="scroll" size={16} /> {take ? QUEST_WHY[take] ?? L('Alınamaz', 'Unavailable') : L('Görevi al', 'Take the task')}
               </button>
             ) : (
-              <button className={claim ? 'btn small' : 'btn small primary'} disabled={!!claim} data-why={claim ? (QUEST_WHY[claim] ?? 'Ödül şu an alınamaz') : undefined} onClick={() => online.act({ type: 'quest', crown: i, action: 'claim' })}>
-                <Icon name="chest" size={16} /> {claim ? QUEST_WHY[claim] ?? 'Alınamaz' : 'Ödülü al'}
+              <button className={claim ? 'btn small' : 'btn small primary'} disabled={!!claim} data-why={claim ? (QUEST_WHY[claim] ?? L('Ödül şu an alınamaz', 'The reward cannot be claimed now')) : undefined} onClick={() => online.act({ type: 'quest', crown: i, action: 'claim' })}>
+                <Icon name="chest" size={16} /> {claim ? QUEST_WHY[claim] ?? L('Alınamaz', 'Unavailable') : L('Ödülü al', 'Claim reward')}
               </button>
             )}
           </Section>

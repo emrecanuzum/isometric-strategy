@@ -1,4 +1,5 @@
 import { ARCHERY_LIMIT, archeryGame, balance } from '@game/shared'
+import { L } from '../../../lib/i18n'
 import type { ArcheryState } from '@game/shared'
 import { play } from '../../../audio/sfx'
 import { C, H, PAL, W, bake, birds, box, checker, cloudLayer, hash, oval, pennant, pline, ramp, rgb, ridge, scroll, text, tone } from './art'
@@ -77,7 +78,7 @@ function target() {
 
 export const archeryScene: Scene<ArcheryState> = {
   make: archeryGame,
-  controls: 'Basılı tut: yayı ger · bırak: oku at',
+  controls: L('Basılı tut: yayı ger · bırak: oku at', 'Hold: draw the bow · release: loose the arrow'),
   score: (s) => s.score,
   left: (s) => 1 - s.step / ARCHERY_LIMIT,
   create() {
@@ -101,10 +102,10 @@ export const archeryScene: Scene<ArcheryState> = {
         fx.burst(x, y, h.points > 0 ? 10 : 4, { colors: [C(PAL.wheat[4]), C(PAL.wheat[3]), C(PAL.wheat[2])], speed: [20, 60], gravity: 200, life: [0.3, 0.7] })
         fx.float(h.points > 0 ? `+${h.points}` : '0', x, y - 16, h.points >= 10 ? '#f2d16b' : h.points >= 6 ? '#9cc464' : '#c8b8a0', h.points >= 10 ? 14 : 11)
         if (h.points >= 10) {
-          fx.float('Tam isabet!', CX, CY - 46, '#fff4c0', 12, 1.1)
+          fx.float(L('Tam isabet!', 'Bullseye!'), CX, CY - 46, '#fff4c0', 12, 1.1)
           fx.flash('#fff4c0', 0.1)
           fx.shake(2, 0.15)
-        } else if (h.points === 0) fx.float('Iska!', x, y - 28, '#ec7a5a', 10)
+        } else if (h.points === 0) fx.float(L('Iska!', 'Miss!'), x, y - 28, '#ec7a5a', 10)
       }
       if (s.shot > shot) {
         shot = s.shot
@@ -112,7 +113,7 @@ export const archeryScene: Scene<ArcheryState> = {
       }
       // The wind pennant on the left.
       pennant(ctx, 22, 50, t, s.wind / A.wind, ['#c8402e', '#f2f0e6'], 18)
-      text(ctx, `Rüzgâr ${s.wind > 0 ? '→' : s.wind < 0 ? '←' : '·'} ${Math.abs(s.wind)}`, 8, 76, { size: 9 })
+      text(ctx, L(`Rüzgâr ${s.wind > 0 ? '→' : s.wind < 0 ? '←' : '·'} ${Math.abs(s.wind)}`, `Wind ${s.wind > 0 ? '→' : s.wind < 0 ? '←' : '·'} ${Math.abs(s.wind)}`), 8, 76, { size: 9 })
       // Drifting leaves in the wind.
       for (let i = 0; i < 6; i++) {
         const x = (((hash(i, 0, 7) * W + t * (8 + s.wind)) % (W + 20)) + W + 20) % (W + 20) - 10
@@ -191,7 +192,7 @@ export const archeryScene: Scene<ArcheryState> = {
         const k = Math.min(1, s.drawn / A.steadySeconds)
         box(ctx, '#14101a', 8, H - 14, 52, 6)
         box(ctx, trembling ? '#ec7a5a' : '#9cc464', 9, H - 13, Math.round(k * 50), 4)
-        text(ctx, trembling ? 'Kol titriyor!' : 'Nişan sakin', 8, H - 26, { size: 8, color: trembling ? '#ec7a5a' : '#c8e0a0' })
+        text(ctx, trembling ? L('Kol titriyor!', 'Arm trembling!') : L('Nişan sakin', 'Aim steady'), 8, H - 26, { size: 8, color: trembling ? '#ec7a5a' : '#c8e0a0' })
       }
       // Arrows left in the quiver.
       const left = A.arrows - s.shot

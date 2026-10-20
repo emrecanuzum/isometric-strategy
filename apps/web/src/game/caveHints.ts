@@ -3,6 +3,7 @@ import type { TrailMark, World } from '@game/shared'
 import { cityInfo } from './cities'
 import { innInfo } from './innInfo'
 import { isCaravanserai } from './innSprites'
+import { getLang, L, locale } from '../lib/i18n'
 
 // The words of a lord's trail to a bandit clan's cave (CLAUDE.md §7.9.1): the hints are told from a landmark the server
 // chose ("Akova kasabasının güneyindeki dağlar"); inns and crown capitals are named here, from the world the app sets
@@ -14,10 +15,13 @@ export const setHintWorld = (w: World | null) => {
 }
 
 // "kuzeyindeki" … : the way from the landmark, 0–7 clockwise from north on the screen.
+// English: the way itself ("the mountains south of …").
+const DIR_EN = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west']
 const DIR_LOC = ['kuzeyindeki', 'kuzeydoğusundaki', 'doğusundaki', 'güneydoğusundaki', 'güneyindeki', 'güneybatısındaki', 'batısındaki', 'kuzeybatısındaki']
 
 // A proper name in the genitive ("Akçay Hanı'nın", "Altınkapı'nın", "Gökova Beyliği'nin"), by the last vowel.
 export function genitive(name: string) {
+  if (getLang() === 'en') return `${name}'s`
   const lower = name.toLocaleLowerCase('tr-TR')
   const vowels = 'aeıioöuü'
   let last = ''
@@ -44,18 +48,19 @@ function innName(mark: TrailMark) {
 }
 
 // The landmark's name in the genitive: "Akova kasabasının", "Kavaklı Menzilhanesi'nin", "senin topraklarının".
+// In English the landmark itself, to follow "of": "Akova town", "Kavaklı Inn", "your lands".
 export function markGenitive(mark: TrailMark) {
   switch (mark.kind) {
     case 'town':
-      return `${mark.name ?? 'bir'} kasabasının`
+      return mark.name ? L(`${mark.name} kasabasının`, `${mark.name} town`) : L('bir kasabasının', 'a town')
     case 'inn': {
       const name = innName(mark)
-      return name ? genitive(name) : 'bir hanın'
+      return name ? L(genitive(name), name) : L('bir hanın', 'an inn')
     }
     case 'city':
-      return world && world.cities[mark.idx] ? genitive(cityInfo(world, mark.idx).capital) : 'bir taç başkentinin'
+      return world && world.cities[mark.idx] ? L(genitive(cityInfo(world, mark.idx).capital), cityInfo(world, mark.idx).capital) : L('bir taç başkentinin', 'a crown capital')
     case 'lord':
-      return mark.own ? 'senin topraklarının' : mark.name ? `${genitive(mark.name)} topraklarının` : 'bir lordun topraklarının'
+      return mark.own ? L('senin topraklarının', 'your lands') : mark.name ? L(`${genitive(mark.name)} topraklarının`, `${genitive(mark.name)} lands`) : L('bir lordun topraklarının', "a lord's lands")
   }
 }
 
@@ -67,15 +72,24 @@ export interface TrailHint {
 
 // Where the trail leads, as a phrase: `place` ("Akova kasabasının güneyindeki dağlar", then "Akova kasabasının 25 karo
 // kadar güneyindeki dağ eteği") and `to` (the same in the dative: "… dağlara" / "… dağ eteğine"). Old trails without a
-// landmark: from the last fight.
+// landmark: from the last fight. In English `to` is the same as `place` ("the mountains south of Akova town"); the
+// caller writes the "to" ("the trail leads to …").
 export function trailHint(t: TrailHint) {
   const dir = ((Number(t.dir ?? 0) % 8) + 8) % 8
   const far = t.far ? Number(t.far) : null
   if (t.mark) {
-    const head = `${markGenitive(t.mark)} ${far ? `${far.toLocaleString('tr-TR')} karo kadar ` : ''}${DIR_LOC[dir]}`
+    if (getLang() === 'en') {
+      const place = far ? `the foothills about ${far.toLocaleString(locale())} tiles ${DIR_EN[dir]} of ${markGenitive(t.mark)}` : `the mountains ${DIR_EN[dir]} of ${markGenitive(t.mark)}`
+      return { place, to: place }
+    }
+    const head = `${markGenitive(t.mark)} ${far ? `${far.toLocaleString(locale())} karo kadar ` : ''}${DIR_LOC[dir]}`
     return { place: `${head} ${far ? 'dağ eteği' : 'dağlar'}`, to: `${head} ${far ? 'dağ eteğine' : 'dağlara'}` }
   }
-  const tail = far ? `, son savaş yerinden aşağı yukarı ${far.toLocaleString('tr-TR')} karo ötede` : ''
+  if (getLang() === 'en') {
+    const place = `the mountains to the ${DIR_NAMES[dir]}${far ? `, roughly ${far.toLocaleString(locale())} tiles from the last battlefield` : ''}`
+    return { place, to: place }
+  }
+  const tail = far ? `, son savaş yerinden aşağı yukarı ${far.toLocaleString(locale())} karo ötede` : ''
   return { place: `${DIR_NAMES[dir]} yönündeki dağlar${tail}`, to: `${DIR_NAMES[dir]} yönündeki dağlara${tail}` }
 }
 

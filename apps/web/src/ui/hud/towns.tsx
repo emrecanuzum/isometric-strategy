@@ -35,21 +35,29 @@ import type { Army, HeldTown, Kingdom, LoyaltyParts, Market, Pact, Point, Town, 
 import { cityInfo } from '../../game/cities'
 import { TOWN_KIND_NAMES, townGift } from '../../game/towns'
 import { Icon } from '../icons'
+import { L, getLang, locale } from '../../lib/i18n'
 import { Meter, Section, Stat, fmt, signed, times } from './primitives'
+import { NameNote } from '../NameNote'
 
 // A town's sheet (CLAUDE.md §8.4): what it sends its holder, who holds it, the siege under way, and sending an army
 // to lay siege to it. A town of the player's own also shows what it has sent so far, how loyal it is and why, the
 // upkeep paid for that loyalty (set here), and what it adds to the lord's strength and to his crown's.
 
 // The upkeep levels by name (balance.towns.upkeep.goldPerRound).
-const UPKEEP_NAMES = ['Yok', 'Az', 'Orta', 'Cömert']
-const upkeepName = (i: number) => UPKEEP_NAMES[i] ?? `${i}. kademe`
+const UPKEEP_NAMES = [L('Yok', 'None'), L('Az', 'Low'), L('Orta', 'Medium'), L('Cömert', 'Generous')]
+const upkeepName = (i: number) => UPKEEP_NAMES[i] ?? L(`${i}. kademe`, `tier ${i}`)
+// Decimals with the language's separator.
+const dec = (v: number | string) => (getLang() === 'en' ? String(v) : String(v).replace('.', ','))
 
-const GOOD_NAMES: Record<TownGood, string> = { gold: 'Altın', food: 'Yemek', materials: 'Yapı malzemesi', arms: 'Savaş malzemesi', villagers: 'Köylü' }
-const amount = (v: number) => (v >= 100 ? fmt(v) : (Math.round(v * 10) / 10).toLocaleString('tr-TR'))
+const GOOD_NAMES: Record<TownGood, string> = { gold: L('Altın', 'Gold'), food: L('Yemek', 'Food'), materials: L('Yapı malzemesi', 'Building materials'), arms: L('Savaş malzemesi', 'War materials'), villagers: L('Köylü', 'Villagers') }
+const amount = (v: number) => (v >= 100 ? fmt(v) : (Math.round(v * 10) / 10).toLocaleString(locale()))
 const span = (ms: number) => {
   const m = Math.max(0, Math.floor(ms / 60_000))
-  return m < 60 ? `${m} dakika` : m < 1440 ? `${Math.floor(m / 60)} saat ${m % 60} dakika` : `${Math.floor(m / 1440)} gün ${Math.floor((m % 1440) / 60)} saat`
+  return m < 60
+    ? L(`${m} dakika`, `${m} min`)
+    : m < 1440
+      ? L(`${Math.floor(m / 60)} saat ${m % 60} dakika`, `${Math.floor(m / 60)} h ${m % 60} min`)
+      : L(`${Math.floor(m / 1440)} gün ${Math.floor((m % 1440) / 60)} saat`, `${Math.floor(m / 1440)} d ${Math.floor((m % 1440) / 60)} h`)
 }
 
 const clock = (ms: number) => {
@@ -58,7 +66,10 @@ const clock = (ms: number) => {
 }
 
 // Armies named as on the army tab: "1. Ordu", "2. Ordu" (the lord's armies in the order they were raised).
-const armyLabel = (a: Army, all: Army[]) => `${all.filter((b) => b.kingdom_id === a.kingdom_id).sort((x, y) => x.id - y.id).findIndex((b) => b.id === a.id) + 1}. Ordu`
+const armyLabel = (a: Army, all: Army[]) => {
+  const n = all.filter((b) => b.kingdom_id === a.kingdom_id).sort((x, y) => x.id - y.id).findIndex((b) => b.id === a.id) + 1
+  return L(`${n}. Ordu`, `Army ${n}`)
+}
 
 export function TownSheet({ world, town, walled, kingdom, me, names, armies, pacts, now, market, relation, onSend, onMove, onBuy, onWatchBattle, onShow, onWatch, onUpkeep, onRelease, onClose }: {
   world: World
@@ -111,27 +122,27 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
   const restless = !!held && (townRevolting(held, now) || townLoyalty(held) < balance.towns.revolt.below + 5 || !!town.rebels)
   const parts: Part<TownPart>[] = mine
     ? [
-        { id: 'state', name: 'Durum', icon: 'happy', dot: restless },
-        { id: 'upkeep', name: 'Bakım', icon: 'gold', dot: (kingdom.towns?.length ?? 0) > 1 },
-        { id: 'yield', name: 'Getiri', icon: 'chest' },
-        { id: 'market', name: 'Pazar', icon: 'trade' },
-        { id: 'siege', name: 'Kuşatma', icon: 'swords', dot: !!siege },
-        { id: 'release', name: 'Bırak', icon: 'banner' },
+        { id: 'state', name: L('Durum', 'State'), icon: 'happy', dot: restless },
+        { id: 'upkeep', name: L('Bakım', 'Upkeep'), icon: 'gold', dot: (kingdom.towns?.length ?? 0) > 1 },
+        { id: 'yield', name: L('Getiri', 'Yield'), icon: 'chest' },
+        { id: 'market', name: L('Pazar', 'Market'), icon: 'trade' },
+        { id: 'siege', name: L('Kuşatma', 'Siege'), icon: 'swords', dot: !!siege },
+        { id: 'release', name: L('Bırak', 'Release'), icon: 'banner' },
       ]
     : [
-        { id: 'info', name: 'Bilgi', icon: 'scroll' },
-        { id: 'market', name: 'Pazar', icon: 'trade' },
-        { id: 'siege', name: 'Kuşat', icon: 'swords', dot: !!siege },
+        { id: 'info', name: L('Bilgi', 'Info'), icon: 'scroll' },
+        { id: 'market', name: L('Pazar', 'Market'), icon: 'trade' },
+        { id: 'siege', name: L('Kuşat', 'Besiege'), icon: 'swords', dot: !!siege },
       ]
   const marketPart = part === 'market' && (
     <TownMarket town={town} kingdom={kingdom} mine={mine} holder={holder} armies={own} atGate={atGate} market={market} relation={relation} now={now} onMove={(a) => onMove(a, middle)} onBuy={onBuy} />
   )
   const siegeSection = siege && (
-    <Section title="Kuşatma" icon="swords" aside={`${clock(siege.endsAt - now)} kaldı`}>
-      <p className="hint">{siege.kingdom === me ? 'Ordun kasabayı kuşatıyor.' : `${names.get(siege.kingdom) ?? '?'} ordusu kasabayı kuşatıyor.`}</p>
-      <Meter value={(now - siege.startedAt) / (siege.endsAt - siege.startedAt)} tone={siege.kingdom === me ? 'up' : 'down'} label="Kuşatma ilerlemesi" segments={12} />
+    <Section title={L('Kuşatma', 'Siege')} icon="swords" aside={L(`${clock(siege.endsAt - now)} kaldı`, `${clock(siege.endsAt - now)} left`)}>
+      <p className="hint">{siege.kingdom === me ? L('Ordun kasabayı kuşatıyor.', 'Your army is besieging the town.') : L(`${names.get(siege.kingdom) ?? '?'} ordusu kasabayı kuşatıyor.`, `${names.get(siege.kingdom) ?? '?'}'s army is besieging the town.`)}</p>
+      <Meter value={(now - siege.startedAt) / (siege.endsAt - siege.startedAt)} tone={siege.kingdom === me ? 'up' : 'down'} label={L('Kuşatma ilerlemesi', 'Siege progress')} segments={12} />
       <button className="btn small" onClick={onWatch}>
-        İzle
+        {L('İzle', 'Watch')}
       </button>
     </Section>
   )
@@ -141,15 +152,16 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
         <Icon name="banner" size={32} />
         <div>
           <h2 id="town-title">{town.name}</h2>
+          <NameNote name={town.name} />
           <small>
             {TOWN_KIND_NAMES[town.kind]}
-            {walled && ' · tahta surlu'} · {distance} karo uzakta
+            {walled && L(' · tahta surlu', ' · palisaded')} · {L(`${distance} karo uzakta`, `${distance} tiles away`)}
           </small>
         </div>
-        <button className="btn icon-only" onClick={() => onShow(middle)} aria-label="Haritada göster" title="Haritada göster">
+        <button className="btn icon-only" onClick={() => onShow(middle)} aria-label={L('Haritada göster', 'Show on map')} title={L('Haritada göster', 'Show on map')}>
           <Icon name="pin" size={16} />
         </button>
-        <button className="btn icon-only" onClick={onClose} aria-label="Kapat (Esc)" title="Kapat (Esc)">
+        <button className="btn icon-only" onClick={onClose} aria-label={L('Kapat (Esc)', 'Close (Esc)')} title={L('Kapat (Esc)', 'Close (Esc)')}>
           <Icon name="close" size={16} />
         </button>
       </header>
@@ -157,18 +169,21 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
         <div className="feature">
           <Icon name="crown" size={32} />
           <div>
-            <b>{mine ? 'Bu kasaba senin' : holder ? `${holder} elinde` : 'Kimseye bağlı değil'}</b>
+            <b>{mine ? L('Bu kasaba senin', 'This town is yours') : holder ? L(`${holder} elinde`, `Held by ${holder}`) : L('Kimseye bağlı değil', 'Belongs to no one')}</b>
             <small className="hint">
-              Sahibine {townGift(town.kind)} gönderir.
-              {town.owner === null && ` Kendi garnizonu var: ${town.garrison} asker; kuşatma boyunca ordun yaklaşık ${townLosses(town.garrison, walled)} asker kaybeder.`}
-              {town.owner !== null && !mine && ' Sahibiyle savaştaysan kuşatıp alabilirsin.'}
-              {mine && ' Savaşta olduğun biri kuşatırsa ordunla gelip kuşatmayı kırabilirsin.'}
+              {L(`Sahibine ${townGift(town.kind)} gönderir.`, `Sends its holder ${townGift(town.kind)}.`)}
+              {town.owner === null && L(` Kendi garnizonu var: ${town.garrison} asker; kuşatma boyunca ordun yaklaşık ${townLosses(town.garrison, walled)} asker kaybeder.`, ` It has its own garrison of ${town.garrison} soldiers; your army will lose about ${townLosses(town.garrison, walled)} soldier${townLosses(town.garrison, walled) === 1 ? '' : 's'} over the siege.`)}
+              {town.owner !== null && !mine && L(' Sahibiyle savaştaysan kuşatıp alabilirsin.', ' If you are at war with its holder you can besiege and take it.')}
+              {mine && L(' Savaşta olduğun biri kuşatırsa ordunla gelip kuşatmayı kırabilirsin.', ' If an enemy you are at war with besieges it, you can come with your army and break the siege.')}
               {walled &&
-                ` Tahta bir çitle çevrili: taş surdan zayıftır ama kuşatma %${Math.round((p.siegeFactor - 1) * 100)} uzun sürer ve garnizon %${Math.round((p.lossFactor - 1) * 100)} daha çok kayıp verdirir.`}
+                L(
+                  ` Tahta bir çitle çevrili: taş surdan zayıftır ama kuşatma %${Math.round((p.siegeFactor - 1) * 100)} uzun sürer ve garnizon %${Math.round((p.lossFactor - 1) * 100)} daha çok kayıp verdirir.`,
+                  ` Ringed by a wooden palisade: weaker than a stone wall, but the siege takes ${Math.round((p.siegeFactor - 1) * 100)}% longer and the garrison inflicts ${Math.round((p.lossFactor - 1) * 100)}% more losses.`,
+                )}
             </small>
           </div>
         </div>
-        <Subtabs label="Kasaba" parts={parts} part={part} onPart={setPart} />
+        <Subtabs label={L('Kasaba', 'Town')} parts={parts} part={part} onPart={setPart} />
         {mine && part === 'state' && town.rebels && (
           <Rebels town={town} armies={own} atGate={atGate} now={now} onSend={(a) => onSend(a, middle)} onWatchBattle={onWatchBattle} />
         )}
@@ -177,48 +192,53 @@ export function TownSheet({ world, town, walled, kingdom, me, names, armies, pac
         {mine && part === 'siege' && (
           <>
             {siegeSection || (
-              <Section title="Kuşatma" icon="shield">
-                <p className="hint">Kasaban şu an kuşatma altında değil.</p>
+              <Section title={L('Kuşatma', 'Siege')} icon="shield">
+                <p className="hint">{L('Kasaban şu an kuşatma altında değil.', 'Your town is not under siege.')}</p>
               </Section>
             )}
             <p className="hint">
-              Savaşta olduğun bir lord ordusunu kasabanın kapısına getirirse kuşatma başlar ve {minutes} dakika sürer; bitince kasaba onun olur. Ordunla gelip
-              kuşatanla meydan muharebesine girersen kuşatmayı kırarsın.{walled ? ' Tahta çit kuşatmayı uzatır.' : ''}
+              {L(
+                `Savaşta olduğun bir lord ordusunu kasabanın kapısına getirirse kuşatma başlar ve ${minutes} dakika sürer; bitince kasaba onun olur. Ordunla gelip kuşatanla meydan muharebesine girersen kuşatmayı kırarsın.`,
+                `If a lord you are at war with brings an army to the town's gate, a siege begins and lasts ${minutes} minutes; when it ends the town is theirs. Come with your army and meet the besiegers in battle to break the siege.`,
+              )}
+              {walled ? L(' Tahta çit kuşatmayı uzatır.', ' The palisade makes the siege longer.') : ''}
             </p>
           </>
         )}
         {!mine && part === 'info' && <Overreach held={kingdom.towns?.length ?? 0} taking />}
         {!mine && part === 'siege' && siegeSection}
         {!mine && part === 'siege' && (
-          <Section title="Kuşat" icon="shield">
+          <Section title={L('Kuşat', 'Besiege')} icon="shield">
             {!lawful ? (
-              <p className="hint">Bu kasaba {holder} elinde ve onunla savaşta değilsin. Kuşatmak için önce savaş ilan etmelisin.</p>
+              <p className="hint">{L(`Bu kasaba ${holder} elinde ve onunla savaşta değilsin. Kuşatmak için önce savaş ilan etmelisin.`, `This town is held by ${holder} and you are not at war with them. Declare war first to besiege it.`)}</p>
             ) : own.length === 0 ? (
-              <p className="hint">Sahada ordun yok. Ordu sekmesinden garnizondan bir ordu çıkar.</p>
+              <p className="hint">{L('Sahada ordun yok. Ordu sekmesinden garnizondan bir ordu çıkar.', 'You have no army in the field. Raise one from the garrison on the Army tab.')}</p>
             ) : (
               <>
                 <p className="hint">
-                  Kuşatma yalnız buradan başlar: kapıdaki ordu hemen kuşatır, uzaktaki ordu kapıya varınca. Haritadan "Hareket" ile gelen ordu kapıda bekler. Kuşatma {minutes} dakika sürer; ordu orada
-                  kalmalı, giderse ya da yenilirse kuşatma kalkar.
+                  {L(
+                    `Kuşatma yalnız buradan başlar: kapıdaki ordu hemen kuşatır, uzaktaki ordu kapıya varınca. Haritadan "Hareket" ile gelen ordu kapıda bekler. Kuşatma ${minutes} dakika sürer; ordu orada kalmalı, giderse ya da yenilirse kuşatma kalkar.`,
+                    `A siege starts only from here: an army at the gate besieges at once, one further off when it reaches the gate. An army sent with "Move" from the map just waits at the gate. The siege lasts ${minutes} minutes; the army must stay, and if it leaves or is beaten the siege is lifted.`,
+                  )}
                 </p>
                 <ul className="town-armies">
                   {own.map((a) => (
                     <li key={a.id}>
                       <span>
-                        {armyLabel(a, armies)} · {a.soldiers ?? '?'} asker
+                        {armyLabel(a, armies)} · {L(`${a.soldiers ?? '?'} asker`, `${a.soldiers ?? '?'} soldiers`)}
                       </span>
                       {(() => {
                         // Already on its way here to lay siege: say so rather than offer to send it again.
                         const going = !siege && a.goal.kind === 'town' && a.goal.town === town.id && Date.parse(a.arrive_at) > now
                         return (
-                          <button className="btn small" disabled={!!siege || going} data-why={siege ? (siege.army === a.id ? 'Bu ordu zaten kuşatıyor' : 'Kasabayı başka bir ordu kuşatıyor; aynı anda tek ordu kuşatabilir') : 'Ordu zaten kuşatmak için yolda'} onClick={() => onSend(a.id, middle)}>
+                          <button className="btn small" disabled={!!siege || going} data-why={siege ? (siege.army === a.id ? L('Bu ordu zaten kuşatıyor', 'This army is already besieging') : L('Kasabayı başka bir ordu kuşatıyor; aynı anda tek ordu kuşatabilir', 'Another army is besieging the town; only one army can besiege at a time')) : L('Ordu zaten kuşatmak için yolda', 'The army is already on its way to besiege')} onClick={() => onSend(a.id, middle)}>
                             {siege && siege.army === a.id
-                              ? 'Kuşatıyor'
+                              ? L('Kuşatıyor', 'Besieging')
                               : going
-                                ? `Yolda · ${Math.ceil((Date.parse(a.arrive_at) - now) / 60_000)} dk`
+                                ? L(`Yolda · ${Math.ceil((Date.parse(a.arrive_at) - now) / 60_000)} dk`, `On the way · ${Math.ceil((Date.parse(a.arrive_at) - now) / 60_000)} min`)
                                 : atGate(a)
-                                  ? 'Kuşatmayı başlat'
-                                  : 'Gönder ve kuşat'}
+                                  ? L('Kuşatmayı başlat', 'Start the siege')
+                                  : L('Gönder ve kuşat', 'Send and besiege')}
                           </button>
                         )
                       })()}
@@ -265,21 +285,28 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, par
     <>
       {part === 'state' && (
         <>
-          <Section title="Sadakat" icon={loyalty >= 50 ? 'happy' : loyalty >= r.below ? 'content' : 'unhappy'} aside={`%${Math.round(loyalty)} · ${Math.abs(trend) < 0.5 ? 'durgun' : trend > 0 ? 'yükseliyor' : 'düşüyor'}`}>
-            <Meter value={loyalty / 100} tone={loyalty >= 50 ? 'up' : loyalty >= r.below ? 'gold' : 'down'} label="Sadakat" segments={20} />
+          <Section title={L('Sadakat', 'Loyalty')} icon={loyalty >= 50 ? 'happy' : loyalty >= r.below ? 'content' : 'unhappy'} aside={L(`%${Math.round(loyalty)} · ${Math.abs(trend) < 0.5 ? 'durgun' : trend > 0 ? 'yükseliyor' : 'düşüyor'}`, `${Math.round(loyalty)}% · ${Math.abs(trend) < 0.5 ? 'steady' : trend > 0 ? 'rising' : 'falling'}`)}>
+            <Meter value={loyalty / 100} tone={loyalty >= 50 ? 'up' : loyalty >= r.below ? 'gold' : 'down'} label={L('Sadakat', 'Loyalty')} segments={20} />
             {revolting ? (
               <p className="alert">
-                Kasaba ayaklandı: {span(held.revoltUntil! - now)} daha hiçbir şey göndermeyecek. Asileri yenersen ayaklanma hemen biter; yoksa ayaklanma bittiğinde sadakat %{r.breakAwayBelow}'nin altındaysa kasaba senden kopar.
+                {L(
+                  `Kasaba ayaklandı: ${span(held.revoltUntil! - now)} daha hiçbir şey göndermeyecek. Asileri yenersen ayaklanma hemen biter; yoksa ayaklanma bittiğinde sadakat %${r.breakAwayBelow}'nin altındaysa kasaba senden kopar.`,
+                  `The town has revolted: it will send nothing for another ${span(held.revoltUntil! - now)}. Beat the rebels and the revolt ends at once; otherwise, if loyalty is below ${r.breakAwayBelow}% when the revolt ends, the town breaks away from you.`,
+                )}
               </p>
             ) : townQuiet(held, now) ? (
-              <p className="hint">Ayaklanma bastırıldı: kasaba {span(held.quietUntil! - now)} daha ayaklanmaz, sadakati düşük olsa bile. Bu sürede bakımı artırıp sadakati toparla.</p>
+              <p className="hint">{L(`Ayaklanma bastırıldı: kasaba ${span(held.quietUntil! - now)} daha ayaklanmaz, sadakati düşük olsa bile. Bu sürede bakımı artırıp sadakati toparla.`, `The revolt was put down: the town will not rise again for ${span(held.quietUntil! - now)}, even with low loyalty. Raise the upkeep meanwhile and win its loyalty back.`)}</p>
             ) : loyalty < r.below + 10 ? (
-              <p className="alert">Sadakat %{r.below}'in altına inerse kasaba ayaklanır. Bakımı artırmak sadakati yükseltir.</p>
+              <p className="alert">{L(`Sadakat %${r.below}'in altına inerse kasaba ayaklanır. Bakımı artırmak sadakati yükseltir.`, `If loyalty falls below ${r.below}% the town will revolt. Raising the upkeep raises loyalty.`)}</p>
             ) : null}
-            <Stat label="Gittiği yer" value={`%${Math.round(target)}`} tone={trend >= 0 ? 'up' : 'down'} note={`yaklaşık ${Math.round(t.loyalty.tauSeconds / 60)} dakikada yolun üçte ikisini alır`} />
+            <Stat label={L('Gittiği yer', 'Heading for')} value={L(`%${Math.round(target)}`, `${Math.round(target)}%`)} tone={trend >= 0 ? 'up' : 'down'} note={L(`yaklaşık ${Math.round(t.loyalty.tauSeconds / 60)} dakikada yolun üçte ikisini alır`, `covers two thirds of the way in about ${Math.round(t.loyalty.tauSeconds / 60)} minutes`)} />
             <p className="hint">
-              Sadakat ne kadar yüksekse kasaba o kadar çok gönderir (%0'da ×{t.loyalty.yieldMin.toLocaleString('tr-TR')}, %100'de ×{t.loyalty.yieldMax.toLocaleString('tr-TR')}
-              {over.yieldFactor < 1 && `, aşırı büyüme ×${String(over.yieldFactor).replace('.', ',')}`}; şu an ×{factor.toFixed(2).replace('.', ',')}).
+              {L(
+                `Sadakat ne kadar yüksekse kasaba o kadar çok gönderir (%0'da ×${t.loyalty.yieldMin.toLocaleString(locale())}, %100'de ×${t.loyalty.yieldMax.toLocaleString(locale())}`,
+                `The more loyal the town, the more it sends (×${t.loyalty.yieldMin.toLocaleString(locale())} at 0%, ×${t.loyalty.yieldMax.toLocaleString(locale())} at 100%`,
+              )}
+              {over.yieldFactor < 1 && L(`, aşırı büyüme ×${dec(over.yieldFactor)}`, `, over-expansion ×${dec(over.yieldFactor)}`)}
+              {L(`; şu an ×${dec(factor.toFixed(2))}).`, `; now ×${dec(factor.toFixed(2))}).`)}
             </p>
           </Section>
           <Unrest held={held} parts={parts} level={level} loyalty={loyalty} now={now} />
@@ -288,9 +315,9 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, par
       {part === 'upkeep' && (
         <>
           {count > 1 && <Overreach held={count} />}
-          <Section title="Bakım" icon="gold" aside={cost > 0 ? `tur başına ${amount(cost)} altın` : 'ödeme yok'}>
-            <p className="hint">Kasabayı elinde tutmak için her üretim turunda hazineden ödenir. Hazine yetmezse ödenmez ve sadakat bakımsızmış gibi düşer.</p>
-            <div className="segmented choices" role="radiogroup" aria-label="Bakım">
+          <Section title={L('Bakım', 'Upkeep')} icon="gold" aside={cost > 0 ? L(`tur başına ${amount(cost)} altın`, `${amount(cost)} gold per round`) : L('ödeme yok', 'nothing paid')}>
+            <p className="hint">{L('Kasabayı elinde tutmak için her üretim turunda hazineden ödenir. Hazine yetmezse ödenmez ve sadakat bakımsızmış gibi düşer.', 'Paid from the treasury every production round to keep the town. If the treasury runs short it goes unpaid and loyalty falls as if there were no upkeep.')}</p>
+            <div className="segmented choices" role="radiogroup" aria-label={L('Bakım', 'Upkeep')}>
               {t.upkeep.goldPerRound.map((gold, i) => (
                 <button key={i} className="btn small" role="radio" aria-checked={level === i} onClick={() => level !== i && onUpkeep(i)}>
                   {upkeepName(i)}
@@ -299,17 +326,20 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, par
               ))}
             </div>
             <Stat
-              label="Saatte"
-              value={`${amount(cost * roundsPerHour)} altın`}
-              note={`sadakat tabanı %${t.loyalty.upkeepTargets[level]} (+ halk ve hükümdar${over.loyalty < 0 ? ', − aşırı büyüme' : ''})${over.upkeepFactor > 1 ? ` · aşırı büyüme bakımı ${times(over.upkeepFactor)} yapıyor` : ''}`}
+              label={L('Saatte', 'Per hour')}
+              value={L(`${amount(cost * roundsPerHour)} altın`, `${amount(cost * roundsPerHour)} gold`)}
+              note={L(
+                `sadakat tabanı %${t.loyalty.upkeepTargets[level]} (+ halk ve hükümdar${over.loyalty < 0 ? ', − aşırı büyüme' : ''})${over.upkeepFactor > 1 ? ` · aşırı büyüme bakımı ${times(over.upkeepFactor)} yapıyor` : ''}`,
+                `loyalty base ${t.loyalty.upkeepTargets[level]}% (+ people and ruler${over.loyalty < 0 ? ', − over-expansion' : ''})${over.upkeepFactor > 1 ? ` · over-expansion makes upkeep ${times(over.upkeepFactor)}` : ''}`,
+              )}
             />
           </Section>
         </>
       )}
       {part === 'yield' && (
         <>
-          <Section title="Sana getirdikleri" icon="chest" aside={held.takenAt ? `${span(now - held.takenAt)} önce alındı` : undefined}>
-            {goods.length === 0 && <p className="hint">Henüz bir şey göndermedi.</p>}
+          <Section title={L('Sana getirdikleri', 'What it has sent you')} icon="chest" aside={held.takenAt ? L(`${span(now - held.takenAt)} önce alındı`, `taken ${span(now - held.takenAt)} ago`) : undefined}>
+            {goods.length === 0 && <p className="hint">{L('Henüz bir şey göndermedi.', 'It has sent nothing yet.')}</p>}
             {goods.map((g) => (
               <Stat
                 key={g}
@@ -318,21 +348,21 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, par
                     <Icon name={g === 'villagers' ? 'villager' : g} size={16} /> {GOOD_NAMES[g]}
                   </>
                 }
-                value={g === 'villagers' ? `${fmt(sends.villagers)} köylü` : `${amount(delivered[g] ?? 0)} toplam`}
-                note={g === 'villagers' ? 'şu an barındırdığı' : `şu an tur başına ${amount(sends[g])}`}
+                value={g === 'villagers' ? L(`${fmt(sends.villagers)} köylü`, `${fmt(sends.villagers)} villagers`) : L(`${amount(delivered[g] ?? 0)} toplam`, `${amount(delivered[g] ?? 0)} in all`)}
+                note={g === 'villagers' ? L('şu an barındırdığı', 'housed there now') : L(`şu an tur başına ${amount(sends[g])}`, `now ${amount(sends[g])} per round`)}
               />
             ))}
-            {cost > 0 && <Stat label="Bakıma giden" value={`tur başına −${amount(cost)} altın`} tone="down" />}
+            {cost > 0 && <Stat label={L('Bakıma giden', 'Spent on upkeep')} value={L(`tur başına −${amount(cost)} altın`, `−${amount(cost)} gold per round`)} tone="down" />}
           </Section>
-          <Section title="Sana kattığı güç" icon="crown" aside={`+${points} puan`}>
+          <Section title={L('Sana kattığı güç', 'Strength it lends you')} icon="crown" aside={L(`+${points} puan`, `+${points} points`)}>
             <p className="hint">
-              Kasaba lordluğunun puanına +{points} katar (sadakatle artar, ayaklanmada yarıya iner).{' '}
+              {L(`Kasaba lordluğunun puanına +${points} katar (sadakatle artar, ayaklanmada yarıya iner).`, `The town adds +${points} to your lordship's score (more with loyalty, halved during a revolt).`)}{' '}
               {liege ? (
                 <>
-                  Bağlı olduğun <b style={{ color: liege.color }}>{liege.name}</b>nın gücüne +{points}.
+                  {L('Bağlı olduğun ', 'And +' + points + ' to the power of your liege, the ')}<b style={{ color: liege.color }}>{liege.name}</b>{L(`nın gücüne +${points}.`, '.')}
                 </>
               ) : (
-                'Henüz bir taç krallığına biat etmedin; ettiğinde bu puan onun gücüne de eklenir.'
+                L('Henüz bir taç krallığına biat etmedin; ettiğinde bu puan onun gücüne de eklenir.', 'You have not sworn to a crown kingdom yet; once you do, these points add to its power too.')
               )}
             </p>
           </Section>
@@ -340,19 +370,21 @@ function Holding({ world, kingdom, held, now, onUpkeep, besieged, onRelease, par
       )}
       {part === 'release' && (
         <>
-          <Section title="Serbest bırak" icon="banner">
+          <Section title={L('Serbest bırak', 'Release')} icon="banner">
             <p className="hint">
-              Kasabayı bırakırsan sahipsiz kalır ve {t.revolt.garrison[0]}–{t.revolt.garrison[1]} askerlik küçük bir garnizonla kendini korur. Bakımı, katkısı ve kattığı
-              puan biter; {count > 1 ? `elindeki kasaba ${count - 1}'e iner ve aşırı büyüme cezası hemen hafifler` : 'sonra yeniden kuşatıp alabilirsin'}.
+              {L(
+                `Kasabayı bırakırsan sahipsiz kalır ve ${t.revolt.garrison[0]}–${t.revolt.garrison[1]} askerlik küçük bir garnizonla kendini korur. Bakımı, katkısı ve kattığı puan biter; ${count > 1 ? `elindeki kasaba ${count - 1}'e iner ve aşırı büyüme cezası hemen hafifler` : 'sonra yeniden kuşatıp alabilirsin'}.`,
+                `Let the town go and it belongs to no one, guarding itself with a small garrison of ${t.revolt.garrison[0]}–${t.revolt.garrison[1]} soldiers. Its upkeep, yield and points end; ${count > 1 ? `you drop to ${count - 1} town${count - 1 === 1 ? '' : 's'} and the over-expansion penalty eases at once` : 'you can besiege and take it again later'}.`,
+              )}
             </p>
             <button
               className={sure ? 'btn small danger' : 'btn small'}
               disabled={besieged}
-              data-why="Kuşatma altındaki kasaba bırakılamaz"
+              data-why={L('Kuşatma altındaki kasaba bırakılamaz', 'A town under siege cannot be released')}
               onClick={() => (sure ? (setSure(false), onRelease()) : setSure(true))}
               onBlur={() => setSure(false)}
             >
-              {besieged ? 'Kuşatma sürerken bırakılamaz' : sure ? 'Emin misin? Kasabayı serbest bırak' : 'Serbest bırak'}
+              {besieged ? L('Kuşatma sürerken bırakılamaz', 'Cannot release during a siege') : sure ? L('Emin misin? Kasabayı serbest bırak', 'Are you sure? Release the town') : L('Serbest bırak', 'Release')}
             </button>
           </Section>
         </>
@@ -368,31 +400,33 @@ function Rebels({ town, armies, atGate, now, onSend, onWatchBattle }: { town: To
   const rebels = town.rebels!
   const q = balance.towns.rebels
   return (
-    <Section title="Asiler kasabayı kuşatıyor" icon="swords" aside={`${rebels.count} asi · ${span(now - rebels.since)}dır`}>
+    <Section title={L('Asiler kasabayı kuşatıyor', 'Rebels besiege the town')} icon="swords" aside={L(`${rebels.count} asi · ${span(now - rebels.since)}dır`, `${rebels.count} rebel${rebels.count === 1 ? '' : 's'} · for ${span(now - rebels.since)}`)}>
       <p className="alert">
-        {rebels.count} asi kasabanın kapısını tuttu; ayaklanma sürdükçe kasaba hiçbir şey göndermez. Ordunu gönderip asileri yenersen ayaklanma biter, sadakat +{q.quellLoyalty} artar ve kasaba{' '}
-        {Math.round(q.quietSeconds / 60)} dakika yeniden ayaklanmaz. Yenilirsen ordun eve çekilir, asiler kalır.
+        {L(
+          `${rebels.count} asi kasabanın kapısını tuttu; ayaklanma sürdükçe kasaba hiçbir şey göndermez. Ordunu gönderip asileri yenersen ayaklanma biter, sadakat +${q.quellLoyalty} artar ve kasaba ${Math.round(q.quietSeconds / 60)} dakika yeniden ayaklanmaz. Yenilirsen ordun eve çekilir, asiler kalır.`,
+          `${rebels.count} rebel${rebels.count === 1 ? ' holds' : 's hold'} the town's gate; while the revolt lasts the town sends nothing. Send your army and beat the rebels and the revolt ends, loyalty rises by +${q.quellLoyalty} and the town will not rise again for ${Math.round(q.quietSeconds / 60)} minutes. Lose, and your army falls back home while the rebels stay.`,
+        )}
       </p>
       {rebels.battle ? (
         <div className="row spread">
-          <span className="hint">Ordun asilerle çarpışıyor.</span>
+          <span className="hint">{L('Ordun asilerle çarpışıyor.', 'Your army is fighting the rebels.')}</span>
           <button className="btn small" onClick={() => onWatchBattle(rebels.battle!)}>
-            İzle
+            {L('İzle', 'Watch')}
           </button>
         </div>
       ) : armies.length === 0 ? (
-        <p className="hint">Sahada ordun yok. Ordu sekmesinden garnizondan bir ordu çıkar.</p>
+        <p className="hint">{L('Sahada ordun yok. Ordu sekmesinden garnizondan bir ordu çıkar.', 'You have no army in the field. Raise one from the garrison on the Army tab.')}</p>
       ) : (
         <>
-          <p className="hint">Asiler kendi topraklarını iyi bilir; en az {Math.ceil(rebels.count * 1.5)} askerle gitmek akıllıcadır.</p>
+          <p className="hint">{L(`Asiler kendi topraklarını iyi bilir; en az ${Math.ceil(rebels.count * 1.5)} askerle gitmek akıllıcadır.`, `The rebels know their own ground well; it is wise to go with at least ${Math.ceil(rebels.count * 1.5)} soldiers.`)}</p>
           <ul className="town-armies">
             {armies.map((a) => (
               <li key={a.id}>
                 <span>
-                  {armyLabel(a, armies)} · {a.soldiers ?? '?'} asker
+                  {armyLabel(a, armies)} · {L(`${a.soldiers ?? '?'} asker`, `${a.soldiers ?? '?'} soldiers`)}
                 </span>
                 <button className="btn small" onClick={() => onSend(a.id)}>
-                  {atGate(a) ? 'Ayaklanmayı bastır' : 'Gönder ve bastır'}
+                  {atGate(a) ? L('Ayaklanmayı bastır', 'Put down the revolt') : L('Gönder ve bastır', 'Send and put it down')}
                 </button>
               </li>
             ))}
@@ -403,7 +437,7 @@ function Rebels({ town, armies, atGate, now, onSend, onWatchBattle }: { town: To
   )
 }
 
-const MARKET_GOOD_NAMES = { food: 'yemek', materials: 'yapı malzemesi', arms: 'savaş malzemesi' } as const
+const MARKET_GOOD_NAMES = { food: L('yemek', 'food'), materials: L('yapı malzemesi', 'building materials'), arms: L('savaş malzemesi', 'war materials') }
 
 // The town's market: the good it sells, its stock, its price for the player, and buying with an army at the gate.
 function TownMarket({ town, kingdom, mine, holder, armies, atGate, market, relation, now, onMove, onBuy }: {
@@ -428,30 +462,38 @@ function TownMarket({ town, kingdom, mine, holder, armies, atGate, market, relat
   const lobby = priceAt(market, good, now)
   const factor = townRelationFactor(relation)
   const perHour = Math.round(m.refillPerRound * (3600 / balance.economy.productionSeconds))
-  const closed = town.rebels ? 'Kasabada ayaklanma var; asiler bastırılana kadar pazar kapalı.' : town.siege ? 'Kasaba kuşatma altında; pazar kapalı.' : null
-  const price = (v: number) => v.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const closed = town.rebels ? L('Kasabada ayaklanma var; asiler bastırılana kadar pazar kapalı.', 'The town is in revolt; the market is closed until the rebels are put down.') : town.siege ? L('Kasaba kuşatma altında; pazar kapalı.', 'The town is under siege; the market is closed.') : null
+  const price = (v: number) => v.toLocaleString(locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const gold = kingdom.stock.gold
   const ready = armies.filter(atGate)
   return (
-    <Section title="Kasaba pazarı" icon="trade" aside={`${fmt(stock)} / ${fmt(m.stock)} ${name}`}>
+    <Section title={L('Kasaba pazarı', 'Town market')} icon="trade" aside={`${fmt(stock)} / ${fmt(m.stock)} ${name}`}>
       <p className="hint">
-        Kasabanın pazarı {name} satar: stoğu sınırlıdır, saatte yaklaşık {fmt(perHour)} birim yenilenir. Almak için bir ordun kasabanın kapısında olmalı; altın hemen ödenir,
-        mallar orduyla gider ve ordu saraya dönünce ambara girer (asker başına {m.carryPerSoldier} birim taşır; yenilen ordu yükünü kaybeder).
+        {L(
+          `Kasabanın pazarı ${name} satar: stoğu sınırlıdır, saatte yaklaşık ${fmt(perHour)} birim yenilenir. Almak için bir ordun kasabanın kapısında olmalı; altın hemen ödenir, mallar orduyla gider ve ordu saraya dönünce ambara girer (asker başına ${m.carryPerSoldier} birim taşır; yenilen ordu yükünü kaybeder).`,
+          `The town's market sells ${name}: stock is limited and refills by about ${fmt(perHour)} units an hour. To buy, one of your armies must stand at the town's gate; the gold is paid at once, the goods travel with the army and go into the storehouse when it returns to the palace (each soldier carries ${m.carryPerSoldier} units; a beaten army loses its load).`,
+        )}
       </p>
-      <Meter value={stock / m.stock} tone="gold" label="Kasabanın stoğu" segments={12} />
-      <Stat label={`Birim fiyatı (${name})`} value={`${price(unit)} altın`} note={`lobi fiyatı ${price(lobby)}, pazar binası ${price(lobby * balance.market.buyMarkup)}`} />
+      <Meter value={stock / m.stock} tone="gold" label={L('Kasabanın stoğu', 'The town\'s stock')} segments={12} />
+      <Stat label={L(`Birim fiyatı (${name})`, `Unit price (${name})`)} value={L(`${price(unit)} altın`, `${price(unit)} gold`)} note={L(`lobi fiyatı ${price(lobby)}, pazar binası ${price(lobby * balance.market.buyMarkup)}`, `lobby price ${price(lobby)}, market building ${price(lobby * balance.market.buyMarkup)}`)} />
       <p className="hint">
         {mine
-          ? 'Kendi kasaban: ödediğin altın kimseye gitmez.'
+          ? L('Kendi kasaban: ödediğin altın kimseye gitmez.', 'Your own town: the gold you pay goes to no one.')
           : holder
-            ? `Ödediğin altın kasabanın sahibi ${holder}'e gider. Onunla ilişkine göre fiyat ×${factor.toFixed(2).replace('.', ',')}${relation !== null ? ` (ilişki ${Math.round(relation)})` : ''}: kötü ilişkide pahalı, iyi ilişkide biraz ucuz.`
-            : 'Kasaba kimseye bağlı değil: ödediğin altın kimseye gitmez.'}{' '}
-        Fiyat lobi fiyatının ×{String(m.floorFactor).replace('.', ',')} altına inmez; buradan alınan mal lobi pazarında kârla satılamaz.
+            ? L(
+                `Ödediğin altın kasabanın sahibi ${holder}'e gider. Onunla ilişkine göre fiyat ×${factor.toFixed(2).replace('.', ',')}${relation !== null ? ` (ilişki ${Math.round(relation)})` : ''}: kötü ilişkide pahalı, iyi ilişkide biraz ucuz.`,
+                `The gold you pay goes to the town's holder, ${holder}. By your relations with them the price is ×${factor.toFixed(2)}${relation !== null ? ` (relations ${Math.round(relation)})` : ''}: dear when relations are bad, a little cheaper when good.`,
+              )
+            : L('Kasaba kimseye bağlı değil: ödediğin altın kimseye gitmez.', 'The town belongs to no one: the gold you pay goes to no one.')}{' '}
+        {L(
+          `Fiyat lobi fiyatının ×${String(m.floorFactor).replace('.', ',')} altına inmez; buradan alınan mal lobi pazarında kârla satılamaz.`,
+          `The price never drops below ×${m.floorFactor} the lobby price; goods bought here cannot be sold at a profit on the lobby market.`,
+        )}
       </p>
       {closed ? (
         <p className="alert">{closed}</p>
       ) : armies.length === 0 ? (
-        <p className="hint">Sahada ordun yok. Ordu sekmesinden garnizondan bir ordu çıkar.</p>
+        <p className="hint">{L('Sahada ordun yok. Ordu sekmesinden garnizondan bir ordu çıkar.', 'You have no army in the field. Raise one from the garrison on the Army tab.')}</p>
       ) : (
         <ul className="town-armies">
           {armies.map((a) => {
@@ -464,10 +506,10 @@ function TownMarket({ town, kingdom, mine, holder, armies, atGate, market, relat
               return (
                 <li key={a.id}>
                   <span>
-                    {armyLabel(a, armies)} · {soldiers} asker · {fmt(room)} birim taşıyabilir
+                    {armyLabel(a, armies)} · {L(`${soldiers} asker · ${fmt(room)} birim taşıyabilir`, `${soldiers} soldiers · can carry ${fmt(room)} units`)}
                   </span>
                   <button className="btn small" onClick={() => onMove(a.id)}>
-                    Kapıya gönder
+                    {L('Kapıya gönder', 'Send to the gate')}
                   </button>
                 </li>
               )
@@ -475,23 +517,23 @@ function TownMarket({ town, kingdom, mine, holder, armies, atGate, market, relat
             return (
               <li key={a.id} className="town-buy">
                 <span>
-                  {armyLabel(a, armies)} kapıda · {fmt(room)} birim daha taşıyabilir
+                  {armyLabel(a, armies)} {L(`kapıda · ${fmt(room)} birim daha taşıyabilir`, `at the gate · can carry ${fmt(room)} more units`)}
                 </span>
                 {most > 0 ? (
                   <>
-                    <div className="segmented choices" role="radiogroup" aria-label="Miktar">
+                    <div className="segmented choices" role="radiogroup" aria-label={L('Miktar', 'Amount')}>
                       {steps.map((n) => (
                         <button key={n} className="btn small" role="radio" aria-checked={picked === n} onClick={() => setAmount({ ...amount, [a.id]: n })}>
-                          {n === most ? `Hepsi (${fmt(n)})` : fmt(n)}
+                          {n === most ? L(`Hepsi (${fmt(n)})`, `All (${fmt(n)})`) : fmt(n)}
                         </button>
                       ))}
                     </div>
-                    <button className="btn small" disabled={picked < 1} data-why="Önce bir miktar seç" onClick={() => onBuy(a.id, picked)}>
-                      <Icon name="gold" size={16} /> {fmt(picked)} {name} satın al · {fmt(Math.ceil(picked * unit))} altın
+                    <button className="btn small" disabled={picked < 1} data-why={L('Önce bir miktar seç', 'Pick an amount first')} onClick={() => onBuy(a.id, picked)}>
+                      <Icon name="gold" size={16} /> {L(`${fmt(picked)} ${name} satın al · ${fmt(Math.ceil(picked * unit))} altın`, `Buy ${fmt(picked)} ${name} · ${fmt(Math.ceil(picked * unit))} gold`)}
                     </button>
                   </>
                 ) : (
-                  <small className="hint">{room < 1 ? 'Ordu daha fazla taşıyamaz.' : stock < 1 ? 'Kasabanın stoğu bitti; biraz bekle.' : 'Hazinende yeterli altın yok.'}</small>
+                  <small className="hint">{room < 1 ? L('Ordu daha fazla taşıyamaz.', 'The army cannot carry any more.') : stock < 1 ? L('Kasabanın stoğu bitti; biraz bekle.', 'The town is out of stock; wait a little.') : L('Hazinende yeterli altın yok.', 'Not enough gold in your treasury.')}</small>
                 )}
               </li>
             )
@@ -508,19 +550,20 @@ const pct = (v: number) => `${Math.max(0, Math.min(100, v))}%`
 const minutesOf = (ms: number) => Math.max(1, Math.round(ms / 60_000))
 
 // How bad over-expansion is at each tier of balance.towns.overreach.tiers, by name.
-const OVERREACH_NAMES = ['Hafif', 'Ağır', 'İsyan']
+const OVERREACH_NAMES = [L('Hafif', 'Mild'), L('Ağır', 'Heavy'), L('İsyan', 'Revolt')]
+const CAP_LABEL = L('Aşırı büyüme tavanı', 'Over-expansion cap')
 const overreachName = (tier: number) => OVERREACH_NAMES[Math.min(tier, OVERREACH_NAMES.length - 1)]
 
 // What over-expansion does at a tier, in one line.
 function overreachText(towns: number) {
   const o = overreachOf(towns)
-  if (o.tier < 0) return 'Ceza yok.'
+  if (o.tier < 0) return L('Ceza yok.', 'No penalty.')
   return [
-    `her kasabanın sadakati ${signed(o.loyalty)}`,
-    ...(o.loyaltyCap < 100 ? [`sadakat en fazla %${o.loyaltyCap} (ayaklanma çizgisi %${balance.towns.revolt.below})`] : []),
-    `halkın mutluluğu ${signed(o.happiness)}`,
-    `bakım ${times(o.upkeepFactor)}`,
-    `katkı ${times(o.yieldFactor)}`,
+    L(`her kasabanın sadakati ${signed(o.loyalty)}`, `every town's loyalty ${signed(o.loyalty)}`),
+    ...(o.loyaltyCap < 100 ? [L(`sadakat en fazla %${o.loyaltyCap} (ayaklanma çizgisi %${balance.towns.revolt.below})`, `loyalty at most ${o.loyaltyCap}% (revolt line ${balance.towns.revolt.below}%)`)] : []),
+    L(`halkın mutluluğu ${signed(o.happiness)}`, `your people's happiness ${signed(o.happiness)}`),
+    L(`bakım ${times(o.upkeepFactor)}`, `upkeep ${times(o.upkeepFactor)}`),
+    L(`katkı ${times(o.yieldFactor)}`, `yield ${times(o.yieldFactor)}`),
   ].join(', ')
 }
 
@@ -537,14 +580,14 @@ function Unrest({ held, parts, level, loyalty, now }: { held: HeldTown; parts: L
     sum += v
     rows.push({ label, from, to: Math.max(0, Math.min(100, sum)), note })
   }
-  step(`Bakım (${upkeepName(held.unpaid ? 0 : level).toLocaleLowerCase('tr-TR')})`, parts.upkeep, held.unpaid ? 'ödenmedi' : undefined)
-  step('Halkının mutluluğu', parts.happiness)
-  step('Hükümdarın halk yeteneği', parts.ruler)
+  step(L(`Bakım (${upkeepName(held.unpaid ? 0 : level).toLocaleLowerCase(locale())})`, `Upkeep (${upkeepName(held.unpaid ? 0 : level).toLocaleLowerCase(locale())})`), parts.upkeep, held.unpaid ? L('ödenmedi', 'unpaid') : undefined)
+  step(L('Halkının mutluluğu', 'Your people\'s happiness'), parts.happiness)
+  step(L('Hükümdarın halk yeteneği', 'The ruler\'s People skill'), parts.ruler)
   // Its governor of the lord's house, a princess married into its first family (CLAUDE.md §9.1.1).
-  if (parts.kin) step('Hanedan: vali ya da gelin', parts.kin)
-  if (parts.overreach !== 0) step('Aşırı büyüme', parts.overreach)
+  if (parts.kin) step(L('Hanedan: vali ya da gelin', 'Dynasty: governor or bride'), parts.kin)
+  if (parts.overreach !== 0) step(L('Aşırı büyüme', 'Over-expansion'), parts.overreach)
   if (sum > parts.cap) {
-    rows.push({ label: 'Aşırı büyüme tavanı', from: Math.min(100, sum), to: parts.cap, note: `en fazla %${parts.cap}` })
+    rows.push({ label: CAP_LABEL, from: Math.min(100, sum), to: parts.cap, note: L(`en fazla %${parts.cap}`, `at most ${parts.cap}%`) })
     sum = parts.cap
   }
   const tau = t.loyalty.tauSeconds * 1000
@@ -554,14 +597,14 @@ function Unrest({ held, parts, level, loyalty, now }: { held: HeldTown; parts: L
   const spy = balance.espionage.operations.townRevolt.loyalty
   // How likely a revolt is, from certain to low.
   const risk = revolting
-    ? { value: 1, label: 'Ayaklanmada', text: `Kasaba şu an ayaklanmada. Sadakat %${r.below}'i geçmeden ayaklanma bitmez.` }
+    ? { value: 1, label: L('Ayaklanmada', 'In revolt'), text: L(`Kasaba şu an ayaklanmada. Sadakat %${r.below}'i geçmeden ayaklanma bitmez.`, `The town is in revolt now. The revolt will not end until loyalty passes ${r.below}%.`) }
     : revoltIn !== null
-      ? { value: 1, label: 'Kesin', text: `Sadakat %${Math.round(parts.target)}'e gidiyor, ayaklanma çizgisinin altına: yaklaşık ${minutesOf(revoltIn)} dakika içinde ayaklanır.` }
+      ? { value: 1, label: L('Kesin', 'Certain'), text: L(`Sadakat %${Math.round(parts.target)}'e gidiyor, ayaklanma çizgisinin altına: yaklaşık ${minutesOf(revoltIn)} dakika içinde ayaklanır.`, `Loyalty is heading for ${Math.round(parts.target)}%, below the revolt line: the town will rise in about ${minutesOf(revoltIn)} minutes.`) }
       : loyalty < r.below + 10 || parts.target < r.below + 10
-        ? { value: 0.75, label: 'Yüksek', text: `Sadakat ayaklanma çizgisine çok yakın; küçük bir sarsıntı (hazinenin boşalması, casuslar) yeter.` }
+        ? { value: 0.75, label: L('Yüksek', 'High'), text: L(`Sadakat ayaklanma çizgisine çok yakın; küçük bir sarsıntı (hazinenin boşalması, casuslar) yeter.`, `Loyalty is very close to the revolt line; a small shock (an empty treasury, spies) would do it.`) }
         : loyalty + spy < r.below || parts.target + spy < r.below
-          ? { value: 0.45, label: 'Orta', text: `Bir casus kışkırtması (${signed(spy)}) kasabayı ayaklandırabilir.` }
-          : { value: 0.15, label: 'Düşük', text: `Bir casus kışkırtması bile kasabayı ayaklandırmaya yetmez.` }
+          ? { value: 0.45, label: L('Orta', 'Medium'), text: L(`Bir casus kışkırtması (${signed(spy)}) kasabayı ayaklandırabilir.`, `A spy's incitement (${signed(spy)}) could set the town off.`) }
+          : { value: 0.15, label: L('Düşük', 'Low'), text: L(`Bir casus kışkırtması bile kasabayı ayaklandırmaya yetmez.`, `Not even a spy's incitement would be enough to make the town rise.`) }
   // The next hour of loyalty, drifting toward its target.
   const W = 120
   const H = 40
@@ -572,8 +615,8 @@ function Unrest({ held, parts, level, loyalty, now }: { held: HeldTown; parts: L
   }).join(' ')
   const line = (v: number) => H - (v / 100) * H
   return (
-    <Section title="Huzursuzluğun kaynakları" icon="unhappy" aside={`ayaklanma riski: ${risk.label.toLocaleLowerCase('tr-TR')}`}>
-      <div className="unrest-chart" role="img" aria-label="Sadakat hedefini oluşturanlar">
+    <Section title={L('Huzursuzluğun kaynakları', 'Sources of unrest')} icon="unhappy" aside={L(`ayaklanma riski: ${risk.label.toLocaleLowerCase(locale())}`, `revolt risk: ${risk.label.toLocaleLowerCase(locale())}`)}>
+      <div className="unrest-chart" role="img" aria-label={L('Sadakat hedefini oluşturanlar', 'What makes up the loyalty target')}>
         {rows.map((row) => {
           const down = row.to < row.from
           return (
@@ -584,60 +627,60 @@ function Unrest({ held, parts, level, loyalty, now }: { held: HeldTown; parts: L
                 <i className="line free" style={{ left: pct(r.breakAwayBelow) }} />
                 <i className={`bar ${down ? 'down' : 'up'}`} style={{ left: pct(Math.min(row.from, row.to)), width: pct(Math.abs(row.to - row.from)) }} />
               </span>
-              <b className={down ? 'down' : 'up'}>{row.note && row.label.endsWith('tavanı') ? `%${parts.cap}` : signed(row.to - row.from)}</b>
+              <b className={down ? 'down' : 'up'}>{row.note && row.label === CAP_LABEL ? L(`%${parts.cap}`, `${parts.cap}%`) : signed(row.to - row.from)}</b>
               {row.note && <small>{row.note}</small>}
             </div>
           )
         })}
         <div className="unrest-row total">
-          <span>Gittiği yer</span>
+          <span>{L('Gittiği yer', 'Heading for')}</span>
           <span className="unrest-track">
             <i className="line revolt" style={{ left: pct(r.below) }} />
             <i className="line free" style={{ left: pct(r.breakAwayBelow) }} />
             <i className={`bar ${parts.target < r.below ? 'down' : 'gold'}`} style={{ left: 0, width: pct(parts.target) }} />
           </span>
-          <b className={parts.target < r.below ? 'down' : undefined}>%{Math.round(parts.target)}</b>
+          <b className={parts.target < r.below ? 'down' : undefined}>{L(`%${Math.round(parts.target)}`, `${Math.round(parts.target)}%`)}</b>
         </div>
         <div className="unrest-row total">
-          <span>Şu an</span>
+          <span>{L('Şu an', 'Now')}</span>
           <span className="unrest-track">
             <i className="line revolt" style={{ left: pct(r.below) }} />
             <i className="line free" style={{ left: pct(r.breakAwayBelow) }} />
             <i className={`bar ${loyalty < r.below ? 'down' : 'up'}`} style={{ left: 0, width: pct(loyalty) }} />
           </span>
-          <b className={loyalty < r.below ? 'down' : undefined}>%{Math.round(loyalty)}</b>
+          <b className={loyalty < r.below ? 'down' : undefined}>{L(`%${Math.round(loyalty)}`, `${Math.round(loyalty)}%`)}</b>
         </div>
         <small className="unrest-legend">
-          <i className="line revolt" /> %{r.below} ayaklanma · <i className="line free" /> %{r.breakAwayBelow} kopma
+          <i className="line revolt" /> {L(`%${r.below} ayaklanma`, `${r.below}% revolt`)} · <i className="line free" /> {L(`%${r.breakAwayBelow} kopma`, `${r.breakAwayBelow}% break-away`)}
         </small>
       </div>
       {incited && (
         <div className="unrest-row spy">
-          <span>Casus kışkırtması</span>
+          <span>{L('Casus kışkırtması', 'Spy incitement')}</span>
           <span className="unrest-track">
             <i className="bar down" style={{ left: 0, width: pct(Math.abs(incited.incitedBy ?? spy)) }} />
           </span>
           <b className="down">{signed(incited.incitedBy ?? spy)}</b>
-          <small>{minutesOf(now - incited.incitedAt!)} dakika önce, bir kerelik; hedefi değiştirmez, sadakat zamanla toparlanır</small>
+          <small>{L(`${minutesOf(now - incited.incitedAt!)} dakika önce, bir kerelik; hedefi değiştirmez, sadakat zamanla toparlanır`, `${minutesOf(now - incited.incitedAt!)} minutes ago, a one-off; it does not move the target, and loyalty recovers in time`)}</small>
         </div>
       )}
       <div className="unrest-risk">
-        <span>Ayaklanma riski</span>
-        <Meter value={risk.value} tone={risk.value >= 0.75 ? 'down' : risk.value >= 0.4 ? 'gold' : 'up'} label="Ayaklanma riski" segments={10} />
+        <span>{L('Ayaklanma riski', 'Revolt risk')}</span>
+        <Meter value={risk.value} tone={risk.value >= 0.75 ? 'down' : risk.value >= 0.4 ? 'gold' : 'up'} label={L('Ayaklanma riski', 'Revolt risk')} segments={10} />
         <b className={risk.value >= 0.75 ? 'down' : undefined}>{risk.label}</b>
       </div>
       <p className="hint">{risk.text}</p>
       <figure className="unrest-plot">
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" shapeRendering="crispEdges" aria-label="Önümüzdeki saatte sadakat" role="img">
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" shapeRendering="crispEdges" aria-label={L('Önümüzdeki saatte sadakat', 'Loyalty over the next hour')} role="img">
           <rect x={0} y={line(r.below)} width={W} height={H - line(r.below)} className="zone" />
           <line x1={0} x2={W} y1={line(r.below)} y2={line(r.below)} className="revolt" />
           <line x1={0} x2={W} y1={line(r.breakAwayBelow)} y2={line(r.breakAwayBelow)} className="free" />
           <polyline points={points} className="path" />
         </svg>
         <figcaption>
-          <span>şimdi</span>
-          <span>önümüzdeki saatte sadakat</span>
-          <span>+60 dk</span>
+          <span>{L('şimdi', 'now')}</span>
+          <span>{L('önümüzdeki saatte sadakat', 'loyalty over the next hour')}</span>
+          <span>{L('+60 dk', '+60 min')}</span>
         </figcaption>
       </figure>
     </Section>
@@ -655,23 +698,30 @@ function Overreach({ held, taking = false }: { held: number; taking?: boolean })
   const last = tiers[tiers.length - 1]
   const at = (n: number) => (n >= last.towns ? last.towns : n)
   return (
-    <Section title="Aşırı büyüme" icon="warn" aside={now.tier < 0 ? (taking ? `${held} kasaban var` : 'yok') : `${held} kasaba · ${overreachName(now.tier).toLocaleLowerCase('tr-TR')}`}>
+    <Section title={L('Aşırı büyüme', 'Over-expansion')} icon="warn" aside={now.tier < 0 ? (taking ? L(`${held} kasaban var`, `you hold ${held} town${held === 1 ? '' : 's'}`) : L('yok', 'none')) : L(`${held} kasaba · ${overreachName(now.tier).toLocaleLowerCase(locale())}`, `${held} town${held === 1 ? '' : 's'} · ${overreachName(now.tier).toLocaleLowerCase(locale())}`)}>
       {taking ? (
         next!.tier < 0 ? (
-          <p className="hint">Bu ilk kasaban olur: tek kasabanın aşırı büyüme cezası yoktur.</p>
+          <p className="hint">{L('Bu ilk kasaban olur: tek kasabanın aşırı büyüme cezası yoktur.', 'This would be your first town: a single town carries no over-expansion penalty.')}</p>
         ) : (
           <p className={next!.tier >= tiers.length - 1 ? 'alert' : 'hint'}>
-            Bu kasabayı alırsan elinde {held + 1} kasaba olur ve aşırı büyüme {now.tier < 0 ? 'başlar' : next!.tier > now.tier ? 'artar' : 'sürer'} ({overreachName(next!.tier).toLocaleLowerCase('tr-TR')}): {overreachText(held + 1)}.
-            {next!.tier >= tiers.length - 1 && ' Kasabaların hepsi ayaklanır.'}
+            {L(
+              `Bu kasabayı alırsan elinde ${held + 1} kasaba olur ve aşırı büyüme ${now.tier < 0 ? 'başlar' : next!.tier > now.tier ? 'artar' : 'sürer'} (${overreachName(next!.tier).toLocaleLowerCase(locale())}): ${overreachText(held + 1)}.`,
+              `Take this town and you hold ${held + 1} towns, and over-expansion ${now.tier < 0 ? 'begins' : next!.tier > now.tier ? 'worsens' : 'continues'} (${overreachName(next!.tier).toLocaleLowerCase(locale())}): ${overreachText(held + 1)}.`,
+            )}
+            {next!.tier >= tiers.length - 1 && L(' Kasabaların hepsi ayaklanır.', ' Every one of your towns will revolt.')}
           </p>
         )
       ) : (
         <p className={now.tier >= tiers.length - 1 ? 'alert' : 'hint'}>
-          Bir lord aynı anda ancak bu kadar kasabaya söz geçirebilir. {held} kasaba elinde: {overreachText(held)}.
-          {now.tier >= tiers.length - 1 && ' Kasabaların sadakati kopma çizgisinin altında kalır: hepsi ayaklanıp kopacak. Birini paneldeki "Serbest bırak" ile bırakırsan ötekiler rahatlar.'}
+          {L(`Bir lord aynı anda ancak bu kadar kasabaya söz geçirebilir. ${held} kasaba elinde: ${overreachText(held)}.`, `A lord can only hold sway over so many towns at once. You hold ${held}: ${overreachText(held)}.`)}
+          {now.tier >= tiers.length - 1 &&
+            L(
+              ' Kasabaların sadakati kopma çizgisinin altında kalır: hepsi ayaklanıp kopacak. Birini paneldeki "Serbest bırak" ile bırakırsan ötekiler rahatlar.',
+              ' Your towns\' loyalty stays below the break-away line: they will all revolt and break away. Let one go with "Release" on its panel and the others breathe easier.',
+            )}
         </p>
       )}
-      <div className="overreach-ladder" role="table" aria-label="Kasaba sayısına göre aşırı büyüme">
+      <div className="overreach-ladder" role="table" aria-label={L('Kasaba sayısına göre aşırı büyüme', 'Over-expansion by number of towns')}>
         {counts.map((n, i) => {
           const o = overreachOf(n)
           const weight = -o.loyalty + (100 - o.loyaltyCap)
@@ -679,23 +729,26 @@ function Overreach({ held, taking = false }: { held: number; taking?: boolean })
           return (
             <div key={n} className={`overreach-row ${mark}`} role="row">
               <span role="cell">
-                {n === last.towns ? `${n}+` : n} kasaba
-                {mark === 'now' && <small> · sen</small>}
-                {mark === 'next' && <small> · alırsan</small>}
+                {n === last.towns ? `${n}+` : n} {L('kasaba', n === 1 ? 'town' : 'towns')}
+                {mark === 'now' && <small>{L(' · sen', ' · you')}</small>}
+                {mark === 'next' && <small>{L(' · alırsan', ' · if you take it')}</small>}
               </span>
               <span className="overreach-bar" role="cell">
                 <i className={i === counts.length - 1 ? 'down' : i === 0 ? 'up' : 'gold'} style={{ width: pct(i === 0 ? 2 : (weight / worst) * 100) }} />
               </span>
               <small role="cell">
                 {o.tier < 0
-                  ? 'ceza yok'
-                  : `sadakat ${signed(o.loyalty)}${o.loyaltyCap < 100 ? `, en fazla %${o.loyaltyCap}` : ''} · mutluluk ${signed(o.happiness)} · bakım ${times(o.upkeepFactor)} · katkı ${times(o.yieldFactor)}`}
+                  ? L('ceza yok', 'no penalty')
+                  : L(
+                      `sadakat ${signed(o.loyalty)}${o.loyaltyCap < 100 ? `, en fazla %${o.loyaltyCap}` : ''} · mutluluk ${signed(o.happiness)} · bakım ${times(o.upkeepFactor)} · katkı ${times(o.yieldFactor)}`,
+                      `loyalty ${signed(o.loyalty)}${o.loyaltyCap < 100 ? `, at most ${o.loyaltyCap}%` : ''} · happiness ${signed(o.happiness)} · upkeep ${times(o.upkeepFactor)} · yield ${times(o.yieldFactor)}`,
+                    )}
               </small>
             </div>
           )
         })}
       </div>
-      <p className="hint">Cezalar elindeki bütün kasabalara (ve lordluğunun halkına) birlikte işler; bir kasaba kopunca ya da elden çıkınca hemen hafifler.</p>
+      <p className="hint">{L('Cezalar elindeki bütün kasabalara (ve lordluğunun halkına) birlikte işler; bir kasaba kopunca ya da elden çıkınca hemen hafifler.', 'The penalties fall on all your towns (and on your lordship\'s people) together; they ease at once when a town breaks away or is lost.')}</p>
     </Section>
   )
 }

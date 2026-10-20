@@ -2,6 +2,7 @@ import { Children, createContext, useContext, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Icon } from './icons'
 import type { IconName } from './icons'
+import { L } from '../lib/i18n'
 
 // Dialogs coming one after another (the envoy's news, the house's news, the day's events; CLAUDE.md §9.8): each one
 // says where it stands in the line ("2 / 5"), offers to close them all at once, and keeps its forward button in the
@@ -31,19 +32,19 @@ export function DialogFoot({ children, onNext, label, disabled, why }: { childre
         {children}
         {more && closeAll && (
           <button className="btn small" onClick={closeAll}>
-            Tümünü kapat
+            {L('Tümünü kapat', 'Close all')}
           </button>
         )}
       </div>
       {total > 1 ? (
-        <span className="dialog-step" aria-label={`${total} haberden ${pos}.`}>
+        <span className="dialog-step" aria-label={L(`${total} haberden ${pos}.`, `${pos} of ${total} dispatches.`)}>
           {pos} / {total}
         </span>
       ) : (
         <span />
       )}
-      <button className="btn small primary dialog-next" disabled={disabled} data-why={why ?? 'Cevap bekleniyor'} onClick={onNext}>
-        {label ?? (more ? 'İleri' : 'Tamam')}
+      <button className="btn small primary dialog-next" disabled={disabled} data-why={why ?? L('Cevap bekleniyor', 'Awaiting an answer')} onClick={onNext}>
+        {label ?? (more ? L('İleri', 'Next') : L('Tamam', 'OK'))}
       </button>
     </div>
   )
@@ -70,8 +71,8 @@ export function ClosedSummary({ items, onClose, folded, onJournal }: { items: Su
         <header className="sheet-head">
           <Icon name={shown ? shown[0].icon : 'scroll'} size={32} />
           <div>
-            <small>{folded ? 'Sen bakmazken' : 'Tümünü kapattın'}</small>
-            <h2 id="closed-title">{shown ? open : folded ? `${items.length} haber geldi` : `${items.length} haber okundu sayıldı`}</h2>
+            <small>{folded ? L('Sen bakmazken', "While you weren't looking") : L('Tümünü kapattın', 'You closed them all')}</small>
+            <h2 id="closed-title">{shown ? open : folded ? L(`${items.length} haber geldi`, `${items.length} ${items.length === 1 ? 'dispatch' : 'dispatches'} arrived`) : L(`${items.length} haber okundu sayıldı`, `${items.length} ${items.length === 1 ? 'dispatch' : 'dispatches'} marked as read`)}</h2>
           </div>
         </header>
         {shown ? (
@@ -90,7 +91,7 @@ export function ClosedSummary({ items, onClose, folded, onJournal }: { items: Su
                 <li key={t}>
                   <button className="summary-line" onClick={() => setOpen(t)}>
                     <Icon name={list[0].icon} size={16} />
-                    <span>{list.length > 1 ? `${t} (${list.length} kez)` : t}</span>
+                    <span>{list.length > 1 ? L(`${t} (${list.length} kez)`, `${t} (${list.length} times)`) : t}</span>
                     <span className="summary-more" aria-hidden>›</span>
                   </button>
                 </li>
@@ -98,8 +99,8 @@ export function ClosedSummary({ items, onClose, folded, onJournal }: { items: Su
             </ul>
             <p className="hint">
               {folded
-                ? 'Bunlar bekleyip bayatladığı ya da hepsi birden geldiği için tek tek açılmadı; okumak için birine dokun. Hepsi günlükte duruyor; cevap bekleyen haberler (haraç, teklif, kriz, seçim) yine açılır.'
-                : 'Okumak için birine dokun. Hepsi günlükte duruyor; cevap bekleyen haberler (haraç, teklif, kriz, seçim) kapatılmadı.'}
+                ? L('Bunlar bekleyip bayatladığı ya da hepsi birden geldiği için tek tek açılmadı; okumak için birine dokun. Hepsi günlükte duruyor; cevap bekleyen haberler (haraç, teklif, kriz, seçim) yine açılır.', 'These went stale waiting, or all came at once, so they were not opened one by one; tap one to read it. They are all in the journal; news awaiting an answer (tribute, offers, crises, choices) still opens.')
+                : L('Okumak için birine dokun. Hepsi günlükte duruyor; cevap bekleyen haberler (haraç, teklif, kriz, seçim) kapatılmadı.', 'Tap one to read it. They are all in the journal; news awaiting an answer (tribute, offers, crises, choices) was not closed.')}
             </p>
           </>
         )}
@@ -107,19 +108,19 @@ export function ClosedSummary({ items, onClose, folded, onJournal }: { items: Su
           <div className="dialog-foot-left">
             {shown ? (
               <button className="btn small" onClick={() => setOpen(null)}>
-                Geri dön
+                {L('Geri dön', 'Back')}
               </button>
             ) : (
               onJournal && (
                 <button className="btn small" onClick={onJournal}>
-                  Günlüğü aç
+                  {L('Günlüğü aç', 'Open the journal')}
                 </button>
               )
             )}
           </div>
           <span />
           <button className="btn small primary dialog-next" onClick={onClose}>
-            Tamam
+            {L('Tamam', 'OK')}
           </button>
         </div>
       </section>

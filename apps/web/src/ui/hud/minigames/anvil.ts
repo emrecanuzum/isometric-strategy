@@ -1,4 +1,5 @@
 import { ANVIL_LIMIT, ANVIL_TRAVEL, ANVIL_WINDOW, anvilGame } from '@game/shared'
+import { L } from '../../../lib/i18n'
 import type { AnvilState } from '@game/shared'
 import { play } from '../../../audio/sfx'
 import { C, H, PAL, W, bake, box, checker, halo, hash, hudCombo, joint, limb, pline, ramp, rgb, text, tone } from './art'
@@ -60,7 +61,7 @@ function backdrop() {
   })
 }
 
-const GRADE_NAMES = ['Boşa', 'Kusursuz!', 'İyi', 'Zayıf', 'Kaçtı']
+const GRADE_NAMES = [L('Boşa', 'Wasted'), L('Kusursuz!', 'Perfect!'), L('İyi', 'Good'), L('Zayıf', 'Weak'), L('Kaçtı', 'Missed')]
 const GRADE_COLORS = ['#a89a88', '#f2d16b', '#9cc464', '#e0a050', '#ec7a5a']
 
 // The smith: a broad, bald, bearded man in a leather apron, standing behind the anvil and facing the strike spot on its
@@ -181,7 +182,7 @@ function smith(ctx: CanvasRenderingContext2D, down: number, t: number) {
 
 export const anvilScene: Scene<AnvilState> = {
   make: anvilGame,
-  controls: 'İşaret çekicin altına gelince bas',
+  controls: L('İşaret çekicin altına gelince bas', 'Press when a mark comes under the hammer'),
   score: (s) => s.score,
   left: (s) => 1 - s.step / ANVIL_LIMIT,
   create() {
@@ -258,9 +259,9 @@ export const anvilScene: Scene<AnvilState> = {
       const missed = s.grades.filter((g) => g === -1).length
       if (missed > passed) {
         passed = missed
-        fx.float('Kaçtı', HIT_X - 20, BAR_Y - 30, GRADE_COLORS[4], 9, 0.6)
+        fx.float(L('Kaçtı', 'Missed'), HIT_X - 20, BAR_Y - 30, GRADE_COLORS[4], 9, 0.6)
       }
-      text(ctx, `${s.notes.filter((_, i) => s.grades[i] > 0).length}/${s.notes.length} vuruş`, 8, 22, { size: 9 })
+      text(ctx, L(`${s.notes.filter((_, i) => s.grades[i] > 0).length}/${s.notes.length} vuruş`, `${s.notes.filter((_, i) => s.grades[i] > 0).length}/${s.notes.length} strikes`), 8, 22, { size: 9 })
       comboPulse = Math.max(0, comboPulse - dt)
       hudCombo(ctx, s.combo, W - 8, 24, comboPulse)
     }

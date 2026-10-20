@@ -1,4 +1,5 @@
 import { NET_BAND, NET_LIMIT, balance, netGame } from '@game/shared'
+import { L } from '../../../lib/i18n'
 import type { NetState } from '@game/shared'
 import { play } from '../../../audio/sfx'
 import { C, H, PAL, W, bake, birds, box, checker, cloudLayer, halo, hash, oval, pline, ramp, rgb, ridge, scroll, text, tone } from './art'
@@ -65,7 +66,7 @@ function fisherman(ctx: CanvasRenderingContext2D, x: number, y: number, lean: nu
 
 export const netScene: Scene<NetState> = {
   make: netGame,
-  controls: 'Basılı tut: ipi çek · gerginliği yeşilde tut',
+  controls: L('Basılı tut: ipi çek · gerginliği yeşilde tut', 'Hold: haul the rope · keep the tension in the green'),
   score: (s) => s.score,
   left: (s) => 1 - s.step / NET_LIMIT,
   create() {
@@ -94,8 +95,8 @@ export const netScene: Scene<NetState> = {
         play('miss')
         fx.shake(4, 0.3)
         fx.flash('#a8342e', 0.15)
-        fx.float('Ağ yırtıldı!', NET_X, WATER - 16, '#ec7a5a', 11)
-        if (tear.lost) fx.float(`-${tear.lost} balık`, NET_X, WATER - 4, '#ec7a5a', 9)
+        fx.float(L('Ağ yırtıldı!', 'The net tore!'), NET_X, WATER - 16, '#ec7a5a', 11)
+        if (tear.lost) fx.float(L(`-${tear.lost} balık`, `-${tear.lost} fish`), NET_X, WATER - 4, '#ec7a5a', 9)
         for (let i = 0; i < tear.lost; i++) fx.burst(NET_X, WATER + 2, 1, { colors: ['#c8d0d8', '#8aa0b0'], speed: [60, 90], angle: [-Math.PI * 0.7, -Math.PI * 0.3], gravity: 260, life: [0.5, 0.7], size: [2, 3] })
         fx.burst(NET_X, WATER, 14, { colors: ['#eef6fa', '#a6d4e0', '#6aa8c2'], speed: [30, 80], angle: [-Math.PI, 0], gravity: 220 })
       }
@@ -106,7 +107,7 @@ export const netScene: Scene<NetState> = {
         lifted = { y: WATER - 22, fish: h.fish, life: 0.9 }
         pile += h.fish
         fx.float(`+${h.points}`, NET_X - 30, WATER - 38, '#f2d16b', 14)
-        if (h.perfect) fx.float('Kusursuz ağ!', NET_X - 30, WATER - 52, '#fff4c0', 10)
+        if (h.perfect) fx.float(L('Kusursuz ağ!', 'A perfect net!'), NET_X - 30, WATER - 52, '#fff4c0', 10)
         fx.burst(NET_X, WATER, 20, { colors: ['#eef6fa', '#a6d4e0', '#6aa8c2'], speed: [40, 100], angle: [-Math.PI, 0], gravity: 240 })
         fx.shake(2, 0.2)
       }
@@ -185,7 +186,7 @@ export const netScene: Scene<NetState> = {
       const inBand = s.tension >= NET_BAND[0] && s.tension <= NET_BAND[1]
       box(ctx, inBand ? '#9cc464' : s.tension > NET_BAND[1] ? '#ec7a5a' : '#e0a050', g.x + 1, ty, g.w - 2, g.y + g.h - ty)
       box(ctx, '#f3e6c8', g.x - 4, ty - 1, g.w + 8, 2)
-      text(ctx, 'Gerginlik', g.x + g.w / 2, g.y + g.h + 4, { align: 'center', size: 8, color: '#c8b8a0' })
+      text(ctx, L('Gerginlik', 'Tension'), g.x + g.w / 2, g.y + g.h + 4, { align: 'center', size: 8, color: '#c8b8a0' })
       // The haul's progress, and the nets.
       const bx = 128
       const by = 26
@@ -193,9 +194,9 @@ export const netScene: Scene<NetState> = {
       box(ctx, C(0x2a2030), bx, by, 80, 5)
       box(ctx, '#6aa8c2', bx, by, Math.round(80 * Math.min(1, s.progress)), 5)
       box(ctx, '#a6d4e0', bx, by, Math.round(80 * Math.min(1, s.progress)), 1)
-      text(ctx, `Ağ ${Math.min(NT.nets, s.hauls.length + 1)}/${NT.nets}`, bx, by + 7, { size: 8 })
-      text(ctx, `${s.fish} balık${s.torn ? ' · yırtık' : ''}`, bx + 80, by + 7, { size: 8, align: 'right', color: s.torn ? '#ec7a5a' : '#c8b8a0' })
-      if (surging) text(ctx, 'Balıklar çırpınıyor!', NET_X, WATER + 34, { align: 'center', size: 9, color: '#a6d4e0' })
+      text(ctx, L(`Ağ ${Math.min(NT.nets, s.hauls.length + 1)}/${NT.nets}`, `Net ${Math.min(NT.nets, s.hauls.length + 1)}/${NT.nets}`), bx, by + 7, { size: 8 })
+      text(ctx, L(`${s.fish} balık${s.torn ? ' · yırtık' : ''}`, `${s.fish} fish${s.torn ? ' · torn' : ''}`), bx + 80, by + 7, { size: 8, align: 'right', color: s.torn ? '#ec7a5a' : '#c8b8a0' })
+      if (surging) text(ctx, L('Balıklar çırpınıyor!', 'The fish are thrashing!'), NET_X, WATER + 34, { align: 'center', size: 9, color: '#a6d4e0' })
     }
   },
 }

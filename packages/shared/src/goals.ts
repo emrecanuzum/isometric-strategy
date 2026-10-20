@@ -2,6 +2,7 @@ import { balance } from './balance'
 import { book, goldCap, palaceLevel, population } from './economy'
 import type { Cost, Kingdom } from './economy'
 import { levelOf } from './institutions'
+import { L } from './lang'
 import { countShips, navyOf } from './navy'
 
 // The season's goals (CLAUDE.md §9.9): tracks of three tiers each (build ten buildings, then twenty-five, then fifty;
@@ -72,7 +73,7 @@ export const goalStarsMax = () => GOAL_TRACKS.reduce((n, t) => n + goalTiers(t).
 // The lord's title from the stars, and the next one up.
 export function goalRank(k: Pick<Kingdom, 'goals'>) {
   const stars = goalStars(k)
-  const ranks = G.ranks
+  const ranks = (G.ranks as { stars: number; title: string; titleEn?: string }[]).map((r) => ({ ...r, title: L(r.title, r.titleEn ?? r.title) }))
   let i = 0
   for (let j = 0; j < ranks.length; j++) if (stars >= ranks[j].stars) i = j
   return { stars, title: ranks[i].title, next: ranks[i + 1] ?? null }

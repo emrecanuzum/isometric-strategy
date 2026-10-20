@@ -9,6 +9,7 @@ import { dashes } from './dashes'
 import { textureOf } from './textures'
 import { surfaceHeight, worldDecks } from './chunkPainter'
 import { marchView } from './marchView'
+import { L } from '../lib/i18n'
 import type { MarchView } from './marchView'
 
 // Armies on the map (CLAUDE.md §9.7): a squad of spearmen under the kingdom's banner, walking along the route the
@@ -47,7 +48,7 @@ export interface MapArmy {
 }
 
 // A rival army's size as everyone sees it, from the figures drawn (about one for every two soldiers).
-export const roughSize = (figures: number) => (figures <= 4 ? 'birkaç' : figures <= 10 ? 'orta' : 'büyük')
+export const roughSize = (figures: number) => (figures <= 4 ? L('birkaç', 'a few') : figures <= 10 ? L('orta', 'medium') : L('büyük', 'large'))
 
 // A tag over a squad or a fleet on the map: a dark-edged plate in the lord's colour with the text in white, or (for
 // outlaws) near black with a blood-red edge and red text. Drawn in screen pixels; scale it by 1 / the camera's zoom.

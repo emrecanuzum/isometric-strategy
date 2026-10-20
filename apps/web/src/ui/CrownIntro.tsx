@@ -8,6 +8,7 @@ import { cityInfo } from '../game/cities'
 import { Scene } from './AwayReport'
 import type { Placed } from './AwayReport'
 import { Icon } from './icons'
+import { L } from '../lib/i18n'
 import { CrownBanner, CrownRivalry } from './hud/cities'
 import type { Online } from './hud/online'
 
@@ -77,11 +78,11 @@ export function CrownIntro({ world, kingdom, online, lobby, onSwear, onClose }: 
   const c = balance.cities.crown
   const pages = useMemo(
     () => [
-      { title: 'İki taç', picture: crownsPicture() },
-      { title: 'Taçların rekabeti', picture: crownsPicture() },
-      { title: 'Lord olmak', picture: lordPicture(kingdom.color) },
-      { title: 'Taçların pazarı', picture: marketPicture() },
-      { title: 'Tarafını seç', picture: crownsPicture() },
+      { title: L('İki taç', 'Two crowns'), picture: crownsPicture() },
+      { title: L('Taçların rekabeti', 'The crowns\' rivalry'), picture: crownsPicture() },
+      { title: L('Lord olmak', 'Being a lord'), picture: lordPicture(kingdom.color) },
+      { title: L('Taçların pazarı', 'The crowns\' market'), picture: marketPicture() },
+      { title: L('Tarafını seç', 'Choose your side'), picture: crownsPicture() },
     ],
     [kingdom.color],
   )
@@ -96,12 +97,12 @@ export function CrownIntro({ world, kingdom, online, lobby, onSwear, onClose }: 
         <header className="sheet-head">
           <Icon name="crown" size={32} />
           <div>
-            <h2 id="crown-intro-title">Taç krallıkları</h2>
+            <h2 id="crown-intro-title">{L('Taç krallıkları', 'The crown kingdoms')}</h2>
             <small>
               {current.title} · {page + 1} / {pages.length}
             </small>
           </div>
-          <button className="btn icon-only" onClick={close} aria-label="Sonra karar ver">
+          <button className="btn icon-only" onClick={close} aria-label={L('Sonra karar ver', 'Decide later')}>
             <Icon name="close" size={16} />
           </button>
         </header>
@@ -110,14 +111,20 @@ export function CrownIntro({ world, kingdom, online, lobby, onSwear, onClose }: 
         {page === 0 && (
           <div className="away-lines">
             <p>
-              Lordluğun büyüdü; artık diyarın büyükleri seni fark ediyor. Bu topraklarda yalnızca iki krallık var, sen ve öbür oyuncular onların lordlarısınız.
+              {L(
+                'Lordluğun büyüdü; artık diyarın büyükleri seni fark ediyor. Bu topraklarda yalnızca iki krallık var, sen ve öbür oyuncular onların lordlarısınız.',
+                'Your lordship has grown; the great of the realm have begun to take notice of you. There are only two kingdoms in these lands, and you and the other players are their lords.',
+              )}
             </p>
             {infos.map((info, i) => {
               const middle = cityCenter(world.cities[i])
               return (
                 <p key={i}>
-                  <CrownBanner world={world} liege={i} size={16} /> <b style={{ color: info.color }}>{info.name}</b>: hükümdarı {info.ruler}, başkenti {info.capital} (
-                  {Math.round(Math.hypot(middle.x - kingdom.site.x, middle.y - kingdom.site.y))} karo uzakta).
+                  <CrownBanner world={world} liege={i} size={16} /> <b style={{ color: info.color }}>{info.name}</b>:{' '}
+                  {L(
+                    `hükümdarı ${info.ruler}, başkenti ${info.capital} (${Math.round(Math.hypot(middle.x - kingdom.site.x, middle.y - kingdom.site.y))} karo uzakta).`,
+                    `ruled by ${info.ruler}, capital ${info.capital} (${Math.round(Math.hypot(middle.x - kingdom.site.x, middle.y - kingdom.site.y))} tiles away).`,
+                  )}
                 </p>
               )
             })}
@@ -126,50 +133,57 @@ export function CrownIntro({ world, kingdom, online, lobby, onSwear, onClose }: 
         {page === 1 && (
           <div className="away-lines">
             <p>
-              İki taç diyara hâkim olmak için yarışır. Bir tacın gücü, ona bağlı lordların gücüdür: lordları büyüdükçe, zenginleştikçe ve savaş kazandıkça tacı güçlenir.
-              Şu an güç %{Math.round(share[0] * 100)} – %{Math.round(share[1] * 100)}.
+              {L(
+                `İki taç diyara hâkim olmak için yarışır. Bir tacın gücü, ona bağlı lordların gücüdür: lordları büyüdükçe, zenginleştikçe ve savaş kazandıkça tacı güçlenir. Şu an güç %${Math.round(share[0] * 100)} – %${Math.round(share[1] * 100)}.`,
+                `The two crowns vie to rule the realm. A crown's power is the power of its lords: as its lords grow, prosper and win battles, the crown grows stronger. Right now the power stands at ${Math.round(share[0] * 100)}% – ${Math.round(share[1] * 100)}%.`,
+              )}
             </p>
             <CrownRivalry world={world} online={online} />
           </div>
         )}
         {page === 2 && (
           <div className="away-lines">
-            <p>Biat ettiğin tacın devriyeleri sana uğrar; eğlence merkezin varsa içip eğlenir, bahşiş bırakır. Taçla ilişkin iyileştikçe armağanlar da getirir:</p>
+            <p>{L('Biat ettiğin tacın devriyeleri sana uğrar; eğlence merkezin varsa içip eğlenir, bahşiş bırakır. Taçla ilişkin iyileştikçe armağanlar da getirir:', 'The patrols of the crown you swear fealty to will call on you; if you have an entertainment hall, they drink, make merry and leave a tip. As your relations with the crown improve they bring gifts too:')}</p>
             <ul className="tiers">
               {c.gifts.map((g) => (
                 <li key={g.at} className="on">
                   <Icon name="chest" size={16} />
                   <span>
-                    <b>{g.name}</b> · ilişki {g.at}+
+                    <b>{L(g.name, g.nameEn ?? g.name)}</b> · {L('ilişki', 'relations')} {g.at}+
                   </span>
                 </li>
               ))}
             </ul>
             <p>
-              Rakip tacın haraççıları ise her {Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir kapına gelip hazinenin %{Math.round(balance.cities.crown.patrol.tribute.share * 100)}'ini (en az {balance.cities.crown.patrol.tribute.min} altın) ister. Ödersen o taçla da aran düzelir; reddedersen bozulur.
+              {L(
+                `Rakip tacın haraççıları ise her ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir kapına gelip hazinenin %${Math.round(balance.cities.crown.patrol.tribute.share * 100)}'ini (en az ${balance.cities.crown.patrol.tribute.min} altın) ister. Ödersen o taçla da aran düzelir; reddedersen bozulur.`,
+                `The rival crown's tribute collectors, meanwhile, knock at your door every ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} minutes and ask for ${Math.round(balance.cities.crown.patrol.tribute.share * 100)}% of your treasury (at least ${balance.cities.crown.patrol.tribute.min} gold). Pay, and you get on better with that crown too; refuse, and things sour.`,
+              )}
             </p>
-            <p>Taçla ilişkini en çok, tüccarını onun başkentine göndererek artırırsın: her sefer onun ticaretine yarar.</p>
+            <p>{L('Taçla ilişkini en çok, tüccarını onun başkentine göndererek artırırsın: her sefer onun ticaretine yarar.', 'The best way to win a crown\'s favour is to send your merchant to its capital: every trip feeds its trade.')}</p>
           </div>
         )}
         {page === 3 && (
           <div className="away-lines">
             <p>
-              Her taç dönem dönem bir malın ticaretini yönetir. O malı satarken taçla ilişkin iyiyse %{Math.round(c.stewardship.bonus * 100)}'e kadar daha pahalıya
-              satarsın; kötüyse daha ucuza. İlişkin {String(c.stewardship.refuseBelow).replace('-', '−')}'nin altına düşerse o tacın tüccarları seninle alışveriş etmez.
+              {L(
+                `Her taç dönem dönem bir malın ticaretini yönetir. O malı satarken taçla ilişkin iyiyse %${Math.round(c.stewardship.bonus * 100)}'e kadar daha pahalıya satarsın; kötüyse daha ucuza. İlişkin ${String(c.stewardship.refuseBelow).replace('-', '−')}'nin altına düşerse o tacın tüccarları seninle alışveriş etmez.`,
+                `Each crown oversees the trade in one good, which changes from time to time. When you sell that good, good relations with the crown get you up to ${Math.round(c.stewardship.bonus * 100)}% more; bad ones, less. If your relations fall below ${String(c.stewardship.refuseBelow).replace('-', '−')}, that crown's merchants will not deal with you at all.`,
+              )}
             </p>
-            <p>Bu yüzden rakip tacı da büsbütün küstürmemek akıllıcadır.</p>
+            <p>{L('Bu yüzden rakip tacı da büsbütün küstürmemek akıllıcadır.', 'So it is wise not to offend the rival crown entirely either.')}</p>
           </div>
         )}
         {page === 4 && (
           <div className="away-lines">
-            <p>Birine biat et. Biat sezon boyunca değişmez; sarayını {c.requiredForPalaceLevel}. seviyeye yükseltmek için de biat şarttır.</p>
-            <div className="goods choices" role="group" aria-label="Taç krallıkları">
+            <p>{L(`Birine biat et. Biat sezon boyunca değişmez; sarayını ${c.requiredForPalaceLevel}. seviyeye yükseltmek için de biat şarttır.`, `Swear fealty to one of them. Fealty holds for the whole season, and you need it to raise your palace to level ${c.requiredForPalaceLevel}.`)}</p>
+            <div className="goods choices" role="group" aria-label={L('Taç krallıkları', 'The crown kingdoms')}>
               {infos.map((info, i) => (
                 <div key={i} className="good">
                   <CrownBanner world={world} liege={i} size={24} />
                   <b style={{ color: info.color }}>{info.name}</b>
                   <small>{info.ruler}</small>
-                  <small>güç %{Math.round(share[i] * 100)}</small>
+                  <small>{L(`güç %${Math.round(share[i] * 100)}`, `power ${Math.round(share[i] * 100)}%`)}</small>
                   {asking === i ? (
                     <span className="row">
                       <button
@@ -179,15 +193,15 @@ export function CrownIntro({ world, kingdom, online, lobby, onSwear, onClose }: 
                           close()
                         }}
                       >
-                        Eminim, biat et
+                        {L('Eminim, biat et', "I'm sure, swear fealty")}
                       </button>
                       <button className="btn small" onClick={() => setAsking(null)}>
-                        Vazgeç
+                        {L('Vazgeç', 'Cancel')}
                       </button>
                     </span>
                   ) : (
                     <button className="btn small" onClick={() => setAsking(i)}>
-                      Biat et
+                      {L('Biat et', 'Swear fealty')}
                     </button>
                   )}
                 </div>
@@ -196,8 +210,8 @@ export function CrownIntro({ world, kingdom, online, lobby, onSwear, onClose }: 
           </div>
         )}
         <div className="away-nav">
-          <button className="btn" disabled={page === 0} data-why="İlk sayfadasın" onClick={() => setPage(page - 1)}>
-            Geri
+          <button className="btn" disabled={page === 0} data-why={L('İlk sayfadasın', 'You are on the first page')} onClick={() => setPage(page - 1)}>
+            {L('Geri', 'Back')}
           </button>
           <span className="away-dots" aria-hidden>
             {pages.map((_, i) => (
@@ -206,11 +220,11 @@ export function CrownIntro({ world, kingdom, online, lobby, onSwear, onClose }: 
           </span>
           {page < pages.length - 1 ? (
             <button className="btn primary" onClick={() => setPage(page + 1)}>
-              İleri
+              {L('İleri', 'Next')}
             </button>
           ) : (
             <button className="btn" onClick={close}>
-              Sonra karar vereceğim
+              {L('Sonra karar vereceğim', "I'll decide later")}
             </button>
           )}
         </div>

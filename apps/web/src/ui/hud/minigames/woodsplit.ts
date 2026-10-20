@@ -1,4 +1,5 @@
 import { WOODSPLIT_LIMIT, balance, woodsplitGame } from '@game/shared'
+import { L } from '../../../lib/i18n'
 import type { WoodsplitState } from '@game/shared'
 import { play } from '../../../audio/sfx'
 import { C, H, PAL, W, bake, birds, box, checker, cloudLayer, hash, hudCombo, joint, limb, oval, pineRow, pline, ramp, rgb, ridge, scroll, smoke, text, tone } from './art'
@@ -148,7 +149,7 @@ function woodsman(ctx: CanvasRenderingContext2D, x: number, y: number, swing: nu
 
 export const woodsplitScene: Scene<WoodsplitState> = {
   make: woodsplitGame,
-  controls: 'Gösterge yeşile gelince bas',
+  controls: L('Gösterge yeşile gelince bas', 'Press when the gauge reaches the green'),
   score: (s) => s.score,
   left: (s) => 1 - s.step / WOODSPLIT_LIMIT,
   create() {
@@ -179,7 +180,7 @@ export const woodsplitScene: Scene<WoodsplitState> = {
           fx.burst(BLOCK_X, top + 2, blow.grade === 1 ? 26 : 14, { colors: [C(PAL.wood[5]), C(PAL.wood[4]), C(PAL.wood[3])], speed: [30, 90], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 220, floor: BLOCK_Y + 6 })
           fx.shake(blow.grade === 1 ? 3 : 2, 0.2)
           fx.float(`+${blow.points}`, BLOCK_X, top - 14, blow.grade === 1 ? '#f2d16b' : '#9cc464', 13)
-          fx.float(blow.grade === 1 ? (l.knotty ? 'Budaklı, temiz!' : 'Temiz!') : 'İyi', BLOCK_X, top - 28, blow.grade === 1 ? '#fff4c0' : '#c8e0a0', 10)
+          fx.float(blow.grade === 1 ? (l.knotty ? L('Budaklı, temiz!', 'Knotty, and clean!') : L('Temiz!', 'Clean!')) : L('İyi', 'Good'), BLOCK_X, top - 28, blow.grade === 1 ? '#fff4c0' : '#c8e0a0', 10)
           if (blow.grade === 1) fx.flash('#fff4c0', 0.08)
           comboPulse = 0.2
         } else if (blow.grade === 3) {
@@ -189,12 +190,12 @@ export const woodsplitScene: Scene<WoodsplitState> = {
           fx.burst(BLOCK_X, top + 4, 30, { colors: [C(PAL.wood[5]), C(PAL.wood[3]), C(PAL.dirt[3])], speed: [60, 140], angle: [-Math.PI, 0], gravity: 260, floor: BLOCK_Y + 6 })
           fx.shake(4, 0.3)
           fx.float(`+${blow.points}`, BLOCK_X, top - 14, '#e0a050', 12)
-          fx.float('Fazla sert!', BLOCK_X, top - 28, '#e0a050', 10)
+          fx.float(L('Fazla sert!', 'Too hard!'), BLOCK_X, top - 28, '#e0a050', 10)
         } else {
           play('miss')
           fx.burst(BLOCK_X, top + 2, 6, { colors: [C(PAL.wood[3]), C(PAL.wood[2])], speed: [10, 30], angle: [-Math.PI, 0] })
           fx.shake(1, 0.15)
-          fx.float('Balta sıkıştı', BLOCK_X, top - 20, '#ec7a5a', 10)
+          fx.float(L('Balta sıkıştı', 'Axe stuck'), BLOCK_X, top - 20, '#ec7a5a', 10)
         }
       }
       // The woodpile and the block.
@@ -265,10 +266,10 @@ export const woodsplitScene: Scene<WoodsplitState> = {
       box(ctx, C(PAL.ink), g.x - 6, ny - 2, 6, 5)
       box(ctx, '#f3e6c8', g.x - 5, ny - 1, 4, 3)
       box(ctx, '#f3e6c8', g.x - 1, ny, g.w + 2, 1)
-      text(ctx, 'Güç', g.x + g.w / 2, g.y + g.h + 4, { align: 'center', size: 8, color: '#c8b8a0' })
+      text(ctx, L('Güç', 'Power'), g.x + g.w / 2, g.y + g.h + 4, { align: 'center', size: 8, color: '#c8b8a0' })
       // Logs left and the run of good blows.
       const left = s.logs.length - s.index
-      text(ctx, `Kütük ${Math.min(s.logs.length, s.index + 1)}/${s.logs.length}`, 8, 22, { size: 9 })
+      text(ctx, L(`Kütük ${Math.min(s.logs.length, s.index + 1)}/${s.logs.length}`, `Log ${Math.min(s.logs.length, s.index + 1)}/${s.logs.length}`), 8, 22, { size: 9 })
       for (let i = 0; i < left; i++) {
         const lx = 9 + (i % 12) * 6
         oval(ctx, C(s.logs[s.index + i]?.knotty ? PAL.wood[2] : PAL.wood[4]), lx + 2, 38, 2.5, 2)

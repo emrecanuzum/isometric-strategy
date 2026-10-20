@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { serverNow } from './clock'
 import { loadArmies, loadBattles, loadDiplomacy, loadNotices, loadOutlaws, loadTowns, settle } from './online'
 import type { ArmyOrder, Battle, Notice } from './online'
+import { localPayload } from '../lib/i18n'
 
 // The layer between kingdoms as the client holds it: relations, pacts, envoys and spies, armies, battles, the
 // player's notices and the lobby's prices. Each part is fetched again when the lobby's broadcast says its table
@@ -69,16 +70,16 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
         const armies = await loadArmies(lobby)
         setLayer((l) => ({ ...l, armies }))
       } else if (part === 'battles') {
-        const battles = await loadBattles(lobby)
+        const battles = localPayload(await loadBattles(lobby))
         setLayer((l) => ({ ...l, battles }))
       } else if (part === 'outlaws') {
-        const outlaws = await loadOutlaws(lobby)
+        const outlaws = localPayload(await loadOutlaws(lobby))
         setLayer((l) => ({ ...l, outlaws }))
       } else if (part === 'towns') {
         const towns = await loadTowns(lobby)
         setLayer((l) => ({ ...l, towns }))
       } else {
-        const notices = await loadNotices(lobby)
+        const notices = localPayload(await loadNotices(lobby))
         setLayer((l) => ({ ...l, notices }))
       }
     },

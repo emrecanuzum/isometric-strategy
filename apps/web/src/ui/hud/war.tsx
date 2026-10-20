@@ -8,6 +8,7 @@ import { KINGDOM_COLORS } from '../../game/buildingSprites'
 import type { KingdomColor } from '../../game/buildingSprites'
 import type { Battle } from '../../net/online'
 import { Icon } from '../icons'
+import { L } from '../../lib/i18n'
 import { RESOURCE_NAMES, UNIT_ICONS, UNIT_NAMES, UNIT_NOTES, WEAPON_NAMES } from '../names'
 import { Dot } from './diplomacy'
 import type { HudData } from './tabs'
@@ -22,7 +23,7 @@ import { Subtabs, showPart, usePart } from './Subtabs'
 
 const clock = (ms: number) => {
   const s = Math.max(0, Math.round(ms / 1000))
-  return s >= 3600 ? `${Math.floor(s / 3600)} sa ${Math.floor((s % 3600) / 60)} dk` : s >= 60 ? `${Math.floor(s / 60)} dk ${s % 60} sn` : `${s} sn`
+  return s >= 3600 ? L(`${Math.floor(s / 3600)} sa ${Math.floor((s % 3600) / 60)} dk`, `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`) : s >= 60 ? L(`${Math.floor(s / 60)} dk ${s % 60} sn`, `${Math.floor(s / 60)} min ${s % 60} s`) : L(`${s} sn`, `${s} s`)
 }
 
 // Where an army rests: its own lands, by an inn or a free city, or the open field.
@@ -32,18 +33,22 @@ export const restOf = (world: World, kingdom: Kingdom, now: number) => (p: Point
   return nearInn(world.inns, p) || nearCity(world.cities, p) ? ('inn' as const) : ('field' as const)
 }
 
-const REST_NAMES = { home: 'kendi topraklarında, moral topluyor', inn: 'hanın yanında, hızla moral topluyor', field: 'açık arazide' }
+const REST_NAMES = {
+  home: L('kendi topraklarında, moral topluyor', 'on its own lands, recovering morale'),
+  inn: L('hanın yanında, hızla moral topluyor', 'by an inn, recovering morale fast'),
+  field: L('açık arazide', 'in the open field'),
+}
 
 export function armyStatus(army: Army, now: number, rest: ReturnType<typeof restOf>, shieldOf: (kingdom: number) => number = () => 0) {
   const arrive = Date.parse(army.arrive_at)
-  if (army.status === 'battle') return 'Savaşta'
+  if (army.status === 'battle') return L('Savaşta', 'In battle')
   // At the gates of a palace still shielded from the last siege: the siege begins when the shield ends.
-  if (army.goal.kind === 'siege' && now >= arrive && shieldOf(army.goal.kingdom) > now) return `Kapıda bekliyor · kuşatmaya ${clock(shieldOf(army.goal.kingdom) - now)}`
+  if (army.goal.kind === 'siege' && now >= arrive && shieldOf(army.goal.kingdom) > now) return L(`Kapıda bekliyor · kuşatmaya ${clock(shieldOf(army.goal.kingdom) - now)}`, `Waiting at the gate · siege in ${clock(shieldOf(army.goal.kingdom) - now)}`)
   if (now < arrive && army.path.length > 1) {
-    const where = army.goal.kind === 'home' ? ('retreat' in army.goal && army.goal.retreat ? 'Geri çekiliyor' : 'Eve dönüyor') : army.goal.kind === 'siege' ? 'Kuşatmaya gidiyor' : army.goal.kind === 'chase' ? 'Yağmacıların peşinde' : army.goal.kind === 'cave' ? 'Yağmacı mağarasına yürüyor' : 'Yürüyor'
-    return `${where} · varış ${clock(arrive - now)}`
+    const where = army.goal.kind === 'home' ? ('retreat' in army.goal && army.goal.retreat ? L('Geri çekiliyor', 'Retreating') : L('Eve dönüyor', 'Returning home')) : army.goal.kind === 'siege' ? L('Kuşatmaya gidiyor', 'Marching to a siege') : army.goal.kind === 'chase' ? L('Yağmacıların peşinde', 'Chasing bandits') : army.goal.kind === 'cave' ? L('Yağmacı mağarasına yürüyor', 'Marching on a bandit cave') : L('Yürüyor', 'Marching')
+    return L(`${where} · varış ${clock(arrive - now)}`, `${where} · arrives in ${clock(arrive - now)}`)
   }
-  return `Bekliyor · ${REST_NAMES[rest(army.path[army.path.length - 1])]}`
+  return L(`Bekliyor · ${REST_NAMES[rest(army.path[army.path.length - 1])]}`, `Waiting · ${REST_NAMES[rest(army.path[army.path.length - 1])]}`)
 }
 
 // The fighting that concerns the player right now (CLAUDE.md §8): sieges of towns they lay or suffer, battles they
@@ -67,7 +72,7 @@ export function warNotes(online: Online, now: number): WarNote[] {
     if (!s || s.endsAt <= now || (s.kingdom !== me && t.owner !== me)) continue
     notes.push({
       key: `town${t.id}`,
-      text: s.kingdom === me ? `${t.name} kuşatılıyor · ${clock(s.endsAt - now)} kaldı` : `${kingdomName(online, s.kingdom)}, ${t.name} kasabanı kuşatıyor · ${clock(s.endsAt - now)} kaldı`,
+      text: s.kingdom === me ? L(`${t.name} kuşatılıyor · ${clock(s.endsAt - now)} kaldı`, `Besieging ${t.name} · ${clock(s.endsAt - now)} left`) : L(`${kingdomName(online, s.kingdom)}, ${t.name} kasabanı kuşatıyor · ${clock(s.endsAt - now)} kaldı`, `${kingdomName(online, s.kingdom)} is besieging your town of ${t.name} · ${clock(s.endsAt - now)} left`),
       from: s.startedAt,
       until: s.endsAt,
       watch: { town: t.id },
@@ -76,44 +81,44 @@ export function warNotes(online: Online, now: number): WarNote[] {
   // Rebels at the gates of the player's own towns (CLAUDE.md §8.4), until they are beaten.
   for (const t of online.towns) {
     if (t.owner !== me || !t.rebels || t.rebels.battle) continue
-    notes.push({ key: `rebels${t.id}`, text: `${t.rebels.count} asi ${t.name} kasabanı kuşatıyor · ordunla gidip bastır` })
+    notes.push({ key: `rebels${t.id}`, text: L(`${t.rebels.count} asi ${t.name} kasabanı kuşatıyor · ordunla gidip bastır`, `${t.rebels.count} rebel${t.rebels.count === 1 ? '' : 's'} besieging your town of ${t.name} · go and put them down with your army`) })
   }
   for (const b of online.battles) {
     const end = Date.parse(b.ends_at)
     if ((b.resolved && end <= now) || ![...b.attackers, ...b.defenders].some((f) => f.kingdom === me)) continue
     const start = Date.parse(b.started_at)
     const what = battleTitle(b, online)
-    notes.push({ key: `battle${b.id}`, text: start > now ? `${what} ${clock(start - now)} sonra başlıyor` : `${what} sürüyor · ${clock(end - now)} kaldı`, from: start, until: end, watch: { battle: b.id } })
+    notes.push({ key: `battle${b.id}`, text: start > now ? L(`${what} ${clock(start - now)} sonra başlıyor`, `${what} begins in ${clock(start - now)}`) : L(`${what} sürüyor · ${clock(end - now)} kaldı`, `${what} under way · ${clock(end - now)} left`), from: start, until: end, watch: { battle: b.id } })
   }
   for (const a of online.armies) {
     if (a.kingdom_id !== me || a.status === 'battle') continue
     const arrive = Date.parse(a.arrive_at)
     if (arrive <= now) continue
     const goal = a.goal
-    const where = goal.kind === 'town' ? online.towns.find((t) => t.id === goal.town)?.name : goal.kind === 'siege' ? `${kingdomName(online, goal.kingdom)} sarayı` : null
-    if (where) notes.push({ key: `march${a.id}`, text: `Ordun ${where} kuşatmasına gidiyor · varış ${clock(arrive - now)}`, from: Date.parse(a.depart_at), until: arrive })
+    const where = goal.kind === 'town' ? online.towns.find((t) => t.id === goal.town)?.name : goal.kind === 'siege' ? L(`${kingdomName(online, goal.kingdom)} sarayı`, `${kingdomName(online, goal.kingdom)}'s palace`) : null
+    if (where) notes.push({ key: `march${a.id}`, text: L(`Ordun ${where} kuşatmasına gidiyor · varış ${clock(arrive - now)}`, `Your army is marching to besiege ${where} · arrives in ${clock(arrive - now)}`), from: Date.parse(a.depart_at), until: arrive })
     // After a band of bandits (CLAUDE.md §7.9).
-    if (goal.kind === 'chase') notes.push({ key: `chase${a.id}`, text: `Ordun yağmacıların peşinde · önlerini kesmesine ${clock(arrive - now)}`, from: Date.parse(a.depart_at), until: arrive })
+    if (goal.kind === 'chase') notes.push({ key: `chase${a.id}`, text: L(`Ordun yağmacıların peşinde · önlerini kesmesine ${clock(arrive - now)}`, `Your army is after the bandits · cuts them off in ${clock(arrive - now)}`), from: Date.parse(a.depart_at), until: arrive })
     // On a bandit clan's cave (CLAUDE.md §7.9.1).
-    if (goal.kind === 'cave') notes.push({ key: `cave${a.id}`, text: `Ordun yağmacı mağarasını kuşatmaya gidiyor · varış ${clock(arrive - now)}`, from: Date.parse(a.depart_at), until: arrive })
+    if (goal.kind === 'cave') notes.push({ key: `cave${a.id}`, text: L(`Ordun yağmacı mağarasını kuşatmaya gidiyor · varış ${clock(arrive - now)}`, `Your army is marching to besiege a bandit cave · arrives in ${clock(arrive - now)}`), from: Date.parse(a.depart_at), until: arrive })
   }
   return notes
 }
 
 // A battle by name: a palace's siege, a town's rebels put down, or a battle in the field.
 export function battleTitle(b: Battle, online: Online) {
-  if (b.kind === 'revolt') return `${online.towns.find((t) => t.id === b.plan.town)?.name ?? 'Kasaba'} ayaklanması`
-  if (b.kind === 'outlaw') return `${b.plan.outlaw?.name ?? 'Yağmacılar'} ile çarpışma`
-  if (b.kind === 'cave') return `${b.plan.outlaw?.name ?? 'Yağmacı klanı'} mağarasının kuşatması`
+  if (b.kind === 'revolt') return L(`${online.towns.find((t) => t.id === b.plan.town)?.name ?? 'Kasaba'} ayaklanması`, `Revolt in ${online.towns.find((t) => t.id === b.plan.town)?.name ?? 'the town'}`)
+  if (b.kind === 'outlaw') return L(`${b.plan.outlaw?.name ?? 'Yağmacılar'} ile çarpışma`, `Clash with ${b.plan.outlaw?.name ?? 'the bandits'}`)
+  if (b.kind === 'cave') return L(`${b.plan.outlaw?.name ?? 'Yağmacı klanı'} mağarasının kuşatması`, `Siege of the ${b.plan.outlaw?.name ?? 'bandit clan'}'s cave`)
   // A pretender's camp attacked, or his men at the palace (CLAUDE.md §9.1.1).
   const claimant = [...b.attackers, ...b.defenders].find((f) => f.pretender)?.pretender
-  if (b.kind === 'pretender') return `${claimant ?? 'Taht davacısı'} karargâhı`
-  if (b.kind === 'usurp') return `${claimant ?? 'Taht davacısı'} sarayı kuşatıyor`
-  return b.kind === 'siege' && b.besieged !== null ? `${kingdomName(online, b.besieged)} kuşatması` : 'Meydan muharebesi'
+  if (b.kind === 'pretender') return L(`${claimant ?? 'Taht davacısı'} karargâhı`, `${claimant ?? 'The pretender'}'s camp`)
+  if (b.kind === 'usurp') return L(`${claimant ?? 'Taht davacısı'} sarayı kuşatıyor`, `${claimant ?? 'The pretender'} besieges the palace`)
+  return b.kind === 'siege' && b.besieged !== null ? L(`${kingdomName(online, b.besieged)} kuşatması`, `Siege of ${kingdomName(online, b.besieged)}`) : L('Meydan muharebesi', 'Pitched battle')
 }
 
 // A side's fighter by name: a kingdom, its garrison, or a town's rebels.
-const fighterName = (online: Online, f: Battle['attackers'][number]) => (f.rebels ? (f.pretender ? `${f.pretender} asileri` : 'Asiler') : f.outlaws ? 'Yağmacılar' : f.army === null ? `${kingdomName(online, f.kingdom)} garnizonu` : kingdomName(online, f.kingdom))
+const fighterName = (online: Online, f: Battle['attackers'][number]) => (f.rebels ? (f.pretender ? L(`${f.pretender} asileri`, `${f.pretender}'s rebels`) : L('Asiler', 'Rebels')) : f.outlaws ? L('Yağmacılar', 'Bandits') : f.army === null ? L(`${kingdomName(online, f.kingdom)} garnizonu`, `${kingdomName(online, f.kingdom)} garrison`) : kingdomName(online, f.kingdom))
 
 // What is going on: the war notes with how far each has run.
 function WarNow({ online, now }: { online: Online; now: number }) {
@@ -121,7 +126,7 @@ function WarNow({ online, now }: { online: Online; now: number }) {
   const notes = warNotes(online, now)
   if (notes.length === 0) return null
   return (
-    <Section title="Süren savaş" icon="swords" aside={`${notes.length}`}>
+    <Section title={L('Süren savaş', 'War under way')} icon="swords" aside={`${notes.length}`}>
       <ul className="places">
         {notes.map((n) => (
           <li key={n.key}>
@@ -129,12 +134,12 @@ function WarNow({ online, now }: { online: Online; now: number }) {
             <span>
               <b>{n.text}</b>
               {n.from !== undefined && n.until !== undefined && n.until > n.from && (
-                <Meter value={Math.max(0, Math.min(1, (now - n.from) / (n.until - n.from)))} label="İlerleme" segments={12} />
+                <Meter value={Math.max(0, Math.min(1, (now - n.from) / (n.until - n.from)))} label={L('İlerleme', 'Progress')} segments={12} />
               )}
             </span>
             {n.watch && (
               <button className="btn small" onClick={() => watch(n.watch!)}>
-                İzle
+                {L('İzle', 'Watch')}
               </button>
             )}
           </li>
@@ -157,22 +162,22 @@ export function ArmyTab(data: HudData) {
     <>
       <WarNow online={online} now={now} />
       <Subtabs
-        label="Ordu"
+        label={L('Ordu', 'Army')}
         part={part}
         onPart={setPart}
         parts={[
-          { id: 'land', name: 'Ordular', icon: 'swords', count: mine.length },
-          { id: 'barracks', name: 'Kışla', icon: 'shield', count: (kingdom.training ?? []).reduce((n, t) => n + t.count, 0) },
-          { id: 'battles', name: 'Savaşlar', icon: 'banner', count: online.battles.filter((b) => !b.resolved || Date.parse(b.ends_at) > now).length },
-          { id: 'sea', name: 'Donanma', icon: 'ship', count: ships, dot: !!kingdom.blockade },
+          { id: 'land', name: L('Ordular', 'Armies'), icon: 'swords', count: mine.length },
+          { id: 'barracks', name: L('Kışla', 'Barracks'), icon: 'shield', count: (kingdom.training ?? []).reduce((n, t) => n + t.count, 0) },
+          { id: 'battles', name: L('Savaşlar', 'Battles'), icon: 'banner', count: online.battles.filter((b) => !b.resolved || Date.parse(b.ends_at) > now).length },
+          { id: 'sea', name: L('Donanma', 'Navy'), icon: 'ship', count: ships, dot: !!kingdom.blockade },
         ]}
       />
       {part === 'sea' && <NavyTab {...data} />}
       {/* The armies first: most orders are given here. */}
       {part === 'land' && (
         <>
-          <Section title="Ordularım" icon="swords" aside={`${mine.length} / ${balance.military.maxArmies}`}>
-            {mine.length === 0 && <p className="hint">Sahada ordun yok. Garnizondan bir ordu çıkar.</p>}
+          <Section title={L('Ordularım', 'My armies')} icon="swords" aside={`${mine.length} / ${balance.military.maxArmies}`}>
+            {mine.length === 0 && <p className="hint">{L('Sahada ordun yok. Garnizondan bir ordu çıkar.', 'You have no army in the field. Raise one from the garrison.')}</p>}
             <ul className="armies">
               {mine.map((army, i) => (
                 <ArmyCard key={army.id} index={i + 1} army={army} others={mine.filter((a) => a.id !== army.id)} data={data} rest={rest} />
@@ -211,11 +216,11 @@ export function UnitRow({ units }: { units: Units | null | undefined }) {
 }
 
 const WHY: Record<string, string> = {
-  building: 'Kışla yok',
-  locked: '2. seviye kışla gerekir',
-  people: 'Gönüllü yok',
-  cost: 'Kaynak ya da silah yetmiyor',
-  research: 'Üniversitede araştırılmalı',
+  building: L('Kışla yok', 'No barracks'),
+  locked: L('2. seviye kışla gerekir', 'Needs a level 2 barracks'),
+  people: L('Gönüllü yok', 'No volunteers'),
+  cost: L('Kaynak ya da silah yetmiyor', 'Not enough resources or weapons'),
+  research: L('Üniversitede araştırılmalı', 'Must be researched at the university'),
 }
 
 function Training({ data, has }: { data: HudData; has: boolean }) {
@@ -224,9 +229,9 @@ function Training({ data, has }: { data: HudData; has: boolean }) {
   const [count, setCount] = useState(1)
   if (!has) {
     return (
-      <Section title="Kışla" icon="people">
-        <Placeholder icon="lock" title="Kışlan yok">
-          Sarayı 2. seviyeye yükselt, sonra İnşa sekmesinden kışla kur. Kışla mızrakçı ve okçu yetiştirir; 2. seviyede süvari ve mancınık da.
+      <Section title={L('Kışla', 'Barracks')} icon="people">
+        <Placeholder icon="lock" title={L('Kışlan yok', 'You have no barracks')}>
+          {L('Sarayı 2. seviyeye yükselt, sonra İnşa sekmesinden kışla kur. Kışla mızrakçı ve okçu yetiştirir; 2. seviyede süvari ve mancınık da.', 'Upgrade your palace to level 2, then build barracks from the Build tab. Barracks train spearmen and archers; at level 2, cavalry and catapults too.')}
         </Placeholder>
       </Section>
     )
@@ -244,11 +249,11 @@ function Training({ data, has }: { data: HudData; has: boolean }) {
   const queue = (kingdom.training ?? []).filter((t) => t.doneAt > now)
   const armory = armoryOf(kingdom)
   return (
-    <Section title="Kışla" icon="people" aside={`asker havuzu ${pool} / ${cap}`}>
+    <Section title={L('Kışla', 'Barracks')} icon="people" aside={L(`asker havuzu ${pool} / ${cap}`, `manpower ${pool} / ${cap}`)}>
       <p className="hint">
-        Asker havuzu her tur dolar; halk mutlu oldukça (%{Math.round(kingdom.happiness ?? 60)}) daha büyük olur ve askerlik ucuzlar.
+        {L(`Asker havuzu her tur dolar; halk mutlu oldukça (%${Math.round(kingdom.happiness ?? 60)}) daha büyük olur ve askerlik ucuzlar.`, `Manpower refills every round; the happier the people (${Math.round(kingdom.happiness ?? 60)}%), the bigger it grows and the cheaper soldiers come.`)}
       </p>
-      <div className="unit-pick choices" role="radiogroup" aria-label="Birlik türü">
+      <div className="unit-pick choices" role="radiogroup" aria-label={L('Birlik türü', 'Unit type')}>
         {UNITS.map((u) => (
           <button key={u} className="btn small" role="radio" aria-checked={unit === u} onClick={() => setUnit(u)} title={UNIT_NOTES[u]}>
             <Icon name={UNIT_ICONS[u]} size={16} /> {UNIT_NAMES[u]}
@@ -257,28 +262,28 @@ function Training({ data, has }: { data: HudData; has: boolean }) {
       </div>
       <p className="hint">{UNIT_NOTES[unit]}.</p>
       <Stat
-        label="Birim başı"
+        label={L('Birim başı', 'Per unit')}
         value={[
           ...Object.entries(cost).map(([r, v]) => `${v} ${RESOURCE_NAMES[r as keyof typeof RESOURCE_NAMES].toLowerCase()}`),
-          ...Object.entries(weapons).map(([w, v]) => `${v} ${WEAPON_NAMES[w as keyof typeof WEAPON_NAMES].toLowerCase()} (${Math.floor(armory[w as keyof typeof armory])} var)`),
+          ...Object.entries(weapons).map(([w, v]) => L(`${v} ${WEAPON_NAMES[w as keyof typeof WEAPON_NAMES].toLowerCase()} (${Math.floor(armory[w as keyof typeof armory])} var)`, `${v} ${w === 'bow' ? (v === 1 ? 'bow and arrows' : 'sets of bow and arrows') : `${WEAPON_NAMES[w as keyof typeof WEAPON_NAMES].toLowerCase()}${v === 1 ? '' : 's'}`} (${Math.floor(armory[w as keyof typeof armory])} in stock)`)),
         ].join(' · ')}
-        note={`${unitSpec(unit).trainSeconds} sn`}
+        note={L(`${unitSpec(unit).trainSeconds} sn`, `${unitSpec(unit).trainSeconds} s`)}
       />
       <div className="stepper">
-        <button className="btn icon-only" disabled={n <= 1} data-why="En az 1 asker eğitilir" onClick={() => setCount(n - 1)} aria-label="Bir asker azalt">
+        <button className="btn icon-only" disabled={n <= 1} data-why={L('En az 1 asker eğitilir', 'At least 1 soldier is trained')} onClick={() => setCount(n - 1)} aria-label={L('Bir asker azalt', 'One soldier fewer')}>
           <Icon name="minus" size={16} />
         </button>
         <span className="stepper-value">
           <b>{n}</b> {UNIT_NAMES[unit].toLowerCase()}
         </span>
-        <button className="btn icon-only" disabled={n >= willing} data-why={willing < 1 ? 'Asker olmaya gönüllü kimse yok' : `Gönüllülerin hepsi bu kadar (${willing})`} onClick={() => setCount(n + 1)} aria-label="Bir asker ekle">
+        <button className="btn icon-only" disabled={n >= willing} data-why={willing < 1 ? L('Asker olmaya gönüllü kimse yok', 'Nobody is willing to be a soldier') : L(`Gönüllülerin hepsi bu kadar (${willing})`, `That is all the volunteers (${willing})`)} onClick={() => setCount(n + 1)} aria-label={L('Bir asker ekle', 'One soldier more')}>
           <Icon name="plus" size={16} />
         </button>
-        <button className="btn small" disabled={most <= 1 || n === most} data-why={most <= 1 ? 'Gönüllüler ya da depolar yalnızca bir askere yetiyor' : 'Zaten en çok seçili'} onClick={() => setCount(most)} title="Gönüllülerin ve depoların yettiği kadar">
-          En çok{most > 1 ? ` (${most})` : ''}
+        <button className="btn small" disabled={most <= 1 || n === most} data-why={most <= 1 ? L('Gönüllüler ya da depolar yalnızca bir askere yetiyor', 'The volunteers or the stores stretch to one soldier only') : L('Zaten en çok seçili', 'The most is already chosen')} onClick={() => setCount(most)} title={L('Gönüllülerin ve depoların yettiği kadar', 'As many as the volunteers and stores allow')}>
+          {L('En çok', 'Most')}{most > 1 ? ` (${most})` : ''}
         </button>
         <button className="btn small" disabled={!!why} data-why={why ? WHY[why] : undefined} onClick={() => online?.act({ type: 'train', count: n, unit })} title={why ? WHY[why] : undefined}>
-          Eğit {why ? `(${WHY[why]})` : ''}
+          {L('Eğit', 'Train')} {why ? `(${WHY[why]})` : ''}
         </button>
       </div>
       {queue.length > 0 && (
@@ -306,14 +311,14 @@ function Garrison({ data, armies }: { data: HudData; armies: number }) {
   const full = armies >= balance.military.maxArmies
   const step = (u: Unit, d: number) => setPicked({ ...units, [u]: Math.max(0, Math.min(garrison[u] ?? 0, (units[u] ?? 0) + d)) })
   return (
-    <Section title="Garnizon" icon="crown" aside={`${total} asker sarayda`}>
+    <Section title={L('Garnizon', 'Garrison')} icon="crown" aside={L(`${total} asker sarayda`, `${total} soldier${total === 1 ? '' : 's'} at the palace`)}>
       {(kingdom.armyLockUntil ?? 0) > data.now && (
         <p className="hint down">
-          <Icon name="warn" size={16} /> Garnizon bir felaketle uğraşıyor: {Math.ceil(((kingdom.armyLockUntil ?? 0) - data.now) / 60_000)} dakika ordu çıkarılamaz.
+          <Icon name="warn" size={16} /> {L(`Garnizon bir felaketle uğraşıyor: ${Math.ceil(((kingdom.armyLockUntil ?? 0) - data.now) / 60_000)} dakika ordu çıkarılamaz.`, `The garrison is busy with a disaster: no army can be raised for ${Math.ceil(((kingdom.armyLockUntil ?? 0) - data.now) / 60_000)} min.`)}
         </p>
       )}
       {total === 0 ? (
-        <p className="hint">Sarayda bekleyen asker yok.</p>
+        <p className="hint">{L('Sarayda bekleyen asker yok.', 'No soldiers waiting at the palace.')}</p>
       ) : (
         <>
           {UNITS.filter((u) => (garrison[u] ?? 0) > 0).map((u) => (
@@ -321,13 +326,13 @@ function Garrison({ data, armies }: { data: HudData; armies: number }) {
               <span className="unit-label">
                 <Icon name={UNIT_ICONS[u]} size={16} /> {UNIT_NAMES[u]}
               </span>
-              <button className="btn icon-only" disabled={(units[u] ?? 0) <= 0} data-why="Bu birlikten seçili asker yok" onClick={() => step(u, -1)} aria-label="Azalt">
+              <button className="btn icon-only" disabled={(units[u] ?? 0) <= 0} data-why={L('Bu birlikten seçili asker yok', 'No soldiers of this unit chosen')} onClick={() => step(u, -1)} aria-label={L('Azalt', 'Fewer')}>
                 <Icon name="minus" size={16} />
               </button>
               <span className="stepper-value">
                 <b>{units[u] ?? 0}</b> / {garrison[u]}
               </span>
-              <button className="btn icon-only" disabled={(units[u] ?? 0) >= (garrison[u] ?? 0)} data-why="Garnizondaki bu birliğin hepsi seçili" onClick={() => step(u, 1)} aria-label="Artır">
+              <button className="btn icon-only" disabled={(units[u] ?? 0) >= (garrison[u] ?? 0)} data-why={L('Garnizondaki bu birliğin hepsi seçili', 'All of this unit in the garrison is chosen')} onClick={() => step(u, 1)} aria-label={L('Artır', 'More')}>
                 <Icon name="plus" size={16} />
               </button>
             </div>
@@ -336,21 +341,21 @@ function Garrison({ data, armies }: { data: HudData; armies: number }) {
             <button
               className="btn small"
               disabled={full || n < 1}
-              data-why={full ? `Sahada en fazla ${balance.military.maxArmies} ordun olabilir` : 'Önce asker seç'}
+              data-why={full ? L(`Sahada en fazla ${balance.military.maxArmies} ordun olabilir`, `You can have at most ${balance.military.maxArmies} armies in the field`) : L('Önce asker seç', 'Choose soldiers first')}
               onClick={() => (online?.act({ type: 'raise', units }), setPicked(null))}
-              title={full ? 'Sahada en fazla 2 ordun olabilir' : undefined}
+              title={full ? L('Sahada en fazla 2 ordun olabilir', 'You can have at most 2 armies in the field') : undefined}
             >
-              {n} askerle ordu çıkar
+              {L(`${n} askerle ordu çıkar`, `Raise an army of ${n}`)}
             </button>
             <button
               className={sureDisband ? 'btn small danger' : 'btn small'}
               disabled={n < 1}
-              data-why="Önce asker seç"
+              data-why={L('Önce asker seç', 'Choose soldiers first')}
               onClick={() => (sureDisband ? (online?.act({ type: 'disband', units }), setPicked(null), setSureDisband(false)) : setSureDisband(true))}
               onBlur={() => setSureDisband(false)}
-              title="Askerler köylüye döner; eğitim maliyeti geri gelmez"
+              title={L('Askerler köylüye döner; eğitim maliyeti geri gelmez', 'The soldiers go back to being villagers; the training cost is not refunded')}
             >
-              {sureDisband ? `Emin misin? ${n} askeri terhis et` : `${n} askeri terhis et`}
+              {sureDisband ? L(`Emin misin? ${n} askeri terhis et`, `Are you sure? Disband ${n} soldier${n === 1 ? '' : 's'}`) : L(`${n} askeri terhis et`, `Disband ${n} soldier${n === 1 ? '' : 's'}`)}
             </button>
           </div>
         </>
@@ -361,12 +366,12 @@ function Garrison({ data, armies }: { data: HudData; armies: number }) {
 
 // Why the lord cannot take command of an army (dynasty.ts leadError).
 const KING_REASONS: Record<LeadError, string> = {
-  council: 'Naipler konseyi yönetirken kral orduya geçemez',
-  queen: 'Önce sarayda bir kraliçe olmalı',
-  son: 'Önce bir oğlun olmalı (tahtın varisi)',
-  leading: 'Kral zaten başka bir orduya komuta ediyor',
-  battle: 'Ordu savaşta',
-  palace: 'Ordu sarayın önünde durmalı',
+  council: L('Naipler konseyi yönetirken kral orduya geçemez', 'The king cannot join an army while a council of regents rules'),
+  queen: L('Önce sarayda bir kraliçe olmalı', 'There must first be a queen at the palace'),
+  son: L('Önce bir oğlun olmalı (tahtın varisi)', 'You must first have a son (an heir to the throne)'),
+  leading: L('Kral zaten başka bir orduya komuta ediyor', 'The king already commands another army'),
+  battle: L('Ordu savaşta', 'The army is in battle'),
+  palace: L('Ordu sarayın önünde durmalı', 'The army must stand before the palace'),
 }
 
 function ArmyCard({ index, army, others, data, rest }: { index: number; army: Army; others: Army[]; data: HudData; rest: ReturnType<typeof restOf> }) {
@@ -397,52 +402,52 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
       <div className="army-body">
         <div className="army-head">
           <b>
-            {index}. Ordu · {soldiers} savaşçı
+            {L(`${index}. Ordu · ${soldiers} savaşçı`, `Army ${index} · ${soldiers} soldier${soldiers === 1 ? '' : 's'}`)}
           </b>
-          <small>{siege ? `${siege.name} kuşatılıyor · ${clock(siege.siege!.endsAt - now)} kaldı` : toTown && Date.parse(army.arrive_at) > now ? `${toTown.name} ${toTown.owner === online.me ? 'asilerine yürüyor' : 'kuşatmasına gidiyor'} · varış ${clock(Date.parse(army.arrive_at) - now)}` : armyStatus(army, now, rest, (id) => online.kingdoms.find((k) => k.id === id)?.shieldUntil ?? 0)}</small>
+          <small>{siege ? L(`${siege.name} kuşatılıyor · ${clock(siege.siege!.endsAt - now)} kaldı`, `Besieging ${siege.name} · ${clock(siege.siege!.endsAt - now)} left`) : toTown && Date.parse(army.arrive_at) > now ? L(`${toTown.name} ${toTown.owner === online.me ? 'asilerine yürüyor' : 'kuşatmasına gidiyor'} · varış ${clock(Date.parse(army.arrive_at) - now)}`, `${toTown.owner === online.me ? `Marching on the rebels of ${toTown.name}` : `Marching to besiege ${toTown.name}`} · arrives in ${clock(Date.parse(army.arrive_at) - now)}`) : armyStatus(army, now, rest, (id) => online.kingdoms.find((k) => k.id === id)?.shieldUntil ?? 0)}</small>
         </div>
         <UnitRow units={army.units ?? { spear: soldiers }} />
         {cargoTotal(army.cargo) > 0 && (
           <small className="order-note">
-            <Icon name="chest" size={16} /> Yük: {Object.entries(army.cargo ?? {}).filter(([, n]) => (n ?? 0) > 0).map(([g, n]) => `${fmt(n ?? 0)} ${RESOURCE_NAMES[g as keyof typeof RESOURCE_NAMES].toLowerCase()}`).join(', ')} · saraya varınca ambara girer (en fazla {fmt(cargoRoom(soldiers, army.cargo) + cargoTotal(army.cargo))} taşır)
+            <Icon name="chest" size={16} /> {L('Yük', 'Cargo')}: {Object.entries(army.cargo ?? {}).filter(([, n]) => (n ?? 0) > 0).map(([g, n]) => `${fmt(n ?? 0)} ${RESOURCE_NAMES[g as keyof typeof RESOURCE_NAMES].toLowerCase()}`).join(', ')} · {L(`saraya varınca ambara girer (en fazla ${fmt(cargoRoom(soldiers, army.cargo) + cargoTotal(army.cargo))} taşır)`, `goes into the storehouse when it reaches the palace (carries up to ${fmt(cargoRoom(soldiers, army.cargo) + cargoTotal(army.cargo))})`)}
           </small>
         )}
         <div className="army-stats">
           <div>
             <span>
-              Moral <b>%{Math.round(morale)}</b>
+              {L('Moral', 'Morale')} <b>{L(`%${Math.round(morale)}`, `${Math.round(morale)}%`)}</b>
             </span>
-            <Meter value={morale / 100} tone={morale >= 60 ? 'up' : morale >= 30 ? 'gold' : 'down'} label="Moral" segments={10} />
+            <Meter value={morale / 100} tone={morale >= 60 ? 'up' : morale >= 30 ? 'gold' : 'down'} label={L('Moral', 'Morale')} segments={10} />
           </div>
           <div>
             <span>
-              Saha bilgisi <b>+{familiarityBonus(familiarity).toFixed(1).replace('.', ',')} zar</b>
+              {L('Saha bilgisi', 'Terrain knowledge')} <b>+{familiarityBonus(familiarity).toFixed(1).replace('.', L(',', '.'))} {L('zar', 'dice')}</b>
             </span>
-            <Meter value={familiarity / 100} tone="water" label="Saha bilgisi" segments={10} />
+            <Meter value={familiarity / 100} tone="water" label={L('Saha bilgisi', 'Terrain knowledge')} segments={10} />
           </div>
         </div>
         {kingLeads && (
           <small className="order-note up">
-            <Icon name="crown" size={16} /> Kral komutada · emirler anında
-            {king ? ` · ${king.name}, savaş yeteneği ${king.skills.military}: zara ${leadDice(kingdom) >= 0 ? '+' : '−'}${Math.abs(leadDice(kingdom)).toFixed(1).replace('.', ',')}` : ''}
+            <Icon name="crown" size={16} /> {L('Kral komutada · emirler anında', 'The king commands · orders take effect at once')}
+            {king ? L(` · ${king.name}, savaş yeteneği ${king.skills.military}: zara ${leadDice(kingdom) >= 0 ? '+' : '−'}${Math.abs(leadDice(kingdom)).toFixed(1).replace('.', ',')}`, ` · ${king.name}, military skill ${king.skills.military}: ${leadDice(kingdom) >= 0 ? '+' : '−'}${Math.abs(leadDice(kingdom)).toFixed(1)} to the dice`) : ''}
           </small>
         )}
         {army.contact_until && Date.parse(army.contact_until) > now && (
           <small className="order-note up">
-            <Icon name="scroll" size={16} /> Komutanla iletişim açık: {clock(Date.parse(army.contact_until) - now)} boyunca emirler hemen uygulanır
+            <Icon name="scroll" size={16} /> {L(`Komutanla iletişim açık: ${clock(Date.parse(army.contact_until) - now)} boyunca emirler hemen uygulanır`, `In touch with the commander: orders take effect at once for ${clock(Date.parse(army.contact_until) - now)}`)}
           </small>
         )}
         {pending.map((o) => (
           <small key={o.id} className="order-note">
-            <Icon name="scroll" size={16} /> Elçi yolda: emir {clock(Date.parse(o.effective_at) - now)} sonra ulaşacak
+            <Icon name="scroll" size={16} /> {L(`Elçi yolda: emir ${clock(Date.parse(o.effective_at) - now)} sonra ulaşacak`, `Envoy on the way: the order arrives in ${clock(Date.parse(o.effective_at) - now)}`)}
           </small>
         ))}
         <div className="army-actions">
           <button className="btn small" onClick={() => (online.setArmy(army.id), onShow(here))}>
-            <Icon name="pin" size={16} /> Göster
+            <Icon name="pin" size={16} /> {L('Göster', 'Show')}
           </button>
-          <button className="btn small" disabled={busy} data-why="Ordu savaşta; emir alamaz" onClick={() => online.target(army.id)}>
-            Hareket
+          <button className="btn small" disabled={busy} data-why={L('Ordu savaşta; emir alamaz', 'The army is in battle; it cannot take orders')} onClick={() => online.target(army.id)}>
+            {L('Hareket', 'Move')}
           </button>
           <button
             className="btn small"
@@ -451,31 +456,31 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
               online.setArmy(army.id)
               online.follow(online.following === army.id ? null : army.id)
             }}
-            title="Kamera orduyu takip etsin (haritayı sürükleyince bırakır)"
+            title={L('Kamera orduyu takip etsin (haritayı sürükleyince bırakır)', 'The camera follows the army (dragging the map lets go)')}
           >
-            <Icon name="eye" size={16} /> {online.following === army.id ? 'Takibi bırak' : 'Takip et'}
+            <Icon name="eye" size={16} /> {online.following === army.id ? L('Takibi bırak', 'Stop following') : L('Takip et', 'Follow')}
           </button>
-          <button className="btn small" disabled={busy} data-why="Ordu savaşta; emir alamaz" onClick={() => online.act({ type: 'army', army: army.id, order: { kind: 'home' } })}>
-            <Icon name="home" size={16} /> Eve dön
+          <button className="btn small" disabled={busy} data-why={L('Ordu savaşta; emir alamaz', 'The army is in battle; it cannot take orders')} onClick={() => online.act({ type: 'army', army: army.id, order: { kind: 'home' } })}>
+            <Icon name="home" size={16} /> {L('Eve dön', 'Return home')}
           </button>
           <button
             className="btn small"
             disabled={busy || soldiers < 2 || others.length + 1 >= balance.military.maxArmies}
-            data-why={busy ? 'Ordu savaşta; bölünemez' : soldiers < 2 ? 'Bölmek için en az 2 asker gerekir' : `Sahada en fazla ${balance.military.maxArmies} ordun olabilir`}
+            data-why={busy ? L('Ordu savaşta; bölünemez', 'The army is in battle; it cannot split') : soldiers < 2 ? L('Bölmek için en az 2 asker gerekir', 'Splitting needs at least 2 soldiers') : L(`Sahada en fazla ${balance.military.maxArmies} ordun olabilir`, `You can have at most ${balance.military.maxArmies} armies in the field`)}
             onClick={() => online.act({ type: 'army', army: army.id, order: { kind: 'split', soldiers: Math.floor(soldiers / 2) } })}
-            title="Ordunun yarısını ayrı bir orduya ayırır (en fazla 2 ordu)"
+            title={L('Ordunun yarısını ayrı bir orduya ayırır (en fazla 2 ordu)', 'Splits half the army off into a separate army (2 armies at most)')}
           >
-            İkiye böl
+            {L('İkiye böl', 'Split in two')}
           </button>
           {kingLeads ? (
             <button
               className="btn small"
               disabled={busy || !home}
-              data-why={busy ? 'Ordu savaşta' : 'Kral yalnızca sarayın önünde komutayı bırakır'}
+              data-why={busy ? L('Ordu savaşta', 'The army is in battle') : L('Kral yalnızca sarayın önünde komutayı bırakır', 'The king gives up command only before the palace')}
               onClick={() => online.act({ type: 'king', army: army.id, action: 'leave' })}
-              title={home ? 'Kral komutayı bırakıp sarayına döner' : 'Kral yalnızca sarayın önünde komutayı bırakır'}
+              title={home ? L('Kral komutayı bırakıp sarayına döner', 'The king gives up command and returns to his palace') : L('Kral yalnızca sarayın önünde komutayı bırakır', 'The king gives up command only before the palace')}
             >
-              <Icon name="home" size={16} /> Kral saraya dönsün
+              <Icon name="home" size={16} /> {L('Kral saraya dönsün', 'Send the king back to the palace')}
             </button>
           ) : (
             <button
@@ -483,14 +488,14 @@ function ArmyCard({ index, army, others, data, rest }: { index: number; army: Ar
               disabled={!!kingWhy}
               data-why={kingWhy ? KING_REASONS[kingWhy] : undefined}
               onClick={() => online.act({ type: 'king', army: army.id, action: 'lead' })}
-              title={kingWhy ? KING_REASONS[kingWhy] : 'Emirler elçi beklemeden uygulanır; kralın savaş yeteneği zarlara tam sayılır, ama ordu yenilirse kral düşebilir'}
+              title={kingWhy ? KING_REASONS[kingWhy] : L('Emirler elçi beklemeden uygulanır; kralın savaş yeteneği zarlara tam sayılır, ama ordu yenilirse kral düşebilir', "Orders take effect without waiting for an envoy; the king's military skill counts in full on the dice, but if the army is beaten the king may fall")}
             >
-              <Icon name="crown" size={16} /> Kral komutayı alsın
+              <Icon name="crown" size={16} /> {L('Kral komutayı alsın', 'Let the king take command')}
             </button>
           )}
           {near && (
-            <button className="btn small" disabled={busy} data-why="Ordu savaşta; birleşemez" onClick={() => online.act({ type: 'army', army: army.id, order: { kind: 'merge', with: near.id } })}>
-              Birleştir
+            <button className="btn small" disabled={busy} data-why={L('Ordu savaşta; birleşemez', 'The army is in battle; it cannot merge')} onClick={() => online.act({ type: 'army', army: army.id, order: { kind: 'merge', with: near.id } })}>
+              {L('Birleştir', 'Merge')}
             </button>
           )}
         </div>
@@ -506,8 +511,8 @@ function Battles({ online, now }: { online: Online; now: number }) {
   const sideOf = (b: Battle) => (b.attackers.some((f) => f.kingdom === online.me) ? 'attackers' : b.defenders.some((f) => f.kingdom === online.me) ? 'defenders' : null)
   const title = (b: Battle) => (b.kind === 'field' ? `${kingdomName(online, b.attackers[0]?.kingdom)} — ${kingdomName(online, b.defenders[0]?.kingdom)}` : battleTitle(b, online))
   return (
-    <Section title="Savaşlar" icon="swords" aside={going.length ? `${going.length} sürüyor` : undefined}>
-      {going.length + done.length === 0 && <p className="hint">Henüz muharebe olmadı.</p>}
+    <Section title={L('Savaşlar', 'Battles')} icon="swords" aside={going.length ? L(`${going.length} sürüyor`, `${going.length} under way`) : undefined}>
+      {going.length + done.length === 0 && <p className="hint">{L('Henüz muharebe olmadı.', 'No battles yet.')}</p>}
       <ul className="places">
         {[...going, ...done].map((b) => (
           <li key={b.id}>
@@ -516,15 +521,15 @@ function Battles({ online, now }: { online: Online; now: number }) {
               <b>{title(b)}</b>
               <small>
                 {Date.parse(b.started_at) > now
-                  ? `${clock(Date.parse(b.started_at) - now)} sonra başlıyor`
+                  ? L(`${clock(Date.parse(b.started_at) - now)} sonra başlıyor`, `Begins in ${clock(Date.parse(b.started_at) - now)}`)
                   : Date.parse(b.ends_at) > now
-                    ? `Sürüyor · ${clock(Date.parse(b.ends_at) - now)} kaldı`
-                    : `Bitti · ${sideOf(b) ? (sideOf(b) === b.plan.winner ? 'kazandın' : 'yenildin') : `${b.plan.winner === 'attackers' ? 'saldıranlar' : 'savunanlar'} kazandı`}`}
-                {involved(b) && Date.parse(b.ends_at) > now ? ' · sen de varsın' : ''}
+                    ? L(`Sürüyor · ${clock(Date.parse(b.ends_at) - now)} kaldı`, `Under way · ${clock(Date.parse(b.ends_at) - now)} left`)
+                    : L(`Bitti · ${sideOf(b) ? (sideOf(b) === b.plan.winner ? 'kazandın' : 'yenildin') : `${b.plan.winner === 'attackers' ? 'saldıranlar' : 'savunanlar'} kazandı`}`, `Over · ${sideOf(b) ? (sideOf(b) === b.plan.winner ? 'you won' : 'you lost') : `the ${b.plan.winner === 'attackers' ? 'attackers' : 'defenders'} won`}`)}
+                {involved(b) && Date.parse(b.ends_at) > now ? L(' · sen de varsın', ' · you are in it') : ''}
               </small>
             </span>
             <button className="btn small" onClick={() => online.watch(b.id)}>
-              İzle
+              {L('İzle', 'Watch')}
             </button>
           </li>
         ))}
@@ -600,10 +605,10 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
           <div>
             <h2 id="battle-title">{battleTitle(battle, online)}</h2>
             <small>
-              {now < started ? `${clock(started - now)} sonra başlıyor` : over ? `Bitti · ${winner.names.join(', ')} kazandı` : `Tur ${shown} / ${rounds.length} sürüyor`}
+              {now < started ? L(`${clock(started - now)} sonra başlıyor`, `Begins in ${clock(started - now)}`) : over ? L(`Bitti · ${winner.names.join(', ')} kazandı`, `Over · ${winner.names.join(', ')} won`) : L(`Tur ${shown} / ${rounds.length} sürüyor`, `Round ${shown} / ${rounds.length} under way`)}
             </small>
           </div>
-          <button className="btn icon-only" onClick={onClose} aria-label="Kapat">
+          <button className="btn icon-only" onClick={onClose} aria-label={L('Kapat', 'Close')}>
             <Icon name="close" size={16} />
           </button>
         </header>
@@ -618,8 +623,8 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
         />
         <div className="battle-sides">
           {[
-            { title: 'Saldıranlar', s: a, roll: last?.attackers },
-            { title: 'Savunanlar', s: d, roll: last?.defenders },
+            { title: L('Saldıranlar', 'Attackers'), s: a, roll: last?.attackers },
+            { title: L('Savunanlar', 'Defenders'), s: d, roll: last?.defenders },
           ].map(({ title, s, roll }) => (
             <div key={title} className="battle-side">
               <small>{title}</small>
@@ -629,31 +634,31 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
                 ))}
                 {s.names.join(', ')}
               </b>
-              <Stat label="Asker" value={`${fmt(s.now.soldiers)} / ${fmt(s.start.soldiers)}`} />
+              <Stat label={L('Asker', 'Soldiers')} value={`${fmt(s.now.soldiers)} / ${fmt(s.start.soldiers)}`} />
               <span className="sign">
-                <span>Moral</span>
-                <Meter value={s.now.morale / 100} tone={s.now.morale >= 50 ? 'up' : s.now.morale >= 25 ? 'gold' : 'down'} label="Moral" segments={10} />
-                <small>%{Math.round(s.now.morale)}</small>
+                <span>{L('Moral', 'Morale')}</span>
+                <Meter value={s.now.morale / 100} tone={s.now.morale >= 50 ? 'up' : s.now.morale >= 25 ? 'gold' : 'down'} label={L('Moral', 'Morale')} segments={10} />
+                <small>{L(`%${Math.round(s.now.morale)}`, `${Math.round(s.now.morale)}%`)}</small>
               </span>
               <UnitRow units={s.units} />
-              <Stat label="Zar bonusu" value={`${s.bonus >= 0 ? '+' : '−'}${Math.abs(s.bonus).toFixed(1).replace('.', ',')}`} note={
+              <Stat label={L('Zar bonusu', 'Dice bonus')} value={`${s.bonus >= 0 ? '+' : '−'}${Math.abs(s.bonus).toFixed(1).replace('.', ',')}`} note={
                   [
-                    s.counter ? `birlik üstünlüğü ${s.counter >= 0 ? '+' : '−'}${Math.abs(s.counter).toFixed(1).replace('.', ',')}` : '',
-                    s.faith ? `${s.king ? 'iman ve kral' : 'iman'} ${s.faith >= 0 ? '+' : '−'}${Math.abs(s.faith).toFixed(1).replace('.', ',')}` : '',
-                    s.king ? 'kral komutada' : '',
-                    s.towers ? `${s.towers} kule` : '',
-                    s.keep ? `hisar +${s.keep.toFixed(1).replace('.', ',')}` : '',
+                    s.counter ? L(`birlik üstünlüğü ${s.counter >= 0 ? '+' : '−'}${Math.abs(s.counter).toFixed(1).replace('.', ',')}`, `unit advantage ${s.counter >= 0 ? '+' : '−'}${Math.abs(s.counter).toFixed(1)}`) : '',
+                    s.faith ? L(`${s.king ? 'iman ve kral' : 'iman'} ${s.faith >= 0 ? '+' : '−'}${Math.abs(s.faith).toFixed(1).replace('.', ',')}`, `${s.king ? 'faith and king' : 'faith'} ${s.faith >= 0 ? '+' : '−'}${Math.abs(s.faith).toFixed(1)}`) : '',
+                    s.king ? L('kral komutada', 'king in command') : '',
+                    s.towers ? L(`${s.towers} kule`, `${s.towers} tower${s.towers === 1 ? '' : 's'}`) : '',
+                    s.keep ? L(`hisar +${s.keep.toFixed(1).replace('.', ',')}`, `citadel +${s.keep.toFixed(1)}`) : '',
                   ]
                     .filter(Boolean)
                     .join(' · ') || undefined
                 }
               />
               {roll && (
-                <div className="dice" aria-label={`Son zar ${roll.roll}`}>
+                <div className="dice" aria-label={L(`Son zar ${roll.roll}`, `Last roll ${roll.roll}`)}>
                   <Icon name="dice" size={24} />
                   {face(roll.roll)}
                   <small>
-                    + {roll.bonus.toFixed(1).replace('.', ',')} bonus → rakipten {roll.kills} asker{roll.towerKills ? ` (${roll.towerKills} kuleden)` : ''}, −{Math.round(roll.moraleHit)} moral
+                    {L(`+ ${roll.bonus.toFixed(1).replace('.', ',')} bonus → rakipten ${roll.kills} asker${roll.towerKills ? ` (${roll.towerKills} kuleden)` : ''}, −${Math.round(roll.moraleHit)} moral`, `+ ${roll.bonus.toFixed(1)} bonus → ${roll.kills} of the enemy down${roll.towerKills ? ` (${roll.towerKills} by towers)` : ''}, −${Math.round(roll.moraleHit)} morale`)}
                   </small>
                 </div>
               )}
@@ -661,20 +666,25 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
           ))}
         </div>
         <p className="hint">
-          Her tur iki taraf da d{balance.military.battle.dice} atar. Zara saha bilgisi eklenir
+          {L(`Her tur iki taraf da d${balance.military.battle.dice} atar. Zara saha bilgisi eklenir`, `Each round both sides roll a d${balance.military.battle.dice}. Terrain knowledge is added to the roll`)}
           {defense && (defense.towers || defense.walls)
-            ? `; kuşatılan saray ${defense.towers} kule ve ${defense.walls} sur ile savunuyor${battle.plan.walls !== undefined && battle.plan.walls < defense.walls ? ` (mancınıklar ${defense.walls - battle.plan.walls} suru etkisiz kıldı)` : ''}${defense.keep ? `, hisarı zara +${defense.keep.toFixed(1).replace('.', ',')} ekliyor` : ''}`
+            ? L(
+                `; kuşatılan saray ${defense.towers} kule ve ${defense.walls} sur ile savunuyor${battle.plan.walls !== undefined && battle.plan.walls < defense.walls ? ` (mancınıklar ${defense.walls - battle.plan.walls} suru etkisiz kıldı)` : ''}${defense.keep ? `, hisarı zara +${defense.keep.toFixed(1).replace('.', ',')} ekliyor` : ''}`,
+                `; the besieged palace defends with ${defense.towers} tower${defense.towers === 1 ? '' : 's'} and ${defense.walls} wall${defense.walls === 1 ? '' : 's'}${battle.plan.walls !== undefined && battle.plan.walls < defense.walls ? ` (catapults put ${defense.walls - battle.plan.walls} wall${defense.walls - battle.plan.walls === 1 ? '' : 's'} out of action)` : ''}${defense.keep ? `, its citadel adds +${defense.keep.toFixed(1)} to the roll` : ''}`,
+              )
             : ''}
-          ; tapınağın imanı ve yakındaki gözcü kuleleri de zara eklenir, kuleler her tur birkaç düşman vurur (askersiz bile birkaç tur direnir); birlik türlerinin üstünlüğü (mızrak &gt; süvari &gt; okçu &gt; mızrak) de eklenir. Morali
-          biten ya da askeri kalmayan taraf yenilir.
+          {L(
+            '; tapınağın imanı ve yakındaki gözcü kuleleri de zara eklenir, kuleler her tur birkaç düşman vurur (askersiz bile birkaç tur direnir); birlik türlerinin üstünlüğü (mızrak > süvari > okçu > mızrak) de eklenir. Morali biten ya da askeri kalmayan taraf yenilir.',
+            '; the faith of the temple and nearby watchtowers are added too, and the towers strike a few enemies every round (holding out a few rounds even without soldiers); the advantage of unit types (spear > cavalry > archer > spear) is added as well. The side that runs out of morale or soldiers is beaten.',
+          )}
         </p>
         {shown > 0 && (
           <ol className="battle-log">
             {rounds.slice(0, shown).map((r, i) => (
               <li key={i}>
-                <b>{i + 1}.</b> {face(r.attackers.roll)} {r.attackers.kills} öldürdü · {face(r.defenders.roll)} {r.defenders.kills} öldürdü
+                <b>{i + 1}.</b> {face(r.attackers.roll)} {L(`${r.attackers.kills} öldürdü`, `${r.attackers.kills} killed`)} · {face(r.defenders.roll)} {L(`${r.defenders.kills} öldürdü`, `${r.defenders.kills} killed`)}
                 <small>
-                  {fmt(r.attackers.soldiers)} / {fmt(r.defenders.soldiers)} asker
+                  {fmt(r.attackers.soldiers)} / {fmt(r.defenders.soldiers)} {L('asker', 'soldiers')}
                 </small>
               </li>
             ))}
@@ -682,7 +692,7 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
         )}
         {over && battle.report?.loot && (
           <p className="alert">
-            Yağma: {Object.entries(battle.report.loot)
+            {L('Yağma', 'Plunder')}: {Object.entries(battle.report.loot)
               .map(([r, v]) => `${fmt(v)} ${RESOURCE_NAMES[r as keyof typeof RESOURCE_NAMES].toLowerCase()}`)
               .join(', ')}
           </p>
@@ -733,12 +743,12 @@ export function TownSiegeView({ town, army, walled, online, now, onClose }: { to
         <header className="sheet-head">
           <Icon name="swords" size={32} />
           <div>
-            <h2 id="siege-title">{town.name} kuşatması</h2>
+            <h2 id="siege-title">{L(`${town.name} kuşatması`, `Siege of ${town.name}`)}</h2>
             <small>
-              {over ? 'Bitti' : `Tur ${Math.min(rounds.length, done + 1)} / ${rounds.length} · sonraki tur ${clock(Math.max(0, Math.min(next, siege.endsAt) - now))} sonra · ${clock(siege.endsAt - now)} kaldı`}
+              {over ? L('Bitti', 'Over') : L(`Tur ${Math.min(rounds.length, done + 1)} / ${rounds.length} · sonraki tur ${clock(Math.max(0, Math.min(next, siege.endsAt) - now))} sonra · ${clock(siege.endsAt - now)} kaldı`, `Round ${Math.min(rounds.length, done + 1)} / ${rounds.length} · next round in ${clock(Math.max(0, Math.min(next, siege.endsAt) - now))} · ${clock(siege.endsAt - now)} left`)}
             </small>
           </div>
-          <button className="btn icon-only" onClick={onClose} aria-label="Kapat">
+          <button className="btn icon-only" onClick={onClose} aria-label={L('Kapat', 'Close')}>
             <Icon name="close" size={16} />
           </button>
         </header>
@@ -753,36 +763,37 @@ export function TownSiegeView({ town, army, walled, online, now, onClose }: { to
         />
         <div className="battle-sides">
           <div className="battle-side">
-            <small>Kuşatan</small>
+            <small>{L('Kuşatan', 'Besieger')}</small>
             <b>
               <Dot color={besieger?.color} />
               {kingdomName(online, siege.kingdom)}
             </b>
-            <Stat label="Asker" value={left !== null ? `${fmt(left)} / ${fmt(soldiers)}` : `bilinmiyor · ${fmt(lostSoFar)} kayıp`} />
+            <Stat label={L('Asker', 'Soldiers')} value={left !== null ? `${fmt(left)} / ${fmt(soldiers)}` : L(`bilinmiyor · ${fmt(lostSoFar)} kayıp`, `unknown · ${fmt(lostSoFar)} lost`)} />
             {units && <UnitRow units={units} />}
           </div>
           <div className="battle-side">
-            <small>Savunan</small>
+            <small>{L('Savunan', 'Defender')}</small>
             <b>
               {holder ? <Dot color={holder.color} /> : null}
-              {holder ? `${holder.name} · ${town.name}` : `${town.name} garnizonu`}
+              {holder ? `${holder.name} · ${town.name}` : L(`${town.name} garnizonu`, `${town.name} garrison`)}
             </b>
-            <Stat label="Asker" value={town.owner === null ? `${fmt(defenders)} / ${fmt(garrison)}` : 'Kasaba halkı'} />
-            <Stat label="Sur" value={walled ? 'Kazık çit' : 'Yok'} />
+            <Stat label={L('Asker', 'Soldiers')} value={town.owner === null ? `${fmt(defenders)} / ${fmt(garrison)}` : L('Kasaba halkı', 'Townsfolk')} />
+            <Stat label={L('Sur', 'Wall')} value={walled ? L('Kazık çit', 'Palisade') : L('Yok', 'None')} />
           </div>
         </div>
         <p className="hint">
-          Kuşatma {Math.round(balance.towns.siegeRoundSeconds / 60)} dakikalık turlarla sürer. Her tur savunanlar kuşatanlardan birkaç asker düşürür
-          {town.owner === null ? ', garnizon da kendi askerlerinden kaybeder' : ' (sahipli kasabanın halkı da direnir)'}; kazık çit kayıpları artırır. Kuşatma bittiğinde ayakta asker kalırsa kasaba kuşatanın olur.
+          {L(`Kuşatma ${Math.round(balance.towns.siegeRoundSeconds / 60)} dakikalık turlarla sürer. Her tur savunanlar kuşatanlardan birkaç asker düşürür`, `The siege runs in rounds of ${Math.round(balance.towns.siegeRoundSeconds / 60)} minutes. Each round the defenders bring down a few of the besiegers`)}
+          {town.owner === null ? L(', garnizon da kendi askerlerinden kaybeder', ', and the garrison loses some of its own') : L(' (sahipli kasabanın halkı da direnir)', ' (the people of a held town resist too)')}
+          {L('; kazık çit kayıpları artırır. Kuşatma bittiğinde ayakta asker kalırsa kasaba kuşatanın olur.', '; a palisade makes the losses heavier. If soldiers are still standing when the siege ends, the town is the besieger\'s.')}
         </p>
         {done > 0 && (
           <ol className="battle-log">
             {rounds.slice(0, done).map((r, i) => (
               <li key={i}>
-                <b>{i + 1}.</b> kuşatan −{r.lost - (i > 0 ? rounds[i - 1].lost : 0)}
-                {town.owner === null ? ` · garnizon −${r.killed - (i > 0 ? rounds[i - 1].killed : 0)}` : ''}
+                <b>{i + 1}.</b> {L('kuşatan', 'besieger')} −{r.lost - (i > 0 ? rounds[i - 1].lost : 0)}
+                {town.owner === null ? L(` · garnizon −${r.killed - (i > 0 ? rounds[i - 1].killed : 0)}`, ` · garrison −${r.killed - (i > 0 ? rounds[i - 1].killed : 0)}`) : ''}
                 <small>
-                  {known ? fmt(r.attackers) : '?'} / {town.owner === null ? fmt(r.defenders) : '—'} asker
+                  {known ? fmt(r.attackers) : '?'} / {town.owner === null ? fmt(r.defenders) : '—'} {L('asker', 'soldiers')}
                 </small>
               </li>
             ))}

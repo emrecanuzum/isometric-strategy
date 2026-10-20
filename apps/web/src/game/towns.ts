@@ -2,6 +2,7 @@ import { balance, hash } from '@game/shared'
 import type { Point, Town, TownKind } from '@game/shared'
 import type { Structure, StructureLook } from './buildingSprites'
 import { palisade } from './campSprites'
+import { L, locale } from '../lib/i18n'
 
 // The towns on the map (CLAUDE.md §8.4), drawn with the kingdoms' own buildings: a cluster of houses round a building
 // that shows what the town sends (a market for gold, a granary for food, a sawmill, a forge, a temple where people
@@ -16,20 +17,20 @@ const CENTER: Record<TownKind, StructureLook> = {
 }
 
 export const TOWN_KIND_NAMES: Record<TownKind, string> = {
-  gold: 'Vergi kasabası',
-  food: 'Tarım kasabası',
-  materials: 'Kereste kasabası',
-  arms: 'Demirci kasabası',
-  people: 'Kalabalık kasaba',
+  gold: L('Vergi kasabası', 'Tax town'),
+  food: L('Tarım kasabası', 'Farming town'),
+  materials: L('Kereste kasabası', 'Timber town'),
+  arms: L('Demirci kasabası', 'Smithing town'),
+  people: L('Kalabalık kasaba', 'Populous town'),
 }
 
 // What a town sends its lord, in words.
 export function townGift(kind: TownKind) {
   const spec = balance.towns.kinds[kind] as { perRound?: number; villagers?: number }
-  const n = (v = 0) => v.toLocaleString('tr-TR')
-  if (kind === 'people') return `${n(spec.villagers)} köylülük yer (halk o yeri zamanla doldurur)`
-  const what = { gold: 'altın', food: 'yemek', materials: 'yapı malzemesi', arms: 'savaş malzemesi' }[kind]
-  return `tur başına +${n(spec.perRound)} ${what}`
+  const n = (v = 0) => v.toLocaleString(locale())
+  if (kind === 'people') return L(`${n(spec.villagers)} köylülük yer (halk o yeri zamanla doldurur)`, `room for ${n(spec.villagers)} villagers (people fill it in time)`)
+  const what = { gold: L('altın', 'gold'), food: L('yemek', 'food'), materials: L('yapı malzemesi', 'building materials'), arms: L('savaş malzemesi', 'war materials') }[kind]
+  return L(`tur başına +${n(spec.perRound)} ${what}`, `+${n(spec.perRound)} ${what} per round`)
 }
 
 // The wooden palisade some towns stand behind (see townWalled): stakes on the tiles round the town, open where the

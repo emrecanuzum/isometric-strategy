@@ -3,10 +3,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { deleteLobby, listLobbies } from '../../net/online'
 import type { LobbyListing } from '../../net/online'
 import { Icon } from '../icons'
+import { L, locale } from '../../lib/i18n'
 
 // The lobby browser: the open lobbies, joining one (with its password if it has one) and opening a new one.
 
-const date = (iso: string) => new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })
+const date = (iso: string) => new Date(iso).toLocaleDateString(locale(), { day: 'numeric', month: 'long' })
 
 export function Lobbies({
   busy,
@@ -53,11 +54,11 @@ export function Lobbies({
   return (
     <div className="home-body">
       <div className="row spread">
-        <button className="btn" onClick={() => setCreating(true)} disabled={busy !== null} data-why="Bir işlem sürüyor; bekle">
-          <Icon name="plus" size={16} /> Lobi aç
+        <button className="btn" onClick={() => setCreating(true)} disabled={busy !== null} data-why={L('Bir işlem sürüyor; bekle', 'Something is in progress; please wait')}>
+          <Icon name="plus" size={16} /> {L('Lobi aç', 'Open a lobby')}
         </button>
-        <button className="btn small" onClick={refresh} disabled={busy !== null} data-why="Bir işlem sürüyor; bekle">
-          Yenile
+        <button className="btn small" onClick={refresh} disabled={busy !== null} data-why={L('Bir işlem sürüyor; bekle', 'Something is in progress; please wait')}>
+          {L('Yenile', 'Refresh')}
         </button>
       </div>
       {error && (
@@ -65,9 +66,9 @@ export function Lobbies({
           <Icon name="warn" size={16} /> {error}
         </p>
       )}
-      {loadError && <p className="form-error">Lobiler yüklenemedi.</p>}
-      {!lobbies && !loadError && <p className="hint">Lobiler yükleniyor…</p>}
-      {lobbies?.length === 0 && <p className="hint">Şu an açık lobi yok. İlkini sen aç!</p>}
+      {loadError && <p className="form-error">{L('Lobiler yüklenemedi.', 'Could not load the lobbies.')}</p>}
+      {!lobbies && !loadError && <p className="hint">{L('Lobiler yükleniyor…', 'Loading lobbies…')}</p>}
+      {lobbies?.length === 0 && <p className="hint">{L('Şu an açık lobi yok. İlkini sen aç!', 'No open lobbies right now. Open the first one!')}</p>}
       <ul className="lobby-rows">
         {lobbies?.map((lobby) => {
           const full = lobby.players >= lobby.max_players && !lobby.joined
@@ -80,10 +81,10 @@ export function Lobbies({
                     {locked && <Icon name="lock" size={16} />} {lobby.name}
                   </b>
                   <small>
-                    {lobby.owner ? `${lobby.owner} açtı · ` : ''}sezon {date(lobby.season_end)} biter
+                    {lobby.owner ? L(`${lobby.owner} açtı · `, `opened by ${lobby.owner} · `) : ''}{L(`sezon ${date(lobby.season_end)} biter`, `season ends ${date(lobby.season_end)}`)}
                   </small>
                 </span>
-                <span className="lobby-count" title="Lord sayısı">
+                <span className="lobby-count" title={L('Lord sayısı', 'Number of lords')}>
                   <Icon name="people" size={16} /> {lobby.players}/{lobby.max_players}
                 </span>
                 {admin && (
@@ -92,24 +93,24 @@ export function Lobbies({
                     onClick={() => remove(lobby.id)}
                     onBlur={() => setDeleting(null)}
                     disabled={busy !== null}
-                    data-why="Bir işlem sürüyor; bekle"
-                    title="Lobiyi ve içindeki her şeyi sil"
+                    data-why={L('Bir işlem sürüyor; bekle', 'Something is in progress; please wait')}
+                    title={L('Lobiyi ve içindeki her şeyi sil', 'Delete the lobby and everything in it')}
                   >
-                    {deleting === lobby.id ? 'Emin misin?' : 'Sil'}
+                    {deleting === lobby.id ? L('Emin misin?', 'Are you sure?') : L('Sil', 'Delete')}
                   </button>
                 )}
                 {lobby.joined ? (
-                  <button className="btn small" onClick={() => onEnter(lobby, '')} disabled={busy !== null} data-why="Bir işlem sürüyor; bekle">
-                    Devam et
+                  <button className="btn small" onClick={() => onEnter(lobby, '')} disabled={busy !== null} data-why={L('Bir işlem sürüyor; bekle', 'Something is in progress; please wait')}>
+                    {L('Devam et', 'Continue')}
                   </button>
                 ) : (
                   <button
                     className="btn small"
                     disabled={full || busy !== null}
-                    data-why={full ? 'Lobi dolu' : 'Bir işlem sürüyor; bekle'}
+                    data-why={full ? L('Lobi dolu', 'The lobby is full') : L('Bir işlem sürüyor; bekle', 'Something is in progress; please wait')}
                     onClick={() => (locked ? (setAsking(asking === lobby.id ? null : lobby.id), setPassword('')) : onEnter(lobby, ''))}
                   >
-                    {full ? 'Dolu' : 'Katıl'}
+                    {full ? L('Dolu', 'Full') : L('Katıl', 'Join')}
                   </button>
                 )}
               </div>
@@ -125,13 +126,13 @@ export function Lobbies({
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Lobi şifresi"
-                    aria-label="Lobi şifresi"
+                    placeholder={L('Lobi şifresi', 'Lobby password')}
+                    aria-label={L('Lobi şifresi', 'Lobby password')}
                     autoFocus
                     required
                   />
-                  <button className="btn small" disabled={busy !== null} data-why="Bir işlem sürüyor; bekle">
-                    {busy === lobby.id ? 'Bekle…' : 'Gir'}
+                  <button className="btn small" disabled={busy !== null} data-why={L('Bir işlem sürüyor; bekle', 'Something is in progress; please wait')}>
+                    {busy === lobby.id ? L('Bekle…', 'Wait…') : L('Gir', 'Enter')}
                   </button>
                 </form>
               )}
@@ -166,36 +167,36 @@ function CreateLobby({
       }}
     >
       <label>
-        <span>Lobi adı</span>
+        <span>{L('Lobi adı', 'Lobby name')}</span>
         <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} required autoFocus />
       </label>
       <div className="field">
-        <span>Lobi büyüklüğü</span>
-        <div className="segmented choices" role="radiogroup" aria-label="Lobi büyüklüğü">
+        <span>{L('Lobi büyüklüğü', 'Lobby size')}</span>
+        <div className="segmented choices" role="radiogroup" aria-label={L('Lobi büyüklüğü', 'Lobby size')}>
           {LOBBY_SIZES.map((size) => (
             <button key={size} type="button" role="radio" aria-checked={players === size} className="btn small" onClick={() => setPlayers(size)}>
-              {size} lord
+              {L(`${size} lord`, `${size} lords`)}
             </button>
           ))}
         </div>
       </div>
       <label>
-        <span>Şifre (isteğe bağlı)</span>
+        <span>{L('Şifre (isteğe bağlı)', 'Password (optional)')}</span>
         <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} maxLength={64} autoComplete="new-password" />
-        <small className="hint">Şifre koyarsan yalnızca şifreyi bilenler katılabilir.</small>
+        <small className="hint">{L('Şifre koyarsan yalnızca şifreyi bilenler katılabilir.', 'With a password, only those who know it can join.')}</small>
       </label>
-      <p className="hint">Sezon 2 hafta sürer. Harita yeni bir tohumdan üretilir.</p>
+      <p className="hint">{L('Sezon 2 hafta sürer. Harita yeni bir tohumdan üretilir.', 'A season lasts 2 weeks. The map is generated from a new seed.')}</p>
       {error && (
         <p className="form-error" role="alert">
           <Icon name="warn" size={16} /> {error}
         </p>
       )}
       <div className="row spread">
-        <button type="button" className="btn small" onClick={onCancel} disabled={busy !== null} data-why="Lobi açılıyor; bekle">
-          Vazgeç
+        <button type="button" className="btn small" onClick={onCancel} disabled={busy !== null} data-why={L('Lobi açılıyor; bekle', 'The lobby is opening; please wait')}>
+          {L('Vazgeç', 'Cancel')}
         </button>
-        <button className="btn" disabled={busy !== null || !name.trim()} data-why={busy !== null ? 'Lobi açılıyor; bekle' : 'Lobiye bir ad ver'}>
-          {busy === 'create' ? 'Dünya oluşturuluyor…' : 'Lobiyi aç'}
+        <button className="btn" disabled={busy !== null || !name.trim()} data-why={busy !== null ? L('Lobi açılıyor; bekle', 'The lobby is opening; please wait') : L('Lobiye bir ad ver', 'Give the lobby a name')}>
+          {busy === 'create' ? L('Dünya oluşturuluyor…', 'Creating the world…') : L('Lobiyi aç', 'Open the lobby')}
         </button>
       </div>
     </form>

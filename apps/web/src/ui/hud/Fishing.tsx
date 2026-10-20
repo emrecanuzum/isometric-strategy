@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { KINGDOM_COLORS } from '../../game/buildingSprites'
 import type { KingdomColor } from '../../game/buildingSprites'
 import { Icon } from '../icons'
+import { L, locale } from '../../lib/i18n'
 import { RESOURCE_NAMES } from '../names'
 import { BoardDialog, MiniBoard, RunResult } from './MiniGames'
 import { fishingScene } from './minigames/fishing'
@@ -15,20 +16,29 @@ import { usePlayingFlag } from './minigames/playing'
 // The mysterious fisher's hut (CLAUDE.md §6.4): a cast of the line is a hard little game (keep the green catch zone on
 // a darting fish until the bar fills), and what it brings up goes into the fisher's log.
 
-const METRIC_NAMES = { gold: 'altını', food: 'yemeği', materials: 'yapı malzemesi', arms: 'savaş malzemesi', soldiers: 'askeri' } as const
-
-export function describeCatch(e: FisherEntry) {
-  if (e.kind === 'miss') return 'Balık kaçtı; olta boş döndü.'
-  if (e.kind === 'bag') {
-    const goods = Object.entries(e.goods)
-      .map(([r, v]) => `${v} ${RESOURCE_NAMES[r as Resource].toLowerCase()}`)
-      .join(', ')
-    return `Oltaya bir kese takıldı: ${goods}.`
-  }
-  return `Şişeden bir not çıktı: «${e.about} lordunun ${e.atLeast.toLocaleString('tr-TR')}'den fazla ${METRIC_NAMES[e.metric]} var gibi görünüyor.»`
+const METRIC_NAMES = {
+  gold: L('altını', 'gold'),
+  food: L('yemeği', 'food'),
+  materials: L('yapı malzemesi', 'building materials'),
+  arms: L('savaş malzemesi', 'war materials'),
+  soldiers: L('askeri', 'soldiers'),
 }
 
-const secs = (ms: number) => (ms >= 60_000 ? `${Math.floor(ms / 60_000)} dk ${Math.ceil((ms % 60_000) / 1000)} sn` : `${Math.ceil(ms / 1000)} sn`)
+export function describeCatch(e: FisherEntry) {
+  if (e.kind === 'miss') return L('Balık kaçtı; olta boş döndü.', 'The fish got away; the line came back empty.')
+  if (e.kind === 'bag') {
+    const goods = Object.entries(e.goods)
+      .map(([r, v]) => `${v} ${RESOURCE_NAMES[r as Resource].toLocaleLowerCase(locale())}`)
+      .join(', ')
+    return L(`Oltaya bir kese takıldı: ${goods}.`, `A pouch caught on the line: ${goods}.`)
+  }
+  return L(
+    `Şişeden bir not çıktı: «${e.about} lordunun ${e.atLeast.toLocaleString(locale())}'den fazla ${METRIC_NAMES[e.metric]} var gibi görünüyor.»`,
+    `A note came out of a bottle: “The lord of ${e.about} seems to have more than ${e.atLeast.toLocaleString(locale())} ${METRIC_NAMES[e.metric]}.”`,
+  )
+}
+
+const secs = (ms: number) => (ms >= 60_000 ? L(`${Math.floor(ms / 60_000)} dk ${Math.ceil((ms % 60_000) / 1000)} sn`, `${Math.floor(ms / 60_000)} min ${Math.ceil((ms % 60_000) / 1000)} s`) : L(`${Math.ceil(ms / 1000)} sn`, `${Math.ceil(ms / 1000)} s`))
 
 // `hall`: shown in the entertainment hall, which keeps a pond and the same strange fisher (CLAUDE.md §6.5).
 export function FisherPanel({ data, hall = false }: { data: HudData; hall?: boolean }) {
@@ -69,35 +79,37 @@ export function FisherPanel({ data, hall = false }: { data: HudData; hall?: bool
   }
   return (
     <>
-      <Section title="Balık tut" icon="food">
+      <Section title={L('Balık tut', 'Go fishing')} icon="food">
         <p className="hint">
-          {hall ? 'Eğlence merkezinin havuz başındaki tuhaf balıkçı' : 'Kulübedeki tuhaf balıkçı'} oltasını sana veriyor. Basılı tut (fare, dokunma ya da boşluk tuşu) ve yeşil alanı kaçan balığın üstünde tut;
-          çubuk dolarsa tutarsın. Bazen bir kese mal, bazen de bir şişe içinde başka bir lord hakkında bir not çıkar.
+          {L(
+            `${hall ? 'Eğlence merkezinin havuz başındaki tuhaf balıkçı' : 'Kulübedeki tuhaf balıkçı'} oltasını sana veriyor. Basılı tut (fare, dokunma ya da boşluk tuşu) ve yeşil alanı kaçan balığın üstünde tut; çubuk dolarsa tutarsın. Bazen bir kese mal, bazen de bir şişe içinde başka bir lord hakkında bir not çıkar.`,
+            `${hall ? 'The odd fisherman by the pool of the entertainment hall' : 'The odd fisherman in the hut'} hands you his rod. Hold down (mouse, touch or space bar) and keep the green zone over the darting fish; fill the bar and you have it. Sometimes a pouch of goods comes up, sometimes a bottle with a note about another lord.`,
+          )}
         </p>
         <div className="minigame-actions">
-          <button className="btn wide" disabled={why !== null || open} data-why={open ? 'Olta zaten suda' : why === 'busy' ? `${secs(castReadyAt(kingdom) - now)} sonra yeniden atılır` : 'Balıkçı kulübesi (ya da eğlence merkezi) henüz bitmedi'} onClick={cast}>
+          <button className="btn wide" disabled={why !== null || open} data-why={open ? L('Olta zaten suda', 'The line is already in the water') : why === 'busy' ? L(`${secs(castReadyAt(kingdom) - now)} sonra yeniden atılır`, `Can be cast again in ${secs(castReadyAt(kingdom) - now)}`) : L('Balıkçı kulübesi (ya da eğlence merkezi) henüz bitmedi', 'The fisher\'s hut (or the entertainment hall) is not finished yet')} onClick={cast}>
             <span>
-              <Icon name="food" size={16} /> Oltayı at
+              <Icon name="food" size={16} /> {L('Oltayı at', 'Cast the line')}
             </span>
-            {why === 'busy' && <small>{secs(castReadyAt(kingdom) - now)} sonra</small>}
+            {why === 'busy' && <small>{L(`${secs(castReadyAt(kingdom) - now)} sonra`, `in ${secs(castReadyAt(kingdom) - now)}`)}</small>}
           </button>
           {online && (
             <button className="btn" onClick={() => setBoard(true)}>
-              <Icon name="star" size={16} /> Sıralama
+              <Icon name="star" size={16} /> {L('Sıralama', 'Rankings')}
             </button>
           )}
         </div>
       </Section>
-      <Section title="Balıkçı günlüğü" icon="scroll" aside={`${log.length} kayıt`}>
+      <Section title={L('Balıkçı günlüğü', 'Fisher\'s log')} icon="scroll" aside={L(`${log.length} kayıt`, `${log.length} entr${log.length === 1 ? 'y' : 'ies'}`)}>
         {log.length === 0 ? (
-          <p className="hint">Henüz bir şey tutulmadı.</p>
+          <p className="hint">{L('Henüz bir şey tutulmadı.', 'Nothing caught yet.')}</p>
         ) : (
           <ul className="fisher-log">
             {log.map((e) => (
               <li key={e.at} className={e.kind}>
                 {e.kind === 'bottle' && <i style={{ background: KINGDOM_COLORS[e.color as KingdomColor]?.swatch ?? '#8a7a60' }} />}
                 <span>{describeCatch(e)}</span>
-                <small>{new Date(e.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</small>
+                <small>{new Date(e.at).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</small>
               </li>
             ))}
           </ul>
@@ -109,8 +121,8 @@ export function FisherPanel({ data, hall = false }: { data: HudData; hall?: bool
             <header className="sheet-head">
               <Icon name="food" size={32} />
               <div>
-                <h2 id="fishing-title">Balık tut</h2>
-                <small>Basılı tut: yeşil alan yükselir; bırak: düşer</small>
+                <h2 id="fishing-title">{L('Balık tut', 'Go fishing')}</h2>
+                <small>{L('Basılı tut: yeşil alan yükselir; bırak: düşer', 'Hold: the green zone rises; let go: it falls')}</small>
               </div>
             </header>
             {result ? (
@@ -118,16 +130,19 @@ export function FisherPanel({ data, hall = false }: { data: HudData; hall?: bool
                 <p className={result.kind === 'miss' ? 'down' : 'up'}>{describeCatch(result)}</p>
                 {online && result.kind !== 'miss' && <MiniBoard lobby={online.lobby.id} game="fishing" compact />}
                 <button className="btn small" onClick={close}>
-                  Tamam
+                  {L('Tamam', 'OK')}
                 </button>
               </RunResult>
             ) : seed === null || reeling ? (
-              <p className="hint fishing-wait">{seed === null ? 'Olta suya atılıyor…' : 'Olta çekiliyor…'}</p>
+              <p className="hint fishing-wait">{seed === null ? L('Olta suya atılıyor…', 'Casting the line…') : L('Olta çekiliyor…', 'Reeling in…')}</p>
             ) : (
               <>
                 <Stage seed={seed} scene={fishingScene} onDone={finish} />
                 <small className="hint">
-                  Bar dolarsa tutarsın, boşalırsa ya da süre biterse balık kaçar. {balance.economy.fishing.cooldownSeconds} sn'de bir olta atılabilir.
+                  {L(
+                    `Bar dolarsa tutarsın, boşalırsa ya da süre biterse balık kaçar. ${balance.economy.fishing.cooldownSeconds} sn'de bir olta atılabilir.`,
+                    `Fill the bar and you catch it; if it empties or time runs out, the fish gets away. The line can be cast once every ${balance.economy.fishing.cooldownSeconds} s.`,
+                  )}
                 </small>
               </>
             )}

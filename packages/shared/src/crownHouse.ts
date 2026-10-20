@@ -1,5 +1,6 @@
 import { balance } from './balance'
 import { calendarAt, yearMs } from './clock'
+import { L } from './lang'
 import type { Kingdom } from './economy'
 import type { Skills } from './dynasty'
 
@@ -197,7 +198,7 @@ export function crownReignAt(key: CrownKey, crown: number, at: number): CrownRei
 }
 
 export const crownAgeOf = (p: Pick<CrownRoyal, 'bornAt'>, at: number) => Math.max(0, (at - p.bornAt) / yearMs())
-export const crownTitleOf = (p: Pick<CrownRoyal, 'sex'>) => (p.sex === 'm' ? 'Kral' : 'Kraliçe')
+export const crownTitleOf = (p: Pick<CrownRoyal, 'sex'>) => (p.sex === 'm' ? L('Kral', 'King') : L('Kraliçe', 'Queen'))
 
 // "Kral Orhan II" / "Kraliçe Selcan".
 export function crownRulerTitle(reign: Pick<CrownReign, 'ruler' | 'regnal'>) {
@@ -240,7 +241,9 @@ export const crownTraitSpec = (trait: CrownTrait) => H().traits[trait]
 // What the reigning ruler's trait does: the share of the treasury the crown's collectors ask (×) and its patrol's tip (×).
 export function crownTraitAt(key: CrownKey, crown: number, at: number) {
   const reign = crownReignAt(key, crown, at)
-  return { trait: reign.ruler.trait, ...crownTraitSpec(reign.ruler.trait) }
+  const spec = crownTraitSpec(reign.ruler.trait)
+  // The name in the player's language (the server's stays Turkish).
+  return { trait: reign.ruler.trait, ...spec, name: L(spec.name, spec.nameEn ?? spec.name) }
 }
 
 // The calendar year of a moment (for the reigns' dates).

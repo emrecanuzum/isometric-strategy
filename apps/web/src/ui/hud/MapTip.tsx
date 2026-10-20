@@ -3,6 +3,8 @@ import type { Building, Point, World } from '@game/shared'
 import { INN_KIND_NAMES, innInfo } from '../../game/innInfo'
 import { isCaravanserai } from '../../game/innSprites'
 import { BUILDING_NAMES } from '../names'
+import { L } from '../../lib/i18n'
+import { NameNote } from '../NameNote'
 
 type Shown = Pick<Building, 'kind' | 'level' | 'doneAt'>
 
@@ -15,10 +17,11 @@ export function MapTip({ building, at, now, owner }: { building: Shown | undefin
   return (
     <div className="map-tip frame" style={{ left: at.x, top: at.y }} role="tooltip">
       {owner && <span className="map-tip-owner" style={{ color: owner.color }}>{owner.name}</span>}
+      {owner && <NameNote name={owner.name} />}
       <b>{BUILDING_NAMES[building.kind]}</b>
-      {top > 1 && <small>Sv. {building.level ?? 1}</small>}
-      {busy && <small className="up">inşaatta</small>}
-      {!owner && <em>tıkla</em>}
+      {top > 1 && <small>{L('Sv.', 'Lv.')} {building.level ?? 1}</small>}
+      {busy && <small className="up">{L('inşaatta', 'under construction')}</small>}
+      {!owner && <em>{L('tıkla', 'click')}</em>}
     </div>
   )
 }
@@ -30,8 +33,9 @@ export function InnTip({ world, index, at }: { world: World; index: number; at: 
   return (
     <div className="map-tip frame" style={{ left: at.x, top: at.y }} role="tooltip">
       <b>{info.name}</b>
+      <NameNote name={info.name} />
       <small>{INN_KIND_NAMES[info.kind]}</small>
-      <em>söylentiler</em>
+      <em>{L('söylentiler', 'rumours')}</em>
     </div>
   )
 }

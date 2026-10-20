@@ -7,6 +7,7 @@ import type { WorldView } from '../game/createWorld'
 import type { Battle } from '../net/online'
 import { serverNow } from '../net/clock'
 import { Icon } from './icons'
+import { L } from '../lib/i18n'
 import type { IconName } from './icons'
 import { MONTH_NAMES } from './names'
 import { frameMargin, paintCap, paintFrame } from '../game/minimapFrame'
@@ -66,33 +67,33 @@ function hotSpots(o: {
   for (const b of o.battles) {
     if ((b.resolved && Date.parse(b.ends_at) <= now) || ![...b.attackers, ...b.defenders].some((f) => f.kingdom === me)) continue
     const foe = [...b.attackers, ...b.defenders].find((f) => f.kingdom !== me)
-    const what = b.kind === 'siege' || b.kind === 'usurp' ? 'Kuşatma' : b.kind === 'revolt' || b.kind === 'pretender' ? 'Asilerle muharebe' : b.kind === 'outlaw' ? 'Yağmacılarla çarpışma' : 'Muharebe'
+    const what = b.kind === 'siege' || b.kind === 'usurp' ? L('Kuşatma', 'Siege') : b.kind === 'revolt' || b.kind === 'pretender' ? L('Asilerle muharebe', 'Battle with rebels') : b.kind === 'outlaw' ? L('Yağmacılarla çarpışma', 'Clash with bandits') : L('Muharebe', 'Battle')
     out.push({ key: `b${b.id}`, label: foe && b.kind !== 'revolt' && b.kind !== 'outlaw' && b.kind !== 'pretender' && b.kind !== 'usurp' ? `${what}: ${o.nameOf(foe.kingdom)}` : what, at: { x: b.x, y: b.y } })
   }
   for (const t of o.towns) {
     if (t.siege && t.siege.endsAt > now && (t.siege.kingdom === me || t.owner === me)) {
-      out.push({ key: `s${t.id}`, label: t.siege.kingdom === me ? `${t.name} kuşatılıyor` : `${t.name} kasaban kuşatma altında`, at: townCenter(t) })
+      out.push({ key: `s${t.id}`, label: t.siege.kingdom === me ? L(`${t.name} kuşatılıyor`, `Besieging ${t.name}`) : L(`${t.name} kasaban kuşatma altında`, `Your town ${t.name} is under siege`), at: townCenter(t) })
     } else if (t.owner === me && t.rebels) {
-      out.push({ key: `r${t.id}`, label: `${t.name}: asiler kapıda`, at: townCenter(t) })
+      out.push({ key: `r${t.id}`, label: L(`${t.name}: asiler kapıda`, `${t.name}: rebels at the gate`), at: townCenter(t) })
     }
   }
   for (const h of o.kingdom.towns ?? []) {
     const t = o.towns.find((x) => x.id === h.id)
-    if (t && townRevolting(h, now) && !out.some((s) => s.key === `r${t.id}` || s.key === `s${t.id}`)) out.push({ key: `r${t.id}`, label: `${t.name} ayaklandı`, at: townCenter(t) })
+    if (t && townRevolting(h, now) && !out.some((s) => s.key === `r${t.id}` || s.key === `s${t.id}`)) out.push({ key: `r${t.id}`, label: L(`${t.name} ayaklandı`, `${t.name} has revolted`), at: townCenter(t) })
   }
   if (o.rect) {
     const foes = new Set(o.pacts.filter((p) => p.kind === 'war' && !p.ended_at && (p.from_id === me || p.to_id === me)).map((p) => (p.from_id === me ? p.to_id : p.from_id)))
     for (const a of o.armies) {
       if (!foes.has(a.kingdom_id)) continue
       const p = armyAt(a, now)
-      if (near(o.rect, p, BORDER_WATCH)) out.push({ key: `e${a.id}`, label: `Sınırında ${o.nameOf(a.kingdom_id)} ordusu`, at: p })
+      if (near(o.rect, p, BORDER_WATCH)) out.push({ key: `e${a.id}`, label: L(`Sınırında ${o.nameOf(a.kingdom_id)} ordusu`, `${o.nameOf(a.kingdom_id)}'s army at your border`), at: p })
     }
     // The crowns' riders whose road ends at the player's lands (the tribute collectors carry the lord in their id).
     for (const p of o.patrols) {
       const end = p.path[p.path.length - 1]
       if (!end || !near(o.rect, end, 6) || p.trainAhead) continue
       const collector = p.id <= -100000
-      out.push({ key: `p${p.id}`, label: collector ? 'Haraççılar kapına geliyor' : 'Taç devriyesi sana uğruyor', at: at(p, now) })
+      out.push({ key: `p${p.id}`, label: collector ? L('Haraççılar kapına geliyor', 'Tribute collectors are coming to your door') : L('Taç devriyesi sana uğruyor', 'The crown patrol is calling on you'), at: at(p, now) })
     }
   }
   out.push(...(o.extra ?? []))
@@ -155,10 +156,10 @@ export function MinimapCorners({
     ? [
         ...armies
           .filter((a) => a.kingdom_id === me)
-          .map((a, i): Spot => ({ key: `a${a.id}`, label: `${i + 1}. ordu${a.soldiers !== null ? ` · ${a.soldiers} asker` : ''}${a.status === 'battle' ? ' · muharebede' : ''}`, at: armyAt(a, now), pick: () => onArmy(a.id) })),
+          .map((a, i): Spot => ({ key: `a${a.id}`, label: L(`${i + 1}. ordu${a.soldiers !== null ? ` · ${a.soldiers} asker` : ''}${a.status === 'battle' ? ' · muharebede' : ''}`, `Army ${i + 1}${a.soldiers !== null ? ` · ${a.soldiers} soldier${a.soldiers === 1 ? '' : 's'}` : ''}${a.status === 'battle' ? ' · in battle' : ''}`), at: armyAt(a, now), pick: () => onArmy(a.id) })),
         ...(kingdom.navy?.fleets ?? []).flatMap((f, i): Spot[] => {
           const p = fleetAt(view.world, kingdom, f, now)
-          return p ? [{ key: `f${f.id}`, label: `${i + 1}. filo`, at: p, pick: () => onFleet(f.id) }] : []
+          return p ? [{ key: `f${f.id}`, label: L(`${i + 1}. filo`, `Fleet ${i + 1}`), at: p, pick: () => onFleet(f.id) }] : []
         }),
       ]
     : []
@@ -178,8 +179,8 @@ export function MinimapCorners({
     s.pick?.()
     setCaption({ text: fresh.length > 1 ? `${i + 1}/${fresh.length} · ${s.label}` : s.label, id: Date.now() })
   }
-  const nextUnit = () => cycle(units, lastUnit, 'Sahada ordun ya da filon yok')
-  const nextSpot = () => cycle(spots, lastSpot, 'Şu an sıcak bir nokta yok')
+  const nextUnit = () => cycle(units, lastUnit, L('Sahada ordun ya da filon yok', 'You have no army or fleet in the field'))
+  const nextSpot = () => cycle(spots, lastSpot, L('Şu an sıcak bir nokta yok', 'No hot spots right now'))
   const openMap = () => {
     play('click')
     onWorldMap()
@@ -240,10 +241,10 @@ export function MinimapCorners({
         style={{ '--mm-f': `${size.thick}px`, '--mm-w': `${size.cap}px`, '--mm-icon': `${size.icon}px` } as React.CSSProperties}
       >
         {width > 0 && <Frame width={width} height={box.current?.clientHeight ?? width / 2} thick={size.thick} />}
-        {corner('top', 'map', 'Dünya haritası (M)', openMap)}
-        {corner('right', 'swords', spots.length ? `Sıcak noktalar (H): ${spots.map((s) => s.label).join(' · ')}` : 'Sıcak noktalar (H): şu an yok', nextSpot, spots.length, spots.length > 0)}
-        {corner('left', 'banner', units.length ? 'Ordularım ve filolarım (Tab): sıradakine git' : 'Ordularım ve filolarım: sahada yok', nextUnit, units.length)}
-        {corner('bottom', 'camera', 'Fotoğraf modu (P)', () => (play('click'), setPhoto(true)))}
+        {corner('top', 'map', L('Dünya haritası (M)', 'World map (M)'), openMap)}
+        {corner('right', 'swords', spots.length ? L(`Sıcak noktalar (H): ${spots.map((s) => s.label).join(' · ')}`, `Hot spots (H): ${spots.map((s) => s.label).join(' · ')}`) : L('Sıcak noktalar (H): şu an yok', 'Hot spots (H): none right now'), nextSpot, spots.length, spots.length > 0)}
+        {corner('left', 'banner', units.length ? L('Ordularım ve filolarım (Tab): sıradakine git', 'My armies and fleets (Tab): go to the next one') : L('Ordularım ve filolarım: sahada yok', 'My armies and fleets: none in the field'), nextUnit, units.length)}
+        {corner('bottom', 'camera', L('Fotoğraf modu (P)', 'Photo mode (P)'), () => (play('click'), setPhoto(true)))}
       </div>
       {caption && <Caption key={caption.id} text={caption.text} box={box.current} lift={size.thick} />}
       {photo && <PhotoMode view={view} center={center} lord={kingdom?.name ?? null} seasonStart={seasonStart} onClose={() => setPhoto(false)} />}
@@ -325,7 +326,7 @@ function PhotoMode({ view, center, lord, seasonStart, onClose }: { view: WorldVi
           {date.day} {MONTH_NAMES[date.month]} {date.year}
         </span>
       </div>
-      {hint && <div className="photo-hint">Çıkmak için bir tuşa bas ya da tıkla · Boşluk: kamera süzülsün · Tekerlek: yakınlaştır</div>}
+      {hint && <div className="photo-hint">{L('Çıkmak için bir tuşa bas ya da tıkla · Boşluk: kamera süzülsün · Tekerlek: yakınlaştır', 'Press a key or click to leave · Space: let the camera glide · Wheel: zoom')}</div>}
     </div>
   )
 }

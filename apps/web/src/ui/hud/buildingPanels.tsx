@@ -6,6 +6,7 @@ import { STRUCTURE_SPRITES } from '../../game/buildingSprites'
 import { CROWN_ROOFS, cityInfo } from '../../game/cities'
 import { Scene } from '../AwayReport'
 import type { Placed } from '../AwayReport'
+import { L } from '../../lib/i18n'
 import { Icon } from '../icons'
 import { Dot, SpyPanel } from './diplomacy'
 import { FisherPanel } from './Fishing'
@@ -33,14 +34,21 @@ function Picture({ items, mood }: { items: Placed[]; mood: Parameters<typeof Sce
 // The rumour the guards pass round about a lord, worded a little differently for each lord and hour.
 function rumour(k: KingdomInfo, held: boolean, now: number) {
   const pick = <T,>(xs: T[]) => xs[(k.id * 7 + Math.floor(now / 3_600_000)) % xs.length]
-  if (held) return pick([`«${k.name} lordunun kraliçesi zaten bizim zindanımızda.»`, `«${k.name} kraliçesi aşağıda, demir kapının ardında; fidyesini bekliyoruz.»`])
+  if (held)
+    return pick([
+      L(`«${k.name} lordunun kraliçesi zaten bizim zindanımızda.»`, `“${k.name}'s queen is already in our dungeon.”`),
+      L(`«${k.name} kraliçesi aşağıda, demir kapının ardında; fidyesini bekliyoruz.»`, `“${k.name}'s queen is downstairs behind the iron door; we await her ransom.”`),
+    ])
   if (k.queen)
     return pick([
-      `«${k.name} lordunun kraliçesi sarayında, rahat uyuyor.»`,
-      `«Diyorlar ki ${k.name} kraliçesi her akşam surlarda geziniyormuş.»`,
-      `«${k.name} sarayında bir kraliçe var; muhafızı az mı çok mu, kim bilir.»`,
+      L(`«${k.name} lordunun kraliçesi sarayında, rahat uyuyor.»`, `“${k.name}'s queen sleeps soundly in her palace.”`),
+      L(`«Diyorlar ki ${k.name} kraliçesi her akşam surlarda geziniyormuş.»`, `“They say ${k.name}'s queen walks the walls every evening.”`),
+      L(`«${k.name} sarayında bir kraliçe var; muhafızı az mı çok mu, kim bilir.»`, `“There's a queen in ${k.name}'s palace; few guards or many, who knows.”`),
     ])
-  return pick([`«${k.name} lordunun kraliçesi yok; oradan kaçıracak kimse çıkmaz.»`, `«${k.name} sarayında kraliçe yok, taht yanı boş.»`])
+  return pick([
+    L(`«${k.name} lordunun kraliçesi yok; oradan kaçıracak kimse çıkmaz.»`, `“${k.name} has no queen; nobody to snatch there.”`),
+    L(`«${k.name} sarayında kraliçe yok, taht yanı boş.»`, `“No queen in ${k.name}'s palace; the seat beside the throne is empty.”`),
+  ])
 }
 
 // The prison (CLAUDE.md §9.7): its yard by night, the queens held in it and, from the guards, who of the lords has a
@@ -80,14 +88,16 @@ export function PrisonPanel({ data }: { data: HudData }) {
       <Picture items={scene} mood="intrigue" />
       {whisper.length > 0 && (
         <p className="hint prison-whisper">
-          Gardiyanlar fısıldaşıyor: «{whisper.join('; ')}…»
+          {L(`Gardiyanlar fısıldaşıyor: «${whisper.join('; ')}…»`, `The guards whisper: “${whisper.join('; ')}…”`)}
         </p>
       )}
-      <Section title="Mahkûmlar" icon="crown" aside={hostages.length > 0 ? `${hostages.length} kraliçe` : 'boş'}>
+      <Section title={L('Mahkûmlar', 'Prisoners')} icon="crown" aside={hostages.length > 0 ? L(`${hostages.length} kraliçe`, `${hostages.length} queen${hostages.length === 1 ? '' : 's'}`) : L('boş', 'empty')}>
         {hostages.length === 0 ? (
           <p className="hint">
-            Hapishane boş. Casus operasyonuyla bir lordun kraliçesini kaçırırsan burada tutulur; fidyesi o lordun altınının casuslarının tahminine göre
-            %{Math.round(balance.espionage.operations.kidnap.ransomShare * 100)}'ı olur (en az {balance.espionage.operations.kidnap.ransomMin} altın).
+            {L(
+              `Hapishane boş. Casus operasyonuyla bir lordun kraliçesini kaçırırsan burada tutulur; fidyesi o lordun altınının casuslarının tahminine göre %${Math.round(balance.espionage.operations.kidnap.ransomShare * 100)}'ı olur (en az ${balance.espionage.operations.kidnap.ransomMin} altın).`,
+              `The prison is empty. If a spy operation kidnaps a lord's queen, she is held here; her ransom is ${Math.round(balance.espionage.operations.kidnap.ransomShare * 100)}% of that lord's gold as your spies reckon it (at least ${balance.espionage.operations.kidnap.ransomMin} gold).`,
+            )}
           </p>
         ) : (
           <ul className="places">
@@ -95,11 +105,11 @@ export function PrisonPanel({ data }: { data: HudData }) {
               <li key={h.of}>
                 <Icon name="crown" size={24} />
                 <span>
-                  <b>{h.name} kraliçesi</b>
-                  <small>Fidyesi {h.ransom ?? fallback} altın · kurtarılmayı bekliyor</small>
+                  <b>{L(`${h.name} kraliçesi`, `Queen of ${h.name}`)}</b>
+                  <small>{L(`Fidyesi ${h.ransom ?? fallback} altın · kurtarılmayı bekliyor`, `Ransom ${h.ransom ?? fallback} gold · awaiting rescue`)}</small>
                 </span>
                 <button className="btn small" onClick={() => online?.act({ type: 'release', target: h.of })}>
-                  Serbest bırak
+                  {L('Serbest bırak', 'Release')}
                 </button>
               </li>
             ))}
@@ -107,15 +117,17 @@ export function PrisonPanel({ data }: { data: HudData }) {
         )}
         {hostages.length > 0 && (
           <p className="hint">
-            Kraliçesi elinde olan lordun halkı mutsuzdur. Fidyeyi öderse kraliçe döner ve altın sana gelir; serbest bırakırsan ilişkiniz düzelir (+
-            {balance.espionage.operations.kidnap.release}).
+            {L(
+              `Kraliçesi elinde olan lordun halkı mutsuzdur. Fidyeyi öderse kraliçe döner ve altın sana gelir; serbest bırakırsan ilişkiniz düzelir (+${balance.espionage.operations.kidnap.release}).`,
+              `The people of a lord whose queen you hold are unhappy. If he pays the ransom, the queen goes home and the gold comes to you; if you release her, your relations improve (+${balance.espionage.operations.kidnap.release}).`,
+            )}
           </p>
         )}
       </Section>
       {online && (
-        <Section title="Gardiyanların fısıltıları" icon="eye" aside={`kaçırmak için ağ %${need}`}>
+        <Section title={L('Gardiyanların fısıltıları', 'The guards\' whispers')} icon="eye" aside={L(`kaçırmak için ağ %${need}`, `${need}% network to kidnap`)}>
           {lords.length === 0 ? (
-            <p className="hint">Lobide başka lord yok; gardiyanlar zar atıp vakit geçiriyor.</p>
+            <p className="hint">{L('Lobide başka lord yok; gardiyanlar zar atıp vakit geçiriyor.', 'No other lords in the lobby; the guards pass the time playing dice.')}</p>
           ) : (
             <ul className="places">
               {lords.map(({ k, held, spies, best }) => (
@@ -127,18 +139,18 @@ export function PrisonPanel({ data }: { data: HudData }) {
                     {!held && k.queen && (
                       <small className={best !== null && best >= need ? 'up' : undefined}>
                         {spies === 0
-                          ? 'Orada casusumuz yok.'
+                          ? L('Orada casusumuz yok.', 'We have no spies there.')
                           : best === null
-                            ? `Orada ${spies} casusumuz var; ağın gücünü bilmiyoruz.`
+                            ? L(`Orada ${spies} casusumuz var; ağın gücünü bilmiyoruz.`, `We have ${spies} spy${spies === 1 ? '' : 'ies'} there; we do not know the network's strength.`)
                             : best >= need
-                              ? `En güçlü ağımız %${Math.round(best)}: kaçırmaya yeter.`
-                              : `En güçlü ağımız %${Math.round(best)}; %${need} olmalı.`}
+                              ? L(`En güçlü ağımız %${Math.round(best)}: kaçırmaya yeter.`, `Our strongest network is ${Math.round(best)}%: enough to kidnap.`)
+                              : L(`En güçlü ağımız %${Math.round(best)}; %${need} olmalı.`, `Our strongest network is ${Math.round(best)}%; it needs ${need}%.`)}
                       </small>
                     )}
                   </span>
                   {spies > 0 && !held && k.queen && (
                     <button className="btn small" onClick={() => online.loadIntel(k.id)}>
-                      Ölç
+                      {L('Ölç', 'Gauge')}
                     </button>
                   )}
                 </li>
@@ -147,8 +159,8 @@ export function PrisonPanel({ data }: { data: HudData }) {
           )}
           <p className="hint">
             {ready.length > 0
-              ? `${ready.map((l) => l.k.name).join(', ')} hazır: kaçırma, Diplomasi sekmesinde lordun sayfasındaki casus operasyonlarından yapılır.`
-              : 'Bir kraliçeyi kaçırmak için o lordun herhangi bir konusundaki casus ağın bu gücü bulmalı; operasyon Diplomasi sekmesinde lordun sayfasından yapılır.'}
+              ? L(`${ready.map((l) => l.k.name).join(', ')} hazır: kaçırma, Diplomasi sekmesinde lordun sayfasındaki casus operasyonlarından yapılır.`, `${ready.map((l) => l.k.name).join(', ')}: ready. Kidnappings are carried out from the spy operations on the lord's page in the Diplomacy tab.`)
+              : L('Bir kraliçeyi kaçırmak için o lordun herhangi bir konusundaki casus ağın bu gücü bulmalı; operasyon Diplomasi sekmesinde lordun sayfasından yapılır.', "To kidnap a queen, your spy network on any one of that lord's topics must reach this strength; the operation is carried out from the lord's page in the Diplomacy tab.")}
           </p>
         </Section>
       )}
@@ -179,20 +191,23 @@ export function TavernPanel({ data }: { data: HudData }) {
   return (
     <>
       <Picture items={scene} mood="house" />
-      <Section title="Devriyeler" icon="banner">
+      <Section title={L('Devriyeler', 'Patrols')} icon="banner">
         <p className="hint">
           {liege != null
-            ? `${cityInfo(world, liege).name} devriyesi uğradığında burada içer, eğlenir ve şu an yaklaşık ${tipPreview(kingdom, liege, data.online ?? { kingdoms: [] }, now)} altın bahşiş bırakır (tacın gücüne, hükümdarın huyuna ve taçların rekabetine göre${waysText(crownKeyOf(kingdom), liege, now, 'tip') ? `: ${waysText(crownKeyOf(kingdom), liege, now, 'tip')}` : ''}).`
-            : 'Bir taç krallığına biat edince onun devriyeleri buraya uğrar, eğlenir ve bahşiş bırakır.'}
+            ? L(
+                `${cityInfo(world, liege).name} devriyesi uğradığında burada içer, eğlenir ve şu an yaklaşık ${tipPreview(kingdom, liege, data.online ?? { kingdoms: [] }, now)} altın bahşiş bırakır (tacın gücüne, hükümdarın huyuna ve taçların rekabetine göre${waysText(crownKeyOf(kingdom), liege, now, 'tip') ? `: ${waysText(crownKeyOf(kingdom), liege, now, 'tip')}` : ''}).`,
+                `When the patrol of ${cityInfo(world, liege).name} calls, it drinks and makes merry here and currently leaves a tip of about ${tipPreview(kingdom, liege, data.online ?? { kingdoms: [] }, now)} gold (depending on the crown's power, the ruler's temper and the crowns' rivalry${waysText(crownKeyOf(kingdom), liege, now, 'tip') ? `: ${waysText(crownKeyOf(kingdom), liege, now, 'tip')}` : ''}).`,
+              )
+            : L('Bir taç krallığına biat edince onun devriyeleri buraya uğrar, eğlenir ve bahşiş bırakır.', 'Once you swear fealty to a crown kingdom, its patrols call here, make merry and leave tips.')}
         </p>
       </Section>
       <Subtabs
-        label="Oyunlar"
+        label={L('Oyunlar', 'Games')}
         part={game}
         onPart={setGame}
         parts={TAVERN_GAMES.map((g) => ({ id: g, name: GAME_NAMES[g], icon: GAME_ICONS[g], dot: ready(g) }))}
       />
-      <p className="hint">Bütün mini oyunlar burada da oynanır; her oyunun bekleme süresi kendi binasındakiyle ortaktır.</p>
+      <p className="hint">{L('Bütün mini oyunlar burada da oynanır; her oyunun bekleme süresi kendi binasındakiyle ortaktır.', 'Every minigame can be played here too; each game shares its cooldown with its own building.')}</p>
       {game === 'fishing' ? <FisherPanel data={data} hall /> : <GamePanel key={game} game={game} data={data} />}
     </>
   )
@@ -202,6 +217,6 @@ export function TavernPanel({ data }: { data: HudData }) {
 
 // The spy house: the spies at home and away, their missions and networks, the counter-espionage and the news of spies.
 export function SpyHousePanel({ data }: { data: HudData }) {
-  if (!data.online) return <Placeholder icon="eye" title="Lobi yükleniyor" />
+  if (!data.online) return <Placeholder icon="eye" title={L('Lobi yükleniyor', 'Loading lobby')} />
   return <SpyPanel data={data} online={data.online} detail={false} />
 }

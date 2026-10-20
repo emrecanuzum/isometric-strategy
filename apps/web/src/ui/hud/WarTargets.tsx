@@ -4,6 +4,7 @@ import { KINGDOM_COLORS } from '../../game/buildingSprites'
 import type { KingdomColor } from '../../game/buildingSprites'
 import type { Rival } from '../../net/online'
 import { Icon } from '../icons'
+import { L } from '../../lib/i18n'
 import type { Online } from './online'
 
 // While an army is being sent somewhere: the kingdoms the player is at war with, down the left side, each with the
@@ -46,14 +47,14 @@ export function WarTargets({
 }) {
   const enemies = online.kingdoms.filter((k) => k.id !== online.me && atWar(online.pacts, online.me, k.id))
   return (
-    <aside className="war-targets frame" aria-label="Hedefler">
+    <aside className="war-targets frame" aria-label={L('Hedefler', 'Targets')}>
       <header>
-        <Icon name="swords" size={16} /> Hızlı hedefler
+        <Icon name="swords" size={16} /> {L('Hızlı hedefler', 'Quick targets')}
       </header>
       <button className="btn small" onClick={onHome}>
-        <Icon name="home" size={16} /> Eve dön
+        <Icon name="home" size={16} /> {L('Eve dön', 'Return home')}
       </button>
-      {enemies.length === 0 && <p className="hint">Savaşta olduğun lord yok. Haritada bir yere tıkla.</p>}
+      {enemies.length === 0 && <p className="hint">{L('Savaşta olduğun lord yok. Haritada bir yere tıkla.', 'You are at war with no lord. Click somewhere on the map.')}</p>}
       {enemies.map((k) => {
         const rival = rivals.find((r) => r.id === k.id)
         const post = rival?.buildings.find((b) => b.kind === 'tradePost')
@@ -63,26 +64,26 @@ export function WarTargets({
           <section key={k.id} className="war-target">
             <b>
               <i style={{ background: swatch(k.color) }} /> {k.name}
-              <button className="btn icon-only" onClick={() => onShow(k.site)} aria-label={`${k.name} haritada göster`} title="Haritada göster">
+              <button className="btn icon-only" onClick={() => onShow(k.site)} aria-label={L(`${k.name} haritada göster`, `Show ${k.name} on the map`)} title={L('Haritada göster', 'Show on the map')}>
                 <Icon name="pin" size={16} />
               </button>
             </b>
-            <button className="btn small" onClick={() => onSend(k.site)} title={shielded ? 'Saray kalkanlı: ordu kapıda bekler' : undefined}>
-              <Icon name="crown" size={16} /> Sarayını kuşat{shielded ? ` (kalkan ${Math.ceil(((k.shieldUntil ?? 0) - now) / 60000)} dk)` : ''}
+            <button className="btn small" onClick={() => onSend(k.site)} title={shielded ? L('Saray kalkanlı: ordu kapıda bekler', 'The palace is shielded: the army waits at the gate') : undefined}>
+              <Icon name="crown" size={16} /> {L('Sarayını kuşat', 'Besiege their palace')}{shielded ? L(` (kalkan ${Math.ceil(((k.shieldUntil ?? 0) - now) / 60000)} dk)`, ` (shield ${Math.ceil(((k.shieldUntil ?? 0) - now) / 60000)} min)`) : ''}
             </button>
             {from && (
-              <button className="btn small" onClick={() => onSend(borderPoint(k.site, k.palace, from))} title="Sınırlarında bekleyen ordu halkını korkutur (mutluluk düşer)">
-                <Icon name="warn" size={16} /> Gözdağı ver (sınırda bekle)
+              <button className="btn small" onClick={() => onSend(borderPoint(k.site, k.palace, from))} title={L('Sınırlarında bekleyen ordu halkını korkutur (mutluluk düşer)', 'An army waiting at their border frightens their people (happiness drops)')}>
+                <Icon name="warn" size={16} /> {L('Gözdağı ver (sınırda bekle)', 'Intimidate (wait at the border)')}
               </button>
             )}
             {post && (
               <button className="btn small" onClick={() => onSend({ x: post.x + post.size + 0.5, y: post.y + post.size + 0.5 })}>
-                <Icon name="trade" size={16} /> Ticaret noktasına git
+                <Icon name="trade" size={16} /> {L('Ticaret noktasına git', 'Go to their trading post')}
               </button>
             )}
             {armies.map((a, i) => (
               <button key={a.id} className="btn small" onClick={() => onSend(armyAt(a, now))}>
-                <Icon name="swords" size={16} /> Muharebeye git{armies.length > 1 ? ` (${i + 1}. ordusu)` : ''}
+                <Icon name="swords" size={16} /> {L('Muharebeye git', 'Go to battle')}{armies.length > 1 ? L(` (${i + 1}. ordusu)`, ` (their army ${i + 1})`) : ''}
               </button>
             ))}
           </section>

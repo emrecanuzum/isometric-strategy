@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { playOnce } from '../../audio/sfx'
 import { cityInfo } from '../../game/cities'
 import { Icon } from '../icons'
+import { L } from '../../lib/i18n'
 import type { IconName } from '../icons'
 import { RESOURCE_ICONS, RESOURCE_NAMES, WEAPON_ICONS, WEAPON_NAMES } from '../names'
 import { QUEST_TITLES } from './cities'
@@ -16,44 +17,46 @@ import { Meter, fmt } from './primitives'
 // handed over within the hour. Its arrival opens a dialog; while it lasts it stays in the quest tracker on the right,
 // beside the crowns' tasks taken this hour.
 
-export const itemName = (item: RoyalItem) => (isWeaponItem(item) ? WEAPON_NAMES[item] : RESOURCE_NAMES[item]).toLowerCase()
+// Counted in English, so a weapon reads in the plural ("115 shields", "sets of bow and arrows").
+export const itemName = (item: RoyalItem) =>
+  isWeaponItem(item) ? L(WEAPON_NAMES[item].toLowerCase(), item === 'bow' ? 'sets of bow and arrows' : `${WEAPON_NAMES[item].toLowerCase()}s`) : RESOURCE_NAMES[item].toLowerCase()
 export const itemIcon = (item: RoyalItem): IconName => (isWeaponItem(item) ? WEAPON_ICONS[item] : RESOURCE_ICONS[item])
 
 // What the envoy says, a few ways for every kind of thing; the ruler's name and the lot filled in.
 const SAYINGS: Record<'weapon' | 'food' | 'materials' | 'arms', ((who: string, lot: string) => string)[]> = {
   weapon: [
-    (who, lot) => `${who} ${lot} istiyor; sınırda işler karışık. Yarına kadar yetişir mi?`,
-    (who, lot) => `${who} muhafız alayını yeniden donatıyor ve senden ${lot} bekliyor. Demircilerin hazır mı?`,
-    (who, lot) => `Başkentin cephaneliği boşaldı. ${who}, sadık lordundan ${lot} rica ediyor.`,
-    (who, lot) => `${who} yakında bir sefere çıkacak; ${lot} gerek. Günün sonuna dek gönderebilir misin?`,
+    (who, lot) => L(`${who} ${lot} istiyor; sınırda işler karışık. Yarına kadar yetişir mi?`, `${who} asks for ${lot}; things are restless on the border. Can it be ready by tomorrow?`),
+    (who, lot) => L(`${who} muhafız alayını yeniden donatıyor ve senden ${lot} bekliyor. Demircilerin hazır mı?`, `${who} is re-arming the household guard and expects ${lot} from you. Are your smiths ready?`),
+    (who, lot) => L(`Başkentin cephaneliği boşaldı. ${who}, sadık lordundan ${lot} rica ediyor.`, `The capital's armoury stands empty. ${who} kindly asks a loyal lord for ${lot}.`),
+    (who, lot) => L(`${who} yakında bir sefere çıkacak; ${lot} gerek. Günün sonuna dek gönderebilir misin?`, `${who} rides to war soon and needs ${lot}. Can you send it before the day is out?`),
   ],
   food: [
-    (who, lot) => `Başkentte ambarlar boşalıyor. ${who} halkı doyurmak için ${lot} istiyor.`,
-    (who, lot) => `${who} büyük bir ziyafet veriyor; mutfaklara ${lot} lazım. Yetiştirebilir misin?`,
-    (who, lot) => `Kuzeyde kıtlık var. ${who} oraya göndermek için senden ${lot} bekliyor.`,
+    (who, lot) => L(`Başkentte ambarlar boşalıyor. ${who} halkı doyurmak için ${lot} istiyor.`, `The capital's granaries are running low. ${who} asks for ${lot} to feed the people.`),
+    (who, lot) => L(`${who} büyük bir ziyafet veriyor; mutfaklara ${lot} lazım. Yetiştirebilir misin?`, `${who} is throwing a grand feast; the kitchens need ${lot}. Can you manage it in time?`),
+    (who, lot) => L(`Kuzeyde kıtlık var. ${who} oraya göndermek için senden ${lot} bekliyor.`, `There is famine in the north. ${who} expects ${lot} from you to send there.`),
   ],
   materials: [
-    (who, lot) => `${who} katedralin kulesini onarıyor; ${lot} gerek. Gün bitmeden gönderebilir misin?`,
-    (who, lot) => `Selden yıkılan köprüler yeniden kurulacak. ${who} senden ${lot} istiyor.`,
-    (who, lot) => `${who} başkentin surlarını yükseltiyor ve ${lot} bekliyor.`,
+    (who, lot) => L(`${who} katedralin kulesini onarıyor; ${lot} gerek. Gün bitmeden gönderebilir misin?`, `${who} is mending the cathedral's tower and needs ${lot}. Can you send it before the day ends?`),
+    (who, lot) => L(`Selden yıkılan köprüler yeniden kurulacak. ${who} senden ${lot} istiyor.`, `The bridges the flood swept away are to be rebuilt. ${who} asks you for ${lot}.`),
+    (who, lot) => L(`${who} başkentin surlarını yükseltiyor ve ${lot} bekliyor.`, `${who} is raising the capital's walls and expects ${lot}.`),
   ],
   arms: [
-    (who, lot) => `${who} yeni bir kadırga döktürüyor; ${lot} istiyor. Ocakların yetişir mi?`,
-    (who, lot) => `Taç ordusunun demirhaneleri malzemesiz kaldı. ${who} senden ${lot} bekliyor.`,
-    (who, lot) => `${who} sınır kalelerini donatıyor; ${lot} gerek. Yarına kadar olur mu?`,
+    (who, lot) => L(`${who} yeni bir kadırga döktürüyor; ${lot} istiyor. Ocakların yetişir mi?`, `${who} is having a new galley fitted out and asks for ${lot}. Can your forges keep up?`),
+    (who, lot) => L(`Taç ordusunun demirhaneleri malzemesiz kaldı. ${who} senden ${lot} bekliyor.`, `The crown army's smithies have run out of stock. ${who} expects ${lot} from you.`),
+    (who, lot) => L(`${who} sınır kalelerini donatıyor; ${lot} gerek. Yarına kadar olur mu?`, `${who} is stocking the border forts and needs ${lot}. Can it be done by tomorrow?`),
   ],
 }
 
 export function royalSaying(world: World, req: RoyalRequest) {
   const ruler = cityInfo(world, req.crown).ruler
   const list = SAYINGS[isWeaponItem(req.item) ? 'weapon' : req.item]
-  const who = req.n % 2 === 0 ? `Hükümdarımız ${ruler}` : ruler
+  const who = req.n % 2 === 0 ? L(`Hükümdarımız ${ruler}`, `Our sovereign ${ruler}`) : ruler
   return list[Math.abs(req.n) % list.length](who, `${fmt(req.units)} ${itemName(req.item)}`)
 }
 
 const left = (ms: number) => {
   const s = Math.max(0, Math.ceil(ms / 1000))
-  return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s} sn`
+  return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : L(`${s} sn`, `${s}s`)
 }
 
 // The request of the hour, while it lasts and is not turned down or handed over.
@@ -85,9 +88,9 @@ export function RoyalDialog({ world, kingdom, req, online, onClose }: { world: W
             <small>
               <Icon name="crown" size={16} />
               <i style={{ width: 10, height: 10, background: info.color, boxShadow: '0 0 0 2px rgb(0 0 0 / 45%)', display: 'inline-block' }} />
-              {info.name} · kraliyet elçisi
+              {info.name} · {L('kraliyet elçisi', 'royal envoy')}
             </small>
-            <h2 id="royal-title">Hükümdarın isteği</h2>
+            <h2 id="royal-title">{L('Hükümdarın isteği', 'The ruler\'s request')}</h2>
           </div>
         </header>
         <div className="fortune-art">
@@ -96,15 +99,18 @@ export function RoyalDialog({ world, kingdom, req, online, onClose }: { world: W
         <div className="fortune-body">
         <p>{royalSaying(world, req)}</p>
         <p className="hint">
-          <Icon name={itemIcon(req.item)} size={16} /> Elinde {fmt(have)} / {fmt(req.units)} {itemName(req.item)} var. {Math.round(r.durationSeconds / 60)} dakika içinde teslim edersen {fmt(req.gold)} altın ve taçla ilişki +{r.relation.deliver}. Geri çevirirsen
-          ilişki −{Math.abs(r.relation.decline)}.
+          <Icon name={itemIcon(req.item)} size={16} />{' '}
+          {L(
+            `Elinde ${fmt(have)} / ${fmt(req.units)} ${itemName(req.item)} var. ${Math.round(r.durationSeconds / 60)} dakika içinde teslim edersen ${fmt(req.gold)} altın ve taçla ilişki +${r.relation.deliver}. Geri çevirirsen ilişki −${Math.abs(r.relation.decline)}.`,
+            `You hold ${fmt(have)} / ${fmt(req.units)} ${itemName(req.item)}. Deliver within ${Math.round(r.durationSeconds / 60)} minutes for ${fmt(req.gold)} gold and +${r.relation.deliver} relations with the crown. Turn it down and relations fall by ${Math.abs(r.relation.decline)}.`,
+          )}
         </p>
         <div className="row spread">
           <button className="btn small danger" onClick={() => (online.act({ type: 'royal', action: 'decline' }), onClose())}>
-            Bu sefer olmaz
+            {L('Bu sefer olmaz', 'Not this time')}
           </button>
           <button className="btn small primary" onClick={() => (online.act({ type: 'royal', action: 'accept' }), onClose())}>
-            <Icon name="scroll" size={16} /> Elimden geleni yaparım
+            <Icon name="scroll" size={16} /> {L('Elimden geleni yaparım', 'I shall do my best')}
           </button>
         </div>
         </div>
@@ -145,10 +151,10 @@ export function QuestTracker({ world, kingdom, online, now }: { world: World; ki
   const ready = (live && !royalError(kingdom, 'deliver', now, online.market) ? 1 : 0) + quests.filter((q) => !q.claim).length
   const goldRoom = goldCap(kingdom, now) - kingdom.stock.gold
   return (
-    <section className={folded ? 'quests frame folded' : 'quests frame open'} aria-label="Görevler">
+    <section className={folded ? 'quests frame folded' : 'quests frame open'} aria-label={L('Görevler', 'Tasks')}>
       <button className="quests-head" onClick={fold} aria-expanded={!folded}>
         <Icon name={folded ? 'plus' : 'minus'} size={8} />
-        <span>Görevler · {count}</span>
+        <span>{L('Görevler', 'Tasks')} · {count}</span>
         {ready > 0 && <b>{ready}</b>}
       </button>
       {!folded && (
@@ -166,13 +172,13 @@ export function QuestTracker({ world, kingdom, online, now }: { world: World; ki
                 </span>
                 <small>{left(q.quest.endsAt - now)}</small>
               </div>
-              <Meter value={q.need ? Math.min(1, q.have / q.need) : 1} tone={q.have >= q.need ? 'up' : 'gold'} label="Görevin ilerlemesi" segments={10} />
+              <Meter value={q.need ? Math.min(1, q.have / q.need) : 1} tone={q.have >= q.need ? 'up' : 'gold'} label={L('Görevin ilerlemesi', 'Task progress')} segments={10} />
               <small className="quest-info">
-                {fmt(Math.min(q.have, q.need))} / {fmt(q.need)} · {fmt(q.quest.gold)} altın
+                {fmt(Math.min(q.have, q.need))} / {fmt(q.need)} · {fmt(q.quest.gold)} {L('altın', 'gold')}
               </small>
               <div className="quest-actions">
-                <button className={q.claim ? 'btn small' : 'btn small primary'} disabled={!!q.claim} data-why={q.claim === 'notYet' ? 'Görev henüz tamamlanmadı' : q.claim === 'done' ? 'Ödülü aldın' : 'Ödül şu an alınamaz'} onClick={() => online.act({ type: 'quest', crown: q.crown, action: 'claim' })}>
-                  <Icon name="chest" size={16} /> Ödülü al
+                <button className={q.claim ? 'btn small' : 'btn small primary'} disabled={!!q.claim} data-why={q.claim === 'notYet' ? L('Görev henüz tamamlanmadı', 'The task is not finished yet') : q.claim === 'done' ? L('Ödülü aldın', 'You have claimed the reward') : L('Ödül şu an alınamaz', 'The reward cannot be claimed now')} onClick={() => online.act({ type: 'quest', crown: q.crown, action: 'claim' })}>
+                  <Icon name="chest" size={16} /> {L('Ödülü al', 'Claim reward')}
                 </button>
               </div>
             </li>
@@ -192,34 +198,34 @@ function RoyalRow({ world, kingdom, req, accepted, online, now, goldRoom }: { wo
       <div className="quest-top">
         <Icon name={itemIcon(req.item)} size={16} />
         <span>
-          <b style={{ color: cityInfo(world, req.crown).ink }}>Kraliyet isteği</b>
+          <b style={{ color: cityInfo(world, req.crown).ink }}>{L('Kraliyet isteği', 'Royal request')}</b>
           <small>
             {fmt(req.units)} {itemName(req.item)}
           </small>
         </span>
         <small>{left(req.endsAt - now)}</small>
       </div>
-      <Meter value={Math.min(1, have / Math.max(1, req.units))} tone={have >= req.units ? 'up' : 'gold'} label="Kraliyet isteğinin ilerlemesi" segments={10} />
+      <Meter value={Math.min(1, have / Math.max(1, req.units))} tone={have >= req.units ? 'up' : 'gold'} label={L('Kraliyet isteğinin ilerlemesi', 'Royal request progress')} segments={10} />
       <small className="quest-info">
-        {fmt(Math.min(have, req.units))} / {fmt(req.units)} · {fmt(req.gold)} altın · ilişki +{r.relation.deliver}
+        {fmt(Math.min(have, req.units))} / {fmt(req.units)} · {fmt(req.gold)} {L('altın', 'gold')} · {L('ilişki', 'relations')} +{r.relation.deliver}
       </small>
       <div className="quest-actions">
         {accepted ? (
-          <button className={can ? 'btn small primary' : 'btn small'} disabled={!can} data-why={have < req.units ? `Elinde ${fmt(have)} / ${fmt(req.units)} ${itemName(req.item)} var` : now >= req.endsAt ? 'Bu isteğin süresi doldu' : 'Şu an teslim edilemez'} onClick={() => online.act({ type: 'royal', action: 'deliver' })}>
-            <Icon name="chest" size={16} /> Teslim et
+          <button className={can ? 'btn small primary' : 'btn small'} disabled={!can} data-why={have < req.units ? L(`Elinde ${fmt(have)} / ${fmt(req.units)} ${itemName(req.item)} var`, `You hold ${fmt(have)} / ${fmt(req.units)} ${itemName(req.item)}`) : now >= req.endsAt ? L('Bu isteğin süresi doldu', 'This request has expired') : L('Şu an teslim edilemez', 'Cannot be delivered right now')} onClick={() => online.act({ type: 'royal', action: 'deliver' })}>
+            <Icon name="chest" size={16} /> {L('Teslim et', 'Deliver')}
           </button>
         ) : (
           <>
-            <button className="btn small danger" title="Bu sefer olmaz" aria-label="Bu sefer olmaz" onClick={() => online.act({ type: 'royal', action: 'decline' })}>
+            <button className="btn small danger" title={L('Bu sefer olmaz', 'Not this time')} aria-label={L('Bu sefer olmaz', 'Not this time')} onClick={() => online.act({ type: 'royal', action: 'decline' })}>
               <Icon name="close" size={16} />
             </button>
             <button className="btn small primary" onClick={() => online.act({ type: 'royal', action: can ? 'deliver' : 'accept' })}>
-              <Icon name={can ? 'chest' : 'scroll'} size={16} /> {can ? 'Teslim et' : 'Üstlen'}
+              <Icon name={can ? 'chest' : 'scroll'} size={16} /> {can ? L('Teslim et', 'Deliver') : L('Üstlen', 'Take it on')}
             </button>
           </>
         )}
       </div>
-      {can && goldRoom < req.gold && <small className="down">Hazinende {fmt(Math.max(0, goldRoom))} altınlık yer var; kalanı boşa gider.</small>}
+      {can && goldRoom < req.gold && <small className="down">{L(`Hazinende ${fmt(Math.max(0, goldRoom))} altınlık yer var; kalanı boşa gider.`, `Your treasury has room for ${fmt(Math.max(0, goldRoom))} gold; the rest goes to waste.`)}</small>}
     </li>
   )
 }

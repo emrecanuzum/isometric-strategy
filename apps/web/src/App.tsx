@@ -162,6 +162,7 @@ import { Timers, buildSeconds } from './ui/hud/Timers'
 import type { TimerGo } from './ui/hud/Timers'
 import { QuestTracker, RoyalDialog, itemName, liveRequest, royalSaying } from './ui/hud/RoyalRequests'
 import { fmt } from './ui/hud/primitives'
+import { L, getLang } from './lib/i18n'
 
 // Map ids of the bands of bandits (-(BAND_ID + idx)) and the lord number the pirate boats are drawn under.
 // Map ids of the NPC columns drawn with the armies, each kind in a range of its own so none can meet another: crown
@@ -178,135 +179,135 @@ const OUTLAW_LORD = -1
 const HAVEN_FLEET = 1000
 
 const TERRAIN_NAMES: Record<number, string> = {
-  [Terrain.Grass]: 'Çayır',
-  [Terrain.Forest]: 'Orman',
-  [Terrain.Mountain]: 'Dağ',
-  [Terrain.Swamp]: 'Bataklık',
-  [Terrain.Desert]: 'Kurak',
-  [Terrain.Lake]: 'Göl',
-  [Terrain.River]: 'Nehir',
+  [Terrain.Grass]: L('Çayır', 'Meadow'),
+  [Terrain.Forest]: L('Orman', 'Forest'),
+  [Terrain.Mountain]: L('Dağ', 'Mountain'),
+  [Terrain.Swamp]: L('Bataklık', 'Swamp'),
+  [Terrain.Desert]: L('Kurak', 'Arid'),
+  [Terrain.Lake]: L('Göl', 'Lake'),
+  [Terrain.River]: L('Nehir', 'River'),
 }
 const FEATURE_NAMES: Record<number, string> = {
-  [Feature.Road]: 'Ticaret yolu',
-  [Feature.Bridge]: 'Köprü',
-  [Feature.Inn]: 'Han',
-  [Feature.City]: 'Taç başkenti',
+  [Feature.Road]: L('Ticaret yolu', 'Trade road'),
+  [Feature.Bridge]: L('Köprü', 'Bridge'),
+  [Feature.Inn]: L('Han', 'Inn'),
+  [Feature.City]: L('Taç başkenti', 'Crown capital'),
 }
 
 const RULE_NAMES: Record<number, string> = {
-  [TileRule.Free]: 'inşa edilebilir',
-  [TileRule.Blocked]: 'inşa edilemez',
-  [TileRule.DockOnly]: 'yalnızca iskele ve sur',
-  [TileRule.TunnelOnly]: 'yalnızca tünel',
-  [TileRule.TradePostOnly]: 'yalnızca ticaret noktası',
+  [TileRule.Free]: L('inşa edilebilir', 'buildable'),
+  [TileRule.Blocked]: L('inşa edilemez', 'not buildable'),
+  [TileRule.DockOnly]: L('yalnızca iskele ve sur', 'dock and walls only'),
+  [TileRule.TunnelOnly]: L('yalnızca tünel', 'tunnel only'),
+  [TileRule.TradePostOnly]: L('yalnızca ticaret noktası', 'trading post only'),
 }
 
 // What the server answers when it refuses a command (see supabase/functions/command).
 const REFUSALS: Record<string, string> = {
   // The lord at the head of an army (CLAUDE.md §8.2.1).
-  king_council: 'Naipler konseyi yönetirken kral orduya geçemez',
-  king_queen: 'Kral ordunun başına geçmeden önce sarayda bir kraliçe olmalı',
-  king_son: 'Kral ordunun başına geçmeden önce bir oğlu olmalı',
-  king_leading: 'Kral zaten başka bir orduya komuta ediyor',
-  king_battle: 'Ordu savaşta',
-  king_palace: 'Ordu sarayın önünde durmalı',
-  king_led: 'Kral zaten bu ordunun başında',
-  king_none: 'Bu ordunun başında kral yok',
-  step: 'Bu miktar seçilemez',
-  tradeWait: 'Satış miktarı az önce değişti; biraz bekle',
-  innPost: 'Önce bir ticaret noktası kur',
-  innLevel: 'Hana tüccar göndermek için ticaret noktası 2. seviye olmalı',
-  innWait: 'Tüccarın yolu az önce değişti; biraz bekle',
-  innFar: 'Bu hanın pastasında payın yok denecek kadar az; yakınında bir kasaba al',
-  full: 'Lobide yer kalmadı',
-  taken: 'Bu yer artık başka bir lordluğa yakın; yeni yer keşfet',
-  color: 'Bu renk başka bir lordun; başka bir renk seç',
-  conflict: 'Lordluk başka yerden değişti, yeniden dene',
-  server: 'Sunucuya ulaşılamadı',
-  relation: 'İlişkiniz bunun için uygun değil',
-  already: 'Bu zaten var ya da yolda',
-  war: 'Savaştayken olmaz',
-  cooldown: 'Biraz bekle, elçin yeni döndü',
-  spies: 'Evde casusun yok',
-  soldiers: 'Yeterli asker yok',
-  armyLocked: 'Garnizon bir felaketle uğraşıyor; ordu bir süre sefere çıkamaz',
-  armies: 'Sahada en fazla 2 ordun olabilir',
-  battle: 'Ordu savaşta; emir alamaz',
-  route: 'Oraya yol yok',
-  far: 'Ordular birleşmek için çok uzak',
-  people: 'Yeterli gönüllü ya da nüfus yok',
-  building: 'Bunun için gereken bina yok',
-  have: 'Zaten var',
-  none: 'Yapılacak bir şey yok',
-  talked: 'Haraççıyla zaten konuştun',
-  target: 'Lord bulunamadı',
-  founded: 'Önce lordluğunu kur',
-  prison: 'Kraliçe kaçırmak için önce hapishane kur (2. seviye saray)',
-  town: 'Bu kasaba o lordun elinde değil',
-  sworn: 'Zaten bir taç krallığına biat ettin; sezon boyunca değişmez',
-  early: 'Şu an uygun değil: taçlar seninle lordluğun biraz büyüyünce ilgilenecek',
-  grown: 'Bu çocuk artık reşit; eğitimi tamamlandı',
-  named: 'Bu çocuğun adı zaten konuldu',
-  council: 'Naipler konseyi yönetirken bu karar verilemez',
+  king_council: L('Naipler konseyi yönetirken kral orduya geçemez', 'The king cannot join an army while the regency council rules'),
+  king_queen: L('Kral ordunun başına geçmeden önce sarayda bir kraliçe olmalı', 'The king cannot take command unless there is a queen at the palace'),
+  king_son: L('Kral ordunun başına geçmeden önce bir oğlu olmalı', 'The king cannot take command until he has a son'),
+  king_leading: L('Kral zaten başka bir orduya komuta ediyor', 'The king already commands another army'),
+  king_battle: L('Ordu savaşta', 'The army is in battle'),
+  king_palace: L('Ordu sarayın önünde durmalı', 'The army must stand before the palace'),
+  king_led: L('Kral zaten bu ordunun başında', 'The king already leads this army'),
+  king_none: L('Bu ordunun başında kral yok', 'The king does not lead this army'),
+  step: L('Bu miktar seçilemez', 'This amount cannot be chosen'),
+  tradeWait: L('Satış miktarı az önce değişti; biraz bekle', 'The sale amount just changed; wait a little'),
+  innPost: L('Önce bir ticaret noktası kur', 'Build a trading post first'),
+  innLevel: L('Hana tüccar göndermek için ticaret noktası 2. seviye olmalı', 'Your trading post must be level 2 to send the merchant to an inn'),
+  innWait: L('Tüccarın yolu az önce değişti; biraz bekle', 'The merchant\'s route just changed; wait a little'),
+  innFar: L('Bu hanın pastasında payın yok denecek kadar az; yakınında bir kasaba al', 'Your share of this inn\'s pie is next to nothing; take a town near it'),
+  full: L('Lobide yer kalmadı', 'The lobby is full'),
+  taken: L('Bu yer artık başka bir lordluğa yakın; yeni yer keşfet', 'This site is now too close to another lordship; find a new one'),
+  color: L('Bu renk başka bir lordun; başka bir renk seç', 'This colour belongs to another lord; pick another'),
+  conflict: L('Lordluk başka yerden değişti, yeniden dene', 'The lordship changed elsewhere; try again'),
+  server: L('Sunucuya ulaşılamadı', 'Could not reach the server'),
+  relation: L('İlişkiniz bunun için uygun değil', 'Your relations do not allow this'),
+  already: L('Bu zaten var ya da yolda', 'This already exists or is on its way'),
+  war: L('Savaştayken olmaz', 'Not while at war'),
+  cooldown: L('Biraz bekle, elçin yeni döndü', 'Wait a little, your envoy has only just returned'),
+  spies: L('Evde casusun yok', 'You have no spy at home'),
+  soldiers: L('Yeterli asker yok', 'Not enough soldiers'),
+  armyLocked: L('Garnizon bir felaketle uğraşıyor; ordu bir süre sefere çıkamaz', 'The garrison is dealing with a disaster; the army cannot march for a while'),
+  armies: L('Sahada en fazla 2 ordun olabilir', 'You can have at most 2 armies in the field'),
+  battle: L('Ordu savaşta; emir alamaz', 'The army is in battle; it cannot take orders'),
+  route: L('Oraya yol yok', 'There is no way there'),
+  far: L('Ordular birleşmek için çok uzak', 'The armies are too far apart to merge'),
+  people: L('Yeterli gönüllü ya da nüfus yok', 'Not enough volunteers or people'),
+  building: L('Bunun için gereken bina yok', 'You lack the building needed for this'),
+  have: L('Zaten var', 'You already have this'),
+  none: L('Yapılacak bir şey yok', 'Nothing to do'),
+  talked: L('Haraççıyla zaten konuştun', 'You have already talked to the tribute collector'),
+  target: L('Lord bulunamadı', 'Lord not found'),
+  founded: L('Önce lordluğunu kur', 'Found your lordship first'),
+  prison: L('Kraliçe kaçırmak için önce hapishane kur (2. seviye saray)', 'Build a prison first to kidnap a queen (level 2 palace)'),
+  town: L('Bu kasaba o lordun elinde değil', 'That lord does not hold this town'),
+  sworn: L('Zaten bir taç krallığına biat ettin; sezon boyunca değişmez', 'You have already sworn fealty to a crown kingdom; it cannot change this season'),
+  early: L('Şu an uygun değil: taçlar seninle lordluğun biraz büyüyünce ilgilenecek', 'Not now: the crowns will take an interest once your lordship has grown a little'),
+  grown: L('Bu çocuk artık reşit; eğitimi tamamlandı', 'This child is of age now; their education is complete'),
+  named: L('Bu çocuğun adı zaten konuldu', 'This child has already been named'),
+  council: L('Naipler konseyi yönetirken bu karar verilemez', 'This cannot be decided while the regency council rules'),
   // The crowns' commissions.
-  done: 'Bu siparişi zaten teslim ettin; sonraki saati bekle',
-  crown: 'Böyle bir taç yok',
+  done: L('Bu siparişi zaten teslim ettin; sonraki saati bekle', 'You have already delivered this order; wait for the next hour'),
+  crown: L('Böyle bir taç yok', 'No such crown'),
   // The navy (CLAUDE.md §8.5).
-  count: 'Geçersiz gemi sayısı',
-  crew: 'Gemilere tayfa yok: asker havuzu boş',
-  fleet: 'Böyle bir filo yok',
-  fleets: 'En fazla 2 filon olabilir',
-  ships: 'Önce gemi seç',
-  away: 'Filo uzakta; önce geri çağır',
-  dock: 'Önce iskeleni kur',
-  cargo: 'Filoda yük taşıyacak gemi yok',
-  warships: 'Bunun için savaş gemisi (kadırga ya da çektiri) gerekir',
-  blockaded: 'İskelen abluka altında',
-  notBlockaded: 'İskelen abluka altında değil',
-  city: 'Bir liman seç',
-  good: 'Taşınacak malı seç',
-  engaged: 'Filo vardı, çarpışma başlamak üzere; şimdi geri çağrılamaz',
-  besieged: 'Kuşatma altındaki kasaba serbest bırakılamaz',
+  count: L('Geçersiz gemi sayısı', 'Invalid number of ships'),
+  crew: L('Gemilere tayfa yok: asker havuzu boş', 'No crew for the ships: the manpower pool is empty'),
+  fleet: L('Böyle bir filo yok', 'No such fleet'),
+  fleets: L('En fazla 2 filon olabilir', 'You can have at most 2 fleets'),
+  ships: L('Önce gemi seç', 'Pick ships first'),
+  away: L('Filo uzakta; önce geri çağır', 'The fleet is away; recall it first'),
+  dock: L('Önce iskeleni kur', 'Build your dock first'),
+  cargo: L('Filoda yük taşıyacak gemi yok', 'The fleet has no ship to carry cargo'),
+  warships: L('Bunun için savaş gemisi (kadırga ya da çektiri) gerekir', 'This needs warships (galleys or raiders)'),
+  blockaded: L('İskelen abluka altında', 'Your dock is under blockade'),
+  notBlockaded: L('İskelen abluka altında değil', 'Your dock is not under blockade'),
+  city: L('Bir liman seç', 'Pick a harbour'),
+  good: L('Taşınacak malı seç', 'Pick the good to carry'),
+  engaged: L('Filo vardı, çarpışma başlamak üzere; şimdi geri çağrılamaz', 'The fleet has arrived and the fighting is about to start; it cannot be recalled now'),
+  besieged: L('Kuşatma altındaki kasaba serbest bırakılamaz', 'A town under siege cannot be released'),
   // The liege's royal requests (CLAUDE.md §7.8).
-  unsworn: 'Önce bir taç krallığına biat et',
-  noRequest: 'Kraliyet elçisinin bir isteği yok',
-  expired: 'Bu isteğin süresi doldu',
-  answered: 'Bu isteğe zaten cevap verdin',
-  declined: 'Bu isteği geri çevirdin',
-  delivered: 'Bu isteği zaten teslim ettin',
-  short: 'İstenen miktar elinde yok',
+  unsworn: L('Önce bir taç krallığına biat et', 'Swear fealty to a crown kingdom first'),
+  noRequest: L('Kraliyet elçisinin bir isteği yok', 'The royal envoy has no request'),
+  expired: L('Bu isteğin süresi doldu', 'This request has expired'),
+  answered: L('Bu isteğe zaten cevap verdin', 'You have already answered this request'),
+  declined: L('Bu isteği geri çevirdin', 'You turned this request down'),
+  delivered: L('Bu isteği zaten teslim ettin', 'You have already delivered this request'),
+  short: L('İstenen miktar elinde yok', 'You do not have the amount asked for'),
   // Town markets (CLAUDE.md §8.4).
-  gate: 'Ordun kasabanın kapısında değil',
-  stock: 'Kasabanın elinde o kadar mal yok',
-  carry: 'Ordun bu kadar yük taşıyamaz',
-  rebels: 'Kasabada ayaklanma var; önce asileri bastır',
-  townBesieged: 'Kasaba kuşatma altında; pazarı kapalı',
+  gate: L('Ordun kasabanın kapısında değil', 'Your army is not at the town\'s gate'),
+  stock: L('Kasabanın elinde o kadar mal yok', 'The town does not have that many goods'),
+  carry: L('Ordun bu kadar yük taşıyamaz', 'Your army cannot carry that much'),
+  rebels: L('Kasabada ayaklanma var; önce asileri bastır', 'The town is in revolt; put down the rebels first'),
+  townBesieged: L('Kasaba kuşatma altında; pazarı kapalı', 'The town is under siege; its market is closed'),
   // Bandits and pirates (CLAUDE.md §7.9, §8.5).
-  outlaw: 'Bu çete dağıtılmış',
-  cave: 'Bu mağarayı bilmiyorsun ya da klan artık orada değil',
-  chasing: 'Zaten peşinde (ya da emri yolda)',
-  boat: 'Bu korsan teknesi batırılmış',
+  outlaw: L('Bu çete dağıtılmış', 'This band has been scattered'),
+  cave: L('Bu mağarayı bilmiyorsun ya da klan artık orada değil', 'You do not know this cave, or the clan is no longer there'),
+  chasing: L('Zaten peşinde (ya da emri yolda)', 'Already in pursuit (or the order is on its way)'),
+  boat: L('Bu korsan teknesi batırılmış', 'This pirate boat has been sunk'),
   // The lord's house (CLAUDE.md §9.1.1).
-  role_none: 'Bu hanedan üyesine görev verilemez',
-  role_age: `Görev için en az ${balance.dynasty.intrigue.roles.minAge} yaşında olmalı`,
-  role_sex: 'Devriyenin başına bir prens geçebilir',
-  role_liege: 'Önce bir taç krallığına biat et',
-  role_town: 'Bu kasaba senin elinde değil',
-  role_taken: 'Bu görevde zaten başka biri var',
-  role_rejected: 'Bu görev zaten onda',
-  marry_none: 'Bu prenses sarayda değil',
-  marry_sex: 'Yalnızca prensesler evlendirilebilir',
-  marry_age: 'Prenses henüz reşit değil',
-  marry_liege: 'Önce bir taç krallığına biat et',
-  marry_cost: 'Çeyiz için yeterli altın yok',
-  marry_town: 'Bu kasaba senin elinde değil (ya da kimseye ait olmayan bir kasaba değil)',
-  aid_none: 'Ortada bir taht davacısı yok',
-  aid_liege: 'Bağlı olduğun bir taç yok',
-  aid_asked: 'Bunu taçtan zaten istedin',
+  role_none: L('Bu hanedan üyesine görev verilemez', 'This member of the house cannot be given a post'),
+  role_age: L(`Görev için en az ${balance.dynasty.intrigue.roles.minAge} yaşında olmalı`, `Must be at least ${balance.dynasty.intrigue.roles.minAge} to hold a post`),
+  role_sex: L('Devriyenin başına bir prens geçebilir', 'Only a prince can lead the patrol'),
+  role_liege: L('Önce bir taç krallığına biat et', 'Swear fealty to a crown kingdom first'),
+  role_town: L('Bu kasaba senin elinde değil', 'You do not hold this town'),
+  role_taken: L('Bu görevde zaten başka biri var', 'Someone else already holds this post'),
+  role_rejected: L('Bu görev zaten onda', 'They already hold this post'),
+  marry_none: L('Bu prenses sarayda değil', 'This princess is not at the palace'),
+  marry_sex: L('Yalnızca prensesler evlendirilebilir', 'Only princesses can be married off'),
+  marry_age: L('Prenses henüz reşit değil', 'The princess is not yet of age'),
+  marry_liege: L('Önce bir taç krallığına biat et', 'Swear fealty to a crown kingdom first'),
+  marry_cost: L('Çeyiz için yeterli altın yok', 'Not enough gold for the dowry'),
+  marry_town: L('Bu kasaba senin elinde değil (ya da kimseye ait olmayan bir kasaba değil)', 'You do not hold this town (nor is it an unclaimed town)'),
+  aid_none: L('Ortada bir taht davacısı yok', 'There is no pretender'),
+  aid_liege: L('Bağlı olduğun bir taç yok', 'You are not sworn to a crown'),
+  aid_asked: L('Bunu taçtan zaten istedin', 'You have already asked the crown for this'),
 }
 const refusal = (e: unknown) => {
   const code = e instanceof CommandError ? e.message : 'server'
-  return REFUSALS[code] ?? BUILD_ERRORS[code as BuildError] ?? 'Komut reddedildi'
+  return REFUSALS[code] ?? BUILD_ERRORS[code as BuildError] ?? L('Komut reddedildi', 'Command refused')
 }
 
 // News that goes against the player: kept under the journal's "Önemli" tab.
@@ -338,17 +339,17 @@ const colorOf = (color: string | null | undefined) => parseInt((KINGDOM_COLORS[c
 const touchOnly = typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches
 
 const BUILD_ERRORS: Record<BuildError, string> = {
-  palace: 'Önce sarayını yerleştir',
-  unique: 'Bundan yalnızca bir tane kurulabilir',
-  cost: 'Yetersiz kaynak',
-  queue: 'İnşaat kuyruğu dolu',
-  spot: 'Buraya inşa edilemez',
-  top: 'En yüksek seviyede',
-  busy: 'Bina şu an inşaatta',
-  locked: 'Önce sarayı yükselt (bu yapı daha yüksek seviye saray ister)',
-  limit: 'Bu yapının sınırı dolu (evlerde nüfus sınırı); sarayı yükselt',
-  liege: 'Sarayı yükseltmek için önce bir taç krallığına biat et (Saray sekmesi → Bağlılık)',
-  queen: 'Sarayı 3. seviyeye yükseltmek için sarayda bir kraliçe olmalı (Halk sekmesi → Kraliçe)',
+  palace: L('Önce sarayını yerleştir', 'Place your palace first'),
+  unique: L('Bundan yalnızca bir tane kurulabilir', 'Only one of these can be built'),
+  cost: L('Yetersiz kaynak', 'Not enough resources'),
+  queue: L('İnşaat kuyruğu dolu', 'The build queue is full'),
+  spot: L('Buraya inşa edilemez', 'Cannot build here'),
+  top: L('En yüksek seviyede', 'At the highest level'),
+  busy: L('Bina şu an inşaatta', 'The building is under construction'),
+  locked: L('Önce sarayı yükselt (bu yapı daha yüksek seviye saray ister)', 'Upgrade the palace first (this building needs a higher-level palace)'),
+  limit: L('Bu yapının sınırı dolu (evlerde nüfus sınırı); sarayı yükselt', 'This building\'s limit is reached (for houses, the population cap); upgrade the palace'),
+  liege: L('Sarayı yükseltmek için önce bir taç krallığına biat et (Saray sekmesi → Bağlılık)', 'To upgrade the palace, first swear fealty to a crown kingdom (Palace tab → Allegiance)'),
+  queen: L('Sarayı 3. seviyeye yükseltmek için sarayda bir kraliçe olmalı (Halk sekmesi → Kraliçe)', 'To raise the palace to level 3 there must be a queen at the palace (People tab → Queen)'),
 }
 
 // Where something walking a path from `departAt` to `arriveAt` (evenly along its length) is at `t`.
@@ -809,7 +810,7 @@ function App({
     try {
       await postChat(lobby.id, mine.id, body)
     } catch {
-      setToast('Mesaj gönderilemedi')
+      setToast(L('Mesaj gönderilemedi', 'The message could not be sent'))
       throw new Error('chat')
     }
   }
@@ -948,15 +949,15 @@ function App({
         if (event.kind === 'trade' && palace) {
           view.float(
             center(palace),
-            event.sold > 0 ? `+${event.gold} altın` : event.full ? 'Hazine dolu: tüccar bekliyor' : event.walledIn ? 'Tüccar surdan çıkamıyor: kapı yap' : `Satacak ${RESOURCE_NAMES[event.good].toLowerCase()} yok`,
+            event.sold > 0 ? L(`+${event.gold} altın`, `+${event.gold} gold`) : event.full ? L('Hazine dolu: tüccar bekliyor', 'Treasury full: the merchant waits') : event.walledIn ? L('Tüccar surdan çıkamıyor: kapı yap', 'The merchant cannot get past the walls: build a gate') : L(`Satacak ${RESOURCE_NAMES[event.good].toLowerCase()} yok`, `No ${RESOURCE_NAMES[event.good].toLowerCase()} to sell`),
             event.sold > 0 ? 0xf2d16b : event.full ? 0xf2d16b : 0xff7a6a,
           )
         } else if (event.kind === 'built' && event.building.kind !== 'road') {
-          view.float(center(event.building), `${BUILDING_NAMES[event.building.kind]} tamamlandı`, 0x9ee6a0)
+          view.float(center(event.building), L(`${BUILDING_NAMES[event.building.kind]} tamamlandı`, `${BUILDING_NAMES[event.building.kind]} completed`), 0x9ee6a0)
         } else if (event.kind === 'goal' && palace) {
-          view.float(center(palace), `★ ${GOAL_TEXTS[event.track]?.badges[event.tier - 1] ?? 'Hedef'}`, 0xf2d16b)
+          view.float(center(palace), `★ ${GOAL_TEXTS[event.track]?.badges[event.tier - 1] ?? L('Hedef', 'Goal')}`, 0xf2d16b)
         } else if (event.kind === 'expedition' && palace && !event.expedition.result?.recalled) {
-          view.float(center(palace), `${EXPEDITION_TEXTS[event.expedition.kind]?.short ?? 'Sefer'} döndü`, 0x9ee6a0)
+          view.float(center(palace), L(`${EXPEDITION_TEXTS[event.expedition.kind]?.short ?? 'Sefer'} döndü`, `${EXPEDITION_TEXTS[event.expedition.kind]?.short ?? 'Expedition'} · back home`), 0x9ee6a0)
         }
       }
     }
@@ -1053,7 +1054,7 @@ function App({
       layer.towns.map((t) => ({
         at: townCenter(t),
         rect: { x: t.x, y: t.y, size: balance.towns.size },
-        name: t.owner === null ? t.name : `${t.name} · ${t.owner === mine?.id ? (shown?.name ?? 'Senin') : (rivals.find((r) => r.id === t.owner)?.name ?? '?')}`,
+        name: t.owner === null ? t.name : `${t.name} · ${t.owner === mine?.id ? (shown?.name ?? L('Senin', 'Yours')) : (rivals.find((r) => r.id === t.owner)?.name ?? '?')}`,
         color: colorFor(t.owner),
         siege: t.siege ? { startedAt: t.siege.startedAt, endsAt: t.siege.endsAt, color: colorFor(t.siege.kingdom) } : null,
       })).concat(
@@ -1061,7 +1062,7 @@ function App({
         camps.map((c) => ({
           at: c.at,
           rect: { x: Math.round(c.at.x) - 3, y: Math.round(c.at.y) - 3, size: 7 },
-          name: `${c.name} karargâhı · ${c.lord === mine?.id ? (shown?.name ?? '') : (rivals.find((r) => r.id === c.lord)?.name ?? '?')} taht davacısı`,
+          name: L(`${c.name} karargâhı · ${c.lord === mine?.id ? (shown?.name ?? '') : (rivals.find((r) => r.id === c.lord)?.name ?? '?')} taht davacısı`, `${c.name}'s camp · pretender to ${c.lord === mine?.id ? (shown?.name ?? '') : (rivals.find((r) => r.id === c.lord)?.name ?? '?')}`),
           color: 0x8a8a90,
           siege: c.marching ? null : { startedAt: c.since, endsAt: c.marchAt, color: 0x3a3a40 },
         })),
@@ -1089,7 +1090,7 @@ function App({
       const palace = palaceOf(battle.besieged)
       if (!palace) continue
       const by = battle.attackers[0]?.kingdom
-      marks.push({ key: `s:${battle.id}`, at: middle(palace), lift: 110, startedAt: Date.parse(battle.started_at), endsAt: Date.parse(battle.ends_at), color: by ? colorFor(by) : 0xc0392b, label: 'Kuşatma' })
+      marks.push({ key: `s:${battle.id}`, at: middle(palace), lift: 110, startedAt: Date.parse(battle.started_at), endsAt: Date.parse(battle.ends_at), color: by ? colorFor(by) : 0xc0392b, label: L('Kuşatma', 'Siege') })
     }
     // The shield runs longer behind a citadel (CLAUDE.md §9.8).
     const spanOf = (id: number) => {
@@ -1099,7 +1100,7 @@ function App({
     for (const [id, until] of [[mine?.id, kingdom?.shieldUntil], ...rivals.map((r) => [r.id, r.shield_until])] as [number | undefined, number | null | undefined][]) {
       if (id === undefined || !until || until <= time) continue
       const palace = palaceOf(id)
-      if (palace) marks.push({ key: `k:${id}`, at: middle(palace), lift: 110, startedAt: until - spanOf(id), endsAt: until, color: 0x8fc4e8, label: 'Kuşatma kalkanı' })
+      if (palace) marks.push({ key: `k:${id}`, at: middle(palace), lift: 110, startedAt: until - spanOf(id), endsAt: until, color: 0x8fc4e8, label: L('Kuşatma kalkanı', 'Siege shield') })
     }
     view.setProgress(marks)
   }, [view, worksKey, siegeKey, shieldKey])
@@ -1327,7 +1328,7 @@ function App({
   const sendArmy = (army: number, tile: Point, siege = false) => {
     act({ type: 'army', army, order: { kind: 'move', x: Math.floor(tile.x), y: Math.floor(tile.y), ...(siege && { siege: true }) } }).then((r) => {
       const at = (r as { at?: string } | undefined)?.at
-      if (at && Date.parse(at) > serverNow() + 5000) setToast('Elçi yola çıktı; emir orduya ulaşınca uygulanacak')
+      if (at && Date.parse(at) > serverNow() + 5000) setToast(L('Elçi yola çıktı; emir orduya ulaşınca uygulanacak', 'The envoy is on his way; the order takes effect when he reaches the army'))
     })
     setAiming(null)
   }
@@ -1352,9 +1353,9 @@ function App({
       const id = fleetFocus.fleet
       const to = { x: tile.x + 0.5, y: tile.y + 0.5 }
       const why = sailError(view.world, current, id, to, serverNow())
-      if (why === 'land') return setToast('Gemiler yalnız suda yüzer: bir nehre ya da göle tıkla')
-      if (why === 'route') return setToast('Oraya su yolu yok')
-      if (why) return setToast(why === 'away' ? 'Filo bir görevde; önce limana çağır' : 'Filo gönderilemedi')
+      if (why === 'land') return setToast(L('Gemiler yalnız suda yüzer: bir nehre ya da göle tıkla', 'Ships only sail on water: click a river or a lake'))
+      if (why === 'route') return setToast(L('Oraya su yolu yok', 'There is no waterway there'))
+      if (why) return setToast(why === 'away' ? L('Filo bir görevde; önce limana çağır', 'The fleet is on a mission; call it back to harbour first') : L('Filo gönderilemedi', 'The fleet could not be sent'))
       play('click')
       view.markMove(to, 0x7ad0ff)
       act({ type: 'fleet', action: 'sail', fleet: id, x: to.x, y: to.y })
@@ -1362,7 +1363,7 @@ function App({
     }
     const army = armyFocus === null ? undefined : layer.armies.find((a) => a.id === armyFocus && a.kingdom_id === mine.id)
     if (!army) return
-    if (army.status === 'battle') return setToast('Ordu muharebede; şimdi emir alamaz')
+    if (army.status === 'battle') return setToast(L('Ordu muharebede; şimdi emir alamaz', 'The army is in battle; it cannot take orders now'))
     const snap = snapAt(tile)
     play('click')
     view.markMove({ x: tile.x + 0.5, y: tile.y + 0.5 }, 0xf2d16b)
@@ -1378,11 +1379,11 @@ function App({
       if (!view || !current) return
       const to = { x: tile.x + 0.5, y: tile.y + 0.5 }
       const why = sailError(view.world, current, sailing, to, serverNow())
-      if (why === 'land') return setToast('Gemiler yalnız suda yüzer: bir nehre ya da göle tıkla')
-      if (why === 'route') return setToast('Oraya su yolu yok')
+      if (why === 'land') return setToast(L('Gemiler yalnız suda yüzer: bir nehre ya da göle tıkla', 'Ships only sail on water: click a river or a lake'))
+      if (why === 'route') return setToast(L('Oraya su yolu yok', 'There is no waterway there'))
       if (why) {
         setSailing(null)
-        return setToast(why === 'away' ? 'Filo bir görevde; önce limana çağır' : 'Filo gönderilemedi')
+        return setToast(why === 'away' ? L('Filo bir görevde; önce limana çağır', 'The fleet is on a mission; call it back to harbour first') : L('Filo gönderilemedi', 'The fleet could not be sent'))
       }
       play('click')
       act({ type: 'fleet', action: 'sail', fleet: sailing, x: to.x, y: to.y })
@@ -1480,11 +1481,11 @@ function App({
     // Tearing down: every building clicked joins the plan.
     if (tool === 'demolish') {
       if (building === undefined || !current) return
-      if (!current.buildings.some((b) => b.id === building)) return setToast('Planlanan yapıyı plan çubuğundaki Geri al ile kaldır')
+      if (!current.buildings.some((b) => b.id === building)) return setToast(L('Planlanan yapıyı plan çubuğundaki Geri al ile kaldır', 'Remove a planned building with Undo on the plan bar'))
       play('click')
       // A second click takes the mark off.
       if (demolishing.has(building)) return setPlan((steps) => steps.filter((s) => !(s.type === 'demolish' && s.id === building)))
-      if (!canDemolish(current, building)) return setToast('Saray ve ticaret noktası yıkılamaz')
+      if (!canDemolish(current, building)) return setToast(L('Saray ve ticaret noktası yıkılamaz', 'The palace and the trading post cannot be torn down'))
       planDemolish(building)
       return
     }
@@ -1644,7 +1645,7 @@ function App({
     addToPlan(placeable.map((p): PlanStep => ({ type: 'build', kind, ...p })))
   }
   // Steps join the plan up to the most one command carries (balance.economy.maxPlan); the rest wait for the next plan.
-  const planFull = `Plan en fazla ${balance.economy.maxPlan} adım alır; önce onu onayla`
+  const planFull = L(`Plan en fazla ${balance.economy.maxPlan} adım alır; önce onu onayla`, `A plan takes at most ${balance.economy.maxPlan} steps; confirm it first`)
   const addToPlan = (steps: PlanStep[]) => {
     const room = balance.economy.maxPlan - plan.length
     if (room < steps.length) setToast(planFull)
@@ -1657,17 +1658,17 @@ function App({
     const { kingdom: predicted, done, skipped } = applyPlan(view.world, current, stage, plan, serverNow())
     setPlan([])
     cancelPlacing()
-    if (!done) return setToast('Plandaki hiçbir adım şu an yapılamıyor')
+    if (!done) return setToast(L('Plandaki hiçbir adım şu an yapılamıyor', 'None of the plan\'s steps can be done right now'))
     play('start')
     command({ type: 'plan', steps: plan }, predicted)
-    if (skipped > 0) setToast(`${skipped} adım yapılamadı (kaynak, sınır ya da yer)`)
+    if (skipped > 0) setToast(L(`${skipped} adım yapılamadı (kaynak, sınır ya da yer)`, `${skipped} step${skipped === 1 ? '' : 's'} could not be done (resources, limit or space)`))
   }
   // Picks a building up to be moved; moving it again replaces the move already planned.
   const pickUp = (id: number) => {
     const current = kingdomRef.current
     const b = current?.buildings.find((x) => x.id === id)
-    if (!b) return setToast('Planlanan yapıyı plan çubuğundaki Geri al ile kaldır')
-    if (!movable(b)) return setToast('Saray, ticaret noktası, iskele, sur ve kapı taşınamaz')
+    if (!b) return setToast(L('Planlanan yapıyı plan çubuğundaki Geri al ile kaldır', 'Remove a planned building with Undo on the plan bar'))
+    if (!movable(b)) return setToast(L('Saray, ticaret noktası, iskele, sur ve kapı taşınamaz', 'The palace, trading post, dock, walls and gates cannot be moved'))
     if (b.doneAt > serverNow()) return setToast(BUILD_ERRORS.busy)
     setPlan((steps) => steps.filter((s) => !((s.type === 'move' || s.type === 'demolish') && s.id === id)))
     setMoving(id)
@@ -1771,7 +1772,7 @@ function App({
   const kingdoms: KingdomInfo[] = useMemo(
     () => [
       ...(kingdom
-        ? [{ id: mine.id, name: kingdom.name ?? 'Lordluğun', color: kingdom.color ?? null, username: null, site: kingdom.site, palaceAt: palaceCenter(kingdom.buildings), queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null, score: scoreOf(kingdom, now), tradeGood: kingdom.trade.idle ? null : kingdom.trade.good, tradeLedger: kingdom.trade.ledger ?? null, tradeDamaged: !!kingdom.trade.damaged, liege: kingdom.liege ?? null, blockade: kingdom.blockade ?? null }]
+        ? [{ id: mine.id, name: kingdom.name ?? L('Lordluğun', 'Your lordship'), color: kingdom.color ?? null, username: null, site: kingdom.site, palaceAt: palaceCenter(kingdom.buildings), queen: !!kingdom.queen, palace: palaceOf(kingdom.buildings), shieldUntil: kingdom.shieldUntil ?? null, score: scoreOf(kingdom, now), tradeGood: kingdom.trade.idle ? null : kingdom.trade.good, tradeLedger: kingdom.trade.ledger ?? null, tradeDamaged: !!kingdom.trade.damaged, liege: kingdom.liege ?? null, blockade: kingdom.blockade ?? null }]
         : []),
       ...rivals.map((r) => ({ id: r.id, name: r.name, color: r.color, username: r.username, site: r.site, queen: r.queen, palace: palaceOf(r.buildings), seenAt: r.seen_at, buildings: r.buildings, shieldUntil: r.shield_until, score: r.score ?? null, tradeGood: r.trade_good ?? null, tradeLedger: r.trade_ledger ?? null, tradeDamaged: !!r.trade_damaged, liege: r.liege ?? null, navy: r.navy ?? null, blockade: r.blockade ?? null })),
     ],
@@ -1902,7 +1903,7 @@ function App({
           const back = t >= arrive + wait
           const [path, departAt, arriveAt] = back ? [[...route].reverse(), arrive + wait, arrive + wait + ride] : [route, arrive - ride, arrive]
           crownColumns.current.set(-(TRIBUTE_ID + lord.id * 8 + crown), { kind: 'tribute', crown, lord: back ? null : lord.id, lordName: back ? null : lordNameOf(lord.id) })
-          out.push({ id: -(TRIBUTE_ID + lord.id * 8 + crown), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 3, catapult: false, train: 2, size: 1.3, trainAhead: back, gather, tag: `${cityInfo(view.world, crown).capital} haraççıları`, tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
+          out.push({ id: -(TRIBUTE_ID + lord.id * 8 + crown), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 3, catapult: false, train: 2, size: 1.3, trainAhead: back, gather, tag: L(`${cityInfo(view.world, crown).capital} haraççıları`, `${cityInfo(view.world, crown).capital} tribute collectors`), tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
         }
       }
     }
@@ -1924,7 +1925,7 @@ function App({
         const back = t >= times.leave
         const [path, departAt, arriveAt] = back ? [[...route].reverse(), times.leave, times.home] : [route, times.start, times.arrive]
         crownColumns.current.set(-(crown * 16 + p + 1), { kind: 'patrol', crown, lord: back ? null : target, lordName: back ? null : lordNameOf(target) })
-        out.push({ id: -(crown * 16 + p + 1), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 4, catapult: false, train: 5, size: 1.6, trainAhead: back, gather, tag: `${cityInfo(view.world, crown).capital} devriyesi`, tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
+        out.push({ id: -(crown * 16 + p + 1), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 4, catapult: false, train: 5, size: 1.6, trainAhead: back, gather, tag: L(`${cityInfo(view.world, crown).capital} devriyesi`, `${cityInfo(view.world, crown).capital} patrol`), tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
       }
     })
     if (patrolRoutes.current.size > 256) patrolRoutes.current.clear()
@@ -1964,7 +1965,7 @@ function App({
         .map((t) => {
           const gate = townGate(t)
           const since = t.rebels!.since
-          return { id: -(REBELS_ID + t.id), color: REBEL_COLOR, own: false, soldiers: null, path: [{ x: gate.x + 1.4, y: gate.y + 0.4 }], departAt: since, arriveAt: since, battle: !!t.rebels!.battle, selected: false, figures: Math.min(20, Math.max(2, Math.ceil(t.rebels!.count / 2))), catapult: false, tag: `${t.name} asileri`, tagOutlaw: true }
+          return { id: -(REBELS_ID + t.id), color: REBEL_COLOR, own: false, soldiers: null, path: [{ x: gate.x + 1.4, y: gate.y + 0.4 }], departAt: since, arriveAt: since, battle: !!t.rebels!.battle, selected: false, figures: Math.min(20, Math.max(2, Math.ceil(t.rebels!.count / 2))), catapult: false, tag: L(`${t.name} asileri`, `${t.name} rebels`), tagOutlaw: true }
         }),
     [layer.towns],
   )
@@ -2002,7 +2003,7 @@ function App({
       const cave = trail?.cave !== undefined && view ? caveSpots(view.world, view.world.seed)[trail.cave] : undefined
       if (!cave) continue
       const fight = clan.battle !== null ? layer.battles.find((x) => x.id === clan.battle && !x.resolved) : undefined
-      out.push({ id: -(CAVE_ID + clan.slot), color: BANDIT_COLOR, own: false, soldiers: null, path: [{ x: cave.front.x - cave.dx * 0.15, y: cave.front.y - cave.dy * 0.15 }], departAt: t, arriveAt: t, battle: !!fight, selected: false, figures: 4, catapult: false, tag: `${clan.name} · mağara`, tagOutlaw: true })
+      out.push({ id: -(CAVE_ID + clan.slot), color: BANDIT_COLOR, own: false, soldiers: null, path: [{ x: cave.front.x - cave.dx * 0.15, y: cave.front.y - cave.dy * 0.15 }], departAt: t, arriveAt: t, battle: !!fight, selected: false, figures: 4, catapult: false, tag: L(`${clan.name} · mağara`, `${clan.name} · cave`), tagOutlaw: true })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2030,24 +2031,24 @@ function App({
     const mid = (b: { x: number; y: number; size: number }) => ({ x: b.x + b.size / 2, y: b.y + b.size / 2 })
     for (const b of bands) {
       if (!outlawUp(b, t) || !post) continue
-      if (roadHeld(view.world, view.world.seed, [b], mid(post), t).share > 0) out.push({ key: `band${b.idx}`, label: `${b.name} yolunu tutuyor`, at: bandAt(b, t) })
+      if (roadHeld(view.world, view.world.seed, [b], mid(post), t).share > 0) out.push({ key: `band${b.idx}`, label: L(`${b.name} yolunu tutuyor`, `${b.name} holds your road`), at: bandAt(b, t) })
     }
     for (const b of lobbyBoats(view.world, layer.outlaws)) {
       if (!outlawUp(b, t)) continue
       const chasing = kingdom.navy?.fleets.some((f) => f.chase?.boat === b.idx)
-      if (chasing || (dock && seaHeld([b], mid(dock), t).share > 0)) out.push({ key: `boat${b.idx}`, label: chasing ? `Filon ${b.name} peşinde` : `${b.name} sularında`, at: boatAt(b, t).at })
+      if (chasing || (dock && seaHeld([b], mid(dock), t).share > 0)) out.push({ key: `boat${b.idx}`, label: chasing ? L(`Filon ${b.name} peşinde`, `Your fleet is after ${b.name}`) : L(`${b.name} sularında`, `${b.name} in your waters`), at: boatAt(b, t).at })
     }
     // The clans' caves the player has found (CLAUDE.md §7.9.1).
     for (const clan of clansOf(view.world.seed, layer.outlaws)) {
       const trail = trailOf(kingdom.caveTrail, clan)
       const cave = trail?.cave !== undefined ? caveSpots(view.world, view.world.seed)[trail.cave] : undefined
-      if (cave) out.push({ key: `cave${clan.slot}`, label: `${clan.name} mağarası`, at: cave.mouth })
+      if (cave) out.push({ key: `cave${clan.slot}`, label: L(`${clan.name} mağarası`, `Cave of the ${clan.name}`), at: cave.mouth })
     }
     for (const a of layer.armies) {
       const goal = a.goal
       if (a.kingdom_id !== mine.id || goal.kind !== 'chase') continue
       const band = bands.find((b) => b.idx === goal.band)
-      out.push({ key: `chase${a.id}`, label: `Ordun ${band?.name ?? 'yağmacıların'} peşinde`, at: armyAt(a, t) })
+      out.push({ key: `chase${a.id}`, label: L(`Ordun ${band?.name ?? 'yağmacıların'} peşinde`, `Your army is after ${band?.name ?? 'the bandits'}`), at: armyAt(a, t) })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2084,7 +2085,7 @@ function App({
         // The lord at its head (own armies: only while he lives and rules).
         royal: a.kingdom_id === mine.id ? !!kingdomRef.current && leadsArmy(kingdomRef.current, a.led_by, serverNow()) : !!a.royal,
         // Whose it is and how many: exact for the player's own, roughly for the rest (CLAUDE.md §9.7).
-        tag: `${names.get(a.kingdom_id) ?? 'Bir lord'} · ${a.soldiers !== null ? a.soldiers : roughSize(a.figures ?? 3)}`,
+        tag: `${names.get(a.kingdom_id) ?? L('Bir lord', 'A lord')} · ${a.soldiers !== null ? a.soldiers : roughSize(a.figures ?? 3)}`,
         tagColor: colorOf(colors.get(a.kingdom_id)),
       })), ...rebelSquads, ...banditSquads, ...campSquads],
       layer.battles
@@ -2148,7 +2149,7 @@ function App({
           lord: OUTLAW_LORD,
           fleet: b.idx,
           color: 0x2a2226,
-          ...(i === 0 && { tag: `${b.name} · korsan` }),
+          ...(i === 0 && { tag: L(`${b.name} · korsan`, `${b.name} · pirate`) }),
         }))
       })
     // The corsairs riding at anchor before each haven, as many as its people man (fleet HAVEN_FLEET + its index).
@@ -2164,7 +2165,7 @@ function App({
         lord: OUTLAW_LORD,
         fleet: HAVEN_FLEET + h.idx,
         color: 0x2a2226,
-        ...(i === 0 && { tag: h.held ? `${h.name} · ${h.held.name} abluka ediyor` : h.name }),
+        ...(i === 0 && { tag: h.held ? L(`${h.name} · ${h.held.name} abluka ediyor`, `${h.name} · blockaded by ${h.held.name}`) : h.name }),
       })),
     )
     view.setFleets([...fleetShips(view.world, lords), ...pirates, ...moored])
@@ -2187,7 +2188,7 @@ function App({
       if (at > now) continue
       journaled.current.add(n.id)
       const { icon, title, text } = describeNotice(n, online)
-      noteJournal(n.id, at, { icon, title, text: text || undefined, important: noticeHurts(n, kingdom?.name) })
+      noteJournal(n.id, at, { icon, title, text: text || undefined, important: noticeHurts(n, kingdom?.name), src: n })
     }
   })
   // The liege's royal envoy (CLAUDE.md §7.8): the request of the hour opens its dialog once (remembered in this
@@ -2215,14 +2216,14 @@ function App({
     if (!req) return
     const id = (n: number, k: number) => -(n * 4 + k)
     const answer = royalAnswer(kingdom, req.n)
-    if (now < req.endsAt) noteJournal(id(req.n, 1), req.arriveAt, { icon: 'crown', title: 'Kraliyet elçisi geldi', text: `${royalSaying(view.world, req)} (Görevler kutusunda.)` })
-    if (answer?.status === 'delivered') noteJournal(id(req.n, 2), answer.at, { icon: 'chest', title: 'Kraliyet isteği teslim edildi', text: `${fmt(req.units)} ${itemName(req.item)} başkente gitti; taç ${fmt(req.gold)} altın ödedi ve sana minnettar.` })
+    if (now < req.endsAt) noteJournal(id(req.n, 1), req.arriveAt, { icon: 'crown', title: L('Kraliyet elçisi geldi', 'The royal envoy has arrived'), text: L(`${royalSaying(view.world, req)} (Görevler kutusunda.)`, `${royalSaying(view.world, req)} (In the Tasks box.)`) })
+    if (answer?.status === 'delivered') noteJournal(id(req.n, 2), answer.at, { icon: 'chest', title: L('Kraliyet isteği teslim edildi', 'Royal request delivered'), text: L(`${fmt(req.units)} ${itemName(req.item)} başkente gitti; taç ${fmt(req.gold)} altın ödedi ve sana minnettar.`, `${fmt(req.units)} ${itemName(req.item)} went to the capital; the crown paid ${fmt(req.gold)} gold and is grateful to you.`) })
     // The one before (or this one, once over): run out without being handed over.
     const prev = now >= req.endsAt ? req : royalRequest(kingdom, req.arriveAt - 1, layer.market)
     if (!prev || now < prev.endsAt) return
     const was = royalAnswer(kingdom, prev.n)
     if (journal.notices?.includes(id(prev.n, 1)) && (!was || was.status === 'accepted'))
-      noteJournal(id(prev.n, 3), prev.endsAt, { icon: 'warn', title: 'Kraliyet isteği yetişmedi', text: `${fmt(prev.units)} ${itemName(prev.item)} zamanında gönderilemedi; elçi eli boş döndü.` })
+      noteJournal(id(prev.n, 3), prev.endsAt, { icon: 'warn', title: L('Kraliyet isteği yetişmedi', 'Royal request missed'), text: L(`${fmt(prev.units)} ${itemName(prev.item)} zamanında gönderilemedi; elçi eli boş döndü.`, `${fmt(prev.units)} ${itemName(prev.item)} could not be sent in time; the envoy went home empty-handed.`) })
   })
   // The dialogs in a line (CLAUDE.md §9.8): how many came since the line began, for the "2 / 5" on each, and closing
   // them all at once (those still waiting for an answer stay: a live tribute demand, a crisis or a choice still open).
@@ -2261,7 +2262,7 @@ function App({
     const news = crownNews(lobby.id, mine.id, kingdom, view.world.cities.length, crownFrom.current, crownPopFrom.current, serverNow())
     for (const n of news.journal) {
       const { icon, title, text } = describeNotice(n, online)
-      noteJournal(n.id, Date.parse(n.show_at), { icon, title, text })
+      noteJournal(n.id, Date.parse(n.show_at), { icon, title, text, src: n })
     }
     if (news.show.length > 0) setCrownQueue((q) => [...q, ...news.show])
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2291,10 +2292,10 @@ function App({
   const decisionFirst = !!kingdom && !!fortunes[0] && fortuneDecisionOpen(fortunes[0], kingdom, now) && notice?.kind !== 'patrol_tribute'
   // The summaries' lines, each enough to read the news again (DialogQueue.tsx → ClosedSummary).
   const noticeItem = (n: Notice): SummaryItem => describeNotice(n, online)
-  const houseItem = (h: HouseNews): SummaryItem => ({ icon: 'crown', title: HOUSE_TITLES[h.kind] ?? 'Hanedandan haber', text: `${HOUSE_TITLES[h.kind] ?? 'Hanedandan haber'}: ${h.person.name}${h.heir ? `; yerine ${h.heir.name}` : ''}. Ayrıntısı Saray → Hanedan'da.` })
+  const houseItem = (h: HouseNews): SummaryItem => ({ icon: 'crown', title: HOUSE_TITLES[h.kind] ?? L('Hanedandan haber', 'News of the house'), text: L(`${HOUSE_TITLES[h.kind] ?? 'Hanedandan haber'}: ${h.person.name}${h.heir ? `; yerine ${h.heir.name}` : ''}. Ayrıntısı Saray → Hanedan'da.`, `${HOUSE_TITLES[h.kind] ?? 'News of the house'}: ${h.person.name}${h.heir ? `; succeeded by ${h.heir.name}` : ''}. Details under Palace → Dynasty.`) })
   const fortuneItem = (f: FortuneEvent): SummaryItem => {
     const t = FORTUNE_TEXTS[f.fortune]
-    return { icon: t?.icon ?? 'star', title: t?.title ?? 'Bir olay', text: t?.text ?? '' }
+    return { icon: t?.icon ?? 'star', title: t?.title ?? L('Bir olay', 'An event'), text: t?.text ?? '' }
   }
   const closeAllDialogs = () => {
     if (!kingdom) return
@@ -2412,6 +2413,13 @@ function App({
     else delete document.documentElement.dataset.hint
   }, [])
 
+  // The envoy's news written in the other language is told again in this one (the player switched languages);
+  // other entries keep the words they were written with (CLAUDE.md §11 Dil).
+  const retold = useMemo(() => {
+    const lang = getLang()
+    if (journal.entries.every((e) => (e.lang ?? 'tr') === lang)) return journal
+    return { ...journal, entries: journal.entries.map((e) => ((e.lang ?? 'tr') !== lang && e.src ? { ...e, ...describeNotice(e.src as Notice, online), lang } : e)) }
+  }, [journal, online])
   // What the tabs and building menus read, and the commands they give.
   const hudData: HudData | null =
     view && kingdom
@@ -2419,7 +2427,7 @@ function App({
           world: view.world,
           kingdom,
           now,
-          journal,
+          journal: retold,
           stage,
           plots,
           muted,
@@ -2496,7 +2504,7 @@ function App({
               <>
                 {/* On phones the settings and the way back to the main menu fold into one menu, the store bar's last chip. */}
                 <div className="map-menu" ref={mapMenu}>
-                  <button className="res menu-toggle" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} aria-label="Menü">
+                  <button className="res menu-toggle" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} aria-label={L('Menü', 'Menu')}>
                     <Icon name={menuOpen ? 'close' : 'menu'} size={16} />
                   </button>
                   {menuOpen && (
@@ -2509,10 +2517,10 @@ function App({
                           setSettingsOpen(true)
                         }}
                       >
-                        <Icon name="gear" size={16} /> Ayarlar
+                        <Icon name="gear" size={16} /> {L('Ayarlar', 'Settings')}
                       </button>
                       <button className="btn small" role="menuitem" onClick={onExit}>
-                        <Icon name="home" size={16} /> Ana menü
+                        <Icon name="home" size={16} /> {L('Ana menü', 'Main menu')}
                       </button>
                     </div>
                   )}
@@ -2523,7 +2531,7 @@ function App({
         )}
       </div>
       <div className="corner-menu" ref={cornerMenu}>
-        <button className="btn icon-only menu-chip frame" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} title="Menü" aria-label="Menü">
+        <button className="btn icon-only menu-chip frame" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} title={L('Menü', 'Menu')} aria-label={L('Menü', 'Menu')}>
           <Icon name={menuOpen ? 'close' : 'menu'} size={16} />
         </button>
         {menuOpen && (
@@ -2536,10 +2544,10 @@ function App({
                 setSettingsOpen(true)
               }}
             >
-              <Icon name="gear" size={16} /> Ayarlar
+              <Icon name="gear" size={16} /> {L('Ayarlar', 'Settings')}
             </button>
             <button className="btn small" role="menuitem" onClick={onExit}>
-              <Icon name="home" size={16} /> Ana menü
+              <Icon name="home" size={16} /> {L('Ana menü', 'Main menu')}
             </button>
           </div>
         )}
@@ -2552,21 +2560,23 @@ function App({
                 <EnvoyPortrait size={44} talking />
               </span>
               <div>
-                <small>Elçinin sözü</small>
-                <h2 id="reset-title">Emin misiniz, lordum?</h2>
+                <small>{L('Elçinin sözü', 'A word from the envoy')}</small>
+                <h2 id="reset-title">{L('Emin misiniz, lordum?', 'Are you sure, my lord?')}</h2>
               </div>
             </header>
             <div className="fortune-body">
               <p>
-                Lordum, bir söyleyin de içim rahat etsin: sarayı, ambarları, hazineyi, ordunuzu, hanedanınızı... hepsini rüzgâra mı savuruyoruz? Bir
-                kez "evet" derseniz geri dönüşü yok; ben de yeni sarayda yine kuzey kulesini isterim.
+                {L(
+                  'Lordum, bir söyleyin de içim rahat etsin: sarayı, ambarları, hazineyi, ordunuzu, hanedanınızı... hepsini rüzgâra mı savuruyoruz? Bir kez "evet" derseniz geri dönüşü yok; ben de yeni sarayda yine kuzey kulesini isterim.',
+                  'My lord, do put my mind at rest: the palace, the storehouses, the treasury, your army, your dynasty... we are truly throwing it all to the wind? Say "yes" once and there is no going back. And I shall insist on the north tower again in the new palace.',
+                )}
               </p>
               <div className="row spread">
                 <button className="btn small" onClick={() => setResetAsk(false)}>
-                  Vazgeçtim
+                  {L('Vazgeçtim', 'I\'ve changed my mind')}
                 </button>
                 <button className="btn small danger" onClick={resetNow}>
-                  Evet, her şeyi sıfırla
+                  {L('Evet, her şeyi sıfırla', 'Yes, reset everything')}
                 </button>
               </div>
             </div>
@@ -2579,10 +2589,10 @@ function App({
             <header className="sheet-head">
               <Icon name="gear" size={32} />
               <div>
-                <h2 id="settings-title">Ayarlar</h2>
-                <small>Ses, görüntü ve performans</small>
+                <h2 id="settings-title">{L('Ayarlar', 'Settings')}</h2>
+                <small>{L('Ses, görüntü ve performans', 'Sound, picture and performance')}</small>
               </div>
-              <button className="btn icon-only" onClick={() => setSettingsOpen(false)} aria-label="Kapat">
+              <button className="btn icon-only" onClick={() => setSettingsOpen(false)} aria-label={L('Kapat', 'Close')}>
                 <Icon name="close" size={16} />
               </button>
             </header>
@@ -2599,7 +2609,7 @@ function App({
           </>
         ) : (
           <>
-            {lobby.name} · {rivals.length + (kingdom ? 1 : 0)}/{lobby.max_players} lord
+            {lobby.name} · {rivals.length + (kingdom ? 1 : 0)}/{lobby.max_players} {L('lord', 'lords')}
           </>
         )}
       </div>
@@ -2665,7 +2675,7 @@ function App({
               onMove={(army, tile) => sendArmy(army, tile)}
               onBuy={(army, units) => online.act({ type: 'townBuy', town: town.id, army, units }).then((r) => {
                 const got = r as { cost?: number } | undefined
-                if (got?.cost !== undefined) setToast(`Mallar orduya yüklendi: ${units} birim, ${got.cost} altın`)
+                if (got?.cost !== undefined) setToast(L(`Mallar orduya yüklendi: ${units} birim, ${got.cost} altın`, `Goods loaded onto the army: ${units} units, ${got.cost} gold`))
               })}
               onWatchBattle={(battle) => online.watch(battle)}
               onShow={(tile) => view.centerOn(tile)}
@@ -2772,23 +2782,23 @@ function App({
         <div className="placing frame" role="status">
           <Icon name="build" size={24} />
           <span>
-            <b>{needsPalace ? 'Sarayını yerleştir' : BUILDING_NAMES[placingKind]}</b> ·{' '}
+            <b>{needsPalace ? L('Sarayını yerleştir', 'Place your palace') : BUILDING_NAMES[placingKind]}</b> ·{' '}
             {stroking
-              ? 'Basılı tutup sürükleyerek sıra hâlinde yerleştir'
+              ? L('Basılı tutup sürükleyerek sıra hâlinde yerleştir', 'Hold and drag to place a row')
               : placingKind === 'gate'
-                ? 'Kapı iki kulesiyle 3 karo kaplar; surun üstüne de kurulur.'
+                ? L('Kapı iki kulesiyle 3 karo kaplar; surun üstüne de kurulur.', 'A gate with its two towers takes 3 tiles; it can be built over walls too.')
               : touchOnly
-                ? 'Hudut içinde bir yere dokun'
-                : 'Hudut içinde yeşil bir yere tıkla'}
+                ? L('Hudut içinde bir yere dokun', 'Tap a spot inside your border')
+                : L('Hudut içinde yeşil bir yere tıkla', 'Click a green spot inside your border')}
           </span>
           {placingKind === 'gate' && (
-            <button className="btn small" onClick={turnGate} title="Kapıyı döndür (R)">
-              <kbd>R</kbd> Döndür
+            <button className="btn small" onClick={turnGate} title={L('Kapıyı döndür (R)', 'Turn the gate (R)')}>
+              <kbd>R</kbd> {L('Döndür', 'Turn')}
             </button>
           )}
           {!needsPalace && (
             <button className="btn small" onClick={cancelPlacing}>
-              İptal
+              {L('İptal', 'Cancel')}
             </button>
           )}
         </div>
@@ -2802,20 +2812,20 @@ function App({
           <span>
             {tool === 'demolish' ? (
               <>
-                <b>Yıkım</b> · Yıkılacak binalara tıkla
+                <b>{L('Yıkım', 'Demolish')}</b> · {L('Yıkılacak binalara tıkla', 'Click the buildings to tear down')}
               </>
             ) : movingBuilding ? (
               <>
-                <b>{BUILDING_NAMES[movingBuilding.kind]} taşınıyor</b> · Yeni yerine tıkla ya da başka bir bina seç
+                <b>{L(`${BUILDING_NAMES[movingBuilding.kind]} taşınıyor`, `Moving: ${BUILDING_NAMES[movingBuilding.kind]}`)}</b> · {L('Yeni yerine tıkla ya da başka bir bina seç', 'Click its new spot or pick another building')}
               </>
             ) : (
               <>
-                <b>Taşıma</b> · Taşınacak binaya tıkla
+                <b>{L('Taşıma', 'Move')}</b> · {L('Taşınacak binaya tıkla', 'Click the building to move')}
               </>
             )}
           </span>
           <button className="btn small" onClick={cancelPlacing}>
-            Bitti
+            {L('Bitti', 'Done')}
           </button>
         </div>
       )}
@@ -2837,9 +2847,9 @@ function App({
         </div>
       )}
       {!ready && (
-        <div className="loading-screen" role="status" aria-label="Harita yükleniyor">
+        <div className="loading-screen" role="status" aria-label={L('Harita yükleniyor', 'Loading the map')}>
           <PixelSpinner big />
-          <p>Diyar yükleniyor…</p>
+          <p>{L('Diyar yükleniyor…', 'Loading the realm…')}</p>
         </div>
       )}
       {ready && view && loading && <PixelSpinner />}
@@ -2863,13 +2873,13 @@ function App({
       )}
       {view && (
         <div className="zoom">
-          <button className="btn icon-only" onClick={() => site && view.centerOn(site)} aria-label="Üsse dön" title="Üsse dön">
+          <button className="btn icon-only" onClick={() => site && view.centerOn(site)} aria-label={L('Üsse dön', 'Back to base')} title={L('Üsse dön', 'Back to base')}>
             <Icon name="pin" size={16} />
           </button>
-          <button className="btn icon-only" onClick={() => view.zoomBy(1)} aria-label="Yakınlaştır" title="Yakınlaştır">
+          <button className="btn icon-only" onClick={() => view.zoomBy(1)} aria-label={L('Yakınlaştır', 'Zoom in')} title={L('Yakınlaştır', 'Zoom in')}>
             <Icon name="plus" size={16} />
           </button>
-          <button className="btn icon-only" onClick={() => view.zoomBy(-1)} aria-label="Uzaklaştır" title="Uzaklaştır">
+          <button className="btn icon-only" onClick={() => view.zoomBy(-1)} aria-label={L('Uzaklaştır', 'Zoom out')} title={L('Uzaklaştır', 'Zoom out')}>
             <Icon name="minus" size={16} />
           </button>
         </div>
@@ -2888,7 +2898,7 @@ function App({
           pacts={layer.pacts}
           patrols={patrols}
           outlaws={outlawSpots}
-          nameOf={(id) => kingdoms.find((k) => k.id === id)?.name ?? 'Bir lord'}
+          nameOf={(id) => kingdoms.find((k) => k.id === id)?.name ?? L('Bir lord', 'A lord')}
           seasonStart={seasonStart}
           onWorldMap={() => setFullMap((open) => !open)}
           onArmy={(id) => {
@@ -2903,7 +2913,7 @@ function App({
           world={view.world}
           kingdoms={[
             ...(kingdom && site
-              ? [{ name: kingdom.name ?? 'Lordluğun', color: hexOf(kingdom.color), rect: territoryRect(site, stage), mine: true }]
+              ? [{ name: kingdom.name ?? L('Lordluğun', 'Your lordship'), color: hexOf(kingdom.color), rect: territoryRect(site, stage), mine: true }]
               : []),
             ...rivals.map((r) => ({
               name: r.name,
@@ -2932,8 +2942,8 @@ function App({
           onLocate={(site) => view?.centerOn(site)}
           aside={
             kingdom && (
-              <button className="btn advisor-toggle" onClick={() => setAdvisorCall((n) => n + 1)} aria-label="Elçiyi çağır" title="Elçiyi çağır: öğüt, öğretici, oyunun anlatımı">
-                <EnvoyPortrait size={26} still /> Elçi
+              <button className="btn advisor-toggle" onClick={() => setAdvisorCall((n) => n + 1)} aria-label={L('Elçiyi çağır', 'Call the envoy')} title={L('Elçiyi çağır: öğüt, öğretici, oyunun anlatımı', 'Call the envoy: advice, tutorial, the game explained')}>
+                <EnvoyPortrait size={26} still /> {L('Elçi', 'Envoy')}
               </button>
             )
           }
@@ -2949,10 +2959,10 @@ function App({
         <div className="placing frame" role="status">
           <Icon name="eye" size={24} />
           <span>
-            <b>Ordu takip ediliyor</b> · haritayı sürüklersen takip biter
+            <b>{L('Ordu takip ediliyor', 'Following the army')}</b> · {L('haritayı sürüklersen takip biter', 'dragging the map stops following')}
           </span>
           <button className="btn small" onClick={() => setFollowing(null)}>
-            Bırak
+            {L('Bırak', 'Stop')}
           </button>
         </div>
       )}
@@ -2960,10 +2970,10 @@ function App({
         <div className="placing frame" role="status">
           <Icon name="ship" size={24} />
           <span>
-            <b>Filonun gideceği yer</b> · {touchOnly ? 'Bir nehre ya da göle dokun' : 'Bir nehre ya da göle tıkla'} (gemiler karaya çıkamaz)
+            <b>{L('Filonun gideceği yer', 'Where the fleet sails')}</b> · {touchOnly ? L('Bir nehre ya da göle dokun', 'Tap a river or a lake') : L('Bir nehre ya da göle tıkla', 'Click a river or a lake')} {L('(gemiler karaya çıkamaz)', '(ships cannot go ashore)')}
           </span>
           <button className="btn small" onClick={() => setSailing(null)}>
-            İptal
+            {L('İptal', 'Cancel')}
           </button>
         </div>
       )}
@@ -2971,10 +2981,10 @@ function App({
         <div className="placing frame" role="status">
           <Icon name="swords" size={24} />
           <span>
-            <b>Ordunun hedefi</b> · {touchOnly ? 'Haritada bir yere dokun' : 'Haritada bir yere tıkla'} (savaştığın bir lordun hududu kuşatma demektir)
+            <b>{L('Ordunun hedefi', 'The army\'s target')}</b> · {touchOnly ? L('Haritada bir yere dokun', 'Tap a spot on the map') : L('Haritada bir yere tıkla', 'Click a spot on the map')} {L('(savaştığın bir lordun hududu kuşatma demektir)', '(sending it into the lands of a lord you are at war with means a siege)')}
           </span>
           <button className="btn small" onClick={() => setAiming(null)}>
-            İptal
+            {L('İptal', 'Cancel')}
           </button>
         </div>
       )}
@@ -3095,7 +3105,7 @@ function App({
 // Eight square pixels in a ring, lit one after another.
 function PixelSpinner({ big = false }: { big?: boolean }) {
   return (
-    <div className={big ? 'spinner big' : 'spinner'} role="status" aria-label="Yükleniyor">
+    <div className={big ? 'spinner big' : 'spinner'} role="status" aria-label={L('Yükleniyor', 'Loading')}>
       {Array.from({ length: 8 }, (_, i) => (
         <i key={i} style={{ '--i': i } as React.CSSProperties} />
       ))}

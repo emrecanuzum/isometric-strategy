@@ -5,6 +5,7 @@ import { squad } from './armies'
 import { palisade, pavilion, rack, tent } from './campSprites'
 import type { Sprite } from './sprites'
 import { SHIP_LENGTH } from './shipSprites'
+import { L } from '../lib/i18n'
 
 // The free cities (CLAUDE.md §4.2, §7.7): walled towns that belong to no player. Each is the capital of a crown
 // kingdom the players swear fealty to as its lords (§7.8). Their names and layout follow from the lobby seed, so every
@@ -16,9 +17,9 @@ const NAMES = [
   'İpekhan', 'Gökkubbe', 'Demirkapı',
 ]
 const RULERS = [
-  'Kral Alparslan', 'Kraliçe Nilüfer', 'Kral Orhan', 'Kraliçe Selcan', 'Kral Tuğrul', 'Kraliçe Gevherhan',
-  'Kral Kılıç Arslan', 'Kraliçe Mahperi', 'Kral Kubilay', 'Kraliçe Tomris', 'Kral Selçuk', 'Kraliçe Turhan',
-  'Kral Osman', 'Kraliçe Gülbahar', 'Kral Keykubad', 'Kraliçe Mihrimah',
+  L('Kral Alparslan', 'King Alparslan'), L('Kraliçe Nilüfer', 'Queen Nilüfer'), L('Kral Orhan', 'King Orhan'), L('Kraliçe Selcan', 'Queen Selcan'), L('Kral Tuğrul', 'King Tuğrul'), L('Kraliçe Gevherhan', 'Queen Gevherhan'),
+  L('Kral Kılıç Arslan', 'King Kılıç Arslan'), L('Kraliçe Mahperi', 'Queen Mahperi'), L('Kral Kubilay', 'King Kubilay'), L('Kraliçe Tomris', 'Queen Tomris'), L('Kral Selçuk', 'King Selçuk'), L('Kraliçe Turhan', 'Queen Turhan'),
+  L('Kral Osman', 'King Osman'), L('Kraliçe Gülbahar', 'Queen Gülbahar'), L('Kral Keykubad', 'King Keykubad'), L('Kraliçe Mihrimah', 'Queen Mihrimah'),
 ]
 // The crowns' banners: the first capital's red, the second's blue.
 export const CROWN_COLORS = ['#b23a26', '#2f5d9e']
@@ -61,7 +62,7 @@ export function cityInfo(world: World, index: number): CityInfo {
   const capital = NAMES[(start + index * 3) % NAMES.length]
   return {
     index,
-    name: `${capital} Krallığı`,
+    name: L(`${capital} Krallığı`, `Kingdom of ${capital}`),
     capital,
     ruler: crownKey ? crownRulerName(crownKey, index, crownClock()) : RULERS[rulerOf(world, index)],
     color: CROWN_COLORS[index % CROWN_COLORS.length],

@@ -1,6 +1,7 @@
 import { relationTerms } from '@game/shared'
 import type { Blockade, Good, NavyLook, Point, Score, TradeLedger } from '@game/shared'
 import type { Layer } from '../../net/layer'
+import { L } from '../../lib/i18n'
 import type { Command, IntelReport, Lobby } from '../../net/online'
 
 // What the tabs know of the lobby and how they act on it: the other kingdoms, the layer between them, the player's
@@ -43,12 +44,12 @@ export interface KingdomInfo {
 
 // "çevrimiçi" within a few minutes, otherwise how long ago.
 export function lastSeen(seenAt: number | null | undefined, now: number) {
-  if (!seenAt) return 'son görülme bilinmiyor'
+  if (!seenAt) return L('son görülme bilinmiyor', 'last seen unknown')
   const min = Math.max(0, Math.floor((now - seenAt) / 60_000))
-  if (min < 6) return 'çevrimiçi'
-  if (min < 60) return `${min} dk önce görüldü`
+  if (min < 6) return L('çevrimiçi', 'online')
+  if (min < 60) return L(`${min} dk önce görüldü`, `seen ${min} min ago`)
   const h = Math.floor(min / 60)
-  return h < 48 ? `${h} sa önce görüldü` : `${Math.floor(h / 24)} gün önce görüldü`
+  return h < 48 ? L(`${h} sa önce görüldü`, `seen ${h} h ago`) : L(`${Math.floor(h / 24)} gün önce görüldü`, `seen ${Math.floor(h / 24)} day${Math.floor(h / 24) === 1 ? '' : 's'} ago`)
 }
 
 export interface Online extends Layer {

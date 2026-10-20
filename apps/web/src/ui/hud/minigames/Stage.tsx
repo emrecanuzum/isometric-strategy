@@ -1,4 +1,5 @@
 import { MINI_STEP } from '@game/shared'
+import { L } from '../../../lib/i18n'
 import { useEffect, useRef } from 'react'
 import { play } from '../../../audio/sfx'
 import { Fx, H, W, box, checker, hudScore, hudTime, text } from './art'
@@ -118,16 +119,16 @@ export function Stage<S extends { step: number; over: boolean }>({ seed, scene, 
         checker(ctx, '#14101a', 0, 0, W, H)
         const n = 3 - Math.floor(phaseT / (INTRO / 3))
         const k = (phaseT % (INTRO / 3)) / (INTRO / 3)
-        text(ctx, n > 0 ? `${n}` : 'Başla!', W / 2, H / 2 - 22 - Math.round((1 - k) * 4), { align: 'center', size: k < 0.15 ? 36 : 30, color: '#f2d16b' })
+        text(ctx, n > 0 ? `${n}` : L('Başla!', 'Go!'), W / 2, H / 2 - 22 - Math.round((1 - k) * 4), { align: 'center', size: k < 0.15 ? 36 : 30, color: '#f2d16b' })
         box(ctx, '#14101a', 40, H / 2 + 14, W - 80, 16)
         box(ctx, '#3a2a1c', 41, H / 2 + 15, W - 82, 14)
         text(ctx, scene.controls, W / 2, H / 2 + 17, { align: 'center', size: 9 })
       } else if (phase === 'play' && phaseT < 0.5) {
-        text(ctx, 'Başla!', W / 2, H / 2 - 22 - Math.round(phaseT * 20), { align: 'center', size: 30, color: '#f2d16b', alpha: 1 - phaseT * 2 })
+        text(ctx, L('Başla!', 'Go!'), W / 2, H / 2 - 22 - Math.round(phaseT * 20), { align: 'center', size: 30, color: '#f2d16b', alpha: 1 - phaseT * 2 })
       } else if (phase === 'outro') {
         const k = Math.min(1, phaseT * 5)
         checker(ctx, '#14101a', 0, Math.round(H / 2 - 18), W, 34)
-        text(ctx, 'Bitti!', W / 2 - Math.round((1 - k) * 60), H / 2 - 16, { align: 'center', size: 26, color: '#fff4c0' })
+        text(ctx, L('Bitti!', 'Done!'), W / 2 - Math.round((1 - k) * 60), H / 2 - 16, { align: 'center', size: 26, color: '#fff4c0' })
       }
       frame = requestAnimationFrame(tick)
     }
@@ -146,7 +147,7 @@ export function Stage<S extends { step: number; over: boolean }>({ seed, scene, 
       onPointerCancel={() => (held.current = false)}
     >
       <canvas ref={canvas} width={W} height={H} style={{ aspectRatio: `${W} / ${H}` }} />
-      <small className="hint">Fare, dokunma ya da boşluk tuşu.</small>
+      <small className="hint">{L('Fare, dokunma ya da boşluk tuşu.', 'Mouse, touch or space bar.')}</small>
     </div>
   )
 }

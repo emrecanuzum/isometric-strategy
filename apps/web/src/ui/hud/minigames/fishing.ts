@@ -1,4 +1,5 @@
 import { FISH_H, FISH_LIMIT, FISH_ZONE, fishGame } from '@game/shared'
+import { L } from '../../../lib/i18n'
 import type { FishState } from '@game/shared'
 import { play } from '../../../audio/sfx'
 import { C, H, PAL, W, bake, birds, box, checker, halo, hash, oval, pline, ramp, rgb, ridge, text, tone } from './art'
@@ -51,7 +52,7 @@ function backdrop() {
 
 export const fishingScene: Scene<FishState> = {
   make: fishGame,
-  controls: 'Basılı tut: yeşil alan yükselir · bırak: düşer',
+  controls: L('Basılı tut: yeşil alan yükselir · bırak: düşer', 'Hold: the green zone rises · release: it falls'),
   left: (s) => 1 - s.step / FISH_LIMIT,
   create() {
     const back = backdrop()
@@ -162,8 +163,8 @@ export const fishingScene: Scene<FishState> = {
       box(ctx, col, b.x + 1, b.y + b.h - fill, b.w - 2, fill)
       box(ctx, '#ffffff', b.x + 1, b.y + b.h - fill, 1, fill)
       oval(ctx, '#e2c48a', b.x + b.w / 2, b.y - 8, 4, 2)
-      text(ctx, s.inside ? 'Tuttun!' : 'Kaçıyor!', 104, 28, { align: 'center', size: 10, color: s.inside ? '#c8f080' : '#ec7a5a' })
-      if (s.over) text(ctx, s.caught ? 'Yakaladın!' : 'Balık kaçtı', 104, 42, { align: 'center', size: 12, color: s.caught ? '#f2d16b' : '#ec7a5a' })
+      text(ctx, s.inside ? L('Tuttun!', 'Hooked!') : L('Kaçıyor!', 'Getting away!'), 104, 28, { align: 'center', size: 10, color: s.inside ? '#c8f080' : '#ec7a5a' })
+      if (s.over) text(ctx, s.caught ? L('Yakaladın!', 'Caught it!') : L('Balık kaçtı', 'It got away'), 104, 42, { align: 'center', size: 12, color: s.caught ? '#f2d16b' : '#ec7a5a' })
     }
   },
 }

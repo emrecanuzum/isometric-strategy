@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type React from 'react'
 import { Icon } from '../icons'
+import { L } from '../../lib/i18n'
 import type { IconName } from '../icons'
 import { DiplomacyTab } from './diplomacy'
 import { BuildTab, JournalTab, KingdomTab, PeopleTab, StoreTab, TradeTab } from './tabs'
@@ -24,14 +25,14 @@ interface Tab {
 }
 
 export const TABS: Tab[] = [
-  { id: 'build', name: 'İnşa', icon: 'build', blurb: 'Yapı seç, hududuna yerleştir', group: 'economy', view: BuildTab },
-  { id: 'store', name: 'Depo', icon: 'chest', blurb: 'Hammadde stoku ve akışı', group: 'economy', view: StoreTab },
-  { id: 'trade', name: 'Ticaret', icon: 'trade', blurb: 'Tüccar ve ticaret noktası', group: 'economy', view: TradeTab },
-  { id: 'kingdom', name: 'Saray', icon: 'crown', blurb: 'Seviye, hanedan, yapılar', group: 'realm', view: KingdomTab },
-  { id: 'people', name: 'Halk', icon: 'people', blurb: 'Vergi, mutluluk, kraliçe', group: 'realm', view: PeopleTab },
-  { id: 'army', name: 'Ordu', icon: 'swords', blurb: 'Kışla, garnizon, ordular, savaşlar', group: 'world', view: ArmyTab },
-  { id: 'diplomacy', name: 'Diplomasi', icon: 'banner', blurb: 'Lordlar, ilişkiler, casusluk', group: 'world', view: DiplomacyTab },
-  { id: 'journal', name: 'Günlük', icon: 'scroll', blurb: 'Elçinin günlük raporları', group: 'world', view: JournalTab },
+  { id: 'build', name: L('İnşa', 'Build'), icon: 'build', blurb: L('Yapı seç, hududuna yerleştir', 'Pick a building, place it within your border'), group: 'economy', view: BuildTab },
+  { id: 'store', name: L('Depo', 'Stores'), icon: 'chest', blurb: L('Hammadde stoku ve akışı', 'Stock and flow of goods'), group: 'economy', view: StoreTab },
+  { id: 'trade', name: L('Ticaret', 'Trade'), icon: 'trade', blurb: L('Tüccar ve ticaret noktası', 'Merchant and trading post'), group: 'economy', view: TradeTab },
+  { id: 'kingdom', name: L('Saray', 'Palace'), icon: 'crown', blurb: L('Seviye, hanedan, yapılar', 'Level, dynasty, buildings'), group: 'realm', view: KingdomTab },
+  { id: 'people', name: L('Halk', 'People'), icon: 'people', blurb: L('Vergi, mutluluk, kraliçe', 'Tax, happiness, queen'), group: 'realm', view: PeopleTab },
+  { id: 'army', name: L('Ordu', 'Army'), icon: 'swords', blurb: L('Kışla, garnizon, ordular, savaşlar', 'Barracks, garrison, armies, wars'), group: 'world', view: ArmyTab },
+  { id: 'diplomacy', name: L('Diplomasi', 'Diplomacy'), icon: 'banner', blurb: L('Lordlar, ilişkiler, casusluk', 'Lords, relations, espionage'), group: 'world', view: DiplomacyTab },
+  { id: 'journal', name: L('Günlük', 'Journal'), icon: 'scroll', blurb: L('Elçinin günlük raporları', 'The envoy\'s daily reports'), group: 'world', view: JournalTab },
 ]
 
 export { TopBar } from './TopBar'
@@ -49,7 +50,7 @@ export function Dock({ open, unread, onToggle }: { open: TabId | null; unread: n
   }
   const focusable = open ? TABS.findIndex((t) => t.id === open) : 0
   return (
-    <nav className="dock frame" aria-label="Lordluk menüsü">
+    <nav className="dock frame" aria-label={L('Lordluk menüsü', 'Lordship menu')}>
       <div role="tablist" aria-orientation="horizontal">
         {TABS.map((tab, i) => (
           <button
@@ -70,7 +71,7 @@ export function Dock({ open, unread, onToggle }: { open: TabId | null; unread: n
             <Icon name={tab.icon} size={24} />
             <span>{tab.name}</span>
             {tab.id === 'journal' && unread > 0 && (
-              <em className="badge" aria-label={`${unread} yeni`}>
+              <em className="badge" aria-label={L(`${unread} yeni`, `${unread} new`)}>
                 {unread > 9 ? '9+' : unread}
               </em>
             )}
@@ -96,7 +97,7 @@ export function Sheet({ tab, data, onClose }: { tab: TabId; data: HudData; onClo
           <h2>{spec.name}</h2>
           <small>{spec.blurb}</small>
         </div>
-        <button className="btn icon-only" onClick={onClose} aria-label="Kapat (Esc)" title="Kapat (Esc)">
+        <button className="btn icon-only" onClick={onClose} aria-label={L('Kapat (Esc)', 'Close (Esc)')} title={L('Kapat (Esc)', 'Close (Esc)')}>
           <Icon name="close" size={16} />
         </button>
       </header>

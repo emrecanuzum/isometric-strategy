@@ -6,6 +6,7 @@ import type { PowerMode } from '../../lib/power'
 import { Icon } from '../icons'
 import type { IconName } from '../icons'
 import { Subtabs, usePart } from '../hud/Subtabs'
+import { L, chooseLang, getLang } from '../../lib/i18n'
 
 // The player's settings (CLAUDE.md §11 Ayarlar), in parts: sound, picture, performance, and in the game the envoy's.
 // Used on the main menu and in the game alike.
@@ -16,15 +17,15 @@ export function SettingsPanel({ profile, settings, onChange, onSignOut }: { prof
   return (
     <div className="home-body form">
       <SettingsTabs settings={settings} onChange={onChange} />
-      <h3>Hesap</h3>
+      <h3>{L('Hesap', 'Account')}</h3>
       <dl className="account">
-        <dt>Kullanıcı adı</dt>
+        <dt>{L('Kullanıcı adı', 'Username')}</dt>
         <dd>{profile.username}</dd>
-        <dt>E-posta</dt>
+        <dt>{L('E-posta', 'Email')}</dt>
         <dd>{profile.email}</dd>
       </dl>
       <button className="btn small" onClick={onSignOut}>
-        Çıkış yap
+        {L('Çıkış yap', 'Sign out')}
       </button>
     </div>
   )
@@ -38,15 +39,16 @@ export function SettingsTabs({ settings, onChange, envoy }: { settings: Settings
   const [part, setPart] = usePart<PartId>('settings', ids, 'sound')
   return (
     <>
+      <LanguageRow />
       <Subtabs
-        label="Ayarlar"
+        label={L('Ayarlar', 'Settings')}
         part={part}
         onPart={setPart}
         parts={[
-          { id: 'sound' as const, name: 'Ses', icon: 'music' as const },
-          { id: 'picture' as const, name: 'Görüntü', icon: 'eye' as const },
-          { id: 'performance' as const, name: 'Performans', icon: 'time' as const },
-          ...(envoy ? [{ id: 'envoy' as const, name: 'Elçi', icon: 'scroll' as const }] : []),
+          { id: 'sound' as const, name: L('Ses', 'Sound'), icon: 'music' as const },
+          { id: 'picture' as const, name: L('Görüntü', 'Picture'), icon: 'eye' as const },
+          { id: 'performance' as const, name: L('Performans', 'Performance'), icon: 'time' as const },
+          ...(envoy ? [{ id: 'envoy' as const, name: L('Elçi', 'Envoy'), icon: 'scroll' as const }] : []),
         ]}
       />
       {part === 'sound' && <SoundSettings settings={settings} onChange={onChange} />}
@@ -63,7 +65,7 @@ type Level = { [K in keyof Settings]: Settings[K] extends number ? K : never }[k
 function Toggle({ on, onClick, disabled, why }: { on: boolean; onClick: () => void; disabled?: boolean; why?: string }) {
   return (
     <button className="btn small" aria-pressed={on} disabled={disabled} data-why={why} onClick={onClick}>
-      {on ? 'Açık' : 'Kapalı'}
+      {on ? L('Açık', 'On') : L('Kapalı', 'Off')}
     </button>
   )
 }
@@ -87,6 +89,28 @@ function Choice<T extends string>({ value, options, onPick, locked }: { value: T
   )
 }
 
+// The language, kept in this browser (CLAUDE.md §11 Dil); picking the other one reloads the page. Written in both
+// languages so a player who cannot read the current one still finds it.
+export function LanguageRow() {
+  return (
+    <div className="settings-row settings-lang">
+      <div>
+        <b>
+          <Icon name="scroll" size={16} /> Dil · Language
+        </b>
+      </div>
+      <Choice
+        value={getLang()}
+        options={[
+          { id: 'tr', label: 'Türkçe' },
+          { id: 'en', label: 'English' },
+        ]}
+        onPick={chooseLang}
+      />
+    </div>
+  )
+}
+
 // A setting's row: its name and what it does, the control on the right.
 function Row({ label, hint, icon, children }: { label: string; hint?: string; icon?: IconName; children: ReactNode }) {
   return (
@@ -105,11 +129,11 @@ function Row({ label, hint, icon, children }: { label: string; hint?: string; ic
 // Every kind of sound with its own switch and volume.
 export function SoundSettings({ settings, onChange }: { settings: Settings; onChange: Change }) {
   const rows: { label: string; hint: string; on: Flag; volume: Level; icon: IconName }[] = [
-    { label: 'Müzik', hint: 'Meyhane ezgisi (menüde daha kısık).', on: 'music', volume: 'musicVolume', icon: 'music' },
-    { label: 'Savaş müziği', hint: 'Bir savaşı izlerken davullar ve borular.', on: 'battle', volume: 'battleVolume', icon: 'swords' },
-    { label: 'Ses efektleri', hint: 'Elçinin haberleri, olaylar, inşaat ve pencerelerin sesleri.', on: 'sfx', volume: 'sfxVolume', icon: 'bell' },
-    { label: 'Yağmur ve gök gürültüsü', hint: 'Yağmurun hışırtısı ve şimşekten sonra gürleme.', on: 'rain', volume: 'rainVolume', icon: 'snow' },
-    { label: 'Elçinin sesi', hint: 'Elçi ve haraççıbaşı konuşurken mırıldanır.', on: 'voice', volume: 'voiceVolume', icon: 'scroll' },
+    { label: L('Müzik', 'Music'), hint: L('Meyhane ezgisi (menüde daha kısık).', 'Tavern tunes (softer in the menu).'), on: 'music', volume: 'musicVolume', icon: 'music' },
+    { label: L('Savaş müziği', 'Battle music'), hint: L('Bir savaşı izlerken davullar ve borular.', 'Drums and horns while you watch a battle.'), on: 'battle', volume: 'battleVolume', icon: 'swords' },
+    { label: L('Ses efektleri', 'Sound effects'), hint: L('Elçinin haberleri, olaylar, inşaat ve pencerelerin sesleri.', 'The sounds of the envoy\'s news, events, construction and windows.'), on: 'sfx', volume: 'sfxVolume', icon: 'bell' },
+    { label: L('Yağmur ve gök gürültüsü', 'Rain and thunder'), hint: L('Yağmurun hışırtısı ve şimşekten sonra gürleme.', 'The patter of rain and the rumble after lightning.'), on: 'rain', volume: 'rainVolume', icon: 'snow' },
+    { label: L('Elçinin sesi', 'The envoy\'s voice'), hint: L('Elçi ve haraççıbaşı konuşurken mırıldanır.', 'The envoy and the chief tribute collector mumble as they talk.'), on: 'voice', volume: 'voiceVolume', icon: 'scroll' },
   ]
   return (
     <div className="settings-list">
@@ -120,13 +144,13 @@ export function SoundSettings({ settings, onChange }: { settings: Settings; onCh
           </Row>
           <label>
             <span>
-              Ses düzeyi: <b>%{settings[r.volume]}</b>
+              {L('Ses düzeyi:', 'Volume:')} <b>{L(`%${settings[r.volume]}`, `${settings[r.volume]}%`)}</b>
             </span>
             <input type="range" min={0} max={100} step={5} value={settings[r.volume]} disabled={!settings[r.on]} onChange={(e) => onChange({ [r.volume]: Number(e.target.value) })} />
           </label>
           {r.on === 'sfx' && (
-            <Row label="Düğme sesleri" hint="Düğmelere basınca hafif bir tık.">
-              <Toggle on={settings.clicks} disabled={!settings.sfx} why="Ses efektleri kapalı" onClick={() => onChange({ clicks: !settings.clicks })} />
+            <Row label={L('Düğme sesleri', 'Button sounds')} hint={L('Düğmelere basınca hafif bir tık.', 'A soft click when you press buttons.')}>
+              <Toggle on={settings.clicks} disabled={!settings.sfx} why={L('Ses efektleri kapalı', 'Sound effects are off')} onClick={() => onChange({ clicks: !settings.clicks })} />
             </Row>
           )}
         </div>
@@ -135,36 +159,36 @@ export function SoundSettings({ settings, onChange }: { settings: Settings; onCh
   )
 }
 
-const PHONE_WHY = 'Telefonda hep kapalı (pil ve bellek için)'
+const PHONE_WHY = L('Telefonda hep kapalı (pil ve bellek için)', 'Always off on phones (for battery and memory)')
 
 const WEATHER: { id: WeatherMode; label: string }[] = [
-  { id: 'full', label: 'Tam' },
-  { id: 'lite', label: 'Sade' },
-  { id: 'off', label: 'Kapalı' },
+  { id: 'full', label: L('Tam', 'Full') },
+  { id: 'lite', label: L('Sade', 'Light') },
+  { id: 'off', label: L('Kapalı', 'Off') },
 ]
 
 // What the map draws. A row power saving turns down says so while it does.
 export function PictureSettings({ settings, onChange }: { settings: Settings; onChange: Change }) {
   const saving = usePowerSave(settings.power)
   const phone = usePhone()
-  const cutNote = (k: Cut) => (saving && settings.cuts[k] && !(phone && PHONE_OFF.includes(k)) ? ' Güç tasarrufu şu an bunu kısıyor.' : '')
+  const cutNote = (k: Cut) => (saving && settings.cuts[k] && !(phone && PHONE_OFF.includes(k)) ? L(' Güç tasarrufu şu an bunu kısıyor.', ' Power saving is turning this down right now.') : '')
   const off = (k: Cut) => phone && PHONE_OFF.includes(k)
   const rows: { label: string; hint: string; key: Flag & Cut; icon: IconName }[] = [
-    { label: 'Detay animasyonları', hint: 'Yakında rüzgârda sallanan ağaçlar ve hareketli binalar (ekin, demirci, bayraklar).', key: 'detail', icon: 'leaf' },
-    { label: 'Canlı gölgeler', hint: 'Binaların, yürüyenlerin ve orduların güneşle dönen gölgeleri. Zemine boyalı gölgeler kalır.', key: 'shadows', icon: 'sun' },
-    { label: 'Gece ışıltısı', hint: 'Gece yanan pencerelerin çevresindeki yumuşak parıltı.', key: 'glow', icon: 'moon' },
-    { label: 'Kuşlar', hint: 'Haritanın üstünde uçan kuş sürüleri.', key: 'birds', icon: 'flower' },
-    { label: 'Bulutlar', hint: 'Uzaklaşınca sürüklenen bulutlar ve gölgeleri.', key: 'clouds', icon: 'map' },
-    { label: 'Keskin çizim', hint: 'Uzaklaştırınca ekranın tam piksel yoğunluğu (Retina). Kapalıyken daha az piksel boyanır.', key: 'sharp', icon: 'camera' },
+    { label: L('Detay animasyonları', 'Detail animations'), hint: L('Yakında rüzgârda sallanan ağaçlar ve hareketli binalar (ekin, demirci, bayraklar).', 'Up close, trees swaying in the wind and moving buildings (crops, smiths, flags).'), key: 'detail', icon: 'leaf' },
+    { label: L('Canlı gölgeler', 'Live shadows'), hint: L('Binaların, yürüyenlerin ve orduların güneşle dönen gölgeleri. Zemine boyalı gölgeler kalır.', 'Shadows of buildings, walkers and armies that turn with the sun. Shadows painted on the ground stay.'), key: 'shadows', icon: 'sun' },
+    { label: L('Gece ışıltısı', 'Night glow'), hint: L('Gece yanan pencerelerin çevresindeki yumuşak parıltı.', 'The soft glow around windows lit at night.'), key: 'glow', icon: 'moon' },
+    { label: L('Kuşlar', 'Birds'), hint: L('Haritanın üstünde uçan kuş sürüleri.', 'Flocks of birds flying over the map.'), key: 'birds', icon: 'flower' },
+    { label: L('Bulutlar', 'Clouds'), hint: L('Uzaklaşınca sürüklenen bulutlar ve gölgeleri.', 'Drifting clouds and their shadows when zoomed out.'), key: 'clouds', icon: 'map' },
+    { label: L('Keskin çizim', 'Sharp rendering'), hint: L('Uzaklaştırınca ekranın tam piksel yoğunluğu (Retina). Kapalıyken daha az piksel boyanır.', 'The screen\'s full pixel density (Retina) when zoomed out. When off, fewer pixels are painted.'), key: 'sharp', icon: 'camera' },
   ]
   return (
     <div className="settings-list">
       {rows.map((r) => (
-        <Row key={r.key} label={r.label} hint={r.hint + cutNote(r.key) + (off(r.key) ? ' Telefonda hep kapalı.' : '')} icon={r.icon}>
+        <Row key={r.key} label={r.label} hint={r.hint + cutNote(r.key) + (off(r.key) ? L(' Telefonda hep kapalı.', ' Always off on phones.') : '')} icon={r.icon}>
           <Toggle on={settings[r.key] && !off(r.key)} disabled={off(r.key)} why={PHONE_WHY} onClick={() => onChange({ [r.key]: !settings[r.key] })} />
         </Row>
       ))}
-      <Row label="Hava efektleri" hint={'Tam: yağmur, kar, bulut gölgeleri ve damla sıçramaları. Sade: daha az damla, gölge ve sıçrama yok. Kapalı: hava hiç çizilmez.' + cutNote('weather') + (phone ? ' Telefonda en çok Sade.' : '')} icon="snow">
+      <Row label={L('Hava efektleri', 'Weather effects')} hint={L('Tam: yağmur, kar, bulut gölgeleri ve damla sıçramaları. Sade: daha az damla, gölge ve sıçrama yok. Kapalı: hava hiç çizilmez.', 'Full: rain, snow, cloud shadows and splashes. Light: fewer drops, no shadows or splashes. Off: no weather is drawn.') + cutNote('weather') + (phone ? L(' Telefonda en çok Sade.', ' At most Light on phones.') : '')} icon="snow">
         <Choice
           value={phone && settings.weather === 'full' ? 'lite' : settings.weather}
           options={WEATHER}
@@ -177,32 +201,32 @@ export function PictureSettings({ settings, onChange }: { settings: Settings; on
 }
 
 const PACES: { id: Pace; label: string }[] = [
-  { id: 'smooth', label: 'Akıcı' },
-  { id: 'balanced', label: 'Dengeli' },
-  { id: 'saver', label: 'Pil dostu' },
+  { id: 'smooth', label: L('Akıcı', 'Smooth') },
+  { id: 'balanced', label: L('Dengeli', 'Balanced') },
+  { id: 'saver', label: L('Pil dostu', 'Battery saver') },
 ]
 
 const PACE_HINTS: Record<Pace, string> = {
-  smooth: 'Dururken saniyede 30 kare (uzakta 20), gezinirken 60.',
-  balanced: 'Dururken saniyede 24 kare (uzakta 15), gezinirken 60.',
-  saver: 'Dururken saniyede 15 kare (uzakta 10), gezinirken 30.',
+  smooth: L('Dururken saniyede 30 kare (uzakta 20), gezinirken 60.', '30 frames a second when still (20 zoomed out), 60 while moving.'),
+  balanced: L('Dururken saniyede 24 kare (uzakta 15), gezinirken 60.', '24 frames a second when still (15 zoomed out), 60 while moving.'),
+  saver: L('Dururken saniyede 15 kare (uzakta 10), gezinirken 30.', '15 frames a second when still (10 zoomed out), 30 while moving.'),
 }
 
 const POWER_MODES: { id: PowerMode; label: string }[] = [
-  { id: 'auto', label: 'Otomatik' },
-  { id: 'on', label: 'Açık' },
-  { id: 'off', label: 'Kapalı' },
+  { id: 'auto', label: L('Otomatik', 'Automatic') },
+  { id: 'on', label: L('Açık', 'On') },
+  { id: 'off', label: L('Kapalı', 'Off') },
 ]
 
 const CUTS: { key: Cut; label: string }[] = [
-  { key: 'pace', label: 'Kare hızını Pil dostu yap' },
-  { key: 'detail', label: 'Detay animasyonlarını kapat' },
-  { key: 'shadows', label: 'Canlı gölgeleri kapat' },
-  { key: 'glow', label: 'Gece ışıltısını kapat' },
-  { key: 'birds', label: 'Kuşları kapat' },
-  { key: 'clouds', label: 'Bulutları kapat' },
-  { key: 'weather', label: 'Hava efektlerini sadeleştir' },
-  { key: 'sharp', label: 'Keskin çizimi kapat' },
+  { key: 'pace', label: L('Kare hızını Pil dostu yap', 'Set the frame rate to Battery saver') },
+  { key: 'detail', label: L('Detay animasyonlarını kapat', 'Turn off detail animations') },
+  { key: 'shadows', label: L('Canlı gölgeleri kapat', 'Turn off live shadows') },
+  { key: 'glow', label: L('Gece ışıltısını kapat', 'Turn off night glow') },
+  { key: 'birds', label: L('Kuşları kapat', 'Turn off birds') },
+  { key: 'clouds', label: L('Bulutları kapat', 'Turn off clouds') },
+  { key: 'weather', label: L('Hava efektlerini sadeleştir', 'Simplify weather effects') },
+  { key: 'sharp', label: L('Keskin çizimi kapat', 'Turn off sharp rendering') },
 ]
 
 // How often the map is drawn, and power saving with what it turns down (CLAUDE.md §12).
@@ -212,27 +236,27 @@ export function PerformanceSettings({ settings, onChange }: { settings: Settings
   return (
     <div className="settings-list">
       <Row
-        label="Kare hızı"
-        hint={PACE_HINTS[settings.pace] + ' Bir pencere haritayı örtünce daha da yavaşlar; sekme gizliyken hiç çizilmez.' + (phone ? ' Telefonda güç tasarrufu bunu değiştirmez, seçtiğin geçerlidir.' : '')}
+        label={L('Kare hızı', 'Frame rate')}
+        hint={PACE_HINTS[settings.pace] + L(' Bir pencere haritayı örtünce daha da yavaşlar; sekme gizliyken hiç çizilmez.', ' Slower still when a window covers the map; nothing is drawn while the tab is hidden.') + (phone ? L(' Telefonda güç tasarrufu bunu değiştirmez, seçtiğin geçerlidir.', ' On phones power saving leaves this alone; your choice applies.') : '')}
         icon="time"
       >
         <Choice value={settings.pace} options={PACES} onPick={(pace) => onChange({ pace })} />
       </Row>
       <Row
-        label="Güç tasarrufu"
+        label={L('Güç tasarrufu', 'Power saving')}
         hint={
           settings.power === 'auto'
-            ? `Telefonda, tablette ve pil ile çalışırken kendiliğinden açılır${saving ? ' (şu an açık)' : ' (şu an kapalı)'}.`
+            ? L(`Telefonda, tablette ve pil ile çalışırken kendiliğinden açılır${saving ? ' (şu an açık)' : ' (şu an kapalı)'}.`, `Turns on by itself on phones, tablets and when running on battery${saving ? ' (on right now)' : ' (off right now)'}.`)
             : saving
-              ? 'Açık: aşağıda seçtiklerin kısılır.'
-              : 'Kapalı: harita her zaman yukarıdaki ayarlarla çizilir.'
+              ? L('Açık: aşağıda seçtiklerin kısılır.', 'On: what you tick below is turned down.')
+              : L('Kapalı: harita her zaman yukarıdaki ayarlarla çizilir.', 'Off: the map is always drawn with the settings above.')
         }
         icon="info"
       >
         <Choice value={settings.power} options={POWER_MODES} onPick={(power) => onChange({ power })} />
       </Row>
       <div className="settings-cuts">
-        <b>Güç tasarrufu açıkken</b>
+        <b>{L('Güç tasarrufu açıkken', 'While power saving is on')}</b>
         {CUTS.map((c) => (
           <button
             key={c.key}
@@ -240,7 +264,7 @@ export function PerformanceSettings({ settings, onChange }: { settings: Settings
             role="checkbox"
             aria-checked={phone && c.key !== 'pace' && c.key !== 'shadows' ? true : phone && c.key === 'pace' ? false : settings.cuts[c.key]}
             disabled={phone && (PHONE_OFF.includes(c.key) || c.key === 'pace' || c.key === 'weather')}
-            data-why={phone ? (c.key === 'pace' ? 'Telefonda kare hızını sen seçersin' : PHONE_WHY) : undefined}
+            data-why={phone ? (c.key === 'pace' ? L('Telefonda kare hızını sen seçersin', 'On phones you choose the frame rate') : PHONE_WHY) : undefined}
             onClick={() => onChange({ cuts: { ...settings.cuts, [c.key]: !settings.cuts[c.key] } })}
           >
             <span className="box" aria-hidden>

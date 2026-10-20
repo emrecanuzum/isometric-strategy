@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '../icons'
+import { L } from '../../lib/i18n'
 import type { IconName } from '../icons'
 
 // A tab split into parts (Saray: Seviye / Hanedan / Yapılar, and the like): a row of buttons over the part shown, the
@@ -62,7 +63,7 @@ export function Subtabs<P extends string>({ label, parts, part, onPart }: { labe
             {p.name}
             {p.count !== undefined && p.count !== 0 && <small> · {p.count}</small>}
           </span>
-          {p.dot && <span className="dot" aria-label="Bekleyen bir şey var" />}
+          {p.dot && <span className="dot" aria-label={L('Bekleyen bir şey var', 'Something is waiting')} />}
         </button>
       ))}
     </div>

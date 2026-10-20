@@ -16,10 +16,10 @@
     "admiral": { "measure": "ships", "tiers": [1, 5, 12] }
   },
   "ranks": [
-    { "stars": 0, "title": "Genç Lord" },
-    { "stars": 4, "title": "Saygın Lord" },
-    { "stars": 10, "title": "Ünlü Lord" },
-    { "stars": 18, "title": "Efsanevi Lord" },
-    { "stars": 28, "title": "Destansı Hükümdar" }
+    { "stars": 0, "title": "Genç Lord", "titleEn": "Young Lord" },
+    { "stars": 4, "title": "Saygın Lord", "titleEn": "Respected Lord" },
+    { "stars": 10, "title": "Ünlü Lord", "titleEn": "Renowned Lord" },
+    { "stars": 18, "title": "Efsanevi Lord", "titleEn": "Legendary Lord" },
+    { "stars": 28, "title": "Destansı Hükümdar", "titleEn": "Epic Ruler" }
   ]
 }

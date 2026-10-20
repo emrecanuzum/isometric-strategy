@@ -7,6 +7,7 @@ import type { KingdomInfo } from './hud/online'
 import type { Score } from '@game/shared'
 import { lastSeen } from './hud/online'
 import { Icon } from './icons'
+import { L, locale } from '../lib/i18n'
 import { play } from '../audio/sfx'
 import { MiniBoards } from './hud/MiniGames'
 
@@ -39,7 +40,7 @@ const readMuted = () => {
     return false
   }
 }
-const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
 
 // The newest message read, kept per lobby in this browser so a reload does not bring old messages back as new.
 const readSeen = (key: string) => {
@@ -196,8 +197,8 @@ export function Chat({
           </button>
         )}
         <div className="chat-bar">
-          <button className="btn chat-toggle" onClick={() => setOpen(true)} title="Lobi sohbeti">
-            <Icon name="scroll" size={16} slash={muted} /> Sohbet
+          <button className="btn chat-toggle" onClick={() => setOpen(true)} title={L('Lobi sohbeti', 'Lobby chat')}>
+            <Icon name="scroll" size={16} slash={muted} /> {L('Sohbet', 'Chat')}
             {called > 0 ? <span className="badge mention-badge">@{called}</span> : unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
           </button>
           {aside}
@@ -206,29 +207,29 @@ export function Chat({
     )
   }
   return (
-    <section className="chat frame" aria-label="Lobi sohbeti">
+    <section className="chat frame" aria-label={L('Lobi sohbeti', 'Lobby chat')}>
       <header>
         <span className="chat-tabs" role="tablist">
           <button role="tab" aria-selected={tab === 'chat'} className="btn small" onClick={() => setTab('chat')}>
-            Sohbet
+            {L('Sohbet', 'Chat')}
           </button>
           <button role="tab" aria-selected={tab === 'kingdoms'} className="btn small" onClick={() => setTab('kingdoms')}>
-            Lordlar ({kingdoms.length})
+            {L('Lordlar', 'Lords')} ({kingdoms.length})
           </button>
           <button role="tab" aria-selected={tab === 'ranking'} className="btn small" onClick={() => setTab('ranking')}>
-            Sıralama
+            {L('Sıralama', 'Rankings')}
           </button>
         </span>
         <button
           className="btn small icon-only"
           aria-pressed={muted}
           onClick={toggleMute}
-          aria-label={muted ? 'Sohbet bildirimlerini aç' : 'Sohbet bildirimlerini sessize al'}
-          title={muted ? 'Sessizde: yalnızca seni etiketleyenler bildirilir' : 'Sessize al'}
+          aria-label={muted ? L('Sohbet bildirimlerini aç', 'Turn chat notifications on') : L('Sohbet bildirimlerini sessize al', 'Mute chat notifications')}
+          title={muted ? L('Sessizde: yalnızca seni etiketleyenler bildirilir', 'Muted: only messages that tag you are notified') : L('Sessize al', 'Mute')}
         >
           <Icon name="bell" size={16} slash={muted} />
         </button>
-        <button className="btn small icon-only" onClick={() => setOpen(false)} aria-label="Sohbeti kapat">
+        <button className="btn small icon-only" onClick={() => setOpen(false)} aria-label={L('Sohbeti kapat', 'Close chat')}>
           <Icon name="close" size={16} />
         </button>
       </header>
@@ -237,10 +238,10 @@ export function Chat({
           {lobby && (
             <div className="chat-ranking-switch" role="tablist">
               <button role="tab" aria-selected={boards === 'lords'} className="btn small" onClick={() => setBoards('lords')}>
-                Lordlar
+                {L('Lordlar', 'Lords')}
               </button>
               <button role="tab" aria-selected={boards === 'games'} className="btn small" onClick={() => setBoards('games')}>
-                Mini oyunlar
+                {L('Mini oyunlar', 'Minigames')}
               </button>
             </div>
           )}
@@ -256,19 +257,19 @@ export function Chat({
         <ol className="chat-kingdoms">
           {kingdoms.map((k) => (
             <li key={k.id}>
-              <button className={k.id === mine ? 'own' : undefined} onClick={() => onKingdom(k.id)} disabled={k.id === mine} data-why="Bu senin lordluğun">
+              <button className={k.id === mine ? 'own' : undefined} onClick={() => onKingdom(k.id)} disabled={k.id === mine} data-why={L('Bu senin lordluğun', 'This is your lordship')}>
                 <i style={{ background: swatch(k.color) }} />
                 <span>
                   <b style={{ color: `color-mix(in srgb, ${swatch(k.color)} 45%, #f3e6c8)` }}>
                     {banner?.(k.id)} {k.name}
                   </b>
-                  <small>{k.id === mine ? 'sen' : (k.username ?? '—')}</small>
+                  <small>{k.id === mine ? L('sen', 'you') : (k.username ?? '—')}</small>
                 </span>
                 {k.id !== mine && (
-                  <span className={lastSeen(k.seenAt, Date.now()) === 'çevrimiçi' ? 'presence on' : 'presence'}>{lastSeen(k.seenAt, Date.now())}</span>
+                  <span className={lastSeen(k.seenAt, Date.now()) === L('çevrimiçi', 'online') ? 'presence on' : 'presence'}>{lastSeen(k.seenAt, Date.now())}</span>
                 )}
               </button>
-              <button className="btn icon-only locate" onClick={() => onLocate(k.site)} aria-label={`${k.name} haritada göster`} title="Haritada göster">
+              <button className="btn icon-only locate" onClick={() => onLocate(k.site)} aria-label={L(`${k.name} haritada göster`, `Show ${k.name} on the map`)} title={L('Haritada göster', 'Show on the map')}>
                 <Icon name="pin" size={16} />
               </button>
             </li>
@@ -276,7 +277,7 @@ export function Chat({
         </ol>
       ) : (
       <ol ref={list}>
-        {messages.length === 0 && <li className="empty">Henüz kimse yazmadı.</li>}
+        {messages.length === 0 && <li className="empty">{L('Henüz kimse yazmadı.', 'Nobody has written yet.')}</li>}
         {messages.map((m) => (
           <li key={m.id} className={m.kingdom_id === mine ? 'own' : undefined}>
             <i style={{ background: swatch(m.color) }} />
@@ -294,7 +295,7 @@ export function Chat({
       </ol>
       )}
       {tags.length > 0 && (
-        <div className="chat-tags" role="listbox" aria-label="Etiketle">
+        <div className="chat-tags" role="listbox" aria-label={L('Etiketle', 'Tag')}>
           {tags.map((n) => (
             <button key={n} type="button" className="btn small" onClick={() => tag(n)}>
               @{n}
@@ -307,12 +308,12 @@ export function Chat({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           maxLength={280}
-          placeholder={canPost ? 'Mesaj yaz… (@ ile etiketle)' : 'Yazmak için lordluğunu kur'}
+          placeholder={canPost ? L('Mesaj yaz… (@ ile etiketle)', 'Write a message… (tag with @)') : L('Yazmak için lordluğunu kur', 'Found your lordship to write')}
           disabled={!canPost}
-          aria-label="Mesaj"
+          aria-label={L('Mesaj', 'Message')}
         />
-        <button className="btn small" disabled={!canPost || sending || !draft.trim()} data-why={!canPost ? 'Yazmak için önce lordluğunu kur' : sending ? 'Mesajın gönderiliyor' : 'Önce bir mesaj yaz'}>
-          Gönder
+        <button className="btn small" disabled={!canPost || sending || !draft.trim()} data-why={!canPost ? L('Yazmak için önce lordluğunu kur', 'Found your lordship first to write') : sending ? L('Mesajın gönderiliyor', 'Your message is being sent') : L('Önce bir mesaj yaz', 'Write a message first')}>
+          {L('Gönder', 'Send')}
         </button>
       </form>
     </section>
@@ -320,12 +321,12 @@ export function Chat({
 }
 
 const PARTS: { key: keyof Omit<Score, 'total'>; name: string }[] = [
-  { key: 'economy', name: 'Hazine' },
-  { key: 'growth', name: 'Gelişim' },
-  { key: 'people', name: 'Nüfus' },
-  { key: 'army', name: 'Ordu' },
-  { key: 'glory', name: 'Zafer' },
-  { key: 'learning', name: 'Bilgi' },
+  { key: 'economy', name: L('Hazine', 'Treasury') },
+  { key: 'growth', name: L('Gelişim', 'Development') },
+  { key: 'people', name: L('Nüfus', 'Population') },
+  { key: 'army', name: L('Ordu', 'Army') },
+  { key: 'glory', name: L('Zafer', 'Glory') },
+  { key: 'learning', name: L('Bilgi', 'Knowledge') },
 ]
 
 // The lobby's ranking: kingdoms by score, each with what its score is made of.
@@ -335,7 +336,7 @@ function Ranking({ kingdoms, mine, onKingdom, banner }: { kingdoms: KingdomInfo[
     <ol className="chat-ranking">
       {ranked.map((k, i) => (
         <li key={k.id} className={k.id === mine ? 'own' : undefined}>
-          <button onClick={() => k.id !== mine && onKingdom(k.id)} disabled={k.id === mine} data-why="Bu senin lordluğun">
+          <button onClick={() => k.id !== mine && onKingdom(k.id)} disabled={k.id === mine} data-why={L('Bu senin lordluğun', 'This is your lordship')}>
             <span className="rank">{i + 1}.</span>
             <i style={{ background: swatch(k.color) }} />
             <span className="who">
@@ -345,18 +346,20 @@ function Ranking({ kingdoms, mine, onKingdom, banner }: { kingdoms: KingdomInfo[
               <small>
                 {k.score
                   ? PARTS.filter((p) => (k.score![p.key] ?? 0) > 0)
-                      .map((p) => `${p.name} ${k.score![p.key].toLocaleString('tr-TR')}`)
+                      .map((p) => `${p.name} ${k.score![p.key].toLocaleString(locale())}`)
                       .join(' · ')
-                  : 'henüz puanlanmadı'}
+                  : L('henüz puanlanmadı', 'not scored yet')}
               </small>
             </span>
-            <strong>{(k.score?.total ?? 0).toLocaleString('tr-TR')}</strong>
+            <strong>{(k.score?.total ?? 0).toLocaleString(locale())}</strong>
           </button>
         </li>
       ))}
       <li className="ranking-note">
-        Puan: hazine (altın ve depo), gelişim (saray ve bina seviyeleri), nüfus, ordu, zafer (kazanılan muharebe ve kuşatmalar, kraliçe, rehineler) ve
-        bilgi (araştırmalar). Başkalarının yalnızca gelişim ve zafer puanı ile yuvarlanmış toplamı görünür; hazinesi ve ordusu casuslarla öğrenilir.
+        {L(
+          'Puan: hazine (altın ve depo), gelişim (saray ve bina seviyeleri), nüfus, ordu, zafer (kazanılan muharebe ve kuşatmalar, kraliçe, rehineler) ve bilgi (araştırmalar). Başkalarının yalnızca gelişim ve zafer puanı ile yuvarlanmış toplamı görünür; hazinesi ve ordusu casuslarla öğrenilir.',
+          'Score: treasury (gold and stores), development (palace and building levels), population, army, glory (battles and sieges won, queen, hostages) and knowledge (research). For other lords only development, glory and a rounded total are shown; their treasury and army must be learned through spies.',
+        )}
       </li>
     </ol>
   )

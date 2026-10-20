@@ -2,29 +2,32 @@ import { useEffect, useRef } from 'react'
 import type React from 'react'
 import type { Sprite } from '../../game/sprites'
 import { Icon } from '../icons'
+import { L, locale } from '../../lib/i18n'
 import type { IconName } from '../icons'
 
 // Building blocks of the pixel interface. Everything is drawn on whole art pixels (see --px in index.css):
 // stepped frames, segmented meters, sprites shown at whole scales.
 
-export const fmt = (v: number) => Math.floor(v).toLocaleString('tr-TR')
+export const fmt = (v: number) => Math.floor(v).toLocaleString(locale())
 // Short form for tight spaces: 1.390 → 1,4K, 2.500.000 → 2,5M.
-const one = (v: number) => (Math.floor(v * 10) / 10).toLocaleString('tr-TR', { maximumFractionDigits: 1 })
+const one = (v: number) => (Math.floor(v * 10) / 10).toLocaleString(locale(), { maximumFractionDigits: 1 })
 export const short = (v: number) => (v < 1000 ? fmt(v) : v < 1_000_000 ? `${one(v / 1000)}K` : `${one(v / 1_000_000)}M`)
 // A sign only when the shown number is not nought: "0,0", never "+0,0" or "−0,0".
 export const signed = (v: number) => {
   const text = Math.abs(v).toFixed(Math.abs(v) < 10 ? 1 : 0)
-  return Number(text) === 0 ? text.replace('.', ',') : `${v > 0 ? '+' : '−'}${text.replace('.', ',')}`
+  const dot = L(',', '.')
+  return Number(text) === 0 ? text.replace('.', dot) : `${v > 0 ? '+' : '−'}${text.replace('.', dot)}`
 }
 // "%12'sini": a percentage with the accusative suffix its spoken Turkish number takes (on iki → on ikisini).
 export function percentOf(n: number) {
   const v = Math.round(Math.abs(n))
+  if (L('tr', 'en') === 'en') return `${v}%`
   const ones = ["'ını", "'ini", "'sini", "'ünü", "'ünü", "'ini", "'sını", "'sini", "'ini", "'unu"]
   const tens = ['', "'unu", "'sini", "'unu", "'ını", "'sini", "'ını", "'ini", "'ini", "'ını"]
   const suffix = v % 100 === 0 ? (v === 0 ? "'ını" : "'ünü") : v % 10 ? ones[v % 10] : tens[Math.floor(v / 10) % 10]
   return `%${v}${suffix}`
 }
-export const times = (v: number) => `×${v.toFixed(2).replace('.', ',')}`
+export const times = (v: number) => `×${v.toFixed(2).replace('.', L(',', '.'))}`
 
 // A game sprite from the map, drawn with square pixels at `scale` screen pixels per art pixel.
 export function SpriteView({ sprite, scale = 1, label }: { sprite: Sprite; scale?: number; label?: string }) {

@@ -1,4 +1,5 @@
 import { balance } from './balance'
+import { L } from './lang'
 import type { Point } from './iso'
 import { Feature, Terrain, hash } from './worldgen'
 import type { World } from './worldgen'
@@ -190,7 +191,7 @@ const pick = <T>(list: T[], r: number) => list[Math.floor(r * list.length) % lis
 export const clanName = (seed: number, slot: number, gen: number) => {
   const first = pick(CLAN_FIRST, hash(slot, 71 + gen * 3, seed + 6201))
   const second = pick(CLAN_SECOND, hash(slot, 72 + gen * 5, seed + 6203))
-  return `${first}${second} klanı`
+  return L(`${first}${second} klanı`, `${first}${second} clan`)
 }
 export const clanColor = (seed: number, slot: number, gen: number) => pick(CLAN_COLORS, hash(slot, 73 + gen, seed + 6207))
 
@@ -317,7 +318,16 @@ export function screenDir(from: Point, to: Point) {
   const angle = Math.atan2(sx, -sy)
   return ((Math.round(angle / (Math.PI / 4)) % 8) + 8) % 8
 }
-export const DIR_NAMES = ['kuzey', 'kuzeydoğu', 'doğu', 'güneydoğu', 'güney', 'güneybatı', 'batı', 'kuzeybatı']
+export const DIR_NAMES = [
+  L('kuzey', 'north'),
+  L('kuzeydoğu', 'north-east'),
+  L('doğu', 'east'),
+  L('güneydoğu', 'south-east'),
+  L('güney', 'south'),
+  L('güneybatı', 'south-west'),
+  L('batı', 'west'),
+  L('kuzeybatı', 'north-west'),
+]
 
 // The trail after one more win over the clan's bands at `from`: the hint grows with each win, the cave is found at
 // the last.
@@ -354,16 +364,17 @@ export const trailOf = (trails: CaveTrails | null | undefined, clan: Pick<Clan, 
 // (CLAUDE.md §7.9.1): the army could not look into it. The same words whether the cave is empty or a clan's hidden
 // den; which one is drawn from the lobby's seed, the cave, the army and the moment it arrived.
 export const PROBE_REASONS = [
-  'Yol çok bozuktu; taşlar ve devrik ağaçlar arasında ordu mağarayı inceleyemedi.',
-  'Mağara buz kesiyordu; askerler soğuktan derinlere inemedi.',
-  'Mağaranın ağzı bir göçükle tıkalıydı; taşları kaldırmaya ne alet ne vakit vardı.',
-  'Meşaleler rutubetten söndü; askerler karanlıkta birkaç adım ilerleyip geri döndü.',
-  'İçeriden yarasalar ve rutubet kokusundan başka bir şey çıkmadı; daha ileri gitmeye kimse gönüllü olmadı.',
-  'Dar bir yarıktan öteye atlar ve yük geçemedi; ordu ağızda beklemekle yetindi.',
-  'İçeriye su basmıştı; dizlere kadar çamura batan askerler geri döndü.',
-  'Mağaranın içi dallanıp budaklanıyordu; kılavuzsuz giren kaybolur diye kimse girmedi.',
-  'Askerler mağaranın cinli olduğunu fısıldaştı; komutan zorlamak istemedi.',
-  'Ağızdaki kayalar gevşekti; bir çığ kopmasın diye ordu uzak durdu.',
+  L('Yol çok bozuktu; taşlar ve devrik ağaçlar arasında ordu mağarayı inceleyemedi.', 'The road was a ruin; among the rocks and fallen trees the army could not look into the cave.'),
+  L('Mağara buz kesiyordu; askerler soğuktan derinlere inemedi.', 'The cave was ice-cold; the soldiers could not bear to go any deeper.'),
+  L('Mağaranın ağzı bir göçükle tıkalıydı; taşları kaldırmaya ne alet ne vakit vardı.', 'The cave mouth was blocked by a rockfall; there was neither the gear nor the time to shift the stones.'),
+  L('Meşaleler rutubetten söndü; askerler karanlıkta birkaç adım ilerleyip geri döndü.', 'The torches died in the damp; the soldiers took a few steps into the dark and came back out.'),
+  L('İçeriden yarasalar ve rutubet kokusundan başka bir şey çıkmadı; daha ileri gitmeye kimse gönüllü olmadı.', 'Nothing came out but bats and the smell of damp; nobody volunteered to go further.'),
+  L('Dar bir yarıktan öteye atlar ve yük geçemedi; ordu ağızda beklemekle yetindi.', 'Beyond a narrow cleft neither horses nor baggage could pass; the army made do with waiting at the mouth.'),
+  L('İçeriye su basmıştı; dizlere kadar çamura batan askerler geri döndü.', 'The cave was flooded; the soldiers sank knee-deep in mud and turned back.'),
+  L('Mağaranın içi dallanıp budaklanıyordu; kılavuzsuz giren kaybolur diye kimse girmedi.', 'The cave branched every which way; without a guide one would be lost, so nobody went in.'),
+  L('Askerler mağaranın cinli olduğunu fısıldaştı; komutan zorlamak istemedi.', 'The soldiers whispered that the cave was haunted; the commander did not care to press them.'),
+  L('Ağızdaki kayalar gevşekti; bir çığ kopmasın diye ordu uzak durdu.', 'The rocks at the mouth were loose; the army kept its distance lest it bring down a rockslide.'),
+
 ]
 
 export const probeReason = (seed: number, cave: number, army: number, at: number) =>

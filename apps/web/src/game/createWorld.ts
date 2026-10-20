@@ -20,6 +20,7 @@ import {
 import type { Point, Rect, RiverKeep, World } from '@game/shared'
 import type { Video } from '../net/settings'
 import { Application, BlurFilter, Container, Graphics, ImageSource, Rectangle, Sprite, Text, Texture, UPDATE_PRIORITY } from 'pixi.js'
+import { L, locale } from '../lib/i18n'
 import { createAmbient } from './ambient'
 import { createArmies } from './armies'
 import type { FleetShip } from './ambient'
@@ -435,7 +436,7 @@ export async function createWorld(
         stroke: { color: 0x10141a, width: 3, join: 'round' },
       },
     })
-  const plotLabels = { dock: label('İskele alanı', DOCK_PLOT), trade: label('Ticaret alanı', TRADE_PLOT) }
+  const plotLabels = { dock: label(L('İskele alanı', 'Dock plot'), DOCK_PLOT), trade: label(L('Ticaret alanı', 'Trade plot'), TRADE_PLOT) }
   // The kingdom's name over its territory, shown once the map is zoomed out far enough to see the whole of it.
   // Lords' names a little smaller than the crown kingdoms', which are written in capitals in their crown's colour.
   const nameLabel = (fill: number | string, fontSize = 27) => new Text({
@@ -1183,7 +1184,7 @@ export async function createWorld(
       const c = parseInt(info.color.slice(1), 16)
       const lift = (v: number) => Math.round(v + (255 - v) * 0.22)
       const text = nameLabel((lift(c >> 16) << 16) | (lift((c >> 8) & 255) << 8) | lift(c & 255), 30)
-      text.text = info.name.toLocaleUpperCase('tr-TR')
+      text.text = info.name.toLocaleUpperCase(locale())
       const middle = groundToScreen(world, cityHall(index))
       text.position.set(middle.x, middle.y - 110 - 14 / camera.scale.y)
       text.scale.set(1 / camera.scale.x)

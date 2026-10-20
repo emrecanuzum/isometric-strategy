@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../icons'
 import { babble } from '../../audio/sfx'
 import { EnvoyPortrait } from './EnvoyPortrait'
+import { L } from '../../lib/i18n'
 import {
   ADVISOR_EVERY_MINUTES, IDLE_LINES, LATER, LATER_ANSWERS, SKIP_ANSWERS, SMALL_TALK, SNOOZE_MINUTES, STEPS, TIPS, TOPICS, TOPICS_ASK, TUTORIAL_DONE,
   TOPIC_GROUPS, TUTORIAL_OFF_ANSWERS, wealthAdvice, wellStocked,
@@ -81,29 +82,29 @@ export function AdvisorSettings({ storeKey }: { storeKey: string }) {
       <div className="settings-row">
         <div>
           <b>
-            <Icon name="scroll" size={16} /> Elçinin öğütleri
+            <Icon name="scroll" size={16} /> {L('Elçinin öğütleri', "The envoy's counsel")}
           </b>
-          <small>Açıkken elçi birkaç dakikada bir gelip eksiklerine göre öğüt verir; kapalıyken yalnızca elçi düğmesiyle çağırınca gelir.</small>
+          <small>{L('Açıkken elçi birkaç dakikada bir gelip eksiklerine göre öğüt verir; kapalıyken yalnızca elçi düğmesiyle çağırınca gelir.', 'When on, the envoy drops by every few minutes with advice on what you lack; when off, he comes only when called with the envoy button.')}</small>
         </div>
         <button className="btn small" aria-pressed={!memory.muted} onClick={() => update({ muted: !memory.muted })}>
-          {memory.muted ? 'Kapalı' : 'Açık'}
+          {memory.muted ? L('Kapalı', 'Off') : L('Açık', 'On')}
         </button>
       </div>
       <div className="settings-row">
         <div>
           <b>
-            <Icon name="book" size={16} /> Öğretici
+            <Icon name="book" size={16} /> {L('Öğretici', 'Tutorial')}
           </b>
-          <small>Yeni bir lordu adım adım kuruluştan 5. seviye saraya götürür; bütün adımları zaten geçtiysen açılınca hemen tamamlanır.</small>
+          <small>{L('Yeni bir lordu adım adım kuruluştan 5. seviye saraya götürür; bütün adımları zaten geçtiysen açılınca hemen tamamlanır.', 'Walks a new lord step by step from founding to a level 5 palace; if you have already passed every step, it completes as soon as it is turned on.')}</small>
         </div>
         <button
           className="btn small"
           aria-pressed={memory.tutorial === 'on'}
           disabled={done}
-          data-why="Öğretici tamamlandı"
+          data-why={L('Öğretici tamamlandı', 'Tutorial completed')}
           onClick={() => update(memory.tutorial === 'on' ? { tutorial: 'off' } : { tutorial: 'on', cheered: [], skipped: [] })}
         >
-          {memory.tutorial === 'on' ? 'Açık' : done ? 'Tamamlandı' : 'Kapalı'}
+          {memory.tutorial === 'on' ? L('Açık', 'On') : done ? L('Tamamlandı', 'Completed') : L('Kapalı', 'Off')}
         </button>
       </div>
     </div>
@@ -230,9 +231,9 @@ function stepSpeech(s: Step, index: number, c: AdvisorCtx, pick: Pick, cheer?: s
     step: { index, of: STEPS.length, title: s.title },
     replies: [
       ...(s.go ? [{ label: s.go.label, act: s.go.act }] : []),
-      { label: 'Nasıl yapılır?', topic: 'build' },
-      { label: 'Bu adımı geç', answer: pick('skip', SKIP_ANSWERS), skip: s.id },
-      { label: 'Öğreticiyi kapat', answer: pick('tutorialOff', TUTORIAL_OFF_ANSWERS), tutorial: 'off' },
+      { label: L('Nasıl yapılır?', 'How do I do it?'), topic: 'build' },
+      { label: L('Bu adımı geç', 'Skip this step'), answer: pick('skip', SKIP_ANSWERS), skip: s.id },
+      { label: L('Öğreticiyi kapat', 'Turn off the tutorial'), answer: pick('tutorialOff', TUTORIAL_OFF_ANSWERS), tutorial: 'off' },
     ],
   }
 }
@@ -253,13 +254,13 @@ function turnPage(s: Speech, index: number): Speech {
     page: { ...s.page, index: i },
     replies: [
       ...(t.go ? [{ label: t.go.label, act: t.go.act }] : []),
-      { label: 'Başka bir şey sor', topic: '' },
-      ...(i === pages.length - 1 ? [{ label: 'Teşekkürler', answer: '' }] : []),
+      { label: L('Başka bir şey sor', 'Ask something else'), topic: '' },
+      ...(i === pages.length - 1 ? [{ label: L('Teşekkürler', 'Thank you'), answer: '' }] : []),
     ],
   }
 }
 
-const topicsSpeech = (pick: Pick): Speech => ({ text: pick('topics', TOPICS_ASK), replies: [{ label: 'Vazgeçtim', answer: '' }], topics: true })
+const topicsSpeech = (pick: Pick): Speech => ({ text: pick('topics', TOPICS_ASK), replies: [{ label: L('Vazgeçtim', 'Never mind'), answer: '' }], topics: true })
 
 // ---- The panel ----------------------------------------------------------------------------------------------------------
 
@@ -306,7 +307,7 @@ export function Advisor({
   useEffect(() => {
     if (tutorial && stepIndex < 0) {
       update({ tutorial: 'done' })
-      if (!blocked) setSpeech({ text: pick('tutorialDone', TUTORIAL_DONE), replies: [{ label: 'Bana oyunu anlat', topic: '' }, { label: 'Sağ ol, elçi efendi', answer: '' }] })
+      if (!blocked) setSpeech({ text: pick('tutorialDone', TUTORIAL_DONE), replies: [{ label: L('Bana oyunu anlat', 'Tell me about the game'), topic: '' }, { label: L('Sağ ol, elçi efendi', 'Thank you, master envoy'), answer: '' }] })
     }
   }, [tutorial, stepIndex, blocked, update, pick])
 
@@ -353,15 +354,15 @@ export function Advisor({
     if (step) return setSpeech(stepSpeech(step, stepIndex, c, pick))
     const tip = tipFor(c, {})
     // With stores filling up, the lord may ask what to do with them.
-    const wealth: Reply | null = wellStocked(c) ? { label: 'Dolu ambarları ve hazineyi ne yapalım?', say: wealthAdvice(c, pick), quiet: true } : null
+    const wealth: Reply | null = wellStocked(c) ? { label: L('Dolu ambarları ve hazineyi ne yapalım?', 'What shall we do with the full storehouses and treasury?'), say: wealthAdvice(c, pick), quiet: true } : null
     if (tip) {
       const said = tipSpeech(tip, c, pick)
-      return setSpeech({ ...said, replies: [...said.replies.slice(0, 2), ...(wealth ? [wealth] : []), { label: 'Bana oyunu anlat', topic: '' }] })
+      return setSpeech({ ...said, replies: [...said.replies.slice(0, 2), ...(wealth ? [wealth] : []), { label: L('Bana oyunu anlat', 'Tell me about the game'), topic: '' }] })
     }
     const talk = pick('smallTalk', SMALL_TALK)
     setSpeech({
       text: pick('idle', IDLE_LINES),
-      replies: [...(wealth ? [wealth] : []), { label: 'Bana oyunu anlat', topic: '' }, { label: talk.label, answer: pick(`talk:${talk.label}`, talk.answers), quiet: true }, { label: 'Bir şey yok, sağ ol', answer: '' }],
+      replies: [...(wealth ? [wealth] : []), { label: L('Bana oyunu anlat', 'Tell me about the game'), topic: '' }, { label: talk.label, answer: pick(`talk:${talk.label}`, talk.answers), quiet: true }, { label: L('Bir şey yok, sağ ol', 'Nothing, thank you'), answer: '' }],
     })
     // Only the button calls him.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -406,7 +407,7 @@ export function Advisor({
       setSpeech(topic ? topicSpeech(topic, ctxRef.current) : topicsSpeech(pick))
       return
     }
-    if (r.answer) setSpeech({ text: r.answer, replies: [{ label: 'Tamam', answer: '' }] })
+    if (r.answer) setSpeech({ text: r.answer, replies: [{ label: L('Tamam', 'Very well'), answer: '' }] })
     else setSpeech(null)
   }
 
@@ -462,23 +463,23 @@ function Panel({
   const asides = speech.replies.filter((r) => r.quiet && r !== guide)
   const answers = speech.replies.filter((r) => !r.quiet && r !== guide)
   return (
-    <section className="advisor frame" role="dialog" aria-label="Elçi" aria-live="polite">
+    <section className="advisor frame" role="dialog" aria-label={L('Elçi', 'Envoy')} aria-live="polite">
       <div className="advisor-face">
         <EnvoyPortrait size={72} talking={!done} />
-        <small>Elçi</small>
+        <small>{L('Elçi', 'Envoy')}</small>
       </div>
       <div className="advisor-talk">
         <header>
           {speech.step ? (
             <small>
-              <Icon name="book" size={16} /> Öğretici · {speech.step.index + 1}/{speech.step.of} · <b>{speech.step.title}</b>
+              <Icon name="book" size={16} /> {L('Öğretici', 'Tutorial')} · {speech.step.index + 1}/{speech.step.of} · <b>{speech.step.title}</b>
             </small>
           ) : page ? (
             <small>
-              <Icon name={page.topic.icon} size={16} /> Bana oyunu anlat · <b>{page.topic.name}</b>
+              <Icon name={page.topic.icon} size={16} /> {L('Bana oyunu anlat', 'Tell me about the game')} · <b>{page.topic.name}</b>
             </small>
           ) : (
-            <small>Elçinin sözü</small>
+            <small>{L('Elçinin sözü', "The envoy's word")}</small>
           )}
           <span className="advisor-tools">
             {guide && (
@@ -486,7 +487,7 @@ function Panel({
                 <Icon name="book" size={16} />
               </button>
             )}
-            <button className="btn icon-only" onClick={onClose} aria-label="Kapat" title="Kapat">
+            <button className="btn icon-only" onClick={onClose} aria-label={L('Kapat', 'Close')} title={L('Kapat', 'Close')}>
               <Icon name="close" size={16} />
             </button>
           </span>
@@ -519,14 +520,14 @@ function Panel({
         <div className="advisor-replies">
           {page && page.pages.length > 1 && (
             <div className="advisor-pager">
-              <button className="btn small" onClick={() => onPage(page.index - 1)} disabled={page.index === 0} data-why="Bu ilk sayfa">
-                ‹ Geri
+              <button className="btn small" onClick={() => onPage(page.index - 1)} disabled={page.index === 0} data-why={L('Bu ilk sayfa', 'This is the first page')}>
+                ‹ {L('Geri', 'Back')}
               </button>
               <span>
                 {page.index + 1} / {page.pages.length}
               </span>
-              <button className={last ? 'btn small' : 'btn small primary'} onClick={() => onPage(page.index + 1)} disabled={last} data-why="Bu son sayfa">
-                İleri ›
+              <button className={last ? 'btn small' : 'btn small primary'} onClick={() => onPage(page.index + 1)} disabled={last} data-why={L('Bu son sayfa', 'This is the last page')}>
+                {L('İleri', 'Next')} ›
               </button>
             </div>
           )}

@@ -27,6 +27,7 @@ import { cityInfo } from '../../game/cities'
 import type { Notice } from '../../net/online'
 import { Portrait } from '../DynastyArt'
 import { Icon } from '../icons'
+import { L, getLang, locale } from '../../lib/i18n'
 import { NoticeArt } from '../NoticeArt'
 import { EnvoyPortrait } from '../advisor/EnvoyPortrait'
 import { playOnce } from '../../audio/sfx'
@@ -47,14 +48,26 @@ const years = (p: Pick<CrownRoyal, 'bornAt'>, at: number) => Math.floor(crownAge
 export const crownKeyOf = (k: Pick<Kingdom, 'lobbyKey' | 'seasonStart'>): CrownKey => ({ lobbyKey: k.lobbyKey, seasonStart: k.seasonStart })
 const seedOf = (key: CrownKey, crown: number, p: CrownRoyal) => ((key.lobbyKey ?? 0) % 100_000) * 7 + crown * 104_729 + p.id * 977
 
-const traitName = (p: CrownRoyal) => crownTraitSpec(p.trait).name
+const traitName = (p: CrownRoyal) => {
+  const t = crownTraitSpec(p.trait)
+  return L(t.name, t.nameEn ?? t.name)
+}
 // What a trait does, in a few words.
 function traitNote(p: CrownRoyal) {
   const t = crownTraitSpec(p.trait)
   const parts: string[] = []
-  if (t.tribute !== 1) parts.push(`haraççıları hazinenin %${(balance.cities.crown.patrol.tribute.share * t.tribute * 100).toFixed(1).replace('.', ',').replace(',0', '')}'ini ister`)
-  if (t.tip !== 1) parts.push(`devriyesi ${t.tip > 1 ? 'daha çok' : 'daha az'} bahşiş bırakır (×${t.tip.toFixed(2).replace('.', ',')})`)
-  return parts.length > 0 ? parts.join(', ') : 'tacın işlerine dokunmaz'
+  if (t.tribute !== 1)
+    parts.push(
+      L(
+        `haraççıları hazinenin %${(balance.cities.crown.patrol.tribute.share * t.tribute * 100).toFixed(1).replace('.', ',').replace(',0', '')}'ini ister`,
+        `the tribute collectors ask for ${(balance.cities.crown.patrol.tribute.share * t.tribute * 100).toFixed(1).replace('.0', '')}% of the treasury`,
+      ),
+    )
+  if (t.tip !== 1)
+    parts.push(
+      L(`devriyesi ${t.tip > 1 ? 'daha çok' : 'daha az'} bahşiş bırakır (×${t.tip.toFixed(2).replace('.', ',')})`, `the patrol leaves ${t.tip > 1 ? 'bigger' : 'smaller'} tips (×${t.tip.toFixed(2)})`),
+    )
+  return parts.length > 0 ? parts.join(', ') : L('tacın işlerine dokunmaz', 'leaves the crown\'s affairs as they are')
 }
 
 const roleOf = (p: CrownRoyal, ruler = false): 'king' | 'queen' | 'prince' | 'princess' => (ruler ? (p.sex === 'm' ? 'king' : 'queen') : p.sex === 'm' ? 'prince' : 'princess')
@@ -68,18 +81,18 @@ export function RoyalFamily({ world, kingdom, crown, now }: { world: World; king
   const year = (at: number) => crownYearOf(key, at)
   const nextOfAge = h.regent ? Math.max(0, Math.ceil((h.regent.until - now) / 3_600_000)) : 0
   return (
-    <Section title="Hanedan" icon="crown" aside={`${year(h.reign.from)}'den beri hüküm sürüyor`}>
+    <Section title={L('Hanedan', 'Dynasty')} icon="crown" aside={L(`${year(h.reign.from)}'den beri hüküm sürüyor`, `reigning since ${year(h.reign.from)}`)}>
       <div className="house">
         <div className="person">
           <Portrait seed={seedOf(key, crown, h.ruler)} sex={h.ruler.sex} age={crownAgeOf(h.ruler, now)} role={roleOf(h.ruler, true)} size={84} />
           <div>
             <b style={{ color: info.ink }}>{h.title}</b>
             <small>
-              {years(h.ruler, now)} yaşında · huyu {traitName(h.ruler).toLocaleLowerCase('tr-TR')}
-              {h.reign.kinsman ? ' · akrabalıktan tahta çağrıldı' : ''}
+              {L(`${years(h.ruler, now)} yaşında · huyu ${traitName(h.ruler).toLocaleLowerCase(locale())}`, `aged ${years(h.ruler, now)} · ${traitName(h.ruler).toLocaleLowerCase(locale())} by nature`)}
+              {h.reign.kinsman ? L(' · akrabalıktan tahta çağrıldı', ' · called to the throne as a kinsman') : ''}
             </small>
             <SkillBars skills={h.ruler.skills} />
-            <small className="hint">Huyu: {traitNote(h.ruler)}.</small>
+            <small className="hint">{L('Huyu', 'Nature')}: {traitNote(h.ruler)}.</small>
           </div>
         </div>
         {h.consort ? (
@@ -87,26 +100,29 @@ export function RoyalFamily({ world, kingdom, crown, now }: { world: World; king
             <Portrait seed={seedOf(key, crown, h.consort)} sex={h.consort.sex} age={crownAgeOf(h.consort, now)} role={h.consort.sex === 'f' ? 'queen' : 'prince'} size={84} />
             <div>
               <b>
-                {h.consort.sex === 'f' ? 'Kraliçe' : 'Prens'} {h.consort.name}
+                {h.consort.sex === 'f' ? L('Kraliçe', 'Queen') : L('Prens', 'Prince')} {h.consort.name}
               </b>
               <small>
-                {years(h.consort, now)} yaşında · {h.ruler.sex === 'm' ? 'kralın eşi' : 'kraliçenin eşi'}
+                {L(`${years(h.consort, now)} yaşında`, `aged ${years(h.consort, now)}`)} · {h.ruler.sex === 'm' ? L('kralın eşi', 'the king\'s consort') : L('kraliçenin eşi', 'the queen\'s consort')}
               </small>
               <SkillBars skills={h.consort.skills} />
             </div>
           </div>
         ) : (
-          <p className="hint">{h.widowed ? `${crownTitleOf(h.ruler)} dul; eşini kaybetti.` : 'Hükümdarın eşi yok.'}</p>
+          <p className="hint">{h.widowed ? L(`${crownTitleOf(h.ruler)} dul; eşini kaybetti.`, `The ${crownTitleOf(h.ruler).toLocaleLowerCase(locale())} is widowed; the consort has died.`) : L('Hükümdarın eşi yok.', 'The ruler has no consort.')}</p>
         )}
       </div>
       {h.regent && (
         <p className="hint">
-          {crownTitleOf(h.ruler)} henüz reşit değil: {h.regent.name ? `naip ${h.regent.name}` : 'naipler meclisi'} {nextOfAge} yıl daha onun adına yönetiyor.
+          {L(
+            `${crownTitleOf(h.ruler)} henüz reşit değil: ${h.regent.name ? `naip ${h.regent.name}` : 'naipler meclisi'} ${nextOfAge} yıl daha onun adına yönetiyor.`,
+            `The ${crownTitleOf(h.ruler).toLocaleLowerCase(locale())} is not yet of age: ${h.regent.name ? `the regent ${h.regent.name}` : 'a council of regents'} rules in their stead for ${nextOfAge} more year${nextOfAge === 1 ? '' : 's'}.`,
+          )}
         </p>
       )}
-      <h4 className="house-title">Çocuklar</h4>
+      <h4 className="house-title">{L('Çocuklar', 'Children')}</h4>
       {h.children.length === 0 ? (
-        <p className="hint">Hükümdarın henüz çocuğu yok. Varisi yoksa taç hanedandan bir akrabaya geçer.</p>
+        <p className="hint">{L('Hükümdarın henüz çocuğu yok. Varisi yoksa taç hanedandan bir akrabaya geçer.', 'The ruler has no children yet. Without an heir the crown passes to a kinsman of the house.')}</p>
       ) : (
         <ul className="ancestors">
           {h.children.map((c) => {
@@ -116,30 +132,32 @@ export function RoyalFamily({ world, kingdom, crown, now }: { world: World; king
               <li key={c.id}>
                 <Portrait seed={seedOf(key, crown, c)} sex={c.sex} age={crownAgeOf(c, dead ? c.deathAt : now)} role={c.sex === 'm' ? 'prince' : 'princess'} dead={dead} size={40} />
                 <span>
-                  {c.sex === 'm' ? 'Prens' : 'Prenses'} {c.name} · {dead ? `${years(c, c.deathAt)} yaşında öldü` : `${years(c, now)} yaşında`}
-                  {place === 0 ? ' · veliaht' : place > 0 ? ` · tahtta ${place + 1}. sırada` : ''}
-                  {!dead && crownAgeOf(c, now) < balance.cities.crown.house.comingOfAge ? ' · reşit değil' : ''} · {traitName(c).toLocaleLowerCase('tr-TR')}
+                  {c.sex === 'm' ? L('Prens', 'Prince') : L('Prenses', 'Princess')} {c.name} · {dead ? L(`${years(c, c.deathAt)} yaşında öldü`, `died aged ${years(c, c.deathAt)}`) : L(`${years(c, now)} yaşında`, `aged ${years(c, now)}`)}
+                  {place === 0 ? L(' · veliaht', ' · heir') : place > 0 ? L(` · tahtta ${place + 1}. sırada`, ` · ${ordinal(place + 1)} in line to the throne`) : ''}
+                  {!dead && crownAgeOf(c, now) < balance.cities.crown.house.comingOfAge ? L(' · reşit değil', ' · under age') : ''} · {traitName(c).toLocaleLowerCase(locale())}
                 </span>
               </li>
             )
           })}
         </ul>
       )}
-      <h4 className="house-title">Önceki hükümdarlar</h4>
+      <h4 className="house-title">{L('Önceki hükümdarlar', 'Earlier rulers')}</h4>
       <ul className="ancestors scroll3">
         {h.past.map((r) => (
           <li key={r.n}>
             <Portrait seed={seedOf(key, crown, r.ruler)} sex={r.ruler.sex} age={crownAgeOf(r.ruler, r.to)} role={r.ruler.sex === 'm' ? 'king' : 'queen'} dead size={40} />
             <span>
-              {crownRulerTitle(r)} · {year(r.from)}–{year(r.to)} · {Math.floor(crownAgeOf(r.ruler, r.to))} yaşında öldü{r.regent ? ' · naiple başladı' : ''}
-              {r.kinsman ? ' · akrabalıktan geldi' : ''}
+              {crownRulerTitle(r)} · {year(r.from)}–{year(r.to)} · {L(`${Math.floor(crownAgeOf(r.ruler, r.to))} yaşında öldü`, `died aged ${Math.floor(crownAgeOf(r.ruler, r.to))}`)}{r.regent ? L(' · naiple başladı', ' · began under a regent') : ''}
+              {r.kinsman ? L(' · akrabalıktan geldi', ' · came as a kinsman') : ''}
             </span>
           </li>
         ))}
       </ul>
       <p className="hint">
-        Taç hanedanları da senin hanedanın gibi yaşlanır (bir gerçek saat bir yıl). Hükümdar ölünce en büyük oğlu, oğlu yoksa en büyük kızı tahta geçer; çocuğu yoksa hanedandan bir akraba
-        çağrılır. Varis {balance.cities.crown.house.comingOfAge} yaşından küçükse reşit olana dek naip yönetir. Her hükümdarın bir huyu vardır; tacın haraççılarını ve devriyesini biraz değiştirir.
+        {L(
+          `Taç hanedanları da senin hanedanın gibi yaşlanır (bir gerçek saat bir yıl). Hükümdar ölünce en büyük oğlu, oğlu yoksa en büyük kızı tahta geçer; çocuğu yoksa hanedandan bir akraba çağrılır. Varis ${balance.cities.crown.house.comingOfAge} yaşından küçükse reşit olana dek naip yönetir. Her hükümdarın bir huyu vardır; tacın haraççılarını ve devriyesini biraz değiştirir.`,
+          `The crowns' houses age just as yours does (one real hour, one year). When a ruler dies the eldest son takes the throne, or failing a son the eldest daughter; with no children a kinsman of the house is called. An heir under ${balance.cities.crown.house.comingOfAge} rules through a regent until coming of age. Every ruler has a nature that nudges the crown's tribute collectors and patrol a little.`,
+        )}
       </p>
     </Section>
   )
@@ -158,7 +176,7 @@ export function CrownCourt({ world, kingdom, crown, online, now }: { world: Worl
   const fealty = unsworn ? 0 : sworn ? r.restSworn : r.restRival
   const off = relation - rest
   const perHour = r.driftPerRound * (3600 / balance.economy.productionSeconds)
-  const word = relation >= 60 ? 'gözdesi' : relation >= 30 ? 'dostu' : relation >= 0 ? 'tarafsız' : relation >= -30 ? 'soğuk' : relation >= -50 ? 'kuşkulu' : 'düşmanı'
+  const word = relation >= 60 ? L('gözdesi', 'favourite') : relation >= 30 ? L('dostu', 'friend') : relation >= 0 ? L('tarafsız', 'neutral') : relation >= -30 ? L('soğuk', 'cool') : relation >= -50 ? L('kuşkulu', 'wary') : L('düşmanı', 'enemy')
   const lords = online.kingdoms.filter((k) => k.liege === crown).sort((a, b) => (b.score?.total ?? 0) - (a.score?.total ?? 0))
   const rival = online.kingdoms.filter((k) => k.liege !== undefined && k.liege !== null && k.liege !== crown)
   // Wars between this crown's lords and the rival crown's.
@@ -166,20 +184,22 @@ export function CrownCourt({ world, kingdom, crown, online, now }: { world: Worl
   const top = Math.max(1, ...lords.map((l) => l.score?.total ?? 0))
   return (
     <>
-      <Section title="Sarayın sana bakışı" icon="crown" aside={`${signed(relation)} · ${word}`}>
-        <Meter value={(relation + 100) / 200} tone={relation >= 30 ? 'up' : relation <= -30 ? 'down' : 'gold'} label={`${info.name} ile ilişki`} segments={20} />
-        <Stat label="Bağlılık" value={signed(fealty)} note={unsworn ? 'henüz biat etmedin' : sworn ? 'bu tacın lordusun' : 'rakip tacın lordusun'} />
-        {house !== 0 && <Stat label="Hanedan bağları" value={signed(house)} note="devriyeyi yöneten kardeş, taca gelin giden prensesler" tone="up" />}
-        <Stat label="Dinlenme değeri" value={signed(rest)} note={`ilişki zamanla buraya döner (saatte ~${Math.round(perHour)} puan)`} />
-        <Stat label="Şu anki sapma" value={signed(off)} note={off >= 0 ? 'siparişler, görevler, ticaret ve armağanlarla kazandın' : 'reddedilen haraç ve istekler, kırgınlıklar'} tone={off >= 0 ? 'up' : 'down'} />
+      <Section title={L('Sarayın sana bakışı', 'How the court sees you')} icon="crown" aside={`${signed(relation)} · ${word}`}>
+        <Meter value={(relation + 100) / 200} tone={relation >= 30 ? 'up' : relation <= -30 ? 'down' : 'gold'} label={L(`${info.name} ile ilişki`, `Relations with the ${info.name}`)} segments={20} />
+        <Stat label={L('Bağlılık', 'Allegiance')} value={signed(fealty)} note={unsworn ? L('henüz biat etmedin', 'not sworn yet') : sworn ? L('bu tacın lordusun', 'you are this crown\'s lord') : L('rakip tacın lordusun', 'you are the rival crown\'s lord')} />
+        {house !== 0 && <Stat label={L('Hanedan bağları', 'Family ties')} value={signed(house)} note={L('devriyeyi yöneten kardeş, taca gelin giden prensesler', 'a brother leading the patrol, princesses wed into the crown')} tone="up" />}
+        <Stat label={L('Dinlenme değeri', 'Resting value')} value={signed(rest)} note={L(`ilişki zamanla buraya döner (saatte ~${Math.round(perHour)} puan)`, `relations drift back here over time (~${Math.round(perHour)} points an hour)`)} />
+        <Stat label={L('Şu anki sapma', 'Current swing')} value={signed(off)} note={off >= 0 ? L('siparişler, görevler, ticaret ve armağanlarla kazandın', 'earned with orders, tasks, trade and gifts') : L('reddedilen haraç ve istekler, kırgınlıklar', 'refused tribute and requests, grudges')} tone={off >= 0 ? 'up' : 'down'} />
         <p className="hint">
-          Artıranlar: tüccarı başkente göndermek (sefer başına +{r.cityTrip}), taç siparişleri, görevler ve kraliyet istekleri, kendi tacının devriyesini ağırlamak (+{r.visit}), rakip tacın
-          haracını ödemek (+{r.tributePaid}). Azaltanlar: haracı reddetmek ({r.tributeRefused}), kraliyet isteğini geri çevirmek.
+          {L(
+            `Artıranlar: tüccarı başkente göndermek (sefer başına +${r.cityTrip}), taç siparişleri, görevler ve kraliyet istekleri, kendi tacının devriyesini ağırlamak (+${r.visit}), rakip tacın haracını ödemek (+${r.tributePaid}). Azaltanlar: haracı reddetmek (${r.tributeRefused}), kraliyet isteğini geri çevirmek.`,
+            `Raised by: sending your merchant to the capital (+${r.cityTrip} a trip), crown orders, tasks and royal requests, hosting your own crown's patrol (+${r.visit}), paying the rival crown's tribute (+${r.tributePaid}). Lowered by: refusing tribute (${r.tributeRefused}), turning down a royal request.`,
+          )}
         </p>
       </Section>
-      <Section title="Lordları" icon="banner" aside={`${lords.length} lord`}>
+      <Section title={L('Lordları', 'Its lords')} icon="banner" aside={L(`${lords.length} lord`, `${lords.length} lord${lords.length === 1 ? '' : 's'}`)}>
         {lords.length === 0 ? (
-          <p className="hint">Bu tacın henüz lordu yok.</p>
+          <p className="hint">{L('Bu tacın henüz lordu yok.', 'This crown has no lords yet.')}</p>
         ) : (
           <ul className="crown-lords">
             {lords.map((l) => {
@@ -187,13 +207,13 @@ export function CrownCourt({ world, kingdom, crown, online, now }: { world: Worl
               const rel = me ? null : relationBetween(online.relations, online.me, l.id, now, relationTermsIn(online, online.me, l.id))
               return (
                 <li key={l.id} className={me ? 'me' : undefined}>
-                  <button className="link" onClick={() => !me && online.setFocus(l.id)} disabled={me} data-why="Bu senin lordluğun">
+                  <button className="link" onClick={() => !me && online.setFocus(l.id)} disabled={me} data-why={L('Bu senin lordluğun', 'This is your lordship')}>
                     {l.name}
-                    {me ? ' (sen)' : ''}
+                    {me ? L(' (sen)', ' (you)') : ''}
                   </button>
                   <i style={{ width: `${((l.score?.total ?? 0) / top) * 100}%`, background: info.color }} />
                   <small>
-                    {fmt(l.score?.total ?? 0)} puan{rel !== null ? ` · seninle ${signed(rel)}` : ''}
+                    {L(`${fmt(l.score?.total ?? 0)} puan`, `${fmt(l.score?.total ?? 0)} points`)}{rel !== null ? L(` · seninle ${signed(rel)}`, ` · with you ${signed(rel)}`) : ''}
                   </small>
                 </li>
               )
@@ -202,9 +222,12 @@ export function CrownCourt({ world, kingdom, crown, online, now }: { world: Worl
         )}
         <p className="hint">
           {wars.length > 0
-            ? `Bu tacın lordlarıyla rakip tacın lordları arasında ${wars.length} savaş sürüyor.`
-            : 'İki tacın lordları arasında şu an savaş yok.'}{' '}
-          İki taç şu an: {STANCE_NAMES[crownRivalryAt(crownKeyOf(kingdom), now).stance].toLocaleLowerCase('tr-TR')} (ayrıntısı Krallıklar sayfasında). Taçlar birbirinin lordlarından haraç ister, lordları rakip tacın lordlarıyla ittifak kuramaz.
+            ? L(`Bu tacın lordlarıyla rakip tacın lordları arasında ${wars.length} savaş sürüyor.`, `${wars.length} war${wars.length === 1 ? ' is' : 's are'} under way between this crown's lords and the rival crown's.`)
+            : L('İki tacın lordları arasında şu an savaş yok.', 'There is no war between the two crowns\' lords right now.')}{' '}
+          {L(
+            `İki taç şu an: ${STANCE_NAMES[crownRivalryAt(crownKeyOf(kingdom), now).stance].toLocaleLowerCase(locale())} (ayrıntısı Krallıklar sayfasında). Taçlar birbirinin lordlarından haraç ister, lordları rakip tacın lordlarıyla ittifak kuramaz.`,
+            `The two crowns now: ${STANCE_NAMES[crownRivalryAt(crownKeyOf(kingdom), now).stance].toLocaleLowerCase(locale())} (details on the Kingdoms page). The crowns demand tribute from each other's lords, and their lords cannot ally with the rival crown's.`,
+          )}
         </p>
       </Section>
     </>
@@ -213,9 +236,11 @@ export function CrownCourt({ world, kingdom, crown, online, now }: { world: Worl
 
 // ---- The crowns' ways and their rivalry (CLAUDE.md §7.8) --------------------------------------------------------
 
-export const STANCE_NAMES: Record<CrownStance, string> = { peace: 'Barış', tension: 'Gerginlik', war: 'Taç savaşı' }
+export const STANCE_NAMES: Record<CrownStance, string> = { peace: L('Barış', 'Peace'), tension: L('Gerginlik', 'Tension'), war: L('Taç savaşı', 'Crown war') }
 const STANCE_ICONS = { peace: 'flower', tension: 'warn', war: 'swords' } as const
-const times = (v: number) => `×${(Math.round(v * 100) / 100).toString().replace('.', ',')}`
+const times = (v: number) => `×${(Math.round(v * 100) / 100).toString().replace('.', getLang() === 'en' ? '.' : ',')}`
+// "2nd", "3rd" (English only).
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`
 
 // Why a crown asks more or less tribute, or tips more or less ("huyu açgözlü ×1,2 · taç savaşı ×1,25"); empty when
 // nothing tilts it.
@@ -223,14 +248,14 @@ export function waysText(key: CrownKey, crown: number, at: number, what: 'tribut
   const w = crownWays(key, crown, at)
   const e = balance.cities.crown.rivalry.effects[w.rivalry.stance][what]
   const parts: string[] = []
-  if (w.trait[what] !== 1) parts.push(`hükümdarı ${w.trait.name.toLocaleLowerCase('tr-TR')} ${times(w.trait[what])}`)
-  if (e !== 1) parts.push(`${STANCE_NAMES[w.rivalry.stance].toLocaleLowerCase('tr-TR')} ${times(e)}`)
+  if (w.trait[what] !== 1) parts.push(L(`hükümdarı ${w.trait.name.toLocaleLowerCase('tr-TR')} ${times(w.trait[what])}`, `${(w.trait.nameEn ?? w.trait.name).toLocaleLowerCase(locale())} ruler ${times(w.trait[what])}`))
+  if (e !== 1) parts.push(`${STANCE_NAMES[w.rivalry.stance].toLocaleLowerCase(locale())} ${times(e)}`)
   return parts.join(' · ')
 }
 
 // The share of the treasury a crown's collectors ask now.
 export const tributeShareNow = (key: CrownKey, crown: number, at: number) => balance.cities.crown.patrol.tribute.share * crownWays(key, crown, at).tribute
-export const pctText = (v: number) => `%${(Math.round(v * 1000) / 10).toString().replace('.', ',')}`
+export const pctText = (v: number) => L(`%${(Math.round(v * 1000) / 10).toString().replace('.', ',')}`, `${Math.round(v * 1000) / 10}%`)
 
 // About what the crown's patrol tips at the house of entertainment now: the base, the crown's power, a brother at the
 // patrol's head, the ruler's ways and the rivalry (the server's sum, patrols.ts).
@@ -253,36 +278,37 @@ export function CrownRivalryPanel({ world, kingdom, now }: { world: World; kingd
   const winnerOf = (h: CrownRivalry) => (h.winner !== null ? names[h.winner].name : null)
   const sworn = kingdom.liege !== undefined && kingdom.liege !== null
   return (
-    <Section title="Taçların rekabeti" icon={STANCE_ICONS[r.stance]} aside={`${STANCE_NAMES[r.stance]} · ${left} dk daha`}>
+    <Section title={L('Taçların rekabeti', 'The crowns\' rivalry')} icon={STANCE_ICONS[r.stance]} aside={L(`${STANCE_NAMES[r.stance]} · ${left} dk daha`, `${STANCE_NAMES[r.stance]} · ${left} min more`)}>
       <p className={r.stance === 'war' ? 'hint down' : 'hint'}>
         {r.stance === 'war'
-          ? `${names[0].name} ile ${names[1].name} savaşta. Haraççılar daha çok ister, taçlar kendi lordlarını kollar.`
+          ? L(`${names[0].name} ile ${names[1].name} savaşta. Haraççılar daha çok ister, taçlar kendi lordlarını kollar.`, `The ${names[0].name} and the ${names[1].name} are at war. Tribute collectors ask for more, and each crown looks after its own lords.`)
           : r.stance === 'tension'
-            ? `${names[0].name} ile ${names[1].name} arasında gerginlik var: sınırlarda kılıçlar bileniyor.`
-            : `${names[0].name} ile ${names[1].name} şimdilik barış içinde.`}
-        {r.winner !== null && ` Son taç savaşını ${names[r.winner].name} kazandı.`}
+            ? L(`${names[0].name} ile ${names[1].name} arasında gerginlik var: sınırlarda kılıçlar bileniyor.`, `There is tension between the ${names[0].name} and the ${names[1].name}: swords are being sharpened on the borders.`)
+            : L(`${names[0].name} ile ${names[1].name} şimdilik barış içinde.`, `The ${names[0].name} and the ${names[1].name} are at peace, for now.`)}
+        {r.winner !== null && L(` Son taç savaşını ${names[r.winner].name} kazandı.`, ` The ${names[r.winner].name} won the last crown war.`)}
       </p>
-      <Stat label="Haraççıların istediği" value={times(e.tribute)} note={e.tribute === 1 ? 'olağan pay' : 'iki tacın haraççıları için'} tone={e.tribute > 1 ? 'down' : undefined} />
-      <Stat label="Devriyenin bahşişi" value={times(e.tip)} note={e.tip === 1 ? 'olağan bahşiş' : 'taç kendi lordlarını kollar'} tone={e.tip > 1 ? 'up' : undefined} />
+      <Stat label={L('Haraççıların istediği', 'Tribute asked')} value={times(e.tribute)} note={e.tribute === 1 ? L('olağan pay', 'the usual share') : L('iki tacın haraççıları için', 'for both crowns\' collectors')} tone={e.tribute > 1 ? 'down' : undefined} />
+      <Stat label={L('Devriyenin bahşişi', 'Patrol\'s tip')} value={times(e.tip)} note={e.tip === 1 ? L('olağan bahşiş', 'the usual tip') : L('taç kendi lordlarını kollar', 'each crown looks after its lords')} tone={e.tip > 1 ? 'up' : undefined} />
       {sworn && (
-        <Stat label="Senden istenen haraç" value={pctText(tributeShareNow(key, kingdom.liege === 0 ? 1 : 0, now))} note={`rakip taç ${names[kingdom.liege === 0 ? 1 : 0].capital}: ${waysText(key, kingdom.liege === 0 ? 1 : 0, now, 'tribute') || 'olağan'}`} />
+        <Stat label={L('Senden istenen haraç', 'Tribute asked of you')} value={pctText(tributeShareNow(key, kingdom.liege === 0 ? 1 : 0, now))} note={`${L('rakip taç', 'rival crown')} ${names[kingdom.liege === 0 ? 1 : 0].capital}: ${waysText(key, kingdom.liege === 0 ? 1 : 0, now, 'tribute') || L('olağan', 'usual')}`} />
       )}
-      <h4 className="house-title">Önceki dönemler</h4>
+      <h4 className="house-title">{L('Önceki dönemler', 'Earlier periods')}</h4>
       <ul className="ancestors">
         {history.map((h) => (
           <li key={h.window}>
             <Icon name={STANCE_ICONS[h.stance]} size={16} />
             <span>
               {crownYearOf(key, h.from)} · {STANCE_NAMES[h.stance]}
-              {winnerOf(h) ? ` (bitişinde ${winnerOf(h)} kazandı)` : ''}
+              {winnerOf(h) ? L(` (bitişinde ${winnerOf(h)} kazandı)`, ` (won by the ${winnerOf(h)})`) : ''}
             </span>
           </li>
         ))}
       </ul>
       <p className="hint">
-        İki taç {Math.round(v.windowSeconds / 3600)} saatlik dönemlerde barış, gerginlik ya da savaş hâlindedir; hâl bir öncekine bağlıdır ve hükümdarların huyu savaş olasılığını
-        kaydırır. Gerginlikte haraççılar hazinenin {times(v.effects.tension.tribute)}'i, savaşta {times(v.effects.war.tribute)}'i kadarını ister; savaşta devriyenin bahşişi{' '}
-        {times(v.effects.war.tip)}. Savaş bitince hükümdarlarının askerlik yeteneği şansı kaydırır; kazanan tacın lordlarının o taçla ilişkisi +{v.victoryRelation} artar.
+        {L(
+          `İki taç ${Math.round(v.windowSeconds / 3600)} saatlik dönemlerde barış, gerginlik ya da savaş hâlindedir; hâl bir öncekine bağlıdır ve hükümdarların huyu savaş olasılığını kaydırır. Gerginlikte haraççılar hazinenin ${times(v.effects.tension.tribute)}'i, savaşta ${times(v.effects.war.tribute)}'i kadarını ister; savaşta devriyenin bahşişi ${times(v.effects.war.tip)}. Savaş bitince hükümdarlarının askerlik yeteneği şansı kaydırır; kazanan tacın lordlarının o taçla ilişkisi +${v.victoryRelation} artar.`,
+          `The two crowns spend ${Math.round(v.windowSeconds / 3600)}-hour periods at peace, in tension or at war; each period follows from the one before, and the rulers' natures shift the odds of war. In tension the tribute collectors ask ${times(v.effects.tension.tribute)} the usual share of the treasury, at war ${times(v.effects.war.tribute)}; at war the patrol's tip is ${times(v.effects.war.tip)}. When a war ends, the rulers' military skill tilts the odds; the winning crown's lords gain +${v.victoryRelation} relations with it.`,
+        )}
       </p>
     </Section>
   )
@@ -317,7 +343,7 @@ export function successionNotice(key: CrownKey, crown: number, reign: CrownReign
       late: crownRulerTitle(late),
       lateAge: Math.floor(crownAgeOf(late.ruler, late.to)),
       ruler: crownRulerTitle(reign),
-      trait: crownTraitSpec(reign.ruler.trait).name,
+      trait: L(crownTraitSpec(reign.ruler.trait).name, crownTraitSpec(reign.ruler.trait).nameEn ?? crownTraitSpec(reign.ruler.trait).name),
       welcome: crownTraitSpec(reign.ruler.trait).welcome,
       age: Math.floor(crownAgeOf(reign.ruler, reign.from)),
       regent: reign.regent ? reign.regent.name ?? true : null,
@@ -403,9 +429,9 @@ export function BetrayalDialog({ world, kingdom, online, now, onLater }: { world
           </span>
           <div>
             <small>
-              <Icon name="banner" size={16} /> Elçi haber getirdi · {minutes} dk içinde karar ver
+              <Icon name="banner" size={16} /> {L(`Elçi haber getirdi · ${minutes} dk içinde karar ver`, `The envoy brings news · decide within ${minutes} min`)}
             </small>
-            <h2 id="betrayal-title">Krallığın sana karşı savaştı</h2>
+            <h2 id="betrayal-title">{L('Krallığın sana karşı savaştı', 'Your own crown fought against you')}</h2>
           </div>
         </header>
         <div className="fortune-art">
@@ -413,29 +439,41 @@ export function BetrayalDialog({ world, kingdom, online, now, onLater }: { world
         </div>
         <div className="fortune-body">
           <p>
-            Lordum, kardeşin {offer.name} tahtına göz diktiğinde <b style={{ color: from.ink }}>{from.name}</b> ve hükümdarı {from.ruler} onun tarafını tuttu. İsyan bastırıldı, ama bu ihanet
-            unutulur mu? Onlara bir tepki göstermek için <b style={{ color: to.ink }}>{to.name}</b> tarafına geçmek ister misin?
+            {L(`Lordum, kardeşin ${offer.name} tahtına göz diktiğinde `, `My lord, when your brother ${offer.name} set his eyes on your throne, the `)}
+            <b style={{ color: from.ink }}>{from.name}</b>
+            {L(
+              ` ve hükümdarı ${from.ruler} onun tarafını tuttu. İsyan bastırıldı, ama bu ihanet unutulur mu? Onlara bir tepki göstermek için `,
+              ` and its ruler ${from.ruler} took his side. The revolt is crushed, but can such treachery be forgotten? Would you go over to the `,
+            )}
+            <b style={{ color: to.ink }}>{to.name}</b>
+            {L(' tarafına geçmek ister misin?', ' to show them what you think of it? I, naturally, saw it coming.')}
           </p>
           <ul className="away-lines">
             <li>
               <Icon name="banner" size={16} />
               <span>
-                Geçersen: {to.name} lordu olursun; onunla ilişkin en az +{s.newRelation} olur, {from.name} ile en çok {s.oldRelation}. Devriyeler ve haraççılar yeni bağlılığına göre gelir.
+                {L(
+                  `Geçersen: ${to.name} lordu olursun; onunla ilişkin en az +${s.newRelation} olur, ${from.name} ile en çok ${s.oldRelation}. Devriyeler ve haraççılar yeni bağlılığına göre gelir.`,
+                  `If you go over: you become a lord of the ${to.name}; your relations with it rise to at least +${s.newRelation}, and with the ${from.name} fall to at most ${s.oldRelation}. Patrols and tribute collectors follow your new allegiance.`,
+                )}
               </span>
             </li>
             <li>
               <Icon name="gold" size={16} />
               <span>
-                Kalırsan: {from.name} özür diler; ilişkin +{s.declineRelation} artar ve hazinene {s.declineGold} altın gönderir.
+                {L(
+                  `Kalırsan: ${from.name} özür diler; ilişkin +${s.declineRelation} artar ve hazinene ${s.declineGold} altın gönderir.`,
+                  `If you stay: the ${from.name} apologises; your relations rise by +${s.declineRelation} and it sends ${s.declineGold} gold to your treasury.`,
+                )}
               </span>
             </li>
           </ul>
-          <DialogFoot label={`${to.capital} tarafına geç`} onNext={() => void online.act({ type: 'switchLiege', accept: true })}>
+          <DialogFoot label={L(`${to.capital} tarafına geç`, `Go over to ${to.capital}`)} onNext={() => void online.act({ type: 'switchLiege', accept: true })}>
             <button className="btn small" onClick={() => void online.act({ type: 'switchLiege', accept: false })}>
-              Sadık kal
+              {L('Sadık kal', 'Stay loyal')}
             </button>
             <button className="btn small" onClick={onLater}>
-              Sonra
+              {L('Sonra', 'Later')}
             </button>
           </DialogFoot>
         </div>
@@ -451,16 +489,19 @@ export function BetrayalCard({ world, kingdom, online, now }: { world: World; ki
   const from = cityInfo(world, offer.from)
   const to = cityInfo(world, offer.to)
   return (
-    <Section title="İhanetin bedeli" icon="banner" aside={`${Math.max(1, Math.ceil((offer.until - now) / 60_000))} dk kaldı`}>
+    <Section title={L('İhanetin bedeli', 'The price of treachery')} icon="banner" aside={L(`${Math.max(1, Math.ceil((offer.until - now) / 60_000))} dk kaldı`, `${Math.max(1, Math.ceil((offer.until - now) / 60_000))} min left`)}>
       <p className="hint down">
-        {from.name} kardeşin {offer.name}'i sana karşı destekledi. {to.name} tarafına geçebilir ya da sadık kalıp tacın özrünü kabul edebilirsin.
+        {L(
+          `${from.name} kardeşin ${offer.name}'i sana karşı destekledi. ${to.name} tarafına geçebilir ya da sadık kalıp tacın özrünü kabul edebilirsin.`,
+          `The ${from.name} backed your brother ${offer.name} against you. You may go over to the ${to.name}, or stay loyal and accept the crown's apology.`,
+        )}
       </p>
       <div className="row">
         <button className="btn small primary" onClick={() => void online.act({ type: 'switchLiege', accept: true })}>
-          <Icon name="banner" size={16} /> {to.capital} tarafına geç
+          <Icon name="banner" size={16} /> {L(`${to.capital} tarafına geç`, `Go over to ${to.capital}`)}
         </button>
         <button className="btn small" onClick={() => void online.act({ type: 'switchLiege', accept: false })}>
-          Sadık kal
+          {L('Sadık kal', 'Stay loyal')}
         </button>
       </div>
     </Section>

@@ -3,6 +3,7 @@ import { babble } from '../../audio/sfx'
 import { onCommandDone } from '../../net/online'
 import { EnvoyPortrait } from './EnvoyPortrait'
 import { narrate } from './narration'
+import { L } from '../../lib/i18n'
 
 // The envoy's word on what the lord has just done (CLAUDE.md §9.8): a small parchment with his face that rises over
 // the map for a few seconds after the server takes the command, never a window to close. A tap sends it away; the
@@ -31,7 +32,7 @@ export function EnvoyNote({ quiet }: { quiet: boolean }) {
   }, [note])
   if (!note) return null
   return (
-    <button key={note.n} className="envoy-note frame" onClick={() => setNote(null)} aria-live="polite" title="Kapat">
+    <button key={note.n} className="envoy-note frame" onClick={() => setNote(null)} aria-live="polite" title={L('Kapat', 'Close')}>
       <EnvoyPortrait size={34} talking />
       <span>{note.text}</span>
     </button>

@@ -1,5 +1,6 @@
 import { hash } from '@game/shared'
 import type { Point, World } from '@game/shared'
+import { L } from '../lib/i18n'
 
 // Every inn on the trade routes has a trade of its own besides lodging, and a name; both follow from the lobby seed, so
 // every player sees the same inn. Purely for show and talk: the rumours told there (see ui/hud/InnSheet).
@@ -9,17 +10,17 @@ export type InnKind = 'inn' | 'market' | 'post' | 'toll'
 export const INN_KINDS: InnKind[] = ['inn', 'market', 'post', 'toll']
 
 export const INN_KIND_NAMES: Record<InnKind, string> = {
-  inn: 'Yol hanı',
-  market: 'Pazar hanı',
-  post: 'Menzilhane',
-  toll: 'Gümrük hanı',
+  inn: L('Yol hanı', 'Roadside inn'),
+  market: L('Pazar hanı', 'Market inn'),
+  post: L('Menzilhane', 'Post house'),
+  toll: L('Gümrük hanı', 'Customs inn'),
 }
 
 export const INN_KIND_TEXT: Record<InnKind, string> = {
-  inn: 'Yolcular ve tüccarlar burada geceler; her kervanın haberi önce buraya düşer.',
-  market: 'Önünde tezgâhlar kurulur, kervanlar yüklerinin bir kısmını burada bozar.',
-  post: 'Ulaklar ve kervanlar atlarını burada değiştirir; uzak yolların haberi buradan geçer.',
-  toll: 'Yoldan geçen yükler burada sayılır; kimin ne taşıdığını en iyi gümrükçü bilir.',
+  inn: L('Yolcular ve tüccarlar burada geceler; her kervanın haberi önce buraya düşer.', 'Travellers and merchants spend the night here; every caravan\'s news lands here first.'),
+  market: L('Önünde tezgâhlar kurulur, kervanlar yüklerinin bir kısmını burada bozar.', 'Stalls go up out front, and caravans break part of their loads here.'),
+  post: L('Ulaklar ve kervanlar atlarını burada değiştirir; uzak yolların haberi buradan geçer.', 'Couriers and caravans change horses here; news from distant roads passes through.'),
+  toll: L('Yoldan geçen yükler burada sayılır; kimin ne taşıdığını en iyi gümrükçü bilir.', 'Every load on the road is counted here; nobody knows who carries what better than the customs man.'),
 }
 
 const PLACES = [
@@ -59,8 +60,8 @@ export function innInfo(world: World, index: number, desert: boolean): InnInfo {
   const start = Math.floor(hash(1, 2, world.seed + 1933) * PLACES.length)
   const place = PLACES[(start + index * 5) % PLACES.length]
   const suffix = desert
-    ? kind === 'market' ? 'Pazar Kervansarayı' : 'Kervansarayı'
-    : { inn: 'Hanı', market: 'Pazar Hanı', post: 'Menzilhanesi', toll: 'Gümrük Hanı' }[kind]
+    ? kind === 'market' ? L('Pazar Kervansarayı', 'Market Caravanserai') : L('Kervansarayı', 'Caravanserai')
+    : { inn: L('Hanı', 'Inn'), market: L('Pazar Hanı', 'Market Inn'), post: L('Menzilhanesi', 'Post House'), toll: L('Gümrük Hanı', 'Customs House') }[kind]
   return {
     index,
     kind,

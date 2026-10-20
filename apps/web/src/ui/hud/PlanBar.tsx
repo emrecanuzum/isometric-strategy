@@ -2,6 +2,7 @@ import { balance } from '@game/shared'
 import type { Building, Cost, Kingdom, PlanStep, Resource } from '@game/shared'
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../icons'
+import { L, locale } from '../../lib/i18n'
 import { BUILDING_NAMES } from '../names'
 import { CostList } from '../panels'
 
@@ -29,11 +30,11 @@ function describe(steps: PlanStep[], buildings: Building[]) {
       if (b) moved.set(BUILDING_NAMES[b.kind], (moved.get(BUILDING_NAMES[b.kind]) ?? 0) + 1)
     } else torn++
   }
-  const list = (m: Map<string, number>) => [...m].map(([name, n]) => `${n} ${name.toLocaleLowerCase('tr')}`).join(', ')
+  const list = (m: Map<string, number>) => [...m].map(([name, n]) => L(`${n} ${name.toLocaleLowerCase(locale())}`, `${n} × ${name.toLocaleLowerCase(locale())}`)).join(', ')
   return [
-    built.size > 0 && `${list(built)} kurulacak`,
-    moved.size > 0 && `${list(moved)} taşınacak`,
-    torn > 0 && `${torn} yapı yıkılacak`,
+    built.size > 0 && L(`${list(built)} kurulacak`, `build ${list(built)}`),
+    moved.size > 0 && L(`${list(moved)} taşınacak`, `move ${list(moved)}`),
+    torn > 0 && L(`${torn} yapı yıkılacak`, `demolish ${torn} building${torn === 1 ? '' : 's'}`),
   ]
     .filter(Boolean)
     .join('; ')
@@ -80,57 +81,57 @@ export function PlanBar({
         <span className="plan-text">
           {/* One line: in the column below, a bare "· text" was left hanging on a line of its own. */}
           <span>
-            <b>Plan</b> · {text}
+            <b>{L('Plan', 'Plan')}</b> · {text}
           </span>
-          <small className={steps.length >= balance.economy.maxPlan ? 'plan-count down' : 'plan-count'} title="Bir planda en fazla bu kadar adım olur">
-            {steps.length} / {balance.economy.maxPlan} adım{steps.length >= balance.economy.maxPlan ? ' · plan dolu, önce onayla' : ''}
+          <small className={steps.length >= balance.economy.maxPlan ? 'plan-count down' : 'plan-count'} title={L('Bir planda en fazla bu kadar adım olur', 'A plan holds at most this many steps')}>
+            {steps.length} / {balance.economy.maxPlan} {L('adım', 'steps')}{steps.length >= balance.economy.maxPlan ? L(' · plan dolu, önce onayla', ' · plan full, confirm it first') : ''}
           </small>
           {skipped > 0 && (
-            <small className="plan-count down" title="Malzeme, yer ya da sınır yetmediği için bu adımlar onayda atlanır">
-              {skipped} adım şu an yapılamıyor (malzeme ya da sınır yetmiyor)
+            <small className="plan-count down" title={L('Malzeme, yer ya da sınır yetmediği için bu adımlar onayda atlanır', 'These steps will be skipped on confirming, for lack of materials, room or limit')}>
+              {L(`${skipped} adım şu an yapılamıyor (malzeme ya da sınır yetmiyor)`, `${skipped} step${skipped === 1 ? '' : 's'} cannot be done right now (not enough materials, or a limit is reached)`)}
             </small>
           )}
           <span className="card-meta">
             {Object.keys(spent).length > 0 && <CostList cost={spent} stock={kingdom.stock} />}
             {Object.keys(back).length > 0 && (
               <span className="plan-back">
-                iade <CostList cost={back} />
+                {L('iade', 'refund')} <CostList cost={back} />
               </span>
             )}
           </span>
         </span>
-        <button className="btn small" onClick={onUndo} title="Son adımı geri al">
-          Geri al
+        <button className="btn small" onClick={onUndo} title={L('Son adımı geri al', 'Undo the last step')}>
+          {L('Geri al', 'Undo')}
         </button>
         <button className="btn small" onClick={onClear}>
-          Temizle
+          {L('Temizle', 'Clear')}
         </button>
         <button className="btn small primary" onClick={() => setAsking(true)}>
-          Onayla
+          {L('Onayla', 'Confirm')}
         </button>
       </div>}
       {asking && (
         <section className="confirm frame" role="alertdialog" aria-labelledby="plan-title" aria-describedby="plan-text">
           <div className="confirm-body">
-            <h2 id="plan-title">Emin misin?</h2>
+            <h2 id="plan-title">{L('Emin misin?', 'Are you sure?')}</h2>
             <p id="plan-text" className="hint">
-              {text}. Kaynaklar harcanır, inşaatlar yer boşaldıkça sırayla başlar.
-              {skipped > 0 ? ` ${skipped} adım şu an yapılamıyor ve atlanacak.` : ''}
+              {text}. {L('Kaynaklar harcanır, inşaatlar yer boşaldıkça sırayla başlar.', 'The goods are spent, and the works start in turn as building slots free up.')}
+              {skipped > 0 ? L(` ${skipped} adım şu an yapılamıyor ve atlanacak.`, ` ${skipped} step${skipped === 1 ? '' : 's'} cannot be done right now and will be skipped.`) : ''}
             </p>
             <span className="card-meta">
               {Object.keys(spent).length > 0 ? <CostList cost={spent} stock={kingdom.stock} /> : null}
               {Object.keys(back).length > 0 && (
                 <span className="plan-back">
-                  iade <CostList cost={back} />
+                  {L('iade', 'refund')} <CostList cost={back} />
                 </span>
               )}
             </span>
             <div className="row">
               <button ref={yes} className="btn primary" onClick={onConfirm}>
-                <Icon name="build" size={16} /> Evet, uygula
+                <Icon name="build" size={16} /> {L('Evet, uygula', 'Yes, carry it out')}
               </button>
               <button className="btn" onClick={() => setAsking(false)}>
-                Vazgeç
+                {L('Vazgeç', 'Cancel')}
               </button>
             </div>
           </div>

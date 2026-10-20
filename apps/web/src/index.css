@@ -7207,3 +7207,20 @@ input:not([type='range']):focus-visible {
 .map-alert.urgent > span {
   padding-right: calc(var(--px) * 8);
 }
+
+/* The language row sits above the settings' tabs (and under the sign-in form). */
+.settings-lang {
+  margin-bottom: calc(var(--px) * 3);
+}
+
+/* A Turkish place name's meaning, for English readers (ui/NameNote.tsx). */
+.name-note {
+  display: block;
+  font-size: 12px;
+  font-style: normal;
+  color: var(--ink-soft, #b9a98a);
+  opacity: 0.85;
+}
+.sheet-head .name-note {
+  margin-top: calc(var(--px) * -1);
+}

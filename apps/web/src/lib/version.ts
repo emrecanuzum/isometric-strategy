@@ -2,6 +2,8 @@
 // into view, it reads the id of the build now served (version.json, written at build time) and, when that is newer
 // than its own, says so for a moment and reloads.
 
+import { L } from './i18n'
+
 const CHECK_MS = 90_000
 const NOTICE_MS = 2500
 
@@ -19,7 +21,7 @@ async function served(): Promise<string | null> {
 function announce() {
   const note = document.createElement('div')
   note.className = 'update-note'
-  note.textContent = 'Oyun güncellendi, sayfa yenileniyor…'
+  note.textContent = L('Oyun güncellendi, sayfa yenileniyor…', 'The game has been updated, reloading the page…')
   document.body.appendChild(note)
 }
 

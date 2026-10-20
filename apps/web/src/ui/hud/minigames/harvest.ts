@@ -1,4 +1,5 @@
 import { HARVEST_LIMIT, HARVEST_REAPER, balance, harvestGame } from '@game/shared'
+import { L } from '../../../lib/i18n'
 import type { HarvestState, Stalk } from '@game/shared'
 import { play } from '../../../audio/sfx'
 import { C, H, PAL, W, bake, birds, box, checker, cloudLayer, hash, hudCombo, oval, pline, ramp, rgb, ridge, scroll, text, tone } from './art'
@@ -155,7 +156,7 @@ function reaper(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, 
 
 export const harvestScene: Scene<HarvestState> = {
   make: harvestGame,
-  controls: 'Basılı tut: biç · yeşilde ve kargada bırak',
+  controls: L('Basılı tut: biç · yeşilde ve kargada bırak', 'Hold: mow · let go for green stalks and crows'),
   score: (s) => s.score,
   left: (s) => 1 - s.step / HARVEST_LIMIT,
   create() {
@@ -203,21 +204,21 @@ export const harvestScene: Scene<HarvestState> = {
               fleeing.push({ x, y: GROUND - 28, vx: 30 + Math.random() * 20, vy: -50, life: 1.5 })
               fx.burst(x, GROUND - 26, 10, { colors: [C(PAL.crow[1]), C(PAL.crow[2]), C(PAL.wheat[3])], speed: [20, 50], gravity: 40, life: [0.6, 1.2] })
               fx.float(`${HV.points.crow}`, x, GROUND - 46, '#ec7a5a', 12)
-              fx.float('Karga!', x, GROUND - 58, '#ec7a5a', 9)
+              fx.float(L('Karga!', 'Crow!'), x, GROUND - 58, '#ec7a5a', 9)
               fx.shake(2, 0.2)
               fx.flash('#a8342e', 0.12)
             } else if (st.kind === 'green') {
               play('miss')
               fx.burst(x, GROUND - 12, 8, { colors: [C(PAL.green[3]), C(PAL.green[2])], speed: [20, 50], angle: [-Math.PI, 0], gravity: 160 })
               fx.float(`${HV.points.green}`, x, GROUND - 36, '#e0a050', 11)
-              fx.float('Ham!', x, GROUND - 48, '#e0a050', 9)
+              fx.float(L('Ham!', 'Unripe!'), x, GROUND - 48, '#e0a050', 9)
             } else {
               fallen.push({ x, y: GROUND - 2, rot: 0, life: 0.8, kind: st.kind })
               fx.burst(x, GROUND - 16, st.kind === 'golden' ? 16 : 5, { colors: [C(PAL.wheat[4]), C(PAL.wheat[3]), C(PAL.gold[3])], speed: [15, 45], angle: [-Math.PI * 0.9, -Math.PI * 0.4], gravity: 90, life: [0.4, 0.9] })
               if (st.kind === 'golden') {
                 play('coin')
                 fx.float(`+${HV.points.golden}`, x, GROUND - 40, '#f2d16b', 13)
-                fx.float('Altın demet!', x, GROUND - 54, '#fff4c0', 9)
+                fx.float(L('Altın demet!', 'Golden sheaf!'), x, GROUND - 54, '#fff4c0', 9)
                 fx.flash('#fff4c0', 0.06)
               } else if (seen.size % 3 === 0) fx.float(`+${HV.points.ripe}`, x, GROUND - 34, '#f6de86', 9, 0.6)
             }
@@ -226,7 +227,7 @@ export const harvestScene: Scene<HarvestState> = {
         }
         if (st.cut < 0 && !seen.has(st.id)) {
           seen.add(st.id)
-          fx.float('kaçtı', x, GROUND - 36, '#a89a88', 8, 0.6)
+          fx.float(L('kaçtı', 'missed'), x, GROUND - 36, '#a89a88', 8, 0.6)
         }
         stalk(ctx, st, x, t)
       }
@@ -251,7 +252,7 @@ export const harvestScene: Scene<HarvestState> = {
       // The reaper and his strength.
       reaper(ctx, HARVEST_REAPER - 10, GROUND + 6, t, s.swinging, s.tired)
       if (s.tired && !wasTired) {
-        fx.float('Yoruldu!', HARVEST_REAPER - 8, GROUND - 52, '#ec7a5a', 10, 1.1)
+        fx.float(L('Yoruldu!', 'Worn out!'), HARVEST_REAPER - 8, GROUND - 52, '#ec7a5a', 10, 1.1)
         play('miss')
       }
       wasTired = s.tired
@@ -266,7 +267,7 @@ export const harvestScene: Scene<HarvestState> = {
       box(ctx, s.tired ? (Math.floor(t * 6) % 2 ? '#d0503c' : '#7a2224') : s.stamina < 0.3 ? '#e0a050' : '#74a852', bx, by, fill, 5)
       box(ctx, s.tired ? '#ec7a5a' : '#9cc464', bx, by, fill, 1)
       box(ctx, '#f3e6c8', bx + Math.round(bw * HV.stamina.recover), by - 1, 1, 7)
-      text(ctx, s.tired ? 'Dinleniyor' : 'Güç', bx, by + 7, { size: 8, color: s.tired ? '#ec7a5a' : '#c8b8a0' })
+      text(ctx, s.tired ? L('Dinleniyor', 'Resting') : L('Güç', 'Strength'), bx, by + 7, { size: 8, color: s.tired ? '#ec7a5a' : '#c8b8a0' })
       if (s.combo !== lastCombo) {
         if (s.combo > lastCombo && s.combo % HV.comboEvery === 0) comboPulse = 0.25
         lastCombo = s.combo

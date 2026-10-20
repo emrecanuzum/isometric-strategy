@@ -70,6 +70,7 @@ import type { BuildingKind, Expedition, Good, Kingdom, Market, Plot, Point, Reso
 import { useEffect, useRef, useState } from 'react'
 import { STRUCTURE_SPRITES, palaceIn } from '../../game/buildingSprites'
 import { Icon } from '../icons'
+import { L, locale } from '../../lib/i18n'
 import { BUILDING_NAMES, BUILDING_NOTES, RESOURCE_ICONS, RESOURCE_NAMES, SEASON_NAMES, WEAPON_ICONS, WEAPON_NAMES, dateText } from '../names'
 import { CostList, GoodChoice, Missing } from '../panels'
 import { buildWhy, lackWhy, sentence, waitWhy } from '../why'
@@ -161,13 +162,13 @@ export function flows(kingdom: Kingdom, now: number, market?: Market | null) {
 
 // Why a building cannot be started right now, in a few words.
 const BLOCKED: Record<string, string> = {
-  palace: 'Önce saray',
-  cost: 'Kaynak yetersiz',
-  queue: 'Kuyruk dolu',
-  unique: 'Zaten var ya da arsa yok',
-  spot: 'Yer yok',
-  locked: '2. seviye saray',
-  limit: 'Sınır dolu: sarayı yükselt',
+  palace: L('Önce saray', 'Palace first'),
+  cost: L('Kaynak yetersiz', 'Not enough resources'),
+  queue: L('Kuyruk dolu', 'Queue full'),
+  unique: L('Zaten var ya da arsa yok', 'Already built, or no plot'),
+  spot: L('Yer yok', 'No room'),
+  locked: L('2. seviye saray', 'Needs a level 2 palace'),
+  limit: L('Sınır dolu: sarayı yükselt', 'Limit reached: upgrade the palace'),
 }
 
 export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
@@ -185,9 +186,9 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
   })
   return (
     <>
-      <Section title="İnşaat kuyruğu" icon="time" aside={`${list.length}/${slots} usta`}>
+      <Section title={L('İnşaat kuyruğu', 'Construction queue')} icon="time" aside={L(`${list.length}/${slots} usta`, `${list.length}/${slots} builders`)}>
         {list.length === 0 ? (
-          <p className="hint">Ustalar boşta. Aşağıdan bir yapı seç, sonra haritada hududun içine yerleştir.</p>
+          <p className="hint">{L('Ustalar boşta. Aşağıdan bir yapı seç, sonra haritada hududun içine yerleştir.', 'The builders are idle. Pick a building below, then place it inside your border on the map.')}</p>
         ) : (
           <ul className="queue-list">
             {list.map((b) => {
@@ -196,46 +197,49 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
               return (
                 <li key={b.id}>
                   <span>{BUILDING_NAMES[b.kind]}</span>
-                  <Meter value={1 - left / total} label={`${BUILDING_NAMES[b.kind]} ilerleme`} segments={10} />
-                  <small>{Math.ceil(left / 1000)} sn</small>
+                  <Meter value={1 - left / total} label={L(`${BUILDING_NAMES[b.kind]} ilerleme`, `${BUILDING_NAMES[b.kind]} progress`)} segments={10} />
+                  <small>{L(`${Math.ceil(left / 1000)} sn`, `${Math.ceil(left / 1000)} s`)}</small>
                 </li>
               )
             })}
           </ul>
         )}
       </Section>
-      <Section title="Yapılar" icon="build">
-        <div className="tier-tabs" role="tablist" aria-label="Saray seviyesi">
+      <Section title={L('Yapılar', 'Buildings')} icon="build">
+        <div className="tier-tabs" role="tablist" aria-label={L('Saray seviyesi', 'Palace level')}>
           {Array.from({ length: tiers }, (_, i) => i + 1).map((t) => (
-            <button key={t} className="btn small" role="tab" aria-selected={tier === t} aria-pressed={tier === t} onClick={() => setTier(t)} title={t > level ? `${t}. seviye saray gerekir` : undefined}>
+            <button key={t} className="btn small" role="tab" aria-selected={tier === t} aria-pressed={tier === t} onClick={() => setTier(t)} title={t > level ? L(`${t}. seviye saray gerekir`, `Requires a level ${t} palace`) : undefined}>
               {t > level && <Icon name="lock" size={8} />}
-              {t}. sv.
+              {L(`${t}. sv.`, `Lv. ${t}`)}
             </button>
           ))}
         </div>
-        {tier > level && <p className="hint">Bu yapılar için sarayı {tier}. seviyeye yükselt.</p>}
-        {raised.length > 0 && <p className="hint">Bu seviyede sınırı artanlar: {raised.join(' · ')}.</p>}
-        {shown.length === 0 && <p className="hint">Bu seviyede açılan yeni yapı yok.</p>}
+        {tier > level && <p className="hint">{L(`Bu yapılar için sarayı ${tier}. seviyeye yükselt.`, `Raise the palace to level ${tier} for these buildings.`)}</p>}
+        {raised.length > 0 && <p className="hint">{L(`Bu seviyede sınırı artanlar: ${raised.join(' · ')}.`, `Limits raised at this level: ${raised.join(' · ')}.`)}</p>}
+        {shown.length === 0 && <p className="hint">{L('Bu seviyede açılan yeni yapı yok.', 'No new buildings open at this level.')}</p>}
         <ul className="cards">
           {shown.map((kind) => {
             const spec = BUILDINGS[kind]
             const error = buildError(world, kingdom, stage, kind, null, now)
             const effect = spec.produces
-              ? `+${(spec.amount! * kingdom.yields[spec.produces]).toFixed(1).replace('.', ',')} ${RESOURCE_NAMES[spec.produces].toLowerCase()} / tur`
+              ? L(
+                  `+${(spec.amount! * kingdom.yields[spec.produces]).toFixed(1).replace('.', ',')} ${RESOURCE_NAMES[spec.produces].toLowerCase()} / tur`,
+                  `+${(spec.amount! * kingdom.yields[spec.produces]).toFixed(1)} ${RESOURCE_NAMES[spec.produces].toLowerCase()} / round`,
+                )
               : spec.villagers
-                ? `+${spec.villagers} köylü`
+                ? L(`+${spec.villagers} köylü`, `+${spec.villagers} villager${spec.villagers === 1 ? '' : 's'}`)
                 : spec.workers
-                  ? `${spec.workers} işçi çalıştırır`
+                  ? L(`${spec.workers} işçi çalıştırır`, `employs ${spec.workers} worker${spec.workers === 1 ? '' : 's'}`)
                   : null
             const why =
               error === 'locked'
-                ? `${spec.requiresPalace ?? 1}. seviye saray`
+                ? L(`${spec.requiresPalace ?? 1}. seviye saray`, `Level ${spec.requiresPalace ?? 1} palace`)
                 : error === 'unique'
                   ? kingdom.buildings.some((b) => b.kind === kind)
-                    ? 'Zaten kurulu (bir tane olur)'
-                    : 'Arsası yok'
+                    ? L('Zaten kurulu (bir tane olur)', 'Already built (only one allowed)')
+                    : L('Arsası yok', 'No plot for it')
                   : error
-                    ? (BLOCKED[error] ?? 'Şu an olmaz')
+                    ? (BLOCKED[error] ?? L('Şu an olmaz', 'Not right now'))
                     : null
             return (
               <li key={kind}>
@@ -244,11 +248,14 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
                   disabled={why !== null}
                   data-why={
                     error === 'locked'
-                      ? `${spec.requiresPalace ?? 1}. seviye saray gerekir`
+                      ? L(`${spec.requiresPalace ?? 1}. seviye saray gerekir`, `Requires a level ${spec.requiresPalace ?? 1} palace`)
                       : error === 'unique'
                         ? (why ?? undefined)
                         : error === 'limit'
-                          ? `Sınır dolu (${buildingCount(kingdom, kind)}/${buildLimit(kingdom, kind, now)}); daha fazlası için sarayı yükselt`
+                          ? L(
+                              `Sınır dolu (${buildingCount(kingdom, kind)}/${buildLimit(kingdom, kind, now)}); daha fazlası için sarayı yükselt`,
+                              `Limit reached (${buildingCount(kingdom, kind)}/${buildLimit(kingdom, kind, now)}); upgrade the palace for more`,
+                            )
                           : buildWhy(error, kingdom, now, buildCost(kingdom, kind))
                   }
                   onClick={() => onPlace(kind)}
@@ -263,20 +270,23 @@ export function BuildTab({ world, kingdom, now, stage, onPlace }: HudData) {
                     {effect && <small className="up">{effect}</small>}
                     {spec.villagers ? (
                       <small>
-                        Barınak {plannedHousing(kingdom)} / {population(kingdom, now).cap} (nüfus sınırı saray seviyesiyle artar)
+                        {L(
+                          `Barınak ${plannedHousing(kingdom)} / ${population(kingdom, now).cap} (nüfus sınırı saray seviyesiyle artar)`,
+                          `Housing ${plannedHousing(kingdom)} / ${population(kingdom, now).cap} (the population limit rises with the palace level)`,
+                        )}
                       </small>
                     ) : (
                       capOf(kingdom, kind, now) !== null && (
                         <small className={buildingCount(kingdom, kind) >= capOf(kingdom, kind, now)! ? 'down' : undefined}>
-                          {buildingCount(kingdom, kind)} / {capOf(kingdom, kind, now)} kurulu
-                          {BUILDINGS[kind].maxByPalaceLevel ? ' (sınır saray seviyesiyle artar)' : ''}
+                          {L(`${buildingCount(kingdom, kind)} / ${capOf(kingdom, kind, now)} kurulu`, `${buildingCount(kingdom, kind)} / ${capOf(kingdom, kind, now)} built`)}
+                          {BUILDINGS[kind].maxByPalaceLevel ? L(' (sınır saray seviyesiyle artar)', ' (the limit rises with the palace level)') : ''}
                         </small>
                       )
                     )}
                     <span className="card-meta">
-                      {isFree(kingdom, kind) ? <span className="chip up">İlki ücretsiz</span> : <CostList cost={spec.cost} stock={kingdom.stock} />}
+                      {isFree(kingdom, kind) ? <span className="chip up">{L('İlki ücretsiz', 'First one free')}</span> : <CostList cost={spec.cost} stock={kingdom.stock} />}
                       <span className="chip">
-                        <Icon name="time" size={8} /> {spec.buildSeconds} sn
+                        <Icon name="time" size={8} /> {L(`${spec.buildSeconds} sn`, `${spec.buildSeconds} s`)}
                       </span>
                       <span className="chip">
                         {/* A gate stands on three tiles in a row: tower, gate, tower. */}
@@ -318,13 +328,13 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
   return (
     <>
       <Subtabs
-        label="Depo"
+        label={L('Depo', 'Storehouse')}
         part={part}
         onPart={setPart}
         parts={[
-          { id: 'goods', name: 'Mallar', icon: 'chest', dot: full },
-          { id: 'books', name: 'Hazine', icon: 'gold' },
-          { id: 'armory', name: 'Cephanelik', icon: 'arms', dot: armsFull },
+          { id: 'goods', name: L('Mallar', 'Goods'), icon: 'chest', dot: full },
+          { id: 'books', name: L('Hazine', 'Treasury'), icon: 'gold' },
+          { id: 'armory', name: L('Cephanelik', 'Armoury'), icon: 'arms', dot: armsFull },
         ]}
       />
       {part === 'books' && (
@@ -334,7 +344,7 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
         </>
       )}
       {part === 'armory' && (
-        <Section title="Cephanelik" icon="arms" aside={`her silahtan en çok ${fmt(armsRoom)}`}>
+        <Section title={L('Cephanelik', 'Armoury')} icon="arms" aside={L(`her silahtan en çok ${fmt(armsRoom)}`, `at most ${fmt(armsRoom)} of each weapon`)}>
           <div className="armory">
             {WEAPONS.map((w) => (
               <div key={w} className={armory[w] >= armsRoom ? 'slot full' : 'slot'}>
@@ -343,22 +353,30 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
                   {fmt(armory[w])} / {fmt(armsRoom)}
                 </b>
                 <small>{WEAPON_NAMES[w]}</small>
-                <Meter value={Math.min(1, armory[w] / armsRoom)} tone={armory[w] >= armsRoom ? 'down' : 'gold'} label={`${WEAPON_NAMES[w]} yeri`} segments={8} />
-                {armory[w] >= armsRoom ? <small className="down">Dolu: atölye durdu</small> : (weapons[w] ?? 0) > 0.05 && <small className="up">{signed(weapons[w]!)} / tur</small>}
+                <Meter value={Math.min(1, armory[w] / armsRoom)} tone={armory[w] >= armsRoom ? 'down' : 'gold'} label={L(`${WEAPON_NAMES[w]} yeri`, `${WEAPON_NAMES[w]} space`)} segments={8} />
+                {armory[w] >= armsRoom ? (
+                  <small className="down">{L('Dolu: atölye durdu', 'Full: the forge has stopped')}</small>
+                ) : (
+                  (weapons[w] ?? 0) > 0.05 && <small className="up">{signed(weapons[w]!)} {L('/ tur', '/ round')}</small>
+                )}
               </div>
             ))}
           </div>
           <p className="hint">
-            Silah atölyesi işledikçe silahlar burada birikir; kışlada okçu ve kalkanlı piyade eğitmek için harcanır. Her silahın yeri saray seviyesiyle ve her
-            ambar seviyesiyle (+{balance.economy.armory.perWarehouseLevel}) artar. Yeri dolan silahı işleyen atölye durur: hammadde harcamaz, işçileri boşta kalır.
+            {L(
+              `Silah atölyesi işledikçe silahlar burada birikir; kışlada okçu ve kalkanlı piyade eğitmek için harcanır. Her silahın yeri saray seviyesiyle ve her ambar seviyesiyle (+${balance.economy.armory.perWarehouseLevel}) artar. Yeri dolan silahı işleyen atölye durur: hammadde harcamaz, işçileri boşta kalır.`,
+              `Weapons pile up here as the forges work; the barracks spend them to train archers and shield infantry. Each weapon's space grows with the palace level and every storehouse level (+${balance.economy.armory.perWarehouseLevel}). A forge making a weapon whose space is full stops: it uses no raw goods and its workers stand idle.`,
+            )}
           </p>
         </Section>
       )}
       {part === 'goods' && (
         <>
       <p className="hint">
-        Her mal için depo yeri {fmt(cap)} (saray seviyesi ve ambarlarla artar); hazinede {fmt(goldCap(kingdom, now))} altın yeri var (saray seviyesi ve
-        hazine binasıyla artar). Sığmayan boşa gider. Her {balance.economy.productionSeconds} saniyede bir üretim turu işler; rakamlar tur başınadır.
+        {L(
+          `Her mal için depo yeri ${fmt(cap)} (saray seviyesi ve ambarlarla artar); hazinede ${fmt(goldCap(kingdom, now))} altın yeri var (saray seviyesi ve hazine binasıyla artar). Sığmayan boşa gider. Her ${balance.economy.productionSeconds} saniyede bir üretim turu işler; rakamlar tur başınadır.`,
+          `Storage for each good: ${fmt(cap)} (rises with the palace level and storehouses); the treasury holds ${fmt(goldCap(kingdom, now))} gold (rises with the palace level and the treasury building). Whatever does not fit is lost. A production round runs every ${balance.economy.productionSeconds} seconds; figures are per round.`,
+        )}
       </p>
       {RESOURCES.map((r) => {
         const { made, used, net } = flow[r]
@@ -373,8 +391,8 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
                 <b>{RESOURCE_NAMES[r]}</b>
                 {r !== 'gold' && (
                   <small>
-                    Arazi çarpanı {times(kingdom.yields[r as Good])}
-                    {r === 'food' && seasonOf(kingdom, now) && ` · Mevsim: ${SEASON_NAMES[seasonOf(kingdom, now)!]} ${times(seasonFactor(kingdom, now, 'food'))}`}
+                    {L('Arazi çarpanı', 'Land multiplier')} {times(kingdom.yields[r as Good])}
+                    {r === 'food' && seasonOf(kingdom, now) && L(` · Mevsim: ${SEASON_NAMES[seasonOf(kingdom, now)!]} ${times(seasonFactor(kingdom, now, 'food'))}`, ` · Season: ${SEASON_NAMES[seasonOf(kingdom, now)!]} ${times(seasonFactor(kingdom, now, 'food'))}`)}
                   </small>
                 )}
               </span>
@@ -383,24 +401,24 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
                 <small> / {fmt(room(r))}</small>
               </strong>
             </header>
-            <Meter value={stock / room(r)} tone={stock >= room(r) ? 'down' : stock >= room(r) * 0.85 ? 'gold' : 'up'} label={`${RESOURCE_NAMES[r]} deposu`} segments={20} />
+            <Meter value={stock / room(r)} tone={stock >= room(r) ? 'down' : stock >= room(r) * 0.85 ? 'gold' : 'up'} label={L(`${RESOURCE_NAMES[r]} deposu`, `${RESOURCE_NAMES[r]} store`)} segments={20} />
             {stock >= room(r) && (
               <p className="alert">
                 <Icon name="warn" size={16} />{' '}
                 {r === 'gold'
-                  ? 'Hazine dolu: gelen altın boşa gidiyor. Harca, hazine binası kur (4. seviye saray) ya da yükselt.'
-                  : 'Depo dolu: üretilen fazlası boşa gidiyor. Ambar kur ya da yükselt, fazlasını sat.'}
+                  ? L('Hazine dolu: gelen altın boşa gidiyor. Harca, hazine binası kur (4. seviye saray) ya da yükselt.', 'Treasury full: incoming gold is going to waste. Spend it, or build a treasury (level 4 palace) or upgrade one.')
+                  : L('Depo dolu: üretilen fazlası boşa gidiyor. Ambar kur ya da yükselt, fazlasını sat.', 'Stores full: the surplus is going to waste. Build or upgrade a storehouse, or sell the excess.')}
               </p>
             )}
             <div className="store-flow">
-              <Stat label="Gelen" value={signed(made)} tone={made > 0 ? 'up' : undefined} />
-              <Stat label="Giden" value={signed(-used)} tone={used > 0 ? 'down' : undefined} />
+              <Stat label={L('Gelen', 'In')} value={signed(made)} tone={made > 0 ? 'up' : undefined} />
+              <Stat label={L('Giden', 'Out')} value={signed(-used)} tone={used > 0 ? 'down' : undefined} />
               <Stat label="Net" value={signed(net)} tone={net > 0.01 ? 'up' : net < -0.01 ? 'down' : undefined} />
             </div>
-            {series.length > 1 && <History values={series} label={`${RESOURCE_NAMES[r]} son ${series.length} tur`} />}
+            {series.length > 1 && <History values={series} label={L(`${RESOURCE_NAMES[r]} son ${series.length} tur`, `${RESOURCE_NAMES[r]}, last ${series.length} rounds`)} />}
             {runsOut !== null && (
               <p className="alert">
-                <Icon name="warn" size={16} /> {runsOut < 1 ? 'Tükendi: depoda hiç kalmadı.' : `Bu gidişle yaklaşık ${runsOut} tur sonra tükenir.`}
+                <Icon name="warn" size={16} /> {runsOut < 1 ? L('Tükendi: depoda hiç kalmadı.', 'Run out: none left in store.') : L(`Bu gidişle yaklaşık ${runsOut} tur sonra tükenir.`, `At this rate it runs out in about ${runsOut} round${runsOut === 1 ? '' : 's'}.`)}
               </p>
             )}
           </article>
@@ -425,21 +443,21 @@ export function TradeTab(data: HudData & { part?: TradePart }) {
   return (
     <>
       <Subtabs
-        label="Ticaret"
+        label={L('Ticaret', 'Trade')}
         part={part}
         onPart={setPart}
         parts={[
-          { id: 'merchant', name: 'Tüccar', icon: 'trade', dot: !!kingdom.trade.damaged },
-          { id: 'market', name: 'Pazar', icon: 'gold' },
-          ...(world.cities.length > 0 ? [{ id: 'orders' as const, name: 'Siparişler', icon: 'scroll' as const, dot: ordersOpen }] : []),
-          { id: 'shares', name: 'Hâkimler', icon: 'star' },
+          { id: 'merchant', name: L('Tüccar', 'Merchant'), icon: 'trade', dot: !!kingdom.trade.damaged },
+          { id: 'market', name: L('Pazar', 'Market'), icon: 'gold' },
+          ...(world.cities.length > 0 ? [{ id: 'orders' as const, name: L('Siparişler', 'Orders'), icon: 'scroll' as const, dot: ordersOpen }] : []),
+          { id: 'shares', name: L('Hâkimler', 'Masters'), icon: 'star' },
         ]}
       />
       {part === 'merchant' && <TradePost {...data} />}
       {part === 'merchant' && <BanditSection kingdom={kingdom} />}
       {part === 'market' && <MarketSection {...data} />}
       {part === 'orders' && <CrownOrders world={world} kingdom={kingdom} now={now} online={online} />}
-      {part === 'shares' && (online ? <TradeShares online={online} /> : <Placeholder icon="trade" title="Lobi yükleniyor" />)}
+      {part === 'shares' && (online ? <TradeShares online={online} /> : <Placeholder icon="trade" title={L('Lobi yükleniyor', 'Loading the lobby')} />)}
     </>
   )
 }
@@ -494,45 +512,55 @@ function MarketSection({ world, kingdom, now, online }: HudData) {
     else timer.current = window.setTimeout(() => void send(), BASKET_WAIT_MS)
   }
   return (
-    <Section title="Lobi fiyatları" icon="gold" aside="satış düşürür, alış artırır">
+    <Section title={L('Lobi fiyatları', 'Lobby prices')} icon="gold" aside={L('satış düşürür, alış artırır', 'selling lowers, buying raises')}>
       <div className="price-row">
         {MARKET_GOODS.map((g) => {
           const price = priceAt(market, g, now)
           const base = Math.round(basePrice(g, market) * 100) / 100
           const floor = atFloor(price, g, market)
           return (
-            <span key={g} className="price" title={`${RESOURCE_NAMES[g]} · olağan fiyatı ${base}${floor ? ' · en dipte' : ''}`}>
+            <span key={g} className="price" title={L(`${RESOURCE_NAMES[g]} · olağan fiyatı ${base}${floor ? ' · en dipte' : ''}`, `${RESOURCE_NAMES[g]} · usual price ${base}${floor ? ' · at rock bottom' : ''}`)}>
               <Icon name={RESOURCE_ICONS[g]} size={16} />
-              <b className={price > base * 1.02 ? 'up' : price < base * 0.98 ? 'down' : undefined}>{price.toFixed(2).replace('.', ',')}</b>
-              <small>{floor ? 'en dipte' : `olağan ${String(base).replace('.', ',')}`}</small>
+              <b className={price > base * 1.02 ? 'up' : price < base * 0.98 ? 'down' : undefined}>{L(price.toFixed(2).replace('.', ','), price.toFixed(2))}</b>
+              <small>{floor ? L('en dipte', 'rock bottom') : L(`olağan ${String(base).replace('.', ',')}`, `usual ${base}`)}</small>
             </span>
           )
         })}
       </div>
       {(market?.foodDemand ?? 1) > 1.001 && (
-        <p className="hint">Dünya nüfusu yemeği pahalandırıyor: olağan fiyatı +%{Math.round(((market?.foodDemand ?? 1) - 1) * 100)}.</p>
+        <p className="hint">
+          {L(
+            `Dünya nüfusu yemeği pahalandırıyor: olağan fiyatı +%${Math.round(((market?.foodDemand ?? 1) - 1) * 100)}.`,
+            `The world's population is driving food up: usual price +${Math.round(((market?.foodDemand ?? 1) - 1) * 100)}%.`,
+          )}
+        </p>
       )}
       {MARKET_GOODS.some((g) => atFloor(priceAt(market, g, now), g, market)) && (
-        <p className="hint">En dipteki malın fiyatını satış daha fazla düşürmez; zamanla ve taç krallıkları aldıkça olağan fiyatına doğru toparlanır.</p>
+        <p className="hint">
+          {L(
+            'En dipteki malın fiyatını satış daha fazla düşürmez; zamanla ve taç krallıkları aldıkça olağan fiyatına doğru toparlanır.',
+            'Selling cannot push a good at rock bottom any lower; it recovers towards its usual price over time and as the crown kingdoms buy.',
+          )}
+        </p>
       )}
       <CrownBuyers world={world} market={market} now={now} />
       {has ? (
         <>
-          <div className="segmented choices" role="radiogroup" aria-label="Alınacak mal">
+          <div className="segmented choices" role="radiogroup" aria-label={L('Alınacak mal', 'Good to buy')}>
             {MARKET_GOODS.map((g) => (
               <button key={g} className="btn small" role="radio" aria-checked={good === g} onClick={() => setGood(g)}>
-                <Icon name={RESOURCE_ICONS[g]} size={16} /> {RESOURCE_NAMES[g].split(' ')[0]}
+                <Icon name={RESOURCE_ICONS[g]} size={16} /> {L(RESOURCE_NAMES[g].split(' ')[0], RESOURCE_NAMES[g].replace(' materials', ''))}
               </button>
             ))}
           </div>
           <div className="stepper">
-            <button className="btn icon-only" disabled={units <= 50} data-why="En az 50 birim alınır" onClick={() => setUnits(units - 50)} aria-label="Azalt">
+            <button className="btn icon-only" disabled={units <= 50} data-why={L('En az 50 birim alınır', 'At least 50 units')} onClick={() => setUnits(units - 50)} aria-label={L('Azalt', 'Decrease')}>
               <Icon name="minus" size={16} />
             </button>
             <span className="stepper-value">
-              <b>{units}</b> birim
+              <b>{units}</b> {L('birim', 'units')}
             </span>
-            <button className="btn icon-only" disabled={units >= buyPerClick} data-why={`Bir tıkta en fazla ${buyPerClick} birim`} onClick={() => setUnits(Math.min(buyPerClick, units + 50))} aria-label="Artır">
+            <button className="btn icon-only" disabled={units >= buyPerClick} data-why={L(`Bir tıkta en fazla ${buyPerClick} birim`, `At most ${buyPerClick} units per click`)} onClick={() => setUnits(Math.min(buyPerClick, units + 50))} aria-label={L('Artır', 'Increase')}>
               <Icon name="plus" size={16} />
             </button>
             <button
@@ -540,32 +568,35 @@ function MarketSection({ world, kingdom, now, online }: HudData) {
               disabled={!!why}
               data-why={
                 sending
-                  ? 'Fiyat güncelleniyor, lütfen bekle'
+                  ? L('Fiyat güncelleniyor, lütfen bekle', 'Updating the price, please wait')
                   : adding <= 0
-                    ? `Sepet dolu (en fazla ${maxBuy} birim); gönderilmesini bekle`
+                    ? L(`Sepet dolu (en fazla ${maxBuy} birim); gönderilmesini bekle`, `Basket full (at most ${maxBuy} units); wait for it to be sent`)
                     : why === 'cost'
-                      ? `Yeterli altın yok (eksik: ${Math.ceil(cost - kingdom.stock.gold)})`
+                      ? L(`Yeterli altın yok (eksik: ${Math.ceil(cost - kingdom.stock.gold)})`, `Not enough gold (short by ${Math.ceil(cost - kingdom.stock.gold)})`)
                       : why === 'building'
-                        ? 'Pazar binası henüz bitmedi'
-                        : 'Şu an alınamaz'
+                        ? L('Pazar binası henüz bitmedi', 'The market building is not finished yet')
+                        : L('Şu an alınamaz', 'Cannot buy right now')
               }
               onClick={add}
             >
-              {cost} altına al
+              {L(`${cost} altına al`, `Buy for ${cost} gold`)}
             </button>
           </div>
-          {discount > 0 && <p className="hint up">Lonca konağı pazarlık ediyor: pazar binasının fiyatı −%{Math.round(discount * 100)}.</p>}
+          {discount > 0 && <p className="hint up">{L(`Lonca konağı pazarlık ediyor: pazar binasının fiyatı −%${Math.round(discount * 100)}.`, `The guild hall drives a hard bargain: market prices −${Math.round(discount * 100)}%.`)}</p>}
           {(basket || sending) && (
             <p className="hint">
               {basket
-                ? `Sepette ${basket.units} ${RESOURCE_NAMES[basket.good].toLocaleLowerCase('tr')} (${buyCost(market, basket.good, basket.units, now, discount)} altın, en fazla ${maxBuy}). `
+                ? L(
+                    `Sepette ${basket.units} ${RESOURCE_NAMES[basket.good].toLocaleLowerCase(locale())} (${buyCost(market, basket.good, basket.units, now, discount)} altın, en fazla ${maxBuy}). `,
+                    `In the basket: ${basket.units} ${RESOURCE_NAMES[basket.good].toLocaleLowerCase(locale())} (${buyCost(market, basket.good, basket.units, now, discount)} gold, at most ${maxBuy}). `,
+                  )
                 : ''}
-              Fiyat güncelleniyor, lütfen bekle…
+              {L('Fiyat güncelleniyor, lütfen bekle…', 'Updating the price, please wait…')}
             </p>
           )}
         </>
       ) : (
-        <p className="hint">Pazar binası kurarsan (2. seviye saray) altınla hammadde alabilirsin.</p>
+        <p className="hint">{L('Pazar binası kurarsan (2. seviye saray) altınla hammadde alabilirsin.', 'Build a market (level 2 palace) and you can buy raw goods with gold.')}</p>
       )}
     </Section>
   )
@@ -581,24 +612,26 @@ function TradeAmount({ kingdom, now, onTradeAmount }: HudData) {
   const wait = Math.max(0, Math.ceil((tradeAmountReadyAt(kingdom) - now) / 1000))
   const shown = Math.min(cap, units)
   return (
-    <Section title="Sefer başına satış" icon="trade" aside={`${current} / ${cap} birim`}>
+    <Section title={L('Sefer başına satış', 'Sold per trip')} icon="trade" aside={L(`${current} / ${cap} birim`, `${current} / ${cap} units`)}>
       <div className="stepper">
-        <button className="btn icon-only" disabled={shown <= amountStep} data-why={`En az ${amountStep} birim`} onClick={() => setUnits(Math.max(amountStep, shown - amountStep))} aria-label="Azalt">
+        <button className="btn icon-only" disabled={shown <= amountStep} data-why={L(`En az ${amountStep} birim`, `At least ${amountStep} units`)} onClick={() => setUnits(Math.max(amountStep, shown - amountStep))} aria-label={L('Azalt', 'Decrease')}>
           <Icon name="minus" size={16} />
         </button>
         <span className="stepper-value">
-          <b>{shown}</b> birim
+          <b>{shown}</b> {L('birim', 'units')}
         </span>
-        <button className="btn icon-only" disabled={shown >= cap} data-why={`Bu seviyenin sınırı ${cap} birim; ticaret noktasını geliştir`} onClick={() => setUnits(Math.min(cap, shown + amountStep))} aria-label="Artır">
+        <button className="btn icon-only" disabled={shown >= cap} data-why={L(`Bu seviyenin sınırı ${cap} birim; ticaret noktasını geliştir`, `This level's limit is ${cap} units; upgrade the trading post`)} onClick={() => setUnits(Math.min(cap, shown + amountStep))} aria-label={L('Artır', 'Increase')}>
           <Icon name="plus" size={16} />
         </button>
-        <button className="btn small" disabled={shown === current || wait > 0} data-why={wait > 0 ? waitWhy(wait * 1000, 'Satış miktarı az önce değişti; ') : 'Seçili miktar zaten uygulanıyor'} onClick={() => onTradeAmount(shown)}>
-          {wait > 0 ? `${wait} sn sonra` : 'Uygula'}
+        <button className="btn small" disabled={shown === current || wait > 0} data-why={wait > 0 ? waitWhy(wait * 1000, L('Satış miktarı az önce değişti; ', 'The amount was just changed; ')) : L('Seçili miktar zaten uygulanıyor', 'The chosen amount is already in effect')} onClick={() => onTradeAmount(shown)}>
+          {wait > 0 ? L(`${wait} sn sonra`, `in ${wait} s`) : L('Uygula', 'Apply')}
         </button>
       </div>
       <p className="hint">
-        Tüccar her seferde bu kadar götürür ({amountStep}'er birim, en fazla seviyenin sınırı {cap}). Değiştirdikten sonra {Math.round(amountCooldownSeconds / 60)} dakika
-        yeniden değiştiremezsin.
+        {L(
+          `Tüccar her seferde bu kadar götürür (${amountStep}'er birim, en fazla seviyenin sınırı ${cap}). Değiştirdikten sonra ${Math.round(amountCooldownSeconds / 60)} dakika yeniden değiştiremezsin.`,
+          `The merchant takes this much each trip (in steps of ${amountStep}, up to the level's limit of ${cap}). Once changed, it cannot be changed again for ${Math.round(amountCooldownSeconds / 60)} minutes.`,
+        )}
       </p>
     </Section>
   )
@@ -607,7 +640,11 @@ function TradeAmount({ kingdom, now, onTradeAmount }: HudData) {
 function TradePost(data: HudData) {
   const { world, kingdom, now, onGood, onUpgrade, onShow, online } = data
   const post = kingdom.buildings.find((b) => b.kind === 'tradePost')
-  if (!post) return <Placeholder icon="trade" title="Ticaret noktan yok">Ticaret arsası bulunamadı.</Placeholder>
+  if (!post) return (
+      <Placeholder icon="trade" title={L('Ticaret noktan yok', 'You have no trading post')}>
+        {L('Ticaret arsası bulunamadı.', 'No trading plot was found.')}
+      </Placeholder>
+    )
   const { trade } = kingdom
   const tripMs = tradeTripMs(kingdom)
   const progress = trade.good ? Math.min(1, (now - trade.departedAt) / tripMs) : 0
@@ -618,66 +655,74 @@ function TradePost(data: HudData) {
       {trade.damaged && (
         <div className="alert">
           <p>
-            <Icon name="warn" size={16} /> Ticaret noktan yağmacılarca harap edildi: onarılana kadar tüccar satış yapamaz.
+            <Icon name="warn" size={16} /> {L('Ticaret noktan yağmacılarca harap edildi: onarılana kadar tüccar satış yapamaz.', 'Raiders have wrecked your trading post: the merchant cannot sell until it is repaired.')}
           </p>
           <div className="row">
             <CostList cost={tradeRepairCost()} stock={kingdom.stock} />
             <button className="btn small" disabled={!affordable(kingdom.stock, tradeRepairCost())} data-why={lackWhy(kingdom.stock, tradeRepairCost()) ?? undefined} onClick={() => online?.act({ type: 'repairTrade' })}>
-              Onar
+              {L('Onar', 'Repair')}
             </button>
           </div>
         </div>
       )}
-      <Section title="Satılacak mal" icon="chest">
+      <Section title={L('Satılacak mal', 'Good to sell')} icon="chest">
         <GoodChoice kingdom={kingdom} selected={trade.good} onGood={onGood} market={online?.market} now={now} />
       </Section>
       <TradeDestination world={world} kingdom={kingdom} market={online?.market} now={now} online={online} onCity={(city) => online?.act({ type: 'tradeCity', city })} onInn={(inn) => online?.act({ type: 'tradeInn', x: inn.x, y: inn.y })} />
       <div className="feature">
         <SpriteView sprite={thumb('tradePost')} scale={0.5} />
         <div>
-          <b>Ticaret noktası · Seviye {trade.level + 1}</b>
+          <b>{L(`Ticaret noktası · Seviye ${trade.level + 1}`, `Trading post · Level ${trade.level + 1}`)}</b>
           <p className="hint">
-            Tüccar her {Math.round(tripMs / 1000)} saniyede {tradeLoad(kingdom)} birim mal götürüp{' '}
-            {trade.city ? 'taç başkentinde lobinin o anki fiyatından' : trade.inn ? 'handa, hancının verdiği fiyattan' : 'lobinin o anki fiyatından'} altına çevirir
-            {kingdom.trade.good ? ` (şu an birimi ${tradePrice(kingdom, kingdom.trade.good, online?.market, now).toFixed(2).replace('.', ',')} altın)` : ''}.
+            {L(
+              `Tüccar her ${Math.round(tripMs / 1000)} saniyede ${tradeLoad(kingdom)} birim mal götürüp ${trade.city ? 'taç başkentinde lobinin o anki fiyatından' : trade.inn ? 'handa, hancının verdiği fiyattan' : 'lobinin o anki fiyatından'} altına çevirir${kingdom.trade.good ? ` (şu an birimi ${tradePrice(kingdom, kingdom.trade.good, online?.market, now).toFixed(2).replace('.', ',')} altın)` : ''}.`,
+              `Every ${Math.round(tripMs / 1000)} seconds the merchant takes ${tradeLoad(kingdom)} units of goods and turns them into gold ${trade.city ? "in the crown's capital at the lobby's going price" : trade.inn ? "at the inn, at the innkeeper's price" : "at the lobby's going price"}${kingdom.trade.good ? ` (currently ${tradePrice(kingdom, kingdom.trade.good, online?.market, now).toFixed(2)} gold a unit)` : ''}.`,
+            )}
           </p>
           <button className="btn small" onClick={() => onShow(center(post))}>
-            <Icon name="pin" size={16} /> Haritada göster
+            <Icon name="pin" size={16} /> {L('Haritada göster', 'Show on map')}
           </button>
         </div>
       </div>
       {cutOff(kingdom.buildings, kingdom.site, now).has(post.id) && (
         <p className="alert">
-          <Icon name="warn" size={16} /> Tüccar surların içinde kaldı: saraydan ticaret noktasına yol yok. Sura bir kapı yap.
+          <Icon name="warn" size={16} /> {L('Tüccar surların içinde kaldı: saraydan ticaret noktasına yol yok. Sura bir kapı yap.', 'The merchant is walled in: there is no way from the palace to the trading post. Put a gate in the wall.')}
         </p>
       )}
       {trade.good && goldCap(kingdom, now) - kingdom.stock.gold < 1 && (
         <p className="alert">
-          <Icon name="gold" size={16} /> Hazine dolu: tüccar mal götürmüyor, bekliyor. Haraç, harcama ya da yeni bir hazine yer açınca yeniden satmaya başlar.
+          <Icon name="gold" size={16} />{' '}
+          {L(
+            'Hazine dolu: tüccar mal götürmüyor, bekliyor. Haraç, harcama ya da yeni bir hazine yer açınca yeniden satmaya başlar.',
+            'Treasury full: the merchant takes no goods and waits. He starts selling again once tribute, spending or a new treasury makes room.',
+          )}
         </p>
       )}
       {trade.good && kingdom.stock[trade.good] - tradeReserve(kingdom, trade.good, now) < 1 && (roundOutcome(kingdom, now).delta[trade.good] ?? 0) <= 0 && (
         <p className="alert">
-          <Icon name="warn" size={16} /> Ambarda satılacak {RESOURCE_NAMES[trade.good].toLocaleLowerCase('tr-TR')} kalmadı: tüccar eli boş bekliyor.
-          Başka bir mal seç ya da bu malın üretimini artır.
+          <Icon name="warn" size={16} />{' '}
+          {L(
+            `Ambarda satılacak ${RESOURCE_NAMES[trade.good].toLocaleLowerCase(locale())} kalmadı: tüccar eli boş bekliyor. Başka bir mal seç ya da bu malın üretimini artır.`,
+            `No ${RESOURCE_NAMES[trade.good].toLocaleLowerCase(locale())} left in store to sell: the merchant waits empty-handed. Pick another good or make more of this one.`,
+          )}
         </p>
       )}
       {trade.good && <TradeAmount {...data} />}
       {trade.good && (
-        <Section title="Tüccar yolda" icon="time" aside={`${Math.max(0, Math.ceil((tripMs - (now - trade.departedAt)) / 1000))} sn`}>
-          <Meter value={progress} label="Tüccarın yolculuğu" segments={16} />
+        <Section title={L('Tüccar yolda', 'Merchant on the road')} icon="time" aside={L(`${Math.max(0, Math.ceil((tripMs - (now - trade.departedAt)) / 1000))} sn`, `${Math.max(0, Math.ceil((tripMs - (now - trade.departedAt)) / 1000))} s`)}>
+          <Meter value={progress} label={L('Tüccarın yolculuğu', "The merchant's journey")} segments={16} />
         </Section>
       )}
-      <Section title="Geliştir" icon="plus">
+      <Section title={L('Geliştir', 'Upgrade')} icon="plus">
         {next ? (
           <button className="btn wide" disabled={!affordable(kingdom.stock, next)} data-why={lackWhy(kingdom.stock, next) ?? undefined} onClick={onUpgrade}>
             <span>
-              Seviye {trade.level + 2}: sefer başına {nextUnits} birim
+              {L(`Seviye ${trade.level + 2}: sefer başına ${nextUnits} birim`, `Level ${trade.level + 2}: ${nextUnits} units per trip`)}
             </span>
             <CostList cost={next} stock={kingdom.stock} />
           </button>
         ) : (
-          <p className="hint">En yüksek seviyede.</p>
+          <p className="hint">{L('En yüksek seviyede.', 'At the highest level.')}</p>
         )}
       </Section>
     </>
@@ -687,7 +732,7 @@ function TradePost(data: HudData) {
 // ---- Krallık --------------------------------------------------------------------------------------------------------
 
 const describe = (plot: Plot | null | undefined) =>
-  !plot ? 'yok' : plot.granted ? `hudut dışında, ${plot.distance} karo` : 'hudut içinde'
+  !plot ? L('yok', 'none') : plot.granted ? L(`hudut dışında, ${plot.distance} karo`, `outside the border, ${plot.distance} tiles`) : L('hudut içinde', 'inside the border')
 
 // The palace tab in three parts, the one last looked at remembered (in this browser).
 type PalacePart = 'level' | 'house' | 'expeditions' | 'goals' | 'projects' | 'buildings'
@@ -706,10 +751,10 @@ export function KingdomTab(data: HudData) {
   const dock = kingdom.buildings.find((b) => b.kind === 'dock')
   const dockState = dock
     ? dock.doneAt > now
-      ? 'inşa ediliyor'
-      : `kuruldu (Sv. ${dock.level ?? 1})`
+      ? L('inşa ediliyor', 'under construction')
+      : L(`kuruldu (Sv. ${dock.level ?? 1})`, `built (Lv. ${dock.level ?? 1})`)
     : kingdom.dockPlot
-      ? 'arsa hazır, kurulmadı'
+      ? L('arsa hazır, kurulmadı', 'plot ready, not built')
       : describe(plots?.dock)
   // How many buildings can go up a level (CLAUDE.md §5.5): not at the top, finished, not held back by the house limit
   // or a missing queen/fealty; of those, how many could start right now (goods in store, a construction slot free).
@@ -740,16 +785,16 @@ export function KingdomTab(data: HudData) {
   return (
     <>
       <Subtabs
-        label="Saray"
+        label={L('Saray', 'Palace')}
         part={part}
         onPart={setPart}
         parts={[
-          { id: 'level', name: 'Seviye', icon: 'home' },
-          { id: 'house', name: 'Hanedan', icon: 'crown', dot: houseWaits },
-          { id: 'expeditions', name: 'Seferler', icon: 'pin', count: away },
-          { id: 'goals', name: 'Hedefler', icon: 'star' },
-          { id: 'projects', name: 'Projeler', icon: 'build' },
-          { id: 'buildings', name: 'Yapılar', icon: 'build' },
+          { id: 'level', name: L('Seviye', 'Level'), icon: 'home' },
+          { id: 'house', name: L('Hanedan', 'Dynasty'), icon: 'crown', dot: houseWaits },
+          { id: 'expeditions', name: L('Seferler', 'Expeditions'), icon: 'pin', count: away },
+          { id: 'goals', name: L('Hedefler', 'Goals'), icon: 'star' },
+          { id: 'projects', name: L('Projeler', 'Projects'), icon: 'build' },
+          { id: 'buildings', name: L('Yapılar', 'Buildings'), icon: 'build' },
         ]}
       />
       {part === 'level' && (
@@ -757,57 +802,62 @@ export function KingdomTab(data: HudData) {
           <div className="feature">
             <SpriteView sprite={thumb('palace', kingdom.color)} scale={0.5} />
             <div>
-              <b>Saray</b>
+              <b>{L('Saray', 'Palace')}</b>
               <GoalTitle kingdom={kingdom} />
-              <p className="hint">{palace ? 'Lordluğun kalbi. Lord ve kraliçe burada yaşar.' : 'Sarayın henüz yerleştirilmedi.'}</p>
+              <p className="hint">{palace ? L('Lordluğun kalbi. Lord ve kraliçe burada yaşar.', 'The heart of the lordship. The lord and the queen live here.') : L('Sarayın henüz yerleştirilmedi.', 'Your palace has not been placed yet.')}</p>
               {palace && (
                 <button className="btn small" onClick={() => onShow(center(palace))}>
-                  <Icon name="home" size={16} /> Saraya git
+                  <Icon name="home" size={16} /> {L('Saraya git', 'Go to the palace')}
                 </button>
               )}
             </div>
           </div>
-          <Section title="Hudut" icon="pin" aside={`${size}×${size} parsel`}>
-            <ol className="stages-track" aria-label="Hudut aşamaları">
+          <Section title={L('Hudut', 'Border')} icon="pin" aside={L(`${size}×${size} parsel`, `${size}×${size} parcels`)}>
+            <ol className="stages-track" aria-label={L('Hudut aşamaları', 'Border stages')}>
               {balance.territory.stageParcels.map((parcels, i) => (
                 <li key={parcels} className={i === stage ? 'now' : i < stage ? 'past' : ''} aria-current={i === stage ? 'step' : undefined}>
                   <b>
                     {parcels}×{parcels}
                   </b>
-                  <small>Saray Sv. {i + 1}</small>
+                  <small>{L(`Saray Sv. ${i + 1}`, `Palace Lv. ${i + 1}`)}</small>
                 </li>
               ))}
             </ol>
             {palace && nextSize ? (
               <>
                 <p className="hint">
-                  Hudut sarayla büyür. Sarayı {stage + 2}. seviyeye yükseltince hudut {nextSize}×{nextSize} parsel olur.
+                  {L(
+                    `Hudut sarayla büyür. Sarayı ${stage + 2}. seviyeye yükseltince hudut ${nextSize}×${nextSize} parsel olur.`,
+                    `The border grows with the palace. Raise the palace to level ${stage + 2} and the border becomes ${nextSize}×${nextSize} parcels.`,
+                  )}
                 </p>
                 {palace.doneAt > now ? (
-                  <p className="hint up">Saray yükseltiliyor: {Math.ceil((palace.doneAt - now) / 1000)} sn</p>
+                  <p className="hint up">{L(`Saray yükseltiliyor: ${Math.ceil((palace.doneAt - now) / 1000)} sn`, `Palace upgrading: ${Math.ceil((palace.doneAt - now) / 1000)} s`)}</p>
                 ) : (
                   <>
                   <button className="btn wide" disabled={upgradeError(kingdom, palace.id, now) !== null} data-why={buildWhy(upgradeError(kingdom, palace.id, now), kingdom, now, upgradeSpec(palace)?.cost)} onClick={() => onUpgradeBuilding(palace.id)}>
-                    <span>Sarayı yükselt <small>({upgradeSpec(palace)?.buildSeconds} sn)</small></span>
+                    <span>
+                      {L('Sarayı yükselt', 'Upgrade the palace')} <small>{L(`(${upgradeSpec(palace)?.buildSeconds} sn)`, `(${upgradeSpec(palace)?.buildSeconds} s)`)}</small>
+                    </span>
                     <CostList cost={upgradeSpec(palace)?.cost} stock={kingdom.stock} />
                   </button>
                   <Missing cost={upgradeSpec(palace)?.cost} stock={kingdom.stock} />
-                  {upgradeError(kingdom, palace.id, now) === 'liege' && <p className="hint down">Önce aşağıdaki Bağlılık bölümünden bir taç krallığına biat et.</p>}
+                  {upgradeError(kingdom, palace.id, now) === 'liege' && <p className="hint down">{L('Önce aşağıdaki Bağlılık bölümünden bir taç krallığına biat et.', 'First swear fealty to a crown kingdom in the Allegiance section below.')}</p>}
                   {upgradeError(kingdom, palace.id, now) === 'queen' && <QueenNeeded kingdom={kingdom} now={now} online={data.online} />}
                   </>
                 )}
               </>
             ) : (
-              palace && <p className="hint">Hudut en geniş hâlinde.</p>
+              palace && <p className="hint">{L('Hudut en geniş hâlinde.', 'The border is at its widest.')}</p>
             )}
-            <Stat label="İskele" value={dockState} />
+            <Stat label={L('İskele', 'Dock')} value={dockState} />
             {dock ? (
               <button className="btn small" onClick={() => onShow(center(dock))}>
-                <Icon name="pin" size={16} /> İskeleye git
+                <Icon name="pin" size={16} /> {L('İskeleye git', 'Go to the dock')}
               </button>
             ) : kingdom.dockPlot ? (
               <button className="btn small" onClick={() => onShow(center(kingdom.dockPlot!))}>
-                <Icon name="pin" size={16} /> Arsayı göster
+                <Icon name="pin" size={16} /> {L('Arsayı göster', 'Show the plot')}
               </button>
             ) : null}
           </Section>
@@ -820,10 +870,17 @@ export function KingdomTab(data: HudData) {
       {part === 'projects' && <ProjectsPanel kingdom={kingdom} now={now} online={data.online} />}
       {report && <ExpeditionReport expedition={report} kingdom={kingdom} online={data.online} onClose={() => setReport(null)} />}
       {part === 'buildings' && (
-        <Section title="Yapılar" icon="build" aside={`${kingdom.buildings.length} toplam${upgradable.total > 0 ? ` · ${upgradable.total} yükseltilebilir` : ''}`}>
+        <Section
+          title={L('Yapılar', 'Buildings')}
+          icon="build"
+          aside={L(`${kingdom.buildings.length} toplam${upgradable.total > 0 ? ` · ${upgradable.total} yükseltilebilir` : ''}`, `${kingdom.buildings.length} total${upgradable.total > 0 ? ` · ${upgradable.total} upgradable` : ''}`)}
+        >
           {upgradable.total > 0 && (
             <p className="hint">
-              {upgradable.total} yapı bir üst seviyeye çıkabilir{upgradable.now > 0 ? `; ${upgradable.now} tanesi şu an hemen yükseltilebilir` : '; şu an malzeme ya da inşaat yeri bekliyorlar'}.
+              {L(
+                `${upgradable.total} yapı bir üst seviyeye çıkabilir${upgradable.now > 0 ? `; ${upgradable.now} tanesi şu an hemen yükseltilebilir` : '; şu an malzeme ya da inşaat yeri bekliyorlar'}.`,
+                `${upgradable.total} building${upgradable.total === 1 ? '' : 's'} can go up a level${upgradable.now > 0 ? `; ${upgradable.now} can be upgraded right now` : '; for now they wait on materials or a construction slot'}.`,
+              )}
             </p>
           )}
           <ul className="tally">
@@ -834,26 +891,29 @@ export function KingdomTab(data: HudData) {
                   {BUILDING_NAMES[kind]}
                   {(upgradable.byKind.get(kind)?.total ?? 0) > 0 && (
                     <small className={(upgradable.byKind.get(kind)?.now ?? 0) > 0 ? 'up' : 'muted'}>
-                      {upgradable.byKind.get(kind)!.total} yükseltilebilir{(upgradable.byKind.get(kind)?.now ?? 0) > 0 ? ` · ${upgradable.byKind.get(kind)!.now} hemen` : ''}
+                      {L(`${upgradable.byKind.get(kind)!.total} yükseltilebilir`, `${upgradable.byKind.get(kind)!.total} upgradable`)}
+                      {(upgradable.byKind.get(kind)?.now ?? 0) > 0 ? L(` · ${upgradable.byKind.get(kind)!.now} hemen`, ` · ${upgradable.byKind.get(kind)!.now} now`) : ''}
                     </small>
                   )}
                 </span>
                 <b className={capOf(kingdom, kind, now) !== null && n >= capOf(kingdom, kind, now)! ? 'down' : undefined}>
                   {n}
-                  {capOf(kingdom, kind, now) !== null ? ` / ${capOf(kingdom, kind, now)}` : kind === 'house' ? ` · ${plannedHousing(kingdom)} / ${population(kingdom, now).cap} barınak` : ''}
+                  {capOf(kingdom, kind, now) !== null ? ` / ${capOf(kingdom, kind, now)}` : kind === 'house' ? L(` · ${plannedHousing(kingdom)} / ${population(kingdom, now).cap} barınak`, ` · ${plannedHousing(kingdom)} / ${population(kingdom, now).cap} housing`) : ''}
                 </b>
               </li>
             ))}
           </ul>
         </Section>
       )}
-      <Section title="Lordluğu sıfırla" icon="warn">
+      <Section title={L('Lordluğu sıfırla', 'Reset the lordship')} icon="warn">
         <p className="hint">
-          Her şey en baştan başlar: saray, yapılar, hazine ve depolar, ordular ve gemiler, hanedan ve kasabalar silinir; lobide yeni bir yer seçip
-          lordluğunu yeniden kurarsın. Geri alınamaz.
+          {L(
+            'Her şey en baştan başlar: saray, yapılar, hazine ve depolar, ordular ve gemiler, hanedan ve kasabalar silinir; lobide yeni bir yer seçip lordluğunu yeniden kurarsın. Geri alınamaz.',
+            'Everything starts over: the palace, buildings, treasury and stores, armies and ships, the dynasty and towns are wiped; you choose a new site in the lobby and found your lordship again. This cannot be undone.',
+          )}
         </p>
         <button className={confirmReset ? 'btn small danger' : 'btn small'} onClick={onReset}>
-          {confirmReset ? 'Emin misin? Her şey silinecek' : 'Lordluğu sıfırla'}
+          {confirmReset ? L('Emin misin? Her şey silinecek', 'Are you sure? Everything will be wiped') : L('Lordluğu sıfırla', 'Reset the lordship')}
         </button>
       </Section>
     </>
@@ -879,12 +939,20 @@ export function PeopleTab(data: HudData) {
   const working = jobs === 0 ? 1 : Math.min(1, villagers / jobs)
   const idle = Math.max(0, villagers - jobs)
   const signs = [
-    { name: 'Gıda', value: fed, note: food.net >= 0 ? 'Ambar doluyor' : `Ambar ~${Math.floor(kingdom.stock.food / -food.net)} tur yeter` },
-    { name: 'İş gücü', value: working, note: villagers < jobs ? `${jobs - villagers} işçi eksik` : idle > 0 ? `${idle} köylü boşta` : 'Herkes işinde' },
+    {
+      name: L('Gıda', 'Food'),
+      value: fed,
+      note: food.net >= 0 ? L('Ambar doluyor', 'Food stores are filling') : L(`Ambar ~${Math.floor(kingdom.stock.food / -food.net)} tur yeter`, `Food lasts ~${Math.floor(kingdom.stock.food / -food.net)} rounds`),
+    },
+    {
+      name: L('İş gücü', 'Workforce'),
+      value: working,
+      note: villagers < jobs ? L(`${jobs - villagers} işçi eksik`, `${jobs - villagers} worker${jobs - villagers === 1 ? '' : 's'} short`) : idle > 0 ? L(`${idle} köylü boşta`, `${idle} villager${idle === 1 ? '' : 's'} idle`) : L('Herkes işinde', 'Everyone is at work'),
+    },
   ]
   const worst = Math.min(...signs.map((s) => s.value))
   const mood = worst >= 0.9 ? 'happy' : worst >= 0.5 ? 'content' : 'unhappy'
-  const moodName = { happy: 'Memnun', content: 'İdare ediyor', unhappy: 'Huzursuz' }[mood]
+  const moodName = { happy: L('Memnun', 'Content'), content: L('İdare ediyor', 'Getting by'), unhappy: L('Huzursuz', 'Restless') }[mood]
   const happiness = kingdom.happiness ?? balance.society.happiness.start
   // The queen's part waits on the lord when she is held, or when one can be had.
   const queenWaits = !!kingdom.queenHeldBy || (!kingdom.queen && queenError(kingdom, now) === null)
@@ -892,14 +960,14 @@ export function PeopleTab(data: HudData) {
     <>
       <PeopleAlerts kingdom={kingdom} now={now} online={online} />
       <Subtabs
-        label="Halk"
+        label={L('Halk', 'People')}
         part={part}
         onPart={setPart}
         parts={[
-          { id: 'people', name: 'Nüfus', icon: 'villager' },
-          { id: 'mood', name: 'Mutluluk', icon: happiness >= 60 ? 'happy' : happiness >= 35 ? 'content' : 'unhappy' },
-          { id: 'health', name: 'Sağlık ve din', icon: 'heal' },
-          { id: 'queen', name: 'Kraliçe', icon: 'crown', dot: queenWaits },
+          { id: 'people', name: L('Nüfus', 'Population'), icon: 'villager' },
+          { id: 'mood', name: L('Mutluluk', 'Happiness'), icon: happiness >= 60 ? 'happy' : happiness >= 35 ? 'content' : 'unhappy' },
+          { id: 'health', name: L('Sağlık ve din', 'Health and faith'), icon: 'heal' },
+          { id: 'queen', name: L('Kraliçe', 'Queen'), icon: 'crown', dot: queenWaits },
         ]}
       />
       {part === 'people' && (
@@ -907,11 +975,11 @@ export function PeopleTab(data: HudData) {
           <div className="feature mood">
             <Icon name={mood} size={48} />
             <div>
-              <b>Halk {moodName.toLowerCase()}</b>
-              <p className="hint">Halkın hâli karnının tokluğuna ve işine bağlı.</p>
+              <b>{L(`Halk ${moodName.toLowerCase()}`, `The people: ${moodName.toLowerCase()}`)}</b>
+              <p className="hint">{L('Halkın hâli karnının tokluğuna ve işine bağlı.', 'How the people fare depends on full bellies and work.')}</p>
             </div>
           </div>
-          <Section title="Halkın durumu" icon="people">
+          <Section title={L('Halkın durumu', 'State of the people')} icon="people">
             {signs.map((s) => (
               <div key={s.name} className="sign">
                 <span>{s.name}</span>
@@ -920,19 +988,21 @@ export function PeopleTab(data: HudData) {
               </div>
             ))}
           </Section>
-          <Section title="İş gücü" icon="villager">
-            <Stat label="Köylü" value={villagers} note={`${houses} ev`} />
-            <Stat label="İş gücü ihtiyacı" value={jobs} tone={villagers < jobs ? 'down' : undefined} />
-            {away > 0 && <Stat label="Seferde" value={away} note="çalışmaz, vergi vermez" />}
-            <Stat label="Üretim verimi" value={`%${Math.round(efficiency * 100)}`} tone={efficiency < 1 ? 'down' : 'up'} />
-            <Stat label="Yemek tüketimi" value={`${signed(-food.used)} / tur`} />
+          <Section title={L('İş gücü', 'Workforce')} icon="villager">
+            <Stat label={L('Köylü', 'Villagers')} value={villagers} note={L(`${houses} ev`, `${houses} house${houses === 1 ? '' : 's'}`)} />
+            <Stat label={L('İş gücü ihtiyacı', 'Workers needed')} value={jobs} tone={villagers < jobs ? 'down' : undefined} />
+            {away > 0 && <Stat label={L('Seferde', 'On expedition')} value={away} note={L('çalışmaz, vergi vermez', 'they neither work nor pay tax')} />}
+            <Stat label={L('Üretim verimi', 'Production efficiency')} value={L(`%${Math.round(efficiency * 100)}`, `${Math.round(efficiency * 100)}%`)} tone={efficiency < 1 ? 'down' : 'up'} />
+            <Stat label={L('Yemek tüketimi', 'Food eaten')} value={L(`${signed(-food.used)} / tur`, `${signed(-food.used)} / round`)} />
           </Section>
           <PopulationPanel kingdom={kingdom} now={now} online={online} />
-          <Section title="Nüfus sınırı" icon="villager" aside={`${villagers + soldiers} / ${cap}`}>
-            <Meter value={cap ? (villagers + soldiers) / cap : 0} tone={villagers + soldiers >= cap ? 'down' : 'gold'} label="Nüfus" segments={16} />
+          <Section title={L('Nüfus sınırı', 'Population limit')} icon="villager" aside={`${villagers + soldiers} / ${cap}`}>
+            <Meter value={cap ? (villagers + soldiers) / cap : 0} tone={villagers + soldiers >= cap ? 'down' : 'gold'} label={L('Nüfus', 'Population')} segments={16} />
             <p className="hint">
-              Sarayın her seviyesi {balance.society.popCapPerPalaceLevel} kişilik yer açar. Evlerin {housing} kişilik yeri var
-              {housing > cap ? `; ${housing - cap} kişi sığmıyor, sarayı yükselt` : ''}. Askerler de bu sınırdan sayılır.
+              {L(
+                `Sarayın her seviyesi ${balance.society.popCapPerPalaceLevel} kişilik yer açar. Evlerin ${housing} kişilik yeri var${housing > cap ? `; ${housing - cap} kişi sığmıyor, sarayı yükselt` : ''}. Askerler de bu sınırdan sayılır.`,
+                `Each palace level makes room for ${balance.society.popCapPerPalaceLevel} people. Your houses hold ${housing}${housing > cap ? `; ${housing - cap} do not fit, upgrade the palace` : ''}. Soldiers count against this limit too.`,
+              )}
             </p>
           </Section>
         </>
@@ -951,12 +1021,12 @@ export function PeopleTab(data: HudData) {
 
 // ---- İç işler ----------------------------------------------------------------------------------------------------
 
-const TAX_NAMES: Record<TaxLevel, string> = { low: 'Düşük', normal: 'Normal', high: 'Yüksek', heavy: 'Ağır' }
+const TAX_NAMES: Record<TaxLevel, string> = { low: L('Düşük', 'Low'), normal: L('Normal', 'Normal'), high: L('Yüksek', 'High'), heavy: L('Ağır', 'Heavy') }
 const QUEEN_WHY: Record<string, string> = {
-  locked: 'sarayı 2. seviyeye yükselt',
-  people: `en az ${balance.society.queen.minPopulation} nüfus gerekir`,
-  cost: 'altın yetmiyor',
-  busy: 'kraliçen rehin',
+  locked: L('sarayı 2. seviyeye yükselt', 'raise the palace to level 2'),
+  people: L(`en az ${balance.society.queen.minPopulation} nüfus gerekir`, `needs a population of at least ${balance.society.queen.minPopulation}`),
+  cost: L('altın yetmiyor', 'not enough gold'),
+  busy: L('kraliçen rehin', 'your queen is held hostage'),
 }
 
 // What is wrong with the people now, over whichever part is shown: an enemy at the border, walls with no gate, a revolt
@@ -969,24 +1039,35 @@ function PeopleAlerts({ kingdom, now, online }: { kingdom: Kingdom; now: number;
       <FortuneNote kingdom={kingdom} now={now} />
       {(kingdom.fearUntil ?? 0) > now && (
         <p className="alert">
-          <Icon name="warn" size={16} /> Sınırında düşman ordusu bekliyor: halk korkuyor (mutluluk −{Math.abs(balance.military.fear.happiness)}).
+          <Icon name="warn" size={16} />{' '}
+          {L(
+            `Sınırında düşman ordusu bekliyor: halk korkuyor (mutluluk −${Math.abs(balance.military.fear.happiness)}).`,
+            `An enemy army waits at your border: the people are afraid (happiness −${Math.abs(balance.military.fear.happiness)}).`,
+          )}
         </p>
       )}
       {imprisoned(kingdom.buildings, kingdom.site, now) && (
         <p className="alert">
-          <Icon name="warn" size={16} /> Surlarında kapı yok, halk dışarı çıkamıyor: lordluğun bir hapishane (mutluluk −{Math.abs(balance.society.happiness.imprisoned)}).
-          Sura bir kapı koy.
+          <Icon name="warn" size={16} />{' '}
+          {L(
+            `Surlarında kapı yok, halk dışarı çıkamıyor: lordluğun bir hapishane (mutluluk −${Math.abs(balance.society.happiness.imprisoned)}). Sura bir kapı koy.`,
+            `Your walls have no gate and the people cannot get out: your lordship is a prison (happiness −${Math.abs(balance.society.happiness.imprisoned)}). Put a gate in the wall.`,
+          )}
         </p>
       )}
       {(kingdom.revoltUntil ?? 0) > now && (
         <p className="alert">
-          <Icon name="warn" size={16} /> Halk ayaklandı: {Math.ceil(((kingdom.revoltUntil ?? 0) - now) / 60000)} dakika daha üretim yarıda ve mutluluk düşük.
+          <Icon name="warn" size={16} />{' '}
+          {L(
+            `Halk ayaklandı: ${Math.ceil(((kingdom.revoltUntil ?? 0) - now) / 60000)} dakika daha üretim yarıda ve mutluluk düşük.`,
+            `The people have risen: for ${Math.ceil(((kingdom.revoltUntil ?? 0) - now) / 60000)} more minutes production is halved and happiness low.`,
+          )}
         </p>
       )}
       {broken > 0 && (
-        <Section title="Yıkık surlar" icon="warn" aside={`${broken}`}>
+        <Section title={L('Yıkık surlar', 'Broken walls')} icon="warn" aside={`${broken}`}>
           <button className="btn small" onClick={() => online?.act({ type: 'repairWalls' })}>
-            Onar · {Object.entries(walls).map(([r, v]) => `${v} ${RESOURCE_NAMES[r as Resource].toLowerCase()}`).join(', ')}
+            {L('Onar', 'Repair')} · {Object.entries(walls).map(([r, v]) => `${v} ${RESOURCE_NAMES[r as Resource].toLowerCase()}`).join(', ')}
           </button>
         </Section>
       )}
@@ -1004,19 +1085,34 @@ function Mood({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?
   const tax = kingdom.tax ?? 'normal'
   return (
     <>
-      <Section title="Mutluluk" icon={happiness >= 60 ? 'happy' : happiness >= 35 ? 'content' : 'unhappy'} aside={`%${Math.round(happiness)} → %${Math.round(target)}`}>
-        <Meter value={happiness / 100} tone={happiness >= 60 ? 'up' : happiness >= 35 ? 'gold' : 'down'} label="Mutluluk" segments={20} />
+      <Section
+        title={L('Mutluluk', 'Happiness')}
+        icon={happiness >= 60 ? 'happy' : happiness >= 35 ? 'content' : 'unhappy'}
+        aside={L(`%${Math.round(happiness)} → %${Math.round(target)}`, `${Math.round(happiness)}% → ${Math.round(target)}%`)}
+      >
+        <Meter value={happiness / 100} tone={happiness >= 60 ? 'up' : happiness >= 35 ? 'gold' : 'down'} label={L('Mutluluk', 'Happiness')} segments={20} />
         <p className="hint">
-          Mutluluk her tur hedefe doğru kayar. Vergi, kraliçe, tapınak, hastalık, günün olayları ve aç kalmak hedefi belirler; mutlu halk daha çok ve daha
-          ucuza asker olur.
+          {L(
+            'Mutluluk her tur hedefe doğru kayar. Vergi, kraliçe, tapınak, hastalık, günün olayları ve aç kalmak hedefi belirler; mutlu halk daha çok ve daha ucuza asker olur.',
+            "Happiness drifts towards its target every round. Tax, the queen, the temple, sickness, the day's events and hunger set the target; a happy people yields more soldiers, and cheaper.",
+          )}
         </p>
-        {memorialHappiness(kingdom, now) > 0 && <Stat label="Hanedan anıtı" value={`+${memorialHappiness(kingdom, now)}`} note="hanedanın şanı mutluluk hedefine eklenir" />}
-        {projectEffects(kingdom, now).happiness > 0 && <Stat label="Ulu Katedral" value={`+${projectEffects(kingdom, now).happiness}`} note="büyük işin aşamaları mutluluk hedefine eklenir" />}
-        {festivalHappiness(kingdom, now) > 0 && <Stat label="Halk şenliği" value={`+${festivalHappiness(kingdom, now)}`} note="şenlik sürdükçe" />}
+        {memorialHappiness(kingdom, now) > 0 && <Stat label={L('Hanedan anıtı', 'Dynasty monument')} value={`+${memorialHappiness(kingdom, now)}`} note={L('hanedanın şanı mutluluk hedefine eklenir', "the house's glory adds to the happiness target")} />}
+        {projectEffects(kingdom, now).happiness > 0 && (
+          <Stat label={L('Ulu Katedral', 'Great Cathedral')} value={`+${projectEffects(kingdom, now).happiness}`} note={L('büyük işin aşamaları mutluluk hedefine eklenir', "the great work's stages add to the happiness target")} />
+        )}
+        {festivalHappiness(kingdom, now) > 0 && <Stat label={L('Halk şenliği', 'Folk festival')} value={`+${festivalHappiness(kingdom, now)}`} note={L('şenlik sürdükçe', 'while the festival lasts')} />}
         <OutlawToll kingdom={kingdom} mood />
       </Section>
-      <Section title="Vergi" icon="gold" aside={`köylü başına ${balance.society.tax.levels[tax].goldPerVillager.toLocaleString('tr-TR', { maximumFractionDigits: 3 })} altın / tur`}>
-        <div className="segmented choices" role="radiogroup" aria-label="Vergi oranı">
+      <Section
+        title={L('Vergi', 'Tax')}
+        icon="gold"
+        aside={L(
+          `köylü başına ${balance.society.tax.levels[tax].goldPerVillager.toLocaleString(locale(), { maximumFractionDigits: 3 })} altın / tur`,
+          `${balance.society.tax.levels[tax].goldPerVillager.toLocaleString(locale(), { maximumFractionDigits: 3 })} gold per villager / round`,
+        )}
+      >
+        <div className="segmented choices" role="radiogroup" aria-label={L('Vergi oranı', 'Tax rate')}>
           {TAX_LEVELS.map((t) => (
             <button key={t} className="btn small" role="radio" aria-checked={tax === t} onClick={() => online?.act({ type: 'tax', tax: t })}>
               {TAX_NAMES[t]}
@@ -1024,28 +1120,34 @@ function Mood({ kingdom, now, online }: { kingdom: Kingdom; now: number; online?
           ))}
         </div>
         <Stat
-          label="Mutluluğa etkisi"
+          label={L('Mutluluğa etkisi', 'Effect on happiness')}
           value={`${balance.society.tax.levels[tax].happiness >= 0 ? '+' : ''}${Math.round(balance.society.tax.levels[tax].happiness * (balance.society.tax.levels[tax].happiness < 0 ? sermonTaxFactor(kingdom, now) : 1))}`}
-          note={sermonTaxFactor(kingdom, now) < 1 ? 'tapınakta vaaz sürüyor' : undefined}
+          note={sermonTaxFactor(kingdom, now) < 1 ? L('tapınakta vaaz sürüyor', 'a sermon is under way at the temple') : undefined}
         />
       </Section>
-      <Section title="Gece mesaisi" icon={night ? 'moon' : 'sun'} aside={`şu an ${night ? 'gece' : 'gündüz'} · iş %${Math.round(rate * 100)}`}>
+      <Section
+        title={L('Gece mesaisi', 'Night shift')}
+        icon={night ? 'moon' : 'sun'}
+        aside={L(`şu an ${night ? 'gece' : 'gündüz'} · iş %${Math.round(rate * 100)}`, `now ${night ? 'night' : 'day'} · work ${Math.round(rate * 100)}%`)}
+      >
         <p className="hint">
-          Geceleri halk dinlenir ve yalnızca %{Math.round(n.workRate * 100)} çalışır. Gece mesaisinde tam çalışır ama mutluluk {Math.abs(n.shiftHappiness)} puan düşer ve
-          biriken yorgunluk gündüz verimini de azaltır.
+          {L(
+            `Geceleri halk dinlenir ve yalnızca %${Math.round(n.workRate * 100)} çalışır. Gece mesaisinde tam çalışır ama mutluluk ${Math.abs(n.shiftHappiness)} puan düşer ve biriken yorgunluk gündüz verimini de azaltır.`,
+            `At night the people rest and work at only ${Math.round(n.workRate * 100)}%. On the night shift they work fully, but happiness drops ${Math.abs(n.shiftHappiness)} points and the fatigue that builds up lowers daytime output too.`,
+          )}
         </p>
-        <div className="segmented choices" role="radiogroup" aria-label="Gece mesaisi">
+        <div className="segmented choices" role="radiogroup" aria-label={L('Gece mesaisi', 'Night shift')}>
           <button className="btn small" role="radio" aria-checked={!kingdom.nightShift} onClick={() => online?.act({ type: 'nightShift', on: false })}>
-            <Icon name="moon" size={16} /> Geceleri dinlensinler
+            <Icon name="moon" size={16} /> {L('Geceleri dinlensinler', 'Let them rest at night')}
           </button>
           <button className="btn small" role="radio" aria-checked={!!kingdom.nightShift} onClick={() => online?.act({ type: 'nightShift', on: true })}>
-            <Icon name="sun" size={16} /> Gece de çalışsınlar
+            <Icon name="sun" size={16} /> {L('Gece de çalışsınlar', 'Work through the night')}
           </button>
         </div>
         <div className="sign">
-          <span>Yorgunluk</span>
-          <Meter value={fatigue / n.maxFatigue} tone={fatigue > n.maxFatigue / 2 ? 'down' : 'gold'} label="Yorgunluk" segments={10} />
-          <small>verim −%{Math.round(fatigue * 100)}</small>
+          <span>{L('Yorgunluk', 'Fatigue')}</span>
+          <Meter value={fatigue / n.maxFatigue} tone={fatigue > n.maxFatigue / 2 ? 'down' : 'gold'} label={L('Yorgunluk', 'Fatigue')} segments={10} />
+          <small>{L(`verim −%${Math.round(fatigue * 100)}`, `output −${Math.round(fatigue * 100)}%`)}</small>
         </div>
       </Section>
     </>
@@ -1062,20 +1164,25 @@ function Health({ data }: { data: HudData }) {
       {hospital ? (
         <HospitalPanel building={hospital} data={data} />
       ) : (
-        <Section title="Sağlık" icon="heal">
+        <Section title={L('Sağlık', 'Health')} icon="heal">
           <Sickness kingdom={kingdom} now={now} />
           <p className="hint">
-            Köylüler zaman zaman hastalanır; hasta köylü çalışmaz, vergi vermez ve halkın keyfini kaçırır. Kendiliğinden yavaşça iyileşirler; hastane (3.
-            seviye saray) iyileşmeyi hızlandırır.
+            {L(
+              'Köylüler zaman zaman hastalanır; hasta köylü çalışmaz, vergi vermez ve halkın keyfini kaçırır. Kendiliğinden yavaşça iyileşirler; hastane (3. seviye saray) iyileşmeyi hızlandırır.',
+              "Villagers fall ill from time to time; a sick villager neither works nor pays tax, and spoils the people's mood. They slowly recover on their own; a hospital (level 3 palace) speeds recovery.",
+            )}
           </p>
         </Section>
       )}
       {temple ? (
         <TemplePanel data={data} />
       ) : (
-        <Section title="İnanç" icon="temple">
+        <Section title={L('İnanç', 'Faith')} icon="temple">
           <p className="hint">
-            Tapınak (3. seviye saray) halkın mutluluğunu artırır, askerlerine iman gücü verir; rahipleri vaaz verince vergiler halka daha az ağır gelir.
+            {L(
+              'Tapınak (3. seviye saray) halkın mutluluğunu artırır, askerlerine iman gücü verir; rahipleri vaaz verince vergiler halka daha az ağır gelir.',
+              'A temple (level 3 palace) raises the people’s happiness and gives your soldiers the strength of faith; when its priests preach, taxes weigh less on the people.',
+            )}
           </p>
         </Section>
       )}
@@ -1089,12 +1196,14 @@ function QueenNeeded({ kingdom, now, online }: { kingdom: Kingdom; now: number; 
   return (
     <>
       <p className="hint down">
-        Sarayı {balance.dynasty.queenForPalaceLevel}. seviyeye yükseltmek için sarayda bir kraliçe olmalı.
-        {kingdom.queenHeldBy && ` Kraliçen ${kingdom.queenHeldBy.name} lordunun elinde: Halk sekmesi → Kraliçe'den fidyesini öde.`}
+        {L(`Sarayı ${balance.dynasty.queenForPalaceLevel}. seviyeye yükseltmek için sarayda bir kraliçe olmalı.`, `To raise the palace to level ${balance.dynasty.queenForPalaceLevel} there must be a queen at court.`)}
+        {kingdom.queenHeldBy &&
+          L(` Kraliçen ${kingdom.queenHeldBy.name} lordunun elinde: Halk sekmesi → Kraliçe'den fidyesini öde.`, ` Your queen is held by ${kingdom.queenHeldBy.name}: pay her ransom under People → Queen.`)}
       </p>
       {!kingdom.queenHeldBy && (
-        <button className="btn small" disabled={!!why} data-why={why === 'cost' ? `Yeterli altın yok (eksik: ${Math.ceil(balance.society.queen.cost.gold - kingdom.stock.gold)})` : sentence(why ? QUEEN_WHY[why] : undefined)} onClick={() => online?.act({ type: 'queen' })}>
-          <Icon name="crown" size={16} /> Kraliçe bul · {queenOwed(kingdom, now) ? 'hemen, bedelsiz' : `${balance.society.queen.cost.gold} altın`} {why ? `(${QUEEN_WHY[why] ?? ''})` : ''}
+        <button className="btn small" disabled={!!why} data-why={why === 'cost' ? L(`Yeterli altın yok (eksik: ${Math.ceil(balance.society.queen.cost.gold - kingdom.stock.gold)})`, `Not enough gold (short by ${Math.ceil(balance.society.queen.cost.gold - kingdom.stock.gold)})`) : sentence(why ? QUEEN_WHY[why] : undefined)} onClick={() => online?.act({ type: 'queen' })}>
+          <Icon name="crown" size={16} /> {L('Kraliçe bul', 'Find a queen')} ·{' '}
+          {queenOwed(kingdom, now) ? L('hemen, bedelsiz', 'at once, free of charge') : L(`${balance.society.queen.cost.gold} altın`, `${balance.society.queen.cost.gold} gold`)} {why ? `(${QUEEN_WHY[why] ?? ''})` : ''}
         </button>
       )}
     </>
@@ -1107,46 +1216,55 @@ function Queen({ kingdom, now, online }: { kingdom: Kingdom; now: number; online
   const queen = queenError(kingdom, now)
   return (
     <>
-      <Section title="Kraliçe" icon="crown">
+      <Section title={L('Kraliçe', 'Queen')} icon="crown">
         {kingdom.queenHeldBy ? (
           <>
             <p className="alert">
-              <Icon name="warn" size={16} /> Kraliçen {kingdom.queenHeldBy.name} lordunun elinde! Halk yas tutuyor (mutluluk{' '}
-              {balance.espionage.operations.kidnap.happiness}).
+              <Icon name="warn" size={16} />{' '}
+              {L(
+                `Kraliçen ${kingdom.queenHeldBy.name} lordunun elinde! Halk yas tutuyor (mutluluk ${balance.espionage.operations.kidnap.happiness}).`,
+                `Your queen is held by ${kingdom.queenHeldBy.name}! The people are in mourning (happiness ${balance.espionage.operations.kidnap.happiness}).`,
+              )}
             </p>
-            <button className="btn small" disabled={kingdom.stock.gold < ransom} data-why={`Yeterli altın yok (eksik: ${Math.ceil(ransom - kingdom.stock.gold)})`} onClick={() => online?.act({ type: 'ransom' })}>
-              Fidye öde · {ransom} altın
+            <button className="btn small" disabled={kingdom.stock.gold < ransom} data-why={L(`Yeterli altın yok (eksik: ${Math.ceil(ransom - kingdom.stock.gold)})`, `Not enough gold (short by ${Math.ceil(ransom - kingdom.stock.gold)})`)} onClick={() => online?.act({ type: 'ransom' })}>
+              {L(`Fidye öde · ${ransom} altın`, `Pay the ransom · ${ransom} gold`)}
             </button>
-            <p className="hint">Ya da {kingdom.queenHeldBy.name} ile savaş: kaçırılan kraliçe sana savaş gerekçesi verir.</p>
+            <p className="hint">{L(`Ya da ${kingdom.queenHeldBy.name} ile savaş: kaçırılan kraliçe sana savaş gerekçesi verir.`, `Or go to war with ${kingdom.queenHeldBy.name}: a kidnapped queen gives you a casus belli.`)}</p>
           </>
         ) : kingdom.queen ? (
           <p className="hint">
-            Sarayında Kraliçe {kingdom.dynasty?.queen?.name ?? ''} var: halkın mutluluğu +{balance.society.happiness.queen}; hanedanın çocukları onunla doğar.
+            {L(
+              `Sarayında Kraliçe ${kingdom.dynasty?.queen?.name ?? ''} var: halkın mutluluğu +${balance.society.happiness.queen}; hanedanın çocukları onunla doğar.`,
+              `Queen ${kingdom.dynasty?.queen?.name ?? ''} is at your court: the people's happiness +${balance.society.happiness.queen}; the house's children are born of her.`,
+            )}
           </p>
         ) : (
           <>
             <p className="hint">
-              Kraliçe halkın mutluluğunu +{balance.society.happiness.queen} artırır; hanedanın çocukları onunla doğar ve sarayı {balance.dynasty.queenForPalaceLevel}. seviyeye
-              yükseltmek için şarttır.
+              {L(
+                `Kraliçe halkın mutluluğunu +${balance.society.happiness.queen} artırır; hanedanın çocukları onunla doğar ve sarayı ${balance.dynasty.queenForPalaceLevel}. seviyeye yükseltmek için şarttır.`,
+                `A queen raises the people's happiness by +${balance.society.happiness.queen}; the house's children are born of her, and she is required to raise the palace to level ${balance.dynasty.queenForPalaceLevel}.`,
+              )}
             </p>
-            <button className="btn small" disabled={!!queen} data-why={queen === 'cost' ? `Yeterli altın yok (eksik: ${Math.ceil(balance.society.queen.cost.gold - kingdom.stock.gold)})` : sentence(queen ? QUEEN_WHY[queen] : undefined)} onClick={() => online?.act({ type: 'queen' })}>
-              <Icon name="crown" size={16} /> Kraliçe edin · {queenOwed(kingdom, now) ? 'hemen, bedelsiz' : `${balance.society.queen.cost.gold} altın`} {queen ? `(${QUEEN_WHY[queen] ?? ''})` : ''}
+            <button className="btn small" disabled={!!queen} data-why={queen === 'cost' ? L(`Yeterli altın yok (eksik: ${Math.ceil(balance.society.queen.cost.gold - kingdom.stock.gold)})`, `Not enough gold (short by ${Math.ceil(balance.society.queen.cost.gold - kingdom.stock.gold)})`) : sentence(queen ? QUEEN_WHY[queen] : undefined)} onClick={() => online?.act({ type: 'queen' })}>
+              <Icon name="crown" size={16} /> {L('Kraliçe edin', 'Take a queen')} ·{' '}
+              {queenOwed(kingdom, now) ? L('hemen, bedelsiz', 'at once, free of charge') : L(`${balance.society.queen.cost.gold} altın`, `${balance.society.queen.cost.gold} gold`)} {queen ? `(${QUEEN_WHY[queen] ?? ''})` : ''}
             </button>
           </>
         )}
       </Section>
       {(kingdom.hostages ?? []).length > 0 && (
-        <Section title="Elindeki kraliçeler" icon="crown">
+        <Section title={L('Elindeki kraliçeler', 'Queens you hold')} icon="crown">
           <ul className="places">
             {kingdom.hostages!.map((h) => (
               <li key={h.of}>
                 <Icon name="crown" size={24} />
                 <span>
-                  <b>{h.name} kraliçesi</b>
-                  <small>Fidyesini ödeyene kadar senin elinde.</small>
+                  <b>{L(`${h.name} kraliçesi`, `Queen of ${h.name}`)}</b>
+                  <small>{L('Fidyesini ödeyene kadar senin elinde.', 'Yours until her ransom is paid.')}</small>
                 </span>
                 <button className="btn small" onClick={() => online?.act({ type: 'release', target: h.of })}>
-                  Serbest bırak (+{balance.espionage.operations.kidnap.release})
+                  {L(`Serbest bırak (+${balance.espionage.operations.kidnap.release})`, `Release (+${balance.espionage.operations.kidnap.release})`)}
                 </button>
               </li>
             ))}
@@ -1161,7 +1279,7 @@ function Queen({ kingdom, now, online }: { kingdom: Kingdom; now: number; online
 
 const ago = (ms: number) => {
   const s = Math.max(0, Math.round(ms / 1000))
-  return s < 60 ? `${s} sn önce` : s < 3600 ? `${Math.floor(s / 60)} dk önce` : `${Math.floor(s / 3600)} sa önce`
+  return s < 60 ? L(`${s} sn önce`, `${s} s ago`) : s < 3600 ? L(`${Math.floor(s / 60)} dk önce`, `${Math.floor(s / 60)} min ago`) : L(`${Math.floor(s / 3600)} sa önce`, `${Math.floor(s / 3600)} h ago`)
 }
 
 export function JournalTab({ journal, now, onImportantRead }: HudData) {
@@ -1178,30 +1296,33 @@ export function JournalTab({ journal, now, onImportantRead }: HudData) {
   for (const e of shown) days.set(e.day, [...(days.get(e.day) ?? []), e])
   return (
     <>
-      <div className="segmented journal-filter" role="tablist" aria-label="Günlük">
+      <div className="segmented journal-filter" role="tablist" aria-label={L('Günlük', 'Journal')}>
         <button className="btn small" role="tab" aria-selected={!only} aria-pressed={!only} onClick={() => setOnly(false)}>
-          <Icon name="scroll" size={16} /> Tümü
+          <Icon name="scroll" size={16} /> {L('Tümü', 'All')}
         </button>
         <button className="btn small" role="tab" aria-selected={only} aria-pressed={only} onClick={() => setOnly(true)}>
-          <Icon name="warn" size={16} /> Önemli {unread > 0 && <span className="count">{unread}</span>}
+          <Icon name="warn" size={16} /> {L('Önemli', 'Important')} {unread > 0 && <span className="count">{unread}</span>}
         </button>
       </div>
       {shown.length === 0 ? (
         only ? (
-          <Placeholder icon="happy" title="Kötü bir haber yok">
-            Lordluğunu etkileyen olumsuz olaylar (yağma, savaş ilanı, kayıplar, sabotaj, kötü olaylar) burada toplanır.
+          <Placeholder icon="happy" title={L('Kötü bir haber yok', 'No bad news')}>
+            {L(
+              'Lordluğunu etkileyen olumsuz olaylar (yağma, savaş ilanı, kayıplar, sabotaj, kötü olaylar) burada toplanır.',
+              'Ill tidings that touch your lordship (raids, declarations of war, losses, sabotage, bad events) gather here.',
+            )}
           </Placeholder>
         ) : (
-          <Placeholder icon="scroll" title="Elçiden haber yok">
-            Her {REPORT_ROUNDS} üretim turunda bir gün kapanır ve elçin raporunu yazar.
+          <Placeholder icon="scroll" title={L('Elçiden haber yok', 'No word from the envoy')}>
+            {L(`Her ${REPORT_ROUNDS} üretim turunda bir gün kapanır ve elçin raporunu yazar.`, `Every ${REPORT_ROUNDS} production rounds a day closes and your envoy writes his report.`)}
           </Placeholder>
         )
       ) : (
         <div className="letters">
           {[...days].map(([day, entries]) => (
             // A journal day is a day/night cycle of the season, which is also a calendar year (CLAUDE.md §2).
-            <section key={day} aria-label={`${balance.time.calendar.startYear + day - 1} yılı`}>
-              <h3 className="day-head">{balance.time.calendar.startYear + day - 1} yılı</h3>
+            <section key={day} aria-label={L(`${balance.time.calendar.startYear + day - 1} yılı`, `The year ${balance.time.calendar.startYear + day - 1}`)}>
+              <h3 className="day-head">{L(`${balance.time.calendar.startYear + day - 1} yılı`, `The year ${balance.time.calendar.startYear + day - 1}`)}</h3>
               {entries.map((e) => (
                 <article key={e.id} className={`letter tone-${e.tone}${isImportant(e) ? ' important' : ''}`}>
                   <Icon name={e.icon} size={16} />
@@ -1235,10 +1356,12 @@ function CrownBuyers({ world, market, now }: { world: World; market?: Market | n
         return (
           <li key={d.crown}>
             <span>
-              <CrownBanner world={world} liege={d.crown} /> {info.name} {RESOURCE_NAMES[d.good].toLocaleLowerCase('tr')} alıyor
+              <CrownBanner world={world} liege={d.crown} />{' '}
+              {L(`${info.name} ${RESOURCE_NAMES[d.good].toLocaleLowerCase(locale())} alıyor`, `${info.name} is buying ${RESOURCE_NAMES[d.good].toLocaleLowerCase(locale())}`)}
             </span>
             <b className={rate > 0 ? 'up' : undefined}>
-              {rate > 0 ? `dakikada ${rate}` : 'fiyat yüksek, almıyor'} · {Math.max(1, Math.ceil((d.until - now) / 60000))} dk
+              {rate > 0 ? L(`dakikada ${rate}`, `${rate} a minute`) : L('fiyat yüksek, almıyor', 'price too high, not buying')} ·{' '}
+              {L(`${Math.max(1, Math.ceil((d.until - now) / 60000))} dk`, `${Math.max(1, Math.ceil((d.until - now) / 60000))} min`)}
             </b>
           </li>
         )

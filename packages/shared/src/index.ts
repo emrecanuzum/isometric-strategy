@@ -1,3 +1,4 @@
+export * from './lang'
 export * from './balance'
 export * from './clock'
 export * from './economy'

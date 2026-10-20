@@ -1,4 +1,5 @@
 import { balance } from './balance'
+import { L } from './lang'
 import type { Kingdom } from './economy'
 import type { Point } from './iso'
 import { atHome, fleetOf, navalBattle, navyOf, shipMight, warships } from './navy'
@@ -66,7 +67,10 @@ const BOAT_SECOND = [
 ]
 const pick = <T>(list: T[], r: number) => list[Math.floor(r * list.length) % list.length]
 
-export const bandName = (seed: number, idx: number) => `${pick(BAND_EPITHETS, hash(idx, 1, seed + 5201))} ${pick(BAND_NAMES, hash(idx, 2, seed + 5203))} çetesi`
+export const bandName = (seed: number, idx: number) => {
+  const name = `${pick(BAND_EPITHETS, hash(idx, 1, seed + 5201))} ${pick(BAND_NAMES, hash(idx, 2, seed + 5203))}`
+  return L(`${name} çetesi`, `${name}'s band`)
+}
 export const boatName = (seed: number, idx: number) => `${pick(BOAT_FIRST, hash(idx, 3, seed + 5207))} ${pick(BOAT_SECOND, hash(idx, 4, seed + 5209))}`
 
 // ---- Where the bands hold the roads -------------------------------------------------------------------------------
@@ -616,7 +620,8 @@ const HAVEN_SECOND = ['Koy', 'Kaya', 'Burun', 'Çatak', 'Kovuk', 'Kıyı', 'Ada'
 export const havenName = (seed: number, idx: number) => {
   const first = (i: number) => Math.floor(hash(i, 31, seed + 5401) * HAVEN_FIRST.length) % HAVEN_FIRST.length
   const a = idx > 0 && first(idx) === first(idx - 1) ? (first(idx) + 1) % HAVEN_FIRST.length : first(idx)
-  return `${HAVEN_FIRST[a]} ${pick(HAVEN_SECOND, hash(idx, 32, seed + 5403))} korsan limanı`
+  const name = `${HAVEN_FIRST[a]} ${pick(HAVEN_SECOND, hash(idx, 32, seed + 5403))}`
+  return L(`${name} korsan limanı`, `${name} pirate haven`)
 }
 
 const havenCache = new WeakMap<object, Map<number, HavenSpot[]>>()

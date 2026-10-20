@@ -4,6 +4,7 @@ import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { PHASE_NAMES, dayPhase, isNight } from '../../game/daylight'
 import { Icon } from '../icons'
+import { L, locale } from '../../lib/i18n'
 import { BUILDING_NAMES, RESOURCE_ICONS, RESOURCE_NAMES, SEASON_NAMES, dateText } from '../names'
 import type { TabId } from './Hud'
 import { History, Meter, fmt, short, signed, times } from './primitives'
@@ -51,17 +52,17 @@ export function TopBar({ kingdom, now, seasonStart, history, onOpen, market, men
     onOpen(tab)
   }
   return (
-    <div ref={bar} className="topbar frame" role="group" aria-label="Kaynaklar">
+    <div ref={bar} className="topbar frame" role="group" aria-label={L('Kaynaklar', 'Resources')}>
       {RESOURCES.map((r) => {
         const net = flow[r].net
         return (
           <Chip
             key={r}
-            label={`${RESOURCE_NAMES[r]} ${fmt(kingdom.stock[r])}, tur başına ${signed(net)}`}
+            label={L(`${RESOURCE_NAMES[r]} ${fmt(kingdom.stock[r])}, tur başına ${signed(net)}`, `${RESOURCE_NAMES[r]} ${fmt(kingdom.stock[r])}, ${signed(net)} per round`)}
             open={open === r}
             onClick={tap(r, 'store')}
             card={<ResourceCard resource={r} kingdom={kingdom} now={now} history={history} market={market} />}
-            go={{ label: 'Depoya git', onClick: go('store') }}
+            go={{ label: L('Depoya git', 'Go to storehouse'), onClick: go('store') }}
           >
             <Icon name={RESOURCE_ICONS[r]} size={24} />
             <span className="res-value">
@@ -72,11 +73,11 @@ export function TopBar({ kingdom, now, seasonStart, history, onOpen, market, men
         )
       })}
       <Chip
-        label={`Nüfus ${people}, sınır ${cap}`}
+        label={L(`Nüfus ${people}, sınır ${cap}`, `Population ${people}, limit ${cap}`)}
         open={open === 'people'}
         onClick={tap('people', 'people')}
         card={<PeopleCard kingdom={kingdom} now={now} />}
-        go={{ label: 'Halka git', onClick: go('people') }}
+        go={{ label: L('Halka git', 'Go to people'), onClick: go('people') }}
       >
         <Icon name="villager" size={24} />
         <span className="res-value">
@@ -123,7 +124,7 @@ function Chip({
   )
 }
 
-const num = (v: number) => v.toFixed(Math.abs(v) < 10 ? 1 : 0).replace('.', ',')
+const num = (v: number) => v.toFixed(Math.abs(v) < 10 ? 1 : 0).replace('.', L(',', '.'))
 
 // Each building kind's share of what comes in, and what goes out where.
 function ResourceCard({ resource: r, kingdom, now, history, market }: { resource: Resource; kingdom: Kingdom; now: number; history: Stock[]; market?: Market | null }) {
@@ -138,10 +139,10 @@ function ResourceCard({ resource: r, kingdom, now, history, market }: { resource
   }
   const lines: { name: string; value: number }[] = [...sources].map(([kind, s]) => ({ name: `${BUILDING_NAMES[kind]} ×${s.count}`, value: s.units }))
   const { villagers } = population(kingdom, now)
-  if (r === 'gold') lines.push({ name: 'Vergi', value: flow.tax })
-  if (r === 'gold' && kingdom.trade.good) lines.push({ name: 'Tüccar', value: flow.tradeGold })
-  if (r === 'food' && villagers > 0) lines.push({ name: `Köylüler (${villagers})`, value: -villagers * balance.economy.foodPerVillager })
-  if (r === kingdom.trade.good) lines.push({ name: 'Tüccar satıyor', value: -flow.sold })
+  if (r === 'gold') lines.push({ name: L('Vergi', 'Tax'), value: flow.tax })
+  if (r === 'gold' && kingdom.trade.good) lines.push({ name: L('Tüccar', 'Merchant'), value: flow.tradeGold })
+  if (r === 'food' && villagers > 0) lines.push({ name: L(`Köylüler (${villagers})`, `Villagers (${villagers})`), value: -villagers * balance.economy.foodPerVillager })
+  if (r === kingdom.trade.good) lines.push({ name: L('Tüccar satıyor', 'Merchant selling'), value: -flow.sold })
   // The soldiers' pay and bread, the ships (the fishing fleets' catch, the crews' bread, their upkeep) and the towns.
   const round = roundOutcome(kingdom, now)
   const pay = ledger(kingdom, now)
@@ -149,16 +150,16 @@ function ResourceCard({ resource: r, kingdom, now, history, market }: { resource
   const sends = townYield(kingdom.towns, now)
   const fish = r === 'food' ? fishCatch(kingdom) : 0
   const sailors = sailorsOf(kingdom)
-  if (fish > 0.01) lines.push({ name: 'Balık avındaki filolar', value: fish })
-  if (r === 'food' && pay.soldiersFood > 0.01) lines.push({ name: 'Askerler', value: -pay.soldiersFood })
-  if (r === 'gold' && pay.soldiersGold > 0.01) lines.push({ name: 'Asker maaşı', value: -pay.soldiersGold })
-  if (r === 'food' && round.navy.food > 0.01) lines.push({ name: `Denizciler (${sailors})`, value: -round.navy.food })
-  if (r === 'gold' && round.navy.gold > 0.01) lines.push({ name: 'Gemi bakımı', value: -round.navy.gold })
-  if ((sends[r] ?? 0) * idle > 0.01) lines.push({ name: 'Kasabalar', value: (sends[r] ?? 0) * idle })
-  if (r === 'gold' && round.towns.cost > 0.01) lines.push({ name: 'Kasaba bakımı', value: -round.towns.cost })
+  if (fish > 0.01) lines.push({ name: L('Balık avındaki filolar', 'Fishing fleets'), value: fish })
+  if (r === 'food' && pay.soldiersFood > 0.01) lines.push({ name: L('Askerler', 'Soldiers'), value: -pay.soldiersFood })
+  if (r === 'gold' && pay.soldiersGold > 0.01) lines.push({ name: L('Asker maaşı', 'Soldiers\' pay'), value: -pay.soldiersGold })
+  if (r === 'food' && round.navy.food > 0.01) lines.push({ name: L(`Denizciler (${sailors})`, `Sailors (${sailors})`), value: -round.navy.food })
+  if (r === 'gold' && round.navy.gold > 0.01) lines.push({ name: L('Gemi bakımı', 'Ship upkeep'), value: -round.navy.gold })
+  if ((sends[r] ?? 0) * idle > 0.01) lines.push({ name: L('Kasabalar', 'Towns'), value: (sends[r] ?? 0) * idle })
+  if (r === 'gold' && round.towns.cost > 0.01) lines.push({ name: L('Kasaba bakımı', 'Town upkeep'), value: -round.towns.cost })
   // Raw goods worked into weapons in the forges.
   const worked = flow.worked[r] ?? 0
-  if (worked > 0.05) lines.push({ name: 'Atölyede işleniyor', value: -worked })
+  if (worked > 0.05) lines.push({ name: L('Atölyede işleniyor', 'Used by the forges'), value: -worked })
   const scale = Math.max(made, used, 0.01)
   const runsOut = net < -0.01 ? Math.floor(kingdom.stock[r] / -net) : null
   const series = history.map((s) => s[r])
@@ -172,11 +173,11 @@ function ResourceCard({ resource: r, kingdom, now, history, market }: { resource
           <small> / {fmt(r === 'gold' ? goldCap(kingdom, now) : storageCap(kingdom, now))}</small>
         </strong>
       </header>
-      <div className="flowbars" aria-label="Tur başına gelen ve giden">
-        <span>Gelen</span>
+      <div className="flowbars" aria-label={L('Tur başına gelen ve giden', 'In and out per round')}>
+        <span>{L('Gelen', 'In')}</span>
         <i className="up" style={{ width: `${(made / scale) * 100}%` }} />
         <small className="up">{signed(made)}</small>
-        <span>Giden</span>
+        <span>{L('Giden', 'Out')}</span>
         <i className="down" style={{ width: `${(used / scale) * 100}%` }} />
         <small className="down">{signed(-used)}</small>
       </div>
@@ -194,24 +195,24 @@ function ResourceCard({ resource: r, kingdom, now, history, market }: { resource
         <ul className="pop-lines">
           <li>
             <span>
-              Mevsim: {SEASON_NAMES[seasonOf(kingdom, now)!]} (tarla, iskele)
+              {L('Mevsim', 'Season')}: {SEASON_NAMES[seasonOf(kingdom, now)!]} {L('(tarla, iskele)', '(farms, dock)')}
             </span>
             <b className={seasonFactor(kingdom, now, 'food') < 1 ? 'down' : 'up'}>{times(seasonFactor(kingdom, now, 'food'))}</b>
           </li>
         </ul>
       )}
-      {series.length > 1 && <History values={series} label={`Son ${series.length} tur`} />}
+      {series.length > 1 && <History values={series} label={L(`Son ${series.length} tur`, `Last ${series.length} rounds`)} />}
       <p className="pop-foot">
         {runsOut !== null ? (
           <span className="down">
-            <Icon name="warn" size={8} /> {runsOut < 1 ? 'Tükendi: ambar boş' : `~${runsOut} tur sonra tükenir`}
+            <Icon name="warn" size={8} /> {runsOut < 1 ? L('Tükendi: ambar boş', 'Run out: the storehouse is empty of it') : L(`~${runsOut} tur sonra tükenir`, `Runs out in ~${runsOut} rounds`)}
           </span>
         ) : wasted > 0.05 ? (
           <span className="down">
-            <Icon name="warn" size={8} /> {r === 'gold' ? 'Hazine' : 'Depo'} dolu: tur başına ~{num(wasted)} boşa gidiyor
+            <Icon name="warn" size={8} /> {L(`${r === 'gold' ? 'Hazine' : 'Depo'} dolu: tur başına ~${num(wasted)} boşa gidiyor`, `${r === 'gold' ? 'Treasury' : 'Storehouse'} full: ~${num(wasted)} wasted per round`)}
           </span>
         ) : (
-          <span>Net {signed(net)} / tur ({balance.economy.productionSeconds} sn)</span>
+          <span>{L(`Net ${signed(net)} / tur (${balance.economy.productionSeconds} sn)`, `Net ${signed(net)} / round (${balance.economy.productionSeconds} s)`)}</span>
         )}
       </p>
     </>
@@ -232,74 +233,74 @@ function PeopleCard({ kingdom, now }: { kingdom: Kingdom; now: number }) {
     <>
       <header className="pop-head">
         <Icon name="people" size={24} />
-        <b>Halk</b>
+        <b>{L('Halk', 'People')}</b>
         <strong>{villagers}</strong>
       </header>
       <div className="flowbars">
-        <span>Köylü</span>
+        <span>{L('Köylü', 'Villagers')}</span>
         <i className="up" style={{ width: `${(villagers / most) * 100}%` }} />
         <small>{villagers}</small>
-        <span>İş</span>
+        <span>{L('İş', 'Jobs')}</span>
         <i style={{ width: `${(jobs / most) * 100}%` }} />
         <small>{jobs}</small>
       </div>
       <ul className="pop-lines">
         <li>
-          <span>Büyüme</span>
+          <span>{L('Büyüme', 'Growth')}</span>
           <b className={grow.perRound > 0.001 ? 'up' : grow.perRound < -0.001 ? 'down' : undefined}>
             {grow.perRound >= 0 ? '+' : '−'}
-            {num(Math.abs(grow.perRound * (3600 / balance.economy.productionSeconds)))} / saat
+            {num(Math.abs(grow.perRound * (3600 / balance.economy.productionSeconds)))} {L('/ saat', '/ hour')}
           </b>
         </li>
         <li>
-          <span>Yerleşim</span>
+          <span>{L('Yerleşim', 'Settled')}</span>
           <b>
             {Math.round(grow.people)} / {grow.room}
-            {fill !== null && fill > 0 && ` · dolmaya ${fill >= 3_600_000 ? `${Math.floor(fill / 3_600_000)} sa ${Math.round((fill % 3_600_000) / 60_000)} dk` : `${Math.ceil(fill / 60_000)} dk`}`}
+            {fill !== null && fill > 0 && L(` · dolmaya ${fill >= 3_600_000 ? `${Math.floor(fill / 3_600_000)} sa ${Math.round((fill % 3_600_000) / 60_000)} dk` : `${Math.ceil(fill / 60_000)} dk`}`, ` · full in ${fill >= 3_600_000 ? `${Math.floor(fill / 3_600_000)} h ${Math.round((fill % 3_600_000) / 60_000)} min` : `${Math.ceil(fill / 60_000)} min`}`)}
           </b>
         </li>
         <li>
-          <span>Nüfus / sınır</span>
+          <span>{L('Nüfus / sınır', 'Population / limit')}</span>
           <b className={villagers + soldiers >= cap ? 'down' : undefined}>
             {villagers + soldiers} / {cap}
           </b>
         </li>
         {soldiers > 0 && (
           <li>
-            <span>Asker</span>
+            <span>{L('Asker', 'Soldiers')}</span>
             <b>{soldiers}</b>
           </li>
         )}
         {sailors > 0 && (
           <li>
-            <span>Denizci (yerden düşer)</span>
+            <span>{L('Denizci (yerden düşer)', 'Sailors (take up room)')}</span>
             <b>{sailors}</b>
           </li>
         )}
         {sick >= 0.5 && (
           <li>
-            <span>Hasta</span>
+            <span>{L('Hasta', 'Sick')}</span>
             <b className="down">{Math.round(sick)}</b>
           </li>
         )}
         <li>
-          <span>Barınak (ev, saray)</span>
+          <span>{L('Barınak (ev, saray)', 'Housing (houses, palace)')}</span>
           <b>
-            {homes} · {housing} kişilik
+            {homes} · {L(`${housing} kişilik`, `room for ${housing}`)}
           </b>
         </li>
         <li>
-          <span>İnşaat ustası</span>
+          <span>{L('İnşaat ustası', 'Builders')}</span>
           <b>
-            {slots} · {busy > 0 ? `${busy} çalışıyor` : 'boşta'}
+            {slots} · {busy > 0 ? L(`${busy} çalışıyor`, `${busy} at work`) : L('boşta', 'idle')}
           </b>
         </li>
         <li>
-          <span>Üretim verimi</span>
-          <b className={efficiency < 1 ? 'down' : 'up'}>%{Math.round(efficiency * 100)}</b>
+          <span>{L('Üretim verimi', 'Work efficiency')}</span>
+          <b className={efficiency < 1 ? 'down' : 'up'}>{L(`%${Math.round(efficiency * 100)}`, `${Math.round(efficiency * 100)}%`)}</b>
         </li>
         <li>
-          <span>Boşta köylü</span>
+          <span>{L('Boşta köylü', 'Idle villagers')}</span>
           <b>{Math.max(0, Math.floor(healthy) - jobs)}</b>
         </li>
       </ul>
@@ -321,7 +322,7 @@ function Clock({ now, seasonStart, nextRound, open, onTap }: { now: number; seas
       {/* A button, so a tap reaches it on every phone (iOS ignores taps on plain elements). */}
       <button
         className="res clock"
-        aria-label={`${dateText(c)}, ${SEASON_NAMES[c.season]}, saat ${time}, ${phase}`}
+        aria-label={L(`${dateText(c)}, ${SEASON_NAMES[c.season]}, saat ${time}, ${phase}`, `${dateText(c)}, ${SEASON_NAMES[c.season]}, ${time}, ${phase}`)}
         aria-expanded={touchOnly() ? open : undefined}
         onClick={() => touchOnly() && onTap()}
       >
@@ -352,46 +353,51 @@ function Clock({ now, seasonStart, nextRound, open, onTap }: { now: number; seas
         </div>
         <ul className="pop-lines">
           <li>
-            <span>Tarih</span>
+            <span>{L('Tarih', 'Date')}</span>
             <b>{dateText(c)}</b>
           </li>
           <li>
-            <span>Mevsim</span>
-            <b title={`${Math.max(1, Math.ceil((c.seasonEndsAt - now) / 60000))} dk sonra ${SEASON_NAMES[c.nextSeason].toLocaleLowerCase('tr')}`}>
-              {SEASON_NAMES[c.season]} · {Math.max(1, Math.ceil((c.seasonEndsAt - now) / 60000))} dk kaldı
+            <span>{L('Mevsim', 'Season')}</span>
+            <b title={L(`${Math.max(1, Math.ceil((c.seasonEndsAt - now) / 60000))} dk sonra ${SEASON_NAMES[c.nextSeason].toLocaleLowerCase(locale())}`, `${SEASON_NAMES[c.nextSeason]} in ${Math.max(1, Math.ceil((c.seasonEndsAt - now) / 60000))} min`)}>
+              {SEASON_NAMES[c.season]} · {L(`${Math.max(1, Math.ceil((c.seasonEndsAt - now) / 60000))} dk kaldı`, `${Math.max(1, Math.ceil((c.seasonEndsAt - now) / 60000))} min left`)}
             </b>
           </li>
           <li>
-            <span>Hasat (tarla, iskele)</span>
+            <span>{L('Hasat (tarla, iskele)', 'Harvest (farms, dock)')}</span>
             <b className={harvest < 0.995 ? 'down' : 'up'}>{times(harvest)}</b>
           </li>
           <li>
-            <span>Hastalığın yayılması</span>
+            <span>{L('Hastalığın yayılması', 'Spread of sickness')}</span>
             <b className={sickness > 1.005 ? 'down' : 'up'}>{times(sickness)}</b>
           </li>
           <li>
-            <span>Sezon</span>
+            <span>{L('Sezon', 'Season')}</span>
             <b>
-              {t.day} / {balance.time.seasonGameDays} yıl
+              {t.day} / {balance.time.seasonGameDays} {L('yıl', 'years')}
             </b>
           </li>
           <li>
-            <span>Yeni yıl</span>
-            <b>{Math.ceil(t.untilNextDay / 60000)} dk sonra</b>
+            <span>{L('Yeni yıl', 'New year')}</span>
+            <b>{L(`${Math.ceil(t.untilNextDay / 60000)} dk sonra`, `in ${Math.ceil(t.untilNextDay / 60000)} min`)}</b>
           </li>
           {nextRound !== undefined && (
             <li>
-              <span>Sonraki üretim turu</span>
-              <b>{Math.max(0, Math.ceil((nextRound - now) / 1000))} sn</b>
+              <span>{L('Sonraki üretim turu', 'Next production round')}</span>
+              <b>{Math.max(0, Math.ceil((nextRound - now) / 1000))} {L('sn', 's')}</b>
             </li>
           )}
         </ul>
-        <Meter value={t.day / balance.time.seasonGameDays} label="Sezon ilerlemesi" segments={16} />
+        <Meter value={t.day / balance.time.seasonGameDays} label={L('Sezon ilerlemesi', 'Season progress')} segments={16} />
         <p className="pop-foot">
-          Oyunda 1 gün = 1 yıl = gerçekte 1 saat: yıl gece yarısı 1 Ocak'ta başlar, her ay ~{Math.round(balance.time.gameDayMs / 12 / 60000)} dk, her mevsim ~
-          {Math.round(balance.time.gameDayMs / 4 / 60000)} dk sürer (kış gece yarısı, ilkbahar şafak, yaz öğle, sonbahar akşamüstü). Hanedan da bu yıllarla yaşlanır. Çubuktaki her kare 1 oyun saatidir (gerçekte ortalama {(balance.time.gameDayMs / 24 / 60000).toString().replace('.', ',')} dk): gece daha hızlı, şafak ve gün batımı daha yavaş geçer.
+          {L(
+            `Oyunda 1 gün = 1 yıl = gerçekte 1 saat: yıl gece yarısı 1 Ocak'ta başlar, her ay ~${Math.round(balance.time.gameDayMs / 12 / 60000)} dk, her mevsim ~${Math.round(balance.time.gameDayMs / 4 / 60000)} dk sürer (kış gece yarısı, ilkbahar şafak, yaz öğle, sonbahar akşamüstü). Hanedan da bu yıllarla yaşlanır. Çubuktaki her kare 1 oyun saatidir (gerçekte ortalama ${(balance.time.gameDayMs / 24 / 60000).toString().replace('.', ',')} dk): gece daha hızlı, şafak ve gün batımı daha yavaş geçer.`,
+            `In the game, 1 day = 1 year = 1 real hour: the year begins at midnight on 1 January, each month lasts ~${Math.round(balance.time.gameDayMs / 12 / 60000)} min and each season ~${Math.round(balance.time.gameDayMs / 4 / 60000)} min (winter at midnight, spring at dawn, summer at noon, autumn in the late afternoon). The dynasty ages by these years too. Each square of the strip is 1 game hour (on average ${(balance.time.gameDayMs / 24 / 60000).toString()} min in reality): night passes faster, dawn and dusk slower.`,
+          )}
           <br />
-          <b>Tur</b>, her {balance.economy.productionSeconds} saniyede (oyunda {Math.round((balance.economy.productionSeconds * 1000 * 24 * 60) / balance.time.gameDayMs)} dk) bir işleyen üretim turudur: binalar üretir, halk yer, vergi ve maaşlar ödenir. Bir oyun saatinde ortalama {Math.round(balance.time.gameDayMs / 24 / (balance.economy.productionSeconds * 1000))} tur geçer.
+          {L(
+            `Tur, her ${balance.economy.productionSeconds} saniyede (oyunda ${Math.round((balance.economy.productionSeconds * 1000 * 24 * 60) / balance.time.gameDayMs)} dk) bir işleyen üretim turudur: binalar üretir, halk yer, vergi ve maaşlar ödenir. Bir oyun saatinde ortalama ${Math.round(balance.time.gameDayMs / 24 / (balance.economy.productionSeconds * 1000))} tur geçer.`,
+            `A round is the production round run every ${balance.economy.productionSeconds} seconds (${Math.round((balance.economy.productionSeconds * 1000 * 24 * 60) / balance.time.gameDayMs)} min in the game): buildings produce, the people eat, taxes and wages are paid. On average ${Math.round(balance.time.gameDayMs / 24 / (balance.economy.productionSeconds * 1000))} rounds pass in a game hour.`,
+          )}
         </p>
       </div>
     </div>

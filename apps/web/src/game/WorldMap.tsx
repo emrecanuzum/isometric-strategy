@@ -3,6 +3,7 @@ import type { Point, Rect, World } from '@game/shared'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { Icon } from '../ui/icons'
+import { L } from '../lib/i18n'
 import { TERRAIN_COLORS } from './createWorld'
 import { cityInfo } from './cities'
 import { CASTLE, lighten, viewOutline } from './Minimap'
@@ -366,17 +367,17 @@ export function WorldMap({
   const zoomButton = (factor: number) => animateZoom(box.w / 2, box.h / 2, view.z * factor)
 
   return (
-    <div className="worldmap" role="dialog" aria-modal="true" aria-label="Dünya haritası">
+    <div className="worldmap" role="dialog" aria-modal="true" aria-label={L('Dünya haritası', 'World map')}>
       <header className="worldmap-head frame">
         <Icon name="pin" size={24} />
-        <h2>Dünya haritası</h2>
-        <button className="btn icon-only" disabled={z <= MIN_ZOOM + 0.001} data-why="En uzak görünümdesin" onClick={() => zoomButton(1 / BUTTON_STEP)} aria-label="Uzaklaştır" title="Uzaklaştır">
+        <h2>{L('Dünya haritası', 'World map')}</h2>
+        <button className="btn icon-only" disabled={z <= MIN_ZOOM + 0.001} data-why={L('En uzak görünümdesin', 'You are zoomed all the way out')} onClick={() => zoomButton(1 / BUTTON_STEP)} aria-label={L('Uzaklaştır', 'Zoom out')} title={L('Uzaklaştır', 'Zoom out')}>
           <Icon name="minus" size={16} />
         </button>
-        <button className="btn icon-only" disabled={z >= MAX_ZOOM - 0.001} data-why="En yakın görünümdesin" onClick={() => zoomButton(BUTTON_STEP)} aria-label="Yakınlaştır" title="Yakınlaştır">
+        <button className="btn icon-only" disabled={z >= MAX_ZOOM - 0.001} data-why={L('En yakın görünümdesin', 'You are zoomed all the way in')} onClick={() => zoomButton(BUTTON_STEP)} aria-label={L('Yakınlaştır', 'Zoom in')} title={L('Yakınlaştır', 'Zoom in')}>
           <Icon name="plus" size={16} />
         </button>
-        <button className="btn icon-only" onClick={onClose} aria-label="Kapat" title="Kapat (Esc)">
+        <button className="btn icon-only" onClick={onClose} aria-label={L('Kapat', 'Close')} title={L('Kapat (Esc)', 'Close (Esc)')}>
           <Icon name="close" size={16} />
         </button>
       </header>
@@ -463,29 +464,29 @@ export function WorldMap({
               {label.text}
             </span>
           ))}
-          {center && <span className="worldmap-here" style={marker(center)} aria-label="Şu an baktığın yer" />}
+          {center && <span className="worldmap-here" style={marker(center)} aria-label={L('Şu an baktığın yer', 'Where you are looking now')} />}
         </div>
       </div>
       <footer className="worldmap-legend frame">
         <span>
-          <i style={{ background: '#e2c48a' }} /> Ticaret yolu
+          <i style={{ background: '#e2c48a' }} /> {L('Ticaret yolu', 'Trade road')}
         </span>
         <span>
-          <i style={{ background: '#4a90c8' }} /> Nehir
+          <i style={{ background: '#4a90c8' }} /> {L('Nehir', 'River')}
         </span>
         <span>
-          <Icon name="inn" size={8} /> Han
+          <Icon name="inn" size={8} /> {L('Han', 'Inn')}
         </span>
         <span>
-          <Icon name="house" size={8} /> Kasaba
+          <Icon name="house" size={8} /> {L('Kasaba', 'Town')}
         </span>
         <span>
-          <i className="patrol" /> Taç devriyesi
+          <i className="patrol" /> {L('Taç devriyesi', 'Crown patrol')}
         </span>
         <span>
-          <i className="here" /> Bakılan yer
+          <i className="here" /> {L('Bakılan yer', 'Your view')}
         </span>
-        <small>Tekerlek ya da iki parmak: yakınlaştır · Sürükle: kaydır</small>
+        <small>{L('Tekerlek ya da iki parmak: yakınlaştır · Sürükle: kaydır', 'Wheel or two fingers: zoom · Drag: pan')}</small>
       </footer>
     </div>
   )

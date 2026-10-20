@@ -48,6 +48,7 @@
       {
         "at": 30,
         "name": "Teşekkür sepeti",
+        "nameEn": "Basket of thanks",
         "gold": 8,
         "goods": {
           "food": 8
@@ -56,6 +57,7 @@
       {
         "at": 60,
         "name": "Saray armağanı",
+        "nameEn": "Palace gift",
         "gold": 18,
         "goods": {
           "food": 12,
@@ -65,6 +67,7 @@
       {
         "at": 85,
         "name": "Hükümdarın lütfu",
+        "nameEn": "The ruler's favour",
         "gold": 35,
         "goods": {
           "food": 20,
@@ -155,11 +158,11 @@
       "comingOfAge": 16,
       "history": 8,
       "traits": {
-        "greedy": { "name": "Açgözlü", "tribute": 1.2, "tip": 0.8, "welcome": -4 },
-        "generous": { "name": "Cömert", "tribute": 0.85, "tip": 1.25, "welcome": 8 },
-        "stern": { "name": "Sert", "tribute": 1.1, "tip": 0.9, "welcome": 0 },
-        "pious": { "name": "Dindar", "tribute": 0.95, "tip": 1.1, "welcome": 5 },
-        "just": { "name": "Adil", "tribute": 1, "tip": 1, "welcome": 5 }
+        "greedy": { "name": "Açgözlü", "nameEn": "Greedy", "tribute": 1.2, "tip": 0.8, "welcome": -4 },
+        "generous": { "name": "Cömert", "nameEn": "Generous", "tribute": 0.85, "tip": 1.25, "welcome": 8 },
+        "stern": { "name": "Sert", "nameEn": "Stern", "tribute": 1.1, "tip": 0.9, "welcome": 0 },
+        "pious": { "name": "Dindar", "nameEn": "Pious", "tribute": 0.95, "tip": 1.1, "welcome": 5 },
+        "just": { "name": "Adil", "nameEn": "Just", "tribute": 1, "tip": 1, "welcome": 5 }
       }
     },
     "rivalry": {

@@ -3,6 +3,7 @@ import type { Blockade, MissionKind, Point, Rect, Sail, World } from '@game/shar
 import type { FleetShip } from './ambient'
 import { worldDecks } from './chunkPainter'
 import type { ShipKind } from './shipSprites'
+import { L } from '../lib/i18n'
 
 // Where the lords' ships show on the map (CLAUDE.md §8.5): the harbour's ships moored by each dock's jetty; a fleet at
 // home riding at anchor off it, or sailing where it was sent and riding at anchor there, its ships in a line behind
@@ -150,7 +151,7 @@ export function fleetShips(world: World, lords: NavyOnMap[]): FleetShip[] {
   return out
 }
 
-const tag = (index: number, ships: number, rough?: boolean) => `${index + 1}. filo · ${rough ? (ships <= 3 ? 'birkaç' : ships <= 8 ? 'orta' : 'büyük') : ships}`
+const tag = (index: number, ships: number, rough?: boolean) => `${L(`${index + 1}. filo`, `Fleet ${index + 1}`)} · ${rough ? (ships <= 3 ? L('birkaç', 'a few') : ships <= 8 ? L('orta', 'medium') : L('büyük', 'large')) : ships}`
 
 const SECONDS_PER_TILE = balance.navy.sail.secondsPerTile
 

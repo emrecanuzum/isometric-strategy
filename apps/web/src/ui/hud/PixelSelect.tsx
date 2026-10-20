@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import type React from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '../icons'
+import { L, locale } from '../../lib/i18n'
 import type { IconName } from '../icons'
 
 // The game's own dropdown, in place of the native <select> (whose system menu breaks the pixel look). A wooden button
@@ -123,12 +124,12 @@ export function PixelSelect<V extends string | number>({ value, options, onChang
     const t = typed.current
     t.text = now - t.at > 700 ? key : t.text + key
     t.at = now
-    const needle = t.text.toLocaleLowerCase('tr-TR')
+    const needle = t.text.toLocaleLowerCase(locale())
     const start = active >= 0 ? active : -1
     for (let i = 1; i <= options.length; i++) {
       const at = (start + (t.text.length > 1 ? i - 1 : i) + options.length) % options.length
       const o = options[at]
-      if (!o.disabled && o.label.toLocaleLowerCase('tr-TR').startsWith(needle)) return at
+      if (!o.disabled && o.label.toLocaleLowerCase(locale()).startsWith(needle)) return at
     }
     return -1
   }
@@ -182,7 +183,7 @@ export function PixelSelect<V extends string | number>({ value, options, onChang
         type="button"
         className={`btn pixel-select${small ? ' small' : ''}${open ? ' open' : ''}${className ? ` ${className}` : ''}`}
         disabled={off}
-        data-why={options.length === 0 ? (placeholder ?? 'Seçenek yok') : (why ?? 'Şu an seçilemez')}
+        data-why={options.length === 0 ? (placeholder ?? L('Seçenek yok', 'No options')) : (why ?? L('Şu an seçilemez', 'Cannot be chosen right now'))}
         role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -194,7 +195,7 @@ export function PixelSelect<V extends string | number>({ value, options, onChang
       >
         <span className="pixel-select-value">
           {current?.icon && <Icon name={current.icon} size={18} />}
-          <span className="pixel-select-label">{current ? current.label : (placeholder ?? 'Seç')}</span>
+          <span className="pixel-select-label">{current ? current.label : (placeholder ?? L('Seç', 'Choose'))}</span>
           {current?.note && <span className="pixel-select-note">{current.note}</span>}
         </span>
         <span className="pixel-select-caret" aria-hidden="true" />

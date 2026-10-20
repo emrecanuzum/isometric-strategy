@@ -4,12 +4,13 @@ import { EventArt } from './EventArt'
 import { StoryScene, fortuneStory } from './storyScenes'
 import { DialogFoot } from './DialogQueue'
 import { Icon } from './icons'
+import { L } from '../lib/i18n'
 import { CRISIS_TEXTS, DILEMMA_TEXTS, FORTUNE_TEXTS, RESOURCE_NAMES, SCOPE_NAMES } from './names'
 
 export type FortuneEvent = Extract<EconomyEvent, { kind: 'fortune' }>
 
-const resourceName = (r: string) => (r === 'gold' ? 'altın' : RESOURCE_NAMES[r as Good]?.toLowerCase() ?? r)
-const pct = (v: number) => `${v > 0 ? '+' : '−'}%${Math.round(Math.abs(v) * 100)}`
+const resourceName = (r: string) => (r === 'gold' ? L('altın', 'gold') : RESOURCE_NAMES[r as Good]?.toLowerCase() ?? r)
+const pct = (v: number) => L(`${v > 0 ? '+' : '−'}%${Math.round(Math.abs(v) * 100)}`, `${v > 0 ? '+' : '−'}${Math.round(Math.abs(v) * 100)}%`)
 const signed = (v: number) => `${v > 0 ? '+' : '−'}${Math.abs(v)}`
 
 // What one way of meeting a choice fortune costs, gives and does while the fortune lasts, each effect marked good or bad.
@@ -18,13 +19,13 @@ function optionEffects(o: ChoiceOption): Effect[] {
   return [
     ...Object.entries(o.cost ?? {}).map(([r, v]) => ({ text: `−${v} ${resourceName(r)}`, good: false })),
     ...Object.entries(o.gain ?? {}).map(([r, v]) => ({ text: `+${v} ${resourceName(r)}`, good: true })),
-    ...(o.happiness ? [{ text: `mutluluk ${signed(o.happiness)}`, good: o.happiness > 0 }] : []),
-    ...(o.templeHappiness ? [{ text: `tapınak varsa mutluluk ${signed(o.templeHappiness)}`, good: o.templeHappiness > 0 }] : []),
-    ...(o.trade ? [{ text: `ticaret geliri ${pct(o.trade)}`, good: o.trade > 0 }] : []),
-    ...(o.work ? [{ text: `iş gücü ${pct(o.work)}`, good: o.work > 0 }] : []),
-    ...Object.entries(o.output ?? {}).map(([g, v]) => ({ text: `${resourceName(g)} üretimi ${pct(v ?? 0)}`, good: (v ?? 0) > 0 })),
-    ...(o.researchRush ? [{ text: `süren araştırma ${Math.round(o.researchRush)} sn erken biter`, good: true }] : []),
-    ...(o.people ? [{ text: `${o.people} köylü yerleşir (boş ev varsa)`, good: true }] : []),
+    ...(o.happiness ? [{ text: L(`mutluluk ${signed(o.happiness)}`, `happiness ${signed(o.happiness)}`), good: o.happiness > 0 }] : []),
+    ...(o.templeHappiness ? [{ text: L(`tapınak varsa mutluluk ${signed(o.templeHappiness)}`, `happiness ${signed(o.templeHappiness)} with a temple`), good: o.templeHappiness > 0 }] : []),
+    ...(o.trade ? [{ text: L(`ticaret geliri ${pct(o.trade)}`, `trade income ${pct(o.trade)}`), good: o.trade > 0 }] : []),
+    ...(o.work ? [{ text: L(`iş gücü ${pct(o.work)}`, `workforce ${pct(o.work)}`), good: o.work > 0 }] : []),
+    ...Object.entries(o.output ?? {}).map(([g, v]) => ({ text: L(`${resourceName(g)} üretimi ${pct(v ?? 0)}`, `${resourceName(g)} output ${pct(v ?? 0)}`), good: (v ?? 0) > 0 })),
+    ...(o.researchRush ? [{ text: L(`süren araştırma ${Math.round(o.researchRush)} sn erken biter`, `current research finishes ${Math.round(o.researchRush)} s sooner`), good: true }] : []),
+    ...(o.people ? [{ text: L(`${o.people} köylü yerleşir (boş ev varsa)`, `${o.people} ${o.people === 1 ? 'villager settles' : 'villagers settle'} (if there are empty homes)`), good: true }] : []),
   ]
 }
 
@@ -49,12 +50,12 @@ function Effects({ list }: { list: (Effect | false | '' | undefined)[] }) {
 function tollOf(kingdom: Kingdom | null, kind: string, choice: CrisisChoice, now: number): Effect | false {
   if (!kingdom) return false
   const lost = Object.entries(crisisToll(kingdom, kind, choice, now)).filter(([, v]) => (v ?? 0) > 0)
-  return lost.length > 0 && { text: `yine de ~${lost.map(([r, v]) => `${Math.round(v ?? 0)} ${resourceName(r)}`).join(', ')} gider`, good: false }
+  return lost.length > 0 && { text: L(`yine de ~${lost.map(([r, v]) => `${Math.round(v ?? 0)} ${resourceName(r)}`).join(', ')} gider`, `still ~${lost.map(([r, v]) => `${Math.round(v ?? 0)} ${resourceName(r)}`).join(', ')} lost`), good: false }
 }
 
 const tollNote = (kingdom: Kingdom | null, kind: string, choice: CrisisChoice, now: number) => {
   const t = tollOf(kingdom, kind, choice, now)
-  return t ? ` Yine de ${t.text.slice('yine de '.length)}.` : ''
+  return t ? L(` Yine de ${t.text.slice('yine de '.length)}.`, ` Still, ${t.text.slice('still '.length)}.`) : ''
 }
 
 const short = (o: ChoiceOption, stock: Kingdom['stock'] | undefined) =>
@@ -92,10 +93,10 @@ export function FortuneDialog({
   const extra = [
     ...Object.entries(event.lost ?? {})
       .filter(([, v]) => (v ?? 0) > 0)
-      .map(([g, v]) => `${Math.round(v ?? 0)} ${RESOURCE_NAMES[g as Good].toLowerCase()} kayboldu`),
-    ...(event.gold ? [`+${event.gold} altın`] : []),
+      .map(([g, v]) => L(`${Math.round(v ?? 0)} ${RESOURCE_NAMES[g as Good].toLowerCase()} kayboldu`, `${Math.round(v ?? 0)} ${RESOURCE_NAMES[g as Good].toLowerCase()} lost`)),
+    ...(event.gold ? [L(`+${event.gold} altın`, `+${event.gold} gold`)] : []),
   ]
-  const left = `${Math.max(0, Math.ceil((deadline - now) / 1000))} sn`
+  const left = L(`${Math.max(0, Math.ceil((deadline - now) / 1000))} sn`, `${Math.max(0, Math.ceil((deadline - now) / 1000))} s`)
   return (
     <div className="modal" role="dialog" aria-labelledby="fortune-title" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <section className={`dialog frame fortune-dialog ${tone}`}>
@@ -103,9 +104,9 @@ export function FortuneDialog({
           <Icon name={f?.icon ?? 'star'} size={32} />
           <div>
             <small>
-              {tone === 'good' ? 'Hayırlı bir haber' : 'Kötü bir haber'} · {SCOPE_NAMES[event.scope ?? 'kingdom']}
+              {tone === 'good' ? L('Hayırlı bir haber', 'Good tidings') : L('Kötü bir haber', 'Ill tidings')} · {SCOPE_NAMES[event.scope ?? 'kingdom']}
             </small>
-            <h2 id="fortune-title">{f?.title ?? 'Beklenmedik bir olay'}</h2>
+            <h2 id="fortune-title">{f?.title ?? L('Beklenmedik bir olay', 'An unexpected event')}</h2>
           </div>
         </header>
         <div className="fortune-art">
@@ -117,22 +118,22 @@ export function FortuneDialog({
         </div>
         <div className="fortune-body">
           <p>{f?.text}</p>
-          <p className="hint">{event.scope === 'lobby' ? 'Bu olay lobideki bütün lordları etkiliyor.' : 'Bu olay yalnızca senin topraklarını etkiliyor.'}</p>
+          <p className="hint">{event.scope === 'lobby' ? L('Bu olay lobideki bütün lordları etkiliyor.', 'This event affects every lord in the lobby.') : L('Bu olay yalnızca senin topraklarını etkiliyor.', 'This event affects only your lands.')}</p>
           {extra.length > 0 && <p className={tone === 'good' ? 'up' : 'down'}>{extra.join(' · ')}</p>}
-          <p className="hint">Yaklaşık {Math.max(1, Math.round((event.until - now) / 60_000))} dakika sürecek.</p>
+          <p className="hint">{L(`Yaklaşık ${Math.max(1, Math.round((event.until - now) / 60_000))} dakika sürecek.`, `Lasts about ${Math.max(1, Math.round((event.until - now) / 60_000))} min.`)}</p>
           {crisis && (
             <div className="crisis">
               {answered ? (
                 <p className={answered === 'none' ? 'down' : 'up'}>
-                  {answered === 'none' ? 'Bir şey yapılmadı; olay etkisini gösterecek.' : answered === 'villagers' || answered === 'army' ? `${crisis[answered]}: asıl zarar önlendi.${tollNote(kingdom, event.fortune, answered, now)}` : ''}
+                  {answered === 'none' ? L('Bir şey yapılmadı; olay etkisini gösterecek.', 'Nothing was done; the event will take its toll.') : answered === 'villagers' || answered === 'army' ? L(`${crisis[answered]}: asıl zarar önlendi.${tollNote(kingdom, event.fortune, answered, now)}`, `${crisis[answered]}: the worst was averted.${tollNote(kingdom, event.fortune, answered, now)}`) : ''}
                 </p>
               ) : now > deadline ? (
-                <p className="down">Karar vermek için geç kaldın; olay etkisini gösterdi.</p>
+                <p className="down">{L('Karar vermek için geç kaldın; olay etkisini gösterdi.', 'Too late to decide; the event has taken its toll.')}</p>
               ) : (
                 <>
                   <p className="hint">
-                    Ne yapalım? {left} içinde karar verilmezse{' '}
-                    {kingdom?.steward ? `kâhyan köylüleri seferber eder (${balance.institutions.events.crisis.steward.fee.gold} altın).` : 'hiçbir şey yapılmaz.'}
+                    {L(`Ne yapalım? ${left} içinde karar verilmezse`, `What shall we do? If no decision is made within ${left},`)}{' '}
+                    {kingdom?.steward ? L(`kâhyan köylüleri seferber eder (${balance.institutions.events.crisis.steward.fee.gold} altın).`, `your steward calls out the villagers (${balance.institutions.events.crisis.steward.fee.gold} gold).`) : L('hiçbir şey yapılmaz.', 'nothing is done.')}
                   </p>
                   <div className="choices">
                     <button className="btn crisis-choice" onClick={() => onAnswer('villagers')}>
@@ -140,24 +141,24 @@ export function FortuneDialog({
                       <small>
                         <Effects
                           list={[
-                            { text: 'asıl zarar önlenir', good: true },
-                            { text: `${Math.round(c.villagers.seconds / 60)} dakika iş gücü %${Math.round(-c.villagers.work * 100)} düşer`, good: false },
+                            { text: L('asıl zarar önlenir', 'the worst is averted'), good: true },
+                            { text: L(`${Math.round(c.villagers.seconds / 60)} dakika iş gücü %${Math.round(-c.villagers.work * 100)} düşer`, `workforce −${Math.round(-c.villagers.work * 100)}% for ${Math.round(c.villagers.seconds / 60)} min`), good: false },
                             tollOf(kingdom, event.fortune, 'villagers', now),
                           ]}
                         />
                       </small>
                     </button>
-                    <button className="btn crisis-choice" disabled={soldiers < c.army.minSoldiers} data-why={`Sarayda en az ${c.army.minSoldiers} asker olmalı (${soldiers} var)`} onClick={() => onAnswer('army')}>
+                    <button className="btn crisis-choice" disabled={soldiers < c.army.minSoldiers} data-why={L(`Sarayda en az ${c.army.minSoldiers} asker olmalı (${soldiers} var)`, `Needs at least ${c.army.minSoldiers} soldiers at the palace (${soldiers} there)`)} onClick={() => onAnswer('army')}>
                       <b>{crisis.army}</b>
                       <small>
                         {soldiers < c.army.minSoldiers ? (
-                          `Sarayda en az ${c.army.minSoldiers} asker olmalı.`
+                          L(`Sarayda en az ${c.army.minSoldiers} asker olmalı.`, `Needs at least ${c.army.minSoldiers} soldiers at the palace.`)
                         ) : (
                           <Effects
                             list={[
-                              { text: 'asıl zarar önlenir', good: true },
-                              { text: `${c.army.loss}, nadiren ${c.army.loss + 1} asker ölür`, good: false },
-                              { text: `ordu ${Math.round(c.army.lockSeconds / 60)} dakika sefere çıkamaz`, good: false },
+                              { text: L('asıl zarar önlenir', 'the worst is averted'), good: true },
+                              { text: L(`${c.army.loss}, nadiren ${c.army.loss + 1} asker ölür`, `${c.army.loss}, rarely ${c.army.loss + 1}, soldiers die`), good: false },
+                              { text: L(`ordu ${Math.round(c.army.lockSeconds / 60)} dakika sefere çıkamaz`, `the army cannot march for ${Math.round(c.army.lockSeconds / 60)} min`), good: false },
                               tollOf(kingdom, event.fortune, 'army', now),
                             ]}
                           />
@@ -169,8 +170,8 @@ export function FortuneDialog({
                       <small>
                         <Effects
                           list={[
-                            { text: 'kimse yorulmaz', good: true },
-                            { text: 'olayın kötü etkisi tam yaşanır', good: false },
+                            { text: L('kimse yorulmaz', 'nobody breaks a sweat'), good: true },
+                            { text: L('olayın kötü etkisi tam yaşanır', 'the event takes its full toll'), good: false },
                             tollOf(kingdom, event.fortune, 'none', now),
                           ]}
                         />
@@ -188,17 +189,17 @@ export function FortuneDialog({
                   <b>{dilemma[answered]}</b>: {dilemma.done[answered]}
                 </p>
               ) : now > deadline ? (
-                <p className="hint">Karar verilmedi; olay kendi hâlinde sürüyor.</p>
+                <p className="hint">{L('Karar verilmedi; olay kendi hâlinde sürüyor.', 'No decision made; the event runs its course.')}</p>
               ) : (
                 <>
-                  <p className="hint">Ne yapalım? {left} içinde karar verilmezse hiçbir şey yapılmaz.</p>
+                  <p className="hint">{L(`Ne yapalım? ${left} içinde karar verilmezse hiçbir şey yapılmaz.`, `What shall we do? If no decision is made within ${left}, nothing is done.`)}</p>
                   <div className="choices">
                     {(['a', 'b'] as const).map((way) => {
                       const lack = short(options[way], kingdom?.stock)
                       return (
-                        <button key={way} className="btn crisis-choice" disabled={lack} data-why={`Yetersiz kaynak: ${optionNote({ cost: options[way].cost })}`} onClick={() => onChoose(way)}>
+                        <button key={way} className="btn crisis-choice" disabled={lack} data-why={L(`Yetersiz kaynak: ${optionNote({ cost: options[way].cost })}`, `Not enough resources: ${optionNote({ cost: options[way].cost })}`)} onClick={() => onChoose(way)}>
                           <b>{dilemma[way]}</b>
-                          <small>{lack ? `Yetersiz kaynak: ${optionNote({ cost: options[way].cost })}` : optionEffects(options[way]).length > 0 ? <Effects list={optionEffects(options[way])} /> : 'Bir bedeli yok.'}</small>
+                          <small>{lack ? L(`Yetersiz kaynak: ${optionNote({ cost: options[way].cost })}`, `Not enough resources: ${optionNote({ cost: options[way].cost })}`) : optionEffects(options[way]).length > 0 ? <Effects list={optionEffects(options[way])} /> : L('Bir bedeli yok.', 'It costs nothing.')}</small>
                         </button>
                       )
                     })}
@@ -207,7 +208,7 @@ export function FortuneDialog({
               )}
             </div>
           )}
-          <DialogFoot onNext={onClose} label={(crisis || options) && open ? 'Sonra' : undefined} />
+          <DialogFoot onNext={onClose} label={(crisis || options) && open ? L('Sonra', 'Later') : undefined} />
         </div>
       </section>
     </div>

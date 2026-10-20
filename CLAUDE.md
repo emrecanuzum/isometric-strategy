@@ -4043,6 +4043,21 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   Sunucu oturumu artık kabul etmezse (veritabanı ya da fonksiyonlar 401
   dönerse) oyuncunun oturumu kapatılır ve giriş ekranına döner
   (`apps/web/src/lib/supabase.ts`).
+- **Dil (Türkçe / İngilizce):** Oyun Türkçe ve İngilizce oynanır. İlk açılışta
+  tarayıcının diline göre seçilir (tarayıcı dillerinden biri Türkçeyse Türkçe,
+  değilse İngilizce); oyuncu **Ayarlar**'ın en üstündeki "Dil · Language"
+  satırından (giriş ekranında da formun altında) değiştirir. Seçim tarayıcıda
+  saklanır (`localStorage` → `lang`); değiştirince sayfa yeniden yüklenir, harita
+  yazıları ve bütün metinler yeni dille kurulur. Kaynak dil Türkçedir: oyuncunun
+  gördüğü her metin kodda `L('Türkçe', 'English')` olarak yazılır
+  (`packages/shared/src/lang.ts`; istemcide `apps/web/src/lib/i18n.ts`, dil
+  `main.tsx`'te her şeyden önce seçilir), sayılar ve tarihler `locale()` ile
+  biçimlenir (1,2K / 1.2K). Denge dosyalarındaki adların İngilizcesi yanlarında
+  `nameEn` / `titleEn` gibi alanlardadır. Kişi, lord ve yer adları (Kara Yusuf,
+  Altınkapı) iki dilde de Türkçe kalır; onlara eklenen sözler çevrilir ("Akçay
+  Hanı" → "Akçay Inn"). Dil Türkçe değilse yer adlarının anlamı adın altında küçük bir notla yazar ("Altınkapı" → *“Golden Gate”*): taç başkentleri, hanlar, kasabalar ve lordluk adları; harita etiketlerinde ve panellerin başlığında (`ui/NameNote.tsx`, sözlük `ui/nameMeanings.ts`: şehir ve han adları tam karşılık, kasaba ve lordluk adları ön ek + son ekten). Elçinin İngilizcesi de aynı kendini beğenmiş, komik
+  saray elçisidir. Sunucu dili bilmez, Türkçe kalır (oyuncuya giden metinleri
+  istemci kurar). Yeni metin yazarken iki dili birlikte yaz.
 - **Ana menü:** Giriş sonrası Lobiler / Nasıl oynanır / Ayarlar. Oyun
   içinden köşedeki menünün "Ana menü"süyle dönülür. Lobi silinirse
   içindeki oyuncular kendiliğinden ana menüye döner (yayın + dakikalık
