@@ -3871,7 +3871,20 @@ krallıkta birer tane olur ve 3 seviyelidir.
   sekme açıkken duruyordu ve elçi neredeyse hiç gelmiyordu). Kendiliğinden
   açtığı bir öğüt yalnızca kapatılsa da 9 dakika dinlenir (`SHOWN_MINUTES`),
   sonraki gelişinde başka bir şey söyler; "Sonra" denen öğüt 15 dakika
-  (`SNOOZE_MINUTES`, öğüdün kendi süresi yoksa) ertelenir. Lordun
+  (`SNOOZE_MINUTES`, öğüdün kendi süresi yoksa) ertelenir. **Konuyu değiştirir**
+  (`Advisor.tsx` → `chooseTip`, konular `gossip.ts` → `tipKind`): her öğüdün bir
+  konusu vardır (acil, ekonomi, inşa, halk, saray, taçlar, lordlar, casusluk, ordu,
+  yağmacılar ve korsanlar, uğraşlar). Acil olanlar (açlık, taht davacısı, taç
+  değiştirme teklifi, baskın) önce gelir (5 dakikada bir); yoksa en uzun süredir
+  açılmayan konudan, o konunun ilk geçerli öğüdü. Son 20 dakikada söylenen öğüt,
+  başka söylenecek bir şey varken tekrarlanmaz; elçi düğmesiyle çağırınca da
+  (önce hep listenin ilk öğüdünü, ör. hep aynı handan söz ediyordu). Ekonominin
+  yanında **sohbet konuları** da vardır (`GOSSIP`, hemen her zaman geçerli,
+  lordun görebildiklerinden): tacın hükümdarı, huyu ve veliahdı; iki tacın
+  rekabeti; rakip hükümdar; lobinin en güçlü lordu; süren lord savaşları (bizimki
+  dahil); casusların ne yaptığı ya da casus evi yokluğu; garnizon ve sahadaki
+  ordular; yollardaki bir çete ve klanı; dağlardaki klanlar; göllerdeki korsanlar;
+  yoldaki ya da düzenlenebilecek seferler; hükümdarın yaşı ve veliaht. Lordun
   eksiklerine ya da düzeltebileceklerine göre biraz şakacı bir öğüt verir
   (yemek azalıyor, tarla yok, ambar ya da hazine dolu, tüccar boşta, saray
   yükseltilebilir, biat edilmedi, kraliçe yok, kışla/casus evi/pazar/ambar/

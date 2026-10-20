@@ -8,6 +8,7 @@ import {
   TOPIC_GROUPS, TUTORIAL_OFF_ANSWERS, wealthAdvice, wellStocked,
 } from './lines'
 import type { AdvisorAction, AdvisorCtx, Reply, Step, Tip, Topic } from './lines'
+import { GOSSIP, tipKind } from './gossip'
 
 // The envoy as the lord's advisor (CLAUDE.md §9.8): a small speech panel, not a dialog, with his portrait, what he says
 // typed out letter by letter and one to three answers. He comes on his own every few minutes of play (never over
@@ -27,6 +28,8 @@ export interface AdvisorMemory {
   skipped?: string[]
   // The next wording to use for each thing he says (they are taken in turn).
   turns?: Record<string, number>
+  // When he last brought up each tip (ms), so that he changes the subject.
+  heard?: Record<string, number>
 }
 
 const EVENT = 'advisor:memory'
@@ -207,7 +210,30 @@ const safe = <T,>(f: () => T, fallback: T): T => {
   }
 }
 
-const tipFor = (c: AdvisorCtx, snoozed: Record<string, number>) => TIPS.find((t) => (snoozed[t.id] ?? 0) <= c.now && safe(() => t.when(c), false)) ?? null
+// A tip said this recently is not said again (unless nothing else is true), and an urgent one comes back sooner.
+const HEARD_MINUTES = 20
+const URGENT_MINUTES = 5
+
+// What he brings up: anything urgent first; otherwise the subject he has talked about least lately (the economy, the
+// court, the crowns, the lords, spies, the army, the wilds…), and within it the first true tip in order of weight.
+// He does not harp on one thing: a tip heard in the last minutes waits while there is anything else to say.
+function chooseTip(c: AdvisorCtx, snoozed: Record<string, number>, heard: Record<string, number>): Tip | null {
+  const all = [...TIPS, ...GOSSIP].filter((t) => (snoozed[t.id] ?? 0) <= c.now && safe(() => t.when(c), false))
+  if (all.length === 0) return null
+  const urgent = all.find((t) => tipKind(t.id) === 'urgent' && (heard[t.id] ?? 0) < c.now - URGENT_MINUTES * 60_000)
+  if (urgent) return urgent
+  const fresh = all.filter((t) => (heard[t.id] ?? 0) < c.now - HEARD_MINUTES * 60_000)
+  const pool = fresh.length > 0 ? fresh : [...all].sort((a, b) => (heard[a.id] ?? 0) - (heard[b.id] ?? 0))
+  const kindAt: Record<string, number> = {}
+  for (const [id, at] of Object.entries(heard)) kindAt[tipKind(id)] = Math.max(kindAt[tipKind(id)] ?? 0, at)
+  return [...pool].sort((a, b) => (kindAt[tipKind(a.id)] ?? 0) - (kindAt[tipKind(b.id)] ?? 0))[0]
+}
+
+// Heard now (older entries are dropped, the memory stays small).
+const hear = (heard: Record<string, number> | undefined, id: string, now: number) => ({
+  ...Object.fromEntries(Object.entries(heard ?? {}).filter(([, at]) => at > now - 2 * 3_600_000)),
+  [id]: now,
+})
 const stepFor = (c: AdvisorCtx, skipped: string[] = []) => STEPS.findIndex((s) => !skipped.includes(s.id) && !safe(() => s.done(c), true))
 
 function tipSpeech(t: Tip, c: AdvisorCtx, pick: Pick): Speech {
@@ -352,7 +378,9 @@ export function Advisor({
     if (speech) return setSpeech(null)
     const c = ctxRef.current
     if (step) return setSpeech(stepSpeech(step, stepIndex, c, pick))
-    const tip = tipFor(c, {})
+    // Called, he keeps to what "later" put off only for advice he would repeat; and changes the subject each time.
+    const tip = chooseTip(c, memory.snoozed ?? {}, memory.heard ?? {}) ?? chooseTip(c, {}, memory.heard ?? {})
+    if (tip) update({ heard: hear(memory.heard, tip.id, c.now) })
     // With stores filling up, the lord may ask what to do with them.
     const wealth: Reply | null = wellStocked(c) ? { label: L('Dolu ambarları ve hazineyi ne yapalım?', 'What shall we do with the full storehouses and treasury?'), say: wealthAdvice(c, pick), quiet: true } : null
     if (tip) {
@@ -381,15 +409,15 @@ export function Advisor({
         played.current = 0
         return setSpeech(stepSpeech(step, stepIndex, c, pick))
       }
-      const tip = tipFor(c, memory.snoozed ?? {})
+      const tip = chooseTip(c, memory.snoozed ?? {}, memory.heard ?? {})
       if (tip) {
         played.current = 0
-        update({ snoozed: { ...(memory.snoozed ?? {}), [tip.id]: Math.max(memory.snoozed?.[tip.id] ?? 0, c.now + SHOWN_MINUTES * 60_000) } })
+        update({ snoozed: { ...(memory.snoozed ?? {}), [tip.id]: Math.max(memory.snoozed?.[tip.id] ?? 0, c.now + SHOWN_MINUTES * 60_000) }, heard: hear(memory.heard, tip.id, c.now) })
         setSpeech(tipSpeech(tip, c, pick))
       } else played.current = ADVISOR_EVERY_MINUTES * 60 * 0.75
     }, 5000)
     return () => clearInterval(id)
-  }, [blocked, busy, speech, memory.muted, memory.snoozed, step, stepIndex, pick, update])
+  }, [blocked, busy, speech, memory.muted, memory.snoozed, memory.heard, step, stepIndex, pick, update])
 
   const reply = (r: Reply) => {
     if (r.snooze && r.id) update({ snoozed: { ...(memory.snoozed ?? {}), [r.id]: ctxRef.current.now + r.snooze * 60_000 } })
