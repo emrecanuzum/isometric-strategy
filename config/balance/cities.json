@@ -16,6 +16,7 @@
         "everySeconds": 1800,
         "share": 0.08,
         "min": 150,
+        "maxShare": 0.25,
         "afkFactor": 1.5,
         "onlineMinutes": 7,
         "lateSeenSeconds": 90,

@@ -58,6 +58,8 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
   })
   const timers = useRef(new Map<Part, number>())
   const lastNudge = useRef(0)
+  // The notices closed in this visit (CLAUDE.md §9.8).
+  const closed = useRef(new Set<number>())
   // How many nudges in a row found the same thing still past due.
   const nudgeStreak = useRef(0)
 
@@ -79,7 +81,8 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
         const towns = await loadTowns(lobby)
         setLayer((l) => ({ ...l, towns }))
       } else {
-        const notices = localPayload(await loadNotices(lobby))
+        // A notice closed here may come back in a fetch that ran before its `seen` was written: not shown twice.
+        const notices = localPayload(await loadNotices(lobby)).filter((n) => !closed.current.has(n.id))
         setLayer((l) => ({ ...l, notices }))
       }
     },
@@ -153,7 +156,10 @@ export function useLayer(lobby: string, initialMarket: Market | null) {
   }, [lobby, layer.battles, layer.envoys, layer.orders, layer.armies, layer.towns, refreshAll])
 
   const onMarket = useCallback((market: Market) => setLayer((l) => ({ ...l, market })), [])
-  const dropNotices = useCallback((ids: number[]) => setLayer((l) => ({ ...l, notices: l.notices.filter((n) => !ids.includes(n.id)) })), [])
+  const dropNotices = useCallback((ids: number[]) => {
+    for (const id of ids) closed.current.add(id)
+    setLayer((l) => ({ ...l, notices: l.notices.filter((n) => !ids.includes(n.id)) }))
+  }, [])
 
   return { layer, refreshAll, onChange, onMarket, dropNotices }
 }

@@ -14,6 +14,10 @@ export interface OutlawPressure {
   bands?: number
   boats?: number
   at?: number
+  // When the envoy last told of the road's or the water's hold (rising or clearing; ms): the raids come and go every
+  // half hour, so the news is told at most once per `noticeEveryMinutes`.
+  roadTold?: number
+  seaTold?: number
 }
 
 const O = () => balance.outlaws

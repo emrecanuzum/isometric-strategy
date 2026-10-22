@@ -72,6 +72,8 @@ export function mapTag(text: string, color: number, outlaw = false) {
 // Tiles between the squads of a column, and over how many tiles before its halt the column closes up and gathers.
 const TRAIN_GAP = 1.7
 const GATHER_RUN = 8
+// Within how many tiles of the halt along the road a squad leaves it for its own place.
+const GATHER_LEAVE = 1.5
 
 const smooth = (v: number) => {
   const t = Math.min(1, Math.max(0, v))
@@ -399,7 +401,6 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
         const fromCapital = army.trainAhead ? total - progress : progress
         const toHalt = army.trainAhead ? progress : total - progress
         const closing = smooth(toHalt / GATHER_RUN)
-        const end = view.at(army.trainAhead ? 0 : total)
         s.followers.forEach((f, i) => {
           const k = i + 1
           const place = army.gather?.[i]
@@ -411,7 +412,13 @@ export function createArmies(world: World, walkers: Container, routes: Graphics,
           // How far it is out of the bunch: all the way once a gap from the end it waits at.
           const w = Math.min(1, fromCapital / (k * TRAIN_GAP))
           let at = { x: rest.x + (trail.x - rest.x) * w, y: rest.y + (trail.y - rest.y) * w }
-          if (place) at = { x: at.x + (place.x - end.x) * (1 - closing), y: at.y + (place.y - end.y) * (1 - closing) }
+          // Its own place only once it has ridden the road to the halt itself: shifted sideways all along the last
+          // stretch, the squads behind cut through the walls beside a gate the head was riding in by.
+          if (place) {
+            const left = Math.max(0, army.trainAhead ? d : total - d)
+            const blend = Math.max(0, 1 - left / GATHER_LEAVE) * (1 - closing)
+            at = { x: at.x + (place.x - at.x) * blend, y: at.y + (place.y - at.y) * blend }
+          }
           const p = standAt(at)
           f.visible = true
           f.texture = body.texture

@@ -125,7 +125,8 @@ export function unansweredTribute(amount: number, lastSeenAt: number | undefined
 export const tributeDemand = (gold: number, factor = 1) => {
   const t = patrolSpec().tribute
   const have = Math.max(0, gold)
-  return Math.floor(Math.min(have, Math.max(have * t.share, t.min) * factor))
+  // At least `min`, but never more than `maxShare` of the treasury: a lean one (a lord long away) is not emptied.
+  return Math.floor(Math.min(have * t.maxShare, Math.max(have * t.share, t.min) * factor))
 }
 
 // Where a crown's patrols ride out from: just outside the capital's front wall.

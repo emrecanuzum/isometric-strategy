@@ -1056,7 +1056,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   aşınmış zemin sayılır: yürüyenler onu seçer, patika yolun üstüne ya da
   yanına çizilmez, yola varan patika kenarında birleşir. Yol zemine boyanır
   (`chunkPainter.ts` → `setLanes`): her yol karosu komşu yol karolarına (köşe
-  komşusuna da) ve değdiği ticaret yoluna bağlanır, dönüşler yuvarlaktır;
+  komşusuna da), değdiği ticaret yoluna ve karşıdan geldiği sur kapısına (arada
+  bir boş karo olsa da; kemerin altına kadar) bağlanır, dönüşler yuvarlaktır;
   sıkıştırılmış toprak ve çakıl, koyu kenar, iki silik araba izi, ara ara
   çakıl taşı; kenarı dalgalanarak çimene dither ile karışır. Gölge düşürmez,
   sprite değildir; üstüne gelince "Yol" yazar.
@@ -1196,8 +1197,10 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   `presenceAt`): açık bırakılan sekme ya da bir betik, başında olmayan
   lordu "burada" tutamaz.
 - **Yokluk cezası:** Oyuncunun son görülmesinden 1 saat sonra, geçen her saat binaların
-  üretimi, vergi ve tüccarın altını %10 azalır (en az %20'ye kadar;
-  `economy.json` → `idle`). Yemek üretimi bundan etkilenmez: halk kendi
+  üretimi, vergi ve tüccarın altını %10 azalır (en az %50'ye kadar;
+  `economy.json` → `idle`). (Önce %20'ye iniyordu: bir gün yokken gelir
+  %20'ye düşerken asker maaşı, kasaba bakımı ve haraç tam sürüyor, hazine
+  birkaç saatte boşalıp öyle kalıyordu.) Yemek üretimi bundan etkilenmez: halk kendi
   yiyeceğini yetiştirir, lord uzun süre yokken açlık çekmez. Diğer oyuncular Krallıklar sekmesinde
   "çevrimiçi / X önce görüldü" bilgisini görür.
 - **Duman:** Bacası olan her yapıdan (ev, atölye, oduncu, ticaret evi,
@@ -1784,7 +1787,10 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   çevresi açık boş kareye (binanın arkasındaki kareler, sıkışık kareler
   daha az tercih edilir) gelir, arkadakiler son 8 karoda sıklaşıp onun
   çevresindeki boş karelere (birbirinden ~1,3 karo arayla, öndekinden en
-  çok 3,6 karo, sur ya da bina aşmadan ulaşılan) dağılır; hiçbir bölük
+  çok 3,6 karo, sur ya da bina aşmadan ulaşılan) dağılır; her bölük yolu
+  kendisi sonuna kadar izler, yerine ancak yolun son 1,5 karosunda ayrılır (önce
+  bütün son kesim boyunca yana kayıyor, kapıdan giren kolun arkası kapının
+  yanındaki surun içinden geçiyordu; `bun scripts/patrol-wall-check.ts`); hiçbir bölük
   binanın ya da tarlanın üstüne çıkmaz. Dönüşte ilk 8 karoda yeniden kol
   olurlar, arkadaki bölükler önden gider. Haraççılar da sarayın önünde aynı
   biçimde toplanır.
@@ -1811,8 +1817,9 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     çakışana; `tribute.clearSeconds`, `marginSeconds`, `stepSeconds`).
     Lordların listesiyle (kimin kime bağlı olduğu) hesaplanır; sunucu ve
     istemci aynı anı bulur. Haraççı **hazinenin %8'ini, en az 150 altın**
-    ister (`share`, `min`; 7000 altında 560, 1000 altında 150; hazinede daha az
-    varsa hepsini); ilişki ve güç bunu değiştirmez. **Taçlar lorda kazandırmaz,
+    ister (`share`, `min`; 7000 altında 560, 1000 altında 150), ama hiçbir
+    zaman hazinenin **%25'inden** fazlasını değil (`maxShare`; 400 altında 100;
+    önce en az 150'yi, yoksa hepsini alıyordu ve yokken hazine sıfırda kalıyordu); ilişki ve güç bunu değiştirmez. **Taçlar lorda kazandırmaz,
     kaybettirir:** kendi tacının saatte en çok 2 devriyesi bahşiş ve armağanla en
     çok ~150–250 altın ve ~100 birim mal bırakır (bahşiş 25'ken ~100–160 idi;
     devriye hiç hissedilmiyordu, 60'a çıktı), rakip tacın saatte 2 haraççısı ise en az 300 altın
@@ -2133,7 +2140,11 @@ Değerler `config/balance/outlaws.json` → `bands`, `road`; mantık
   sarayı yakınsa "senin tüccarın da bu yollardan geçiyor" diye; göllerdeki
   korsan teknesi sayısı da).
 - **Elçi:** Yağmacıların payı en az 15 puan artınca "Yağmacılar yolu tuttu!"
-  (`outlaw_road`), sıfıra inince "Yollar temizlendi"; takip başlayınca
+  (`outlaw_road`), sıfıra inince "Yollar temizlendi" (baskınlar yarım saatte bir
+  gelip gittiği için ikisi birlikte en çok **2 saatte bir** söylenir;
+  `road.noticeEveryMinutes`, `Kingdom.outlaws.roadTold`; korsanlarda aynısı,
+  `sea.noticeEveryMinutes`, `seaTold`. Önce bir gün yokken onlarca aynı haber
+  birikiyordu); takip başlayınca
   (`outlaw_chase`), çete yakalanınca ve muharebe bitince (`battle_start` /
   `battle_end`, tür `outlaw`; kazanınca ganimetle), çete kaçınca ya da
   ortadan kalkınca (`outlaw_escaped`, `outlaw_gone`). Çizimleri yağma
@@ -2489,7 +2500,9 @@ alınabilir. Değerler `config/balance/towns.json`; yerleşim ve bonus
     25'in altındaysa ayaklanma sürer; **12'nin altındaysa kasaba lorddan kopar**:
     sahipsiz olur ve 3–6 askerlik küçük bir garnizonla kendini savunur. Lord
     ayaklanmayı ve kopuşu elçi haberiyle öğrenir (`town_revolt`,
-    `town_lost_revolt`). Sunucu, sadakati düşük kasabası olan lordların
+    `town_lost_revolt`). Ayaklanma sadakat düşük kaldığı için uzayınca (yeni süre
+    öncekinin bittiği anda başlar) yeniden haber verilmez; önce her 10 dakikada bir
+    "X ayaklandı!" geliyordu. Sunucu, sadakati düşük kasabası olan lordların
     durumunu (çevrimdışıyken de) dakikada bir ilerletir, ayaklanmayı bir kez
     duyurur ve kopan kasabayı `lobby_towns`'ta sahipsiz yapar (lordun
     durumundaki `townsLost` listesinden; `supabase/functions/_shared/towns.ts`
@@ -3409,6 +3422,10 @@ mertebesindedir.
   varan ordu savaşmadan bekler, kalkan bitince kuşatma kendiliğinden
   başlar. Kalan süre Krallıklar sekmesinde, ordu kartında ve sayaçlarda
   görünür.
+- **Kule kayıpları haberi** (`tower_losses`): kule menzilinde duran ordu her
+  dakika asker kaybeder; haber o ordu için 15 dakikada bir yazılır, okunmamışken
+  gelen kayıplar aynı haberin sayısına eklenir (`military.json` →
+  `tower.noticeEveryMinutes`).
 - **Gözcü kuleleri muharebede:** Bir muharebenin yakınındaki (8 karo) kuleler
   sahiplerinin tarafına zar bonusu verir ve her tur birkaç düşman vurur;
   meydan muharebesinde iki taraf için de geçerlidir. Garnizonu boş saray
@@ -3423,7 +3440,11 @@ mertebesindedir.
   zara saha bilgisi (kuşatılan saray için kule ve sur bonusu) eklenir;
   sonuca göre karşı taraf asker ve moral kaybeder. Morali ya da askeri
   biten taraf yenilir; son turda (14.) saldıran çekilir. Savaşlar ~8 tur sürer
-  ve tur tur izlenebilir (zarlar, bonuslar, moral, kayıplar). Yenilen ordu
+  ve tur tur izlenebilir (zarlar, bonuslar, moral, kayıplar). Zar bonusunun
+  altında kalemleri yazar: saha bilgisi, birlik üstünlüğü, iman ve kral, kuleler,
+  hisar ve surlar. **Birlik üstünlüğü sayıya değil karışıma bakar** (iki ordunun
+  birlik paylarının çarpımı, `units.ts` → `counterBonus`); asker sayısı zarda değil,
+  öldürülen düşmanda ve moral kaybında sayılır. Yenilen ordu
   eve çekilir ve eve varana kadar yeniden yakalanamaz.
 - Savaştayken elçiler yalnızca barış götürür (ilişki geliştirme, hediye ve
   haraç isteği olmaz).
@@ -3762,7 +3783,22 @@ krallıkta birer tane olur ve 3 seviyelidir.
     (`keepWhenFlooded`) kalır, gerisi özete katılır. Hiçbir zaman
     düşmeyenler: cevap süresi işleyen haraç isteği, cevap bekleyen elçi
     teklifi, karar süresi açık kriz ve seçim; sekme görünürken ekranda
-    açılmış pencere de okunurken kaybolmaz. Oyuncu sırayı ilerletirken
+    açılmış pencere de okunurken kaybolmaz.
+    **Birikmiş haberler:** istemci okunmamış haberlerin **en yeni 30'unu** çeker
+    (`net/online.ts` → `loadNotices`, `NOTICE_PAGE`; önce en eski 30'u çekiyordu:
+    bir gün yokken birikmiş yüzlerce haber 30'arlı parçalarla bitmez bir sıra
+    gibi geri geliyordu). Sayfa doluyken katlanan haberlerle birlikte ondan
+    eskilerin hepsi de okundu sayılır; "Sen yokken" raporu kapanınca o ana kadarki
+    bütün okunmamış haberler okundu sayılır (`markSeenUpTo`). Cevap bekleyenler
+    (süresi işleyen haraç, bekleyen elçi teklifi) kalır. Burada kapatılan haber,
+    `seen` yazılmadan önce çekilen bir sayfayla geri gelse de yeniden gösterilmez
+    (`net/layer.ts` → `closed`). Günün olayı da bir kez açılır: sunucunun durumu
+    yereldekinden geride gelince (`advance` aynı turları yeniden oynar) aynı olay
+    yeniden başlamış sayılıyordu; gösterilenler tarayıcıda olay bitene kadar
+    hatırlanır (`App.tsx` → `tellFortune`). Sınama:
+    `bun scripts/notice-repeat-check.ts` (yağmacı/korsan haberi, süren ayaklanma,
+    yeniden oynanan olaylar, birikmiş haberlerin sayfalanması; eski kurala göre de
+    sayar). Oyuncu sırayı ilerletirken
     arkada bekleyenlerin yaşı son "İleri"den sayılır (okuyan oyuncunun
     haberleri bayatlamaz). Doğumda ad konmasa da olur (sonra kartından
     konur). "Sen yokken" raporu açılacaksa haberleri o anlatır: rapor

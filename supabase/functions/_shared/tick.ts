@@ -305,7 +305,20 @@ async function moveArmies(lobby: string, world: LobbyWorld, rows: Row[], pacts: 
     const left = l.army.soldiers - killed
     if (killed > 0) {
       await mutateKingdom(l.army.kingdom_id, now, (k) => game.book({ ...k, fielded: Math.max(0, (k.fielded ?? 0) - killed) }, {}, { towers: killed }))
-      await notify(lobby, [l.army.kingdom_id], 'tower_losses', { army: id, killed }, now)
+      // An army standing in the towers' reach loses men every minute: one dispatch for a while, its count growing,
+      // not one a minute (CLAUDE.md §9.7).
+      const { data: recent } = await admin
+        .from('notices')
+        .select('id, seen, payload')
+        .eq('kingdom_id', l.army.kingdom_id)
+        .eq('kind', 'tower_losses')
+        .eq('payload->>army', String(id))
+        .gte('show_at', iso(now - m.tower.noticeEveryMinutes * 60_000))
+        .order('show_at', { ascending: false })
+        .limit(1)
+      const last = recent?.[0] as { id: number; seen: boolean; payload: { killed?: number } } | undefined
+      if (last && !last.seen) await admin.from('notices').update({ payload: { ...last.payload, army: id, killed: (last.payload.killed ?? 0) + killed } }).eq('id', last.id)
+      else if (!last) await notify(lobby, [l.army.kingdom_id], 'tower_losses', { army: id, killed }, now)
     }
     if (left <= 0) await admin.from('armies').delete().eq('id', id)
     else

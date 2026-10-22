@@ -96,12 +96,15 @@ async function settleRevolts(lobby: string, rows: Row[], towns: TownRow[], now: 
       (h) => h.revoltUntil !== undefined || game.townLoyalty(h) < r.below + 5 || game.townLoyaltyTarget(h, { happiness: game.happinessOf(row.state), ruler: 0, towns: held.length }) < r.below,
     )
     if (!restless || now - (row.state.settledAt ?? 0) < 60_000) continue
-    const told: { id: number; name?: string }[] = []
+    const told: { id: number; name?: string; again: boolean }[] = []
     const written = await mutateKingdom(row.id, now, (k) => {
       told.length = 0
       const towns = (k.towns ?? []).map((h: { id: number; name?: string; revoltUntil?: number; revoltTold?: number }) => {
-        if (h.revoltUntil === undefined || h.revoltUntil <= now || h.revoltTold === h.revoltUntil) return h
-        told.push(h)
+        // A revolt that goes on (loyalty still low as it ran out) is the same revolt, not news again (otherwise a lord
+        // away for a day finds one every ten minutes; game.revoltNews).
+        const news = game.revoltNews(h, now)
+        if (news === null) return h
+        told.push({ ...h, again: news === 'again' })
         return { ...h, revoltTold: h.revoltUntil }
       })
       return { ...k, towns }
@@ -111,6 +114,7 @@ async function settleRevolts(lobby: string, rows: Row[], towns: TownRow[], now: 
       const town = towns.find((t) => t.id === h.id)
       // The rebels come out to the gate as the revolt is told.
       const rebels = town ? await raiseRebels(town, (written?.state?.towns ?? []).find((x: { id: number }) => x.id === h.id), now) : null
+      if (h.again) continue
       await notify(lobby, [row.id], 'town_revolt', { town: h.id, name: town?.name ?? h.name ?? '?', minutes: Math.round(r.seconds / 60), rebels: rebels?.count ?? null }, now)
     }
   }

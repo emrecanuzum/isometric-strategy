@@ -98,7 +98,7 @@ import type { AimMark, Hover, ProgressMark, RivalTerritory, WorldView } from './
 import { KINGDOM_COLORS } from './game/buildingSprites'
 import type { KingdomColor } from './game/buildingSprites'
 import { serverNow } from './net/clock'
-import { CHAT_KEEP, CommandError, loadChat, loadMine, loadRivals, markSeen, postChat, send, sendFor, settle, subscribe } from './net/online'
+import { CHAT_KEEP, CommandError, NOTICE_PAGE, loadChat, loadMine, loadRivals, markSeen, markSeenUpTo, postChat, send, sendFor, settle, subscribe } from './net/online'
 import type { ChatMessage, Command, IntelReport, Lobby, Mine, Notice, Rival } from './net/online'
 import { useLayer } from './net/layer'
 import type { MapArmy } from './game/armies'
@@ -914,6 +914,28 @@ function App({
   // The envoy's journal of what happened, kept in this browser per lobby.
   // The day's events waiting to be shown in their window, oldest first.
   const [fortunes, setFortunes] = useState<FortuneEvent[]>([])
+  const toldFortunes = useRef<Record<string, number> | null>(null)
+  const tellFortune = (f: FortuneEvent, at: number) => {
+    const store = `fortunes-told:${lobby.id}:${initial.id}`
+    if (!toldFortunes.current) {
+      try {
+        toldFortunes.current = JSON.parse(localStorage.getItem(store) ?? '{}') as Record<string, number>
+      } catch {
+        toldFortunes.current = {}
+      }
+    }
+    const told = toldFortunes.current
+    const key = `${f.scope ?? 'kingdom'}:${f.start}:${f.fortune}`
+    if (told[key] !== undefined) return false
+    for (const k of Object.keys(told)) if (told[k] < at) delete told[k]
+    told[key] = f.until
+    try {
+      localStorage.setItem(store, JSON.stringify(told))
+    } catch {
+      // Without storage it is remembered for this visit only.
+    }
+    return true
+  }
   const { journal, record: recordJournal, markRead, reset: resetJournal, notice: noteJournal, markImportantRead } = useJournal(`journal-v2:${lobby.id}`, seasonStart)
 
   // The clock: settle whatever came due and show it on the map.
@@ -932,7 +954,9 @@ function App({
       // A lord on a level 1 palace is still finding his feet: the day's news goes to the journal and the people's tab
       // without a dialog of its own; only a crisis (which harms if left unanswered) pops up (CLAUDE.md §9.8).
       const quiet = palaceLevel(next, time) < balance.institutions.events.quietBelowPalace
-      const begun = events.filter((e): e is FortuneEvent => e.kind === 'fortune' && e.until > time && (!quiet || !!e.crisis))
+      // A round replayed (the server's state came back behind the local one, a reload) begins the same fortune again:
+      // each one pops up once (remembered in the browser while it lasts).
+      const begun = events.filter((e): e is FortuneEvent => e.kind === 'fortune' && e.until > time && (!quiet || !!e.crisis) && tellFortune(e, time))
       // A sound for what stands out (one per tick, the most important).
       const cue: Cue | null = begun.length > 0
         ? FORTUNE_TEXTS[begun[0].fortune]?.tone === 'bad'
@@ -2422,9 +2446,13 @@ function App({
       for (const i of left) if (!keep.has(i.key)) stale.add(i.key)
     }
     if (stale.size > 0) {
-      const ids = dueNotices.filter((n) => stale.has(`n:${n.id}`)).map((n) => n.id)
+      const gone = dueNotices.filter((n) => stale.has(`n:${n.id}`))
+      const ids = gone.map((n) => n.id)
       if (ids.length > 0) {
-        markSeen(ids)
+        // A full page means more wait behind it, older still: they would only come back page after page to be folded
+        // again. All up to the newest folded one go with it (what still waits for an answer stays).
+        if (layer.notices.length >= NOTICE_PAGE) markSeenUpTo(lobby.id, mine.id, Math.max(...gone.map((n) => Date.parse(n.show_at))), dueNotices.filter(answerable).map((n) => n.id))
+        else markSeen(ids)
         dropNotices(ids)
       }
       if (houseQueue.some((h) => stale.has(`h:${h.key}`))) setHouseQueue((q) => q.filter((h) => !stale.has(`h:${h.key}`)))
@@ -3082,10 +3110,17 @@ function App({
             awayClosedAt.current = serverNow()
             // The parties back while away were told in the report.
             markExpeditionSeen(Math.max(0, ...(kingdom.expeditions ?? []).filter((e) => e.result).map((e) => e.id)))
-            if (ids.length > 0) {
-              markSeen(ids)
-              dropNotices(ids)
-            }
+            // The report told of the whole absence; whatever else piled up unseen (more than a page of it after a
+            // long one) is not to pop up afterwards. What still waits for an answer stays.
+            const live = dueNotices.filter(
+              (n) =>
+                (n.kind === 'patrol_tribute' && Number((n.payload as { expiresAt?: number }).expiresAt) > serverNow()) ||
+                (n.kind === 'envoy_proposal' && online.envoys.some((e) => e.id === (n.payload as { envoy?: number }).envoy && e.status === 'pending')),
+            )
+            markSeenUpTo(lobby.id, mine.id, serverNow(), live.map((n) => n.id))
+            if (ids.length > 0) markSeen(ids)
+            const told = dueNotices.filter((n) => !live.includes(n)).map((n) => n.id)
+            if (ids.length > 0 || told.length > 0) dropNotices([...new Set([...ids, ...told])])
           }}
         />
       )}

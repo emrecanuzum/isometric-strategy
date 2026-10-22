@@ -27,6 +27,7 @@
   "tower": {
     "range": 6,
     "secondsPerKill": 20,
+    "noticeEveryMinutes": 15,
     "killsPerRound": 2,
     "holdRounds": 3,
     "battleRange": 8

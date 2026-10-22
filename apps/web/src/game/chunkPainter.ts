@@ -197,13 +197,24 @@ export function setStructures(context: PaintContext, structures: Structure[], tr
 }
 
 // The roads laid by the lords: each road tile joined to the road tiles beside it (straight neighbours, and diagonal
-// ones that share no straight neighbour), and to a trade route it touches; a lone tile is a round patch.
+// ones that share no straight neighbour), to a trade route it touches and into a wall gate it meets head on (under its
+// arch, so the road runs on through the gate and does not stop short of it); a lone tile is a round patch.
 function setLanes(context: PaintContext, structures: Structure[]) {
   const { size, feature } = context.world
   context.lane = new Uint8Array(size * size)
   context.laneNear = new Map()
   const roads = new Set<number>()
-  for (const s of structures) if (s.look === 'road' && s.x >= 0 && s.y >= 0 && s.x < size && s.y < size) roads.add(s.y * size + s.x)
+  // A gate's way through: across its wall ('gate' stands in a wall running along x, so it is passed along y).
+  const gates = new Map<number, 'x' | 'y'>()
+  // Tiles something stands on: a road one bare tile short of a gate is drawn on across it.
+  const taken = new Set<number>()
+  for (const s of structures) {
+    if (s.x < 0 || s.y < 0 || s.x >= size || s.y >= size) continue
+    for (let y = s.y; y < s.y + s.size; y++) for (let x = s.x; x < s.x + s.size; x++) taken.add(y * size + x)
+    if (s.look === 'road') roads.add(s.y * size + s.x)
+    else if (s.look === 'gate' || s.look === 'gateY') gates.set(s.y * size + s.x, s.look === 'gate' ? 'y' : 'x')
+  }
+  const isGate = (x: number, y: number, dx: number) => x >= 0 && y >= 0 && x < size && y < size && gates.get(y * size + x) === (dx !== 0 ? 'x' : 'y')
   const isRoad = (x: number, y: number) => x >= 0 && y >= 0 && x < size && y < size && roads.has(y * size + x)
   const isRoute = (x: number, y: number) => x >= 0 && y >= 0 && x < size && y < size && (feature[y * size + x] === Feature.Road || feature[y * size + x] === Feature.Bridge)
   const add = (ax: number, ay: number, bx: number, by: number) => {
@@ -228,9 +239,12 @@ function setLanes(context: PaintContext, structures: Structure[]) {
         linked = true
         // Each straight link once, from the tile before.
         if (dx > 0 || dy > 0) add(cx, cy, cx + dx, cy + dy)
-      } else if (isRoute(x + dx, y + dy)) {
+      } else if (isRoute(x + dx, y + dy) || isGate(x + dx, y + dy, dx)) {
         linked = true
         add(cx, cy, cx + dx, cy + dy)
+      } else if (isGate(x + 2 * dx, y + 2 * dy, dx) && !taken.has((y + dy) * size + x + dx) && context.world.terrain[(y + dy) * size + x + dx] !== Terrain.Lake && context.world.terrain[(y + dy) * size + x + dx] !== Terrain.River) {
+        linked = true
+        add(cx, cy, cx + 2 * dx, cy + 2 * dy)
       }
     }
     for (const [dx, dy] of [[1, 1], [1, -1], [-1, -1], [-1, 1]]) {

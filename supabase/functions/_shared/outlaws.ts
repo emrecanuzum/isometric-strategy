@@ -291,16 +291,18 @@ export async function settleOutlaws(lobby: string, world: LobbyWorld, kingdoms: 
   // Each lord's share of the bandits' and pirates' hold, written when it changes (with word when it rises or clears).
   for (const row of kingdoms) {
     if (!row.state) continue
-    const before = row.state.outlaws as { road: number; sea: number; bands?: number; boats?: number } | undefined
-    const p = game.pressureOf(world.world, seed, bands, boats, row.state, now, game.havenStrength(havens, now))
-    if (before && Math.abs(before.road - p.road) < 0.01 && Math.abs(before.sea - p.sea) < 0.01 && (before.bands ?? 0) === p.bands && (before.boats ?? 0) === p.boats) continue
+    const before = row.state.outlaws as { road: number; sea: number; bands?: number; boats?: number; roadTold?: number; seaTold?: number } | undefined
+    const fresh = game.pressureOf(world.world, seed, bands, boats, row.state, now, game.havenStrength(havens, now))
+    if (before && Math.abs(before.road - fresh.road) < 0.01 && Math.abs(before.sea - fresh.sea) < 0.01 && (before.bands ?? 0) === fresh.bands && (before.boats ?? 0) === fresh.boats) continue
+    // The raids come and go every half hour: the rise and the clearing are told at most once in a while each, or a
+    // lord away for a day finds dozens of the same dispatch waiting (game.outlawNews).
+    const { pressure: p, news } = game.outlawNews(before, fresh, now)
     await mutateKingdom(row.id, now, (k) => ({ ...k, outlaws: p })).catch(() => null)
-    const road = before?.road ?? 0
-    const sea = before?.sea ?? 0
-    if (p.road >= road + O.road.noticeStep) await notify(lobby, [row.id], 'outlaw_road', { share: p.road, bands: p.bands, cut: game.outlawEffects({ outlaws: p }).merchantCut }, now)
-    else if (road > 0 && p.road === 0) await notify(lobby, [row.id], 'outlaw_road_clear', {}, now)
-    if (p.sea >= sea + O.sea.noticeStep) await notify(lobby, [row.id], 'pirate_waters', { share: p.sea, boats: p.boats }, now)
-    else if (sea > 0 && p.sea === 0) await notify(lobby, [row.id], 'pirate_waters_clear', {}, now)
+    for (const kind of news as string[]) {
+      if (kind === 'outlaw_road') await notify(lobby, [row.id], kind, { share: p.road, bands: p.bands, cut: game.outlawEffects({ outlaws: p }).merchantCut }, now)
+      else if (kind === 'pirate_waters') await notify(lobby, [row.id], kind, { share: p.sea, boats: p.boats }, now)
+      else await notify(lobby, [row.id], kind, {}, now)
+    }
   }
 }
 

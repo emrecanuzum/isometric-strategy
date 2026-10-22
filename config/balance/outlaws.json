@@ -80,14 +80,16 @@
     "radiusTiles": 70,
     "merchantCut": 0.25,
     "happiness": 5,
-    "noticeStep": 0.15
+    "noticeStep": 0.15,
+    "noticeEveryMinutes": 120
   },
   "sea": {
     "perBoat": 0.4,
     "pirateChance": 0.6,
     "fishCut": 0.25,
     "happiness": 4,
-    "noticeStep": 0.35
+    "noticeStep": 0.35,
+    "noticeEveryMinutes": 120
   },
   "happinessCap": 8,
   "caves": {

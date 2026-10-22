@@ -570,7 +570,11 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
     // Townsfolk and outlaws fight as a rabble (a pretender's men as soldiers), in plain colours.
     const rabble = fighters.length > 0 && fighters.every((f) => (f.rebels && !f.pretender) || f.outlaws)
     const plain = fighters.some((f) => f.outlaws) ? '#7a5a3a' : fighters.some((f) => f.pretender) ? '#5a4a6a' : fighters.some((f) => f.rebels) ? '#6a6258' : '#a8a4ac'
-    return { start, now, bonus, counter, faith, towers, keep, units, names, colors, king, rabble, plain }
+    // Knowledge of the ground (CLAUDE.md §9.7), weighted by soldiers as the plan does; the walls are what is left.
+    const ground = familiarityBonus(fighters.reduce((s0, f) => s0 + (f.familiarity ?? 0) * f.soldiers, 0) / Math.max(1, start.soldiers))
+    const b = balance.military.battle
+    const walls = Math.max(0, bonus - ground - (counter ?? 0) - faith - Math.min(b.maxTowerBonus, towers * b.towerBonus) - keep)
+    return { start, now, bonus, counter, faith, towers, keep, ground, walls, units, names, colors, king, rabble, plain }
   }
   const a = side('attackers')
   const d = side('defenders')
@@ -643,11 +647,13 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
               <UnitRow units={s.units} />
               <Stat label={L('Zar bonusu', 'Dice bonus')} value={`${s.bonus >= 0 ? '+' : '−'}${Math.abs(s.bonus).toFixed(1).replace('.', ',')}`} note={
                   [
+                    s.ground >= 0.05 ? L(`saha bilgisi +${s.ground.toFixed(1).replace('.', ',')}`, `ground +${s.ground.toFixed(1)}`) : '',
                     s.counter ? L(`birlik üstünlüğü ${s.counter >= 0 ? '+' : '−'}${Math.abs(s.counter).toFixed(1).replace('.', ',')}`, `unit advantage ${s.counter >= 0 ? '+' : '−'}${Math.abs(s.counter).toFixed(1)}`) : '',
                     s.faith ? L(`${s.king ? 'iman ve kral' : 'iman'} ${s.faith >= 0 ? '+' : '−'}${Math.abs(s.faith).toFixed(1).replace('.', ',')}`, `${s.king ? 'faith and king' : 'faith'} ${s.faith >= 0 ? '+' : '−'}${Math.abs(s.faith).toFixed(1)}`) : '',
                     s.king ? L('kral komutada', 'king in command') : '',
                     s.towers ? L(`${s.towers} kule`, `${s.towers} tower${s.towers === 1 ? '' : 's'}`) : '',
                     s.keep ? L(`hisar +${s.keep.toFixed(1).replace('.', ',')}`, `citadel +${s.keep.toFixed(1)}`) : '',
+                    s.walls >= 0.05 ? L(`surlar +${s.walls.toFixed(1).replace('.', ',')}`, `walls +${s.walls.toFixed(1)}`) : '',
                   ]
                     .filter(Boolean)
                     .join(' · ') || undefined
@@ -674,8 +680,8 @@ export function BattleView({ battle, online, now, onClose }: { battle: Battle; o
               )
             : ''}
           {L(
-            '; tapınağın imanı ve yakındaki gözcü kuleleri de zara eklenir, kuleler her tur birkaç düşman vurur (askersiz bile birkaç tur direnir); birlik türlerinin üstünlüğü (mızrak > süvari > okçu > mızrak) de eklenir. Morali biten ya da askeri kalmayan taraf yenilir.',
-            '; the faith of the temple and nearby watchtowers are added too, and the towers strike a few enemies every round (holding out a few rounds even without soldiers); the advantage of unit types (spear > cavalry > archer > spear) is added as well. The side that runs out of morale or soldiers is beaten.',
+            '; tapınağın imanı ve yakındaki gözcü kuleleri de zara eklenir, kuleler her tur birkaç düşman vurur (askersiz bile birkaç tur direnir); birlik türlerinin üstünlüğü (mızrak > süvari > okçu > mızrak) de eklenir; üstünlük sayıya değil iki ordunun birlik karışımına bakar. Asker sayısı zarda değil, öldürülen düşmanda ve moral kaybında sayılır: çok asker çok vurur. Morali biten ya da askeri kalmayan taraf yenilir.',
+            '; the faith of the temple and nearby watchtowers are added too, and the towers strike a few enemies every round (holding out a few rounds even without soldiers); the advantage of unit types (spear > cavalry > archer > spear) is added as well; it looks at the mix of the two armies, not their size. Numbers count not in the roll but in the enemies killed and the morale lost: many soldiers strike many blows. The side that runs out of morale or soldiers is beaten.',
           )}
         </p>
         {shown > 0 && (

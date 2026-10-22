@@ -441,12 +441,24 @@ export async function loadOutlaws(lobby: string): Promise<OutlawRow[]> {
   return (data ?? []).map((r) => ({ kind: r.kind, idx: r.idx, gen: r.gen, down_until: r.down_until === null ? null : Number(r.down_until), battle: r.battle === null ? null : Number(r.battle), shift: Number(r.shift ?? 0), losses: r.losses, born_at: r.born_at === null || r.born_at === undefined ? null : Number(r.born_at), fallen: r.fallen ?? [] }))
 }
 
+// The newest unseen notices, oldest first. After a long absence hundreds may wait: the newest are what matter (a live
+// tribute demand), and taking the oldest 30 at a time fed the same kinds of news back in one batch after another.
+export const NOTICE_PAGE = 30
 export async function loadNotices(lobby: string): Promise<Notice[]> {
-  const { data } = await supabase.from('notices').select('*').eq('lobby_id', lobby).eq('seen', false).order('show_at').limit(30)
-  return (data ?? []) as Notice[]
+  const { data } = await supabase.from('notices').select('*').eq('lobby_id', lobby).eq('seen', false).order('show_at', { ascending: false }).limit(NOTICE_PAGE)
+  return ((data ?? []) as Notice[]).reverse()
 }
 
 // Query builders only run when awaited.
 export async function markSeen(ids: number[]) {
   await supabase.from('notices').update({ seen: true }).in('id', ids)
+}
+
+// Every unseen notice of the player's shown up to `upto` (ms) is marked seen, but for the ones in `keep` (what still
+// waits for an answer) and the proposals (answered from the envoys' list). For a backlog: the away report told of it,
+// or it lies beyond the newest page and would only have been folded away.
+export async function markSeenUpTo(lobby: string, me: number, upto: number, keep: number[]) {
+  let q = supabase.from('notices').update({ seen: true }).eq('lobby_id', lobby).eq('kingdom_id', me).eq('seen', false).lte('show_at', new Date(upto).toISOString()).neq('kind', 'envoy_proposal')
+  if (keep.length > 0) q = q.not('id', 'in', `(${keep.join(',')})`)
+  await q
 }
