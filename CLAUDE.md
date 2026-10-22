@@ -4207,7 +4207,10 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
 - **Dil (Türkçe / İngilizce):** Oyun Türkçe ve İngilizce oynanır. İlk açılışta
   tarayıcının diline göre seçilir (tarayıcı dillerinden biri Türkçeyse Türkçe,
   değilse İngilizce); oyuncu **Ayarlar**'ın en üstündeki "Dil · Language"
-  satırından (giriş ekranında da formun altında) değiştirir. Seçim tarayıcıda
+  satırından değiştirir; giriş ekranında formun altında ve açılıştaki "Devam et"
+  düğmesinin altında iki küçük piksel **bayrak** (Türkiye, Birleşik Krallık)
+  durur, dokununca dil değişir (`ui/home/LangFlags.tsx`). Seçili olanın altın
+  çerçevesi vardır ve bir piksel yukarı kalkıktır, öbürü soluktur. Seçim tarayıcıda
   saklanır (`localStorage` → `lang`); değiştirince sayfa yeniden yüklenir, harita
   yazıları ve bütün metinler yeni dille kurulur. Kaynak dil Türkçedir: oyuncunun
   gördüğü her metin kodda `L('Türkçe', 'English')` olarak yazılır
@@ -4407,7 +4410,14 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   sekmesi) sekmeli bir pencere açar (son bakılan sekme hatırlanır; Esc
   kapatır). Her şey profilde saklanır, cihazdan cihaza taşınır. Her satırda
   ayarın adı ve ne yaptığı solda, düğmesi sağda; seçili seçenek altın zeminlidir.
-  - **Ses:** müzik, **savaş müziği** (savaş izlerken), **ses efektleri**
+  - **Ses:** en üstte bir **mikser** durur: önce **Genel ses** (bütün seslerin
+    üstündeki düzey ve düğmesi; `Settings.master`, `masterVolume`, varsayılan açık,
+    %100; her türün düzeyiyle çarpılır, kapatınca oyun susar), altında her tür
+    tek satırda adı, sürgüsü, yüzdesi ve Açık/Kapalı düğmesiyle (ne olduğu üstüne
+    gelince yazar). Sürgüler oyunun piksel dilindedir (koyu oluk, değere kadar
+    altın dolgu, kare altın tutamak; `index.css` → `input[type='range']`, dolgu
+    `--fill` ile). Mikserin altında düğme sesleri ve müziğin parçaları durur.
+    Türler: müzik, **savaş müziği** (savaş izlerken), **ses efektleri**
     (elçinin haberleri, olaylar, inşaat, pencereler) ve altında **düğme
     sesleri** (tık), **yağmur ve gök gürültüsü**, **ortam sesleri** (rüzgâr,
     su, kuşlar, köy; §4.2.1), **elçinin sesi** (elçi ve

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { signIn, signUp } from '../../net/online'
 import { Icon } from '../icons'
-import { LanguageRow } from './SettingsPanel'
+import { LangFlags } from './LangFlags'
 import { L } from '../../lib/i18n'
 
 // Sign in or open an account with an email and a password.
@@ -108,7 +108,7 @@ export function AuthScreen() {
         <button className="btn wide" disabled={busy} data-why={L('Sunucunun cevabı bekleniyor', 'Waiting for the server')}>
           {busy ? L('Bekle…', 'Wait…') : mode === 'in' ? L('Giriş yap', 'Sign in') : L('Hesabı oluştur', 'Create account')}
         </button>
-        <LanguageRow />
+        <LangFlags />
       </form>
     </section>
   )

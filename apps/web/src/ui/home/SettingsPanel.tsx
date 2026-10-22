@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { LangFlags } from './LangFlags'
+import type { CSSProperties, ReactNode } from 'react'
 import { PHONE_OFF, playTrack, useNowPlaying } from '../../net/settings'
 import { TRACKS } from '../../audio/music'
 import type { Cut, Pace, Profile, Settings, WeatherMode } from '../../net/settings'
@@ -7,7 +8,7 @@ import type { PowerMode } from '../../lib/power'
 import { Icon } from '../icons'
 import type { IconName } from '../icons'
 import { Subtabs, usePart } from '../hud/Subtabs'
-import { L, chooseLang, getLang } from '../../lib/i18n'
+import { L } from '../../lib/i18n'
 
 // The player's settings (CLAUDE.md §11 Ayarlar), in parts: sound, picture, performance, and in the game the envoy's.
 // Used on the main menu and in the game alike.
@@ -100,14 +101,7 @@ export function LanguageRow() {
           <Icon name="scroll" size={16} /> Dil · Language
         </b>
       </div>
-      <Choice
-        value={getLang()}
-        options={[
-          { id: 'tr', label: 'Türkçe' },
-          { id: 'en', label: 'English' },
-        ]}
-        onPick={chooseLang}
-      />
+      <LangFlags />
     </div>
   )
 }
@@ -137,27 +131,45 @@ export function SoundSettings({ settings, onChange }: { settings: Settings; onCh
     { label: L('Ortam sesleri', 'Ambient sounds'), hint: L('Rüzgâr, akan su, yaprak hışırtısı, kuşlar ve cırcır böcekleri, köyün uğultusu; haritada baktığın yere göre.', 'Wind, running water, rustling leaves, birds and crickets, the hum of a village; from where you look on the map.'), on: 'ambience', volume: 'ambienceVolume', icon: 'leaf' },
     { label: L('Elçinin sesi', 'The envoy\'s voice'), hint: L('Elçi ve haraççıbaşı konuşurken mırıldanır.', 'The envoy and the chief tribute collector mumble as they talk.'), on: 'voice', volume: 'voiceVolume', icon: 'scroll' },
   ]
+  const master = settings.master
   return (
     <div className="settings-list">
-      {rows.map((r) => (
-        <div key={r.on} className="sound-row">
-          <Row label={r.label} hint={r.hint} icon={r.icon}>
-            <Toggle on={settings[r.on]} onClick={() => onChange({ [r.on]: !settings[r.on] })} />
-          </Row>
-          <label>
-            <span>
-              {L('Ses düzeyi:', 'Volume:')} <b>{L(`%${settings[r.volume]}`, `${settings[r.volume]}%`)}</b>
-            </span>
-            <input type="range" min={0} max={100} step={5} value={settings[r.volume]} disabled={!settings[r.on]} onChange={(e) => onChange({ [r.volume]: Number(e.target.value) })} />
-          </label>
-          {r.on === 'music' && <TrackList settings={settings} onChange={onChange} />}
-          {r.on === 'sfx' && (
-            <Row label={L('Düğme sesleri', 'Button sounds')} hint={L('Düğmelere basınca hafif bir tık.', 'A soft click when you press buttons.')}>
-              <Toggle on={settings.clicks} disabled={!settings.sfx} why={L('Ses efektleri kapalı', 'Sound effects are off')} onClick={() => onChange({ clicks: !settings.clicks })} />
-            </Row>
-          )}
-        </div>
-      ))}
+      {/* The mixer first: the general volume over every kind, then each kind's own bar (CLAUDE.md §11 Ayarlar). */}
+      <div className="mixer">
+        <MixRow label={L('Genel ses', 'Master volume')} hint={L('Bütün seslerin üstündeki düzey; kapatınca oyun tamamen susar.', 'The level over every sound; switched off, the game goes silent.')} icon="bell" on={master} volume={settings.masterVolume} master onToggle={() => onChange({ master: !master })} onVolume={(v) => onChange({ masterVolume: v })} />
+        {rows.map((r) => (
+          <MixRow
+            key={r.on}
+            label={r.label}
+            hint={r.hint}
+            icon={r.icon}
+            on={settings[r.on]}
+            volume={settings[r.volume]}
+            muted={!master}
+            onToggle={() => onChange({ [r.on]: !settings[r.on] })}
+            onVolume={(v) => onChange({ [r.volume]: v })}
+          />
+        ))}
+      </div>
+      <Row label={L('Düğme sesleri', 'Button sounds')} hint={L('Düğmelere basınca hafif bir tık (ses efektleriyle).', 'A soft click when you press buttons (with the sound effects).')} icon="bell">
+        <Toggle on={settings.clicks} disabled={!settings.sfx} why={L('Ses efektleri kapalı', 'Sound effects are off')} onClick={() => onChange({ clicks: !settings.clicks })} />
+      </Row>
+      <TrackList settings={settings} onChange={onChange} />
+    </div>
+  )
+}
+
+// One bar of the mixer: the kind's name (what it is under the pointer), its switch, its level.
+function MixRow({ label, hint, icon, on, volume, master, muted, onToggle, onVolume }: { label: string; hint: string; icon: IconName; on: boolean; volume: number; master?: boolean; muted?: boolean; onToggle: () => void; onVolume: (v: number) => void }) {
+  const silent = !on || muted
+  return (
+    <div className={`mix-row${master ? ' master' : ''}${silent ? ' silent' : ''}`} title={hint}>
+      <b>
+        <Icon name={icon} size={16} /> {label}
+      </b>
+      <input type="range" min={0} max={100} step={5} value={volume} disabled={!on} aria-label={label} style={{ '--fill': `${volume}%` } as CSSProperties} onChange={(e) => onVolume(Number(e.target.value))} />
+      <span className="mix-level">{L(`%${volume}`, `${volume}%`)}</span>
+      <Toggle on={on} onClick={onToggle} />
     </div>
   )
 }

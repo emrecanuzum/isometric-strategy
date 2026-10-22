@@ -3744,14 +3744,151 @@ button[data-busy]::after {
   gap: calc(var(--px) * 6);
 }
 
-.sound-row {
+/* The sound settings' mixer: the master bar on top, a bar for each kind below it. */
+.mixer {
   display: grid;
   gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 4);
+  background: rgb(0 0 0 / 22%);
+  border: var(--px) solid rgb(242 209 107 / 18%);
 }
 
-.sound-row label {
+.mix-row {
   display: grid;
+  grid-template-columns: minmax(0, 11em) minmax(0, 1fr) 3.4em auto;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+}
+
+.mix-row b {
+  display: flex;
+  align-items: center;
   gap: calc(var(--px) * 2);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mix-row input[type='range'] {
+  width: 100%;
+}
+
+/* Every slider in the pixel style: a dark sunken groove filled with gold up to the value (`--fill`, set inline;
+   Firefox fills it itself), and a square gold knob with a dark outline, lit from the top left. */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: calc(var(--px) * 8);
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type='range']:focus {
+  outline: none;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: calc(var(--px) * 4);
+  background: linear-gradient(to right, #d9aa3e 0 var(--fill, 50%), #140c06 var(--fill, 50%) 100%);
+  border: var(--px) solid #0a0604;
+  box-shadow: inset 0 var(--px) 0 rgb(0 0 0 / 45%), 0 var(--px) 0 rgb(242 209 107 / 18%);
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: calc(var(--px) * 6);
+  height: calc(var(--px) * 8);
+  margin-top: calc(var(--px) * -2);
+  background: #f2d16b;
+  border: var(--px) solid #1c120a;
+  border-radius: 0;
+  box-shadow: inset calc(var(--px) * -1) calc(var(--px) * -1) 0 #a8761c, inset var(--px) var(--px) 0 #fff4c0, 0 var(--px) 0 rgb(0 0 0 / 50%);
+}
+
+input[type='range']::-moz-range-track {
+  height: calc(var(--px) * 4);
+  background: #140c06;
+  border: var(--px) solid #0a0604;
+  box-shadow: inset 0 var(--px) 0 rgb(0 0 0 / 45%), 0 var(--px) 0 rgb(242 209 107 / 18%);
+}
+
+input[type='range']::-moz-range-progress {
+  height: calc(var(--px) * 4);
+  background: #d9aa3e;
+}
+
+input[type='range']::-moz-range-thumb {
+  width: calc(var(--px) * 6);
+  height: calc(var(--px) * 8);
+  background: #f2d16b;
+  border: var(--px) solid #1c120a;
+  border-radius: 0;
+  box-shadow: inset calc(var(--px) * -1) calc(var(--px) * -1) 0 #a8761c, inset var(--px) var(--px) 0 #fff4c0, 0 var(--px) 0 rgb(0 0 0 / 50%);
+}
+
+input[type='range']:hover:not(:disabled)::-webkit-slider-thumb {
+  background: #fff0a8;
+}
+
+input[type='range']:focus-visible::-webkit-slider-thumb {
+  outline: var(--px) solid #fff4c0;
+  outline-offset: var(--px);
+}
+
+input[type='range']:disabled {
+  cursor: default;
+}
+
+input[type='range']:disabled::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #6a5a3e 0 var(--fill, 50%), #140c06 var(--fill, 50%) 100%);
+}
+
+input[type='range']:disabled::-webkit-slider-thumb {
+  background: #8a7a5e;
+  box-shadow: none;
+}
+
+input[type='range']:disabled::-moz-range-progress {
+  background: #6a5a3e;
+}
+
+input[type='range']:disabled::-moz-range-thumb {
+  background: #8a7a5e;
+  box-shadow: none;
+}
+
+.mix-row .mix-level {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.mix-row.master {
+  padding-bottom: calc(var(--px) * 4);
+  margin-bottom: var(--px);
+  border-bottom: var(--px) solid rgb(242 209 107 / 25%);
+}
+
+.mix-row.master b {
+  color: var(--gold, #f2d16b);
+}
+
+.mix-row.silent b,
+.mix-row.silent .mix-level {
+  opacity: 0.5;
+}
+
+@media (max-width: 520px) {
+  .mix-row {
+    grid-template-columns: minmax(0, 1fr) 3.4em auto;
+  }
+
+  .mix-row input[type='range'] {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
 }
 
 /* The lobby's prices and the market's goods, three to a row. */
@@ -7007,12 +7144,18 @@ input:not([type='range']):focus-visible {
 }
 
 /* Settings' own switches and choices: the one picked stands out in gold. */
-.settings-row .btn[aria-pressed='true'] {
+.settings-row > .lang-flags {
+  display: flex;
+}
+
+.settings-row .btn[aria-pressed='true'],
+.mix-row .btn[aria-pressed='true'] {
   background: var(--gold-2);
   color: var(--ink);
 }
 
-.settings-row .btn[aria-pressed='false'] {
+.settings-row .btn[aria-pressed='false'],
+.mix-row .btn[aria-pressed='false'] {
   opacity: 0.85;
 }
 

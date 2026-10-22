@@ -323,7 +323,10 @@ main.home-screen:has(> .menu-backdrop) {
 .home-screen .home-continue {
   display: flex;
   flex: 1;
-  align-items: flex-end;
+  flex-direction: column;
+  gap: calc(var(--px) * 8);
+  align-items: center;
+  justify-content: flex-end;
   justify-content: center;
   padding-bottom: max(24px, 10vh);
 }
@@ -349,6 +352,51 @@ main.home-screen:has(> .menu-backdrop) {
 .home-screen .home-continue .btn:hover:not(:disabled) {
   --face: #6e4b22;
   color: #fff;
+}
+
+/* The languages as pixel flags under "Devam et": the one in use framed in gold and raised, the other dimmed. */
+.lang-flags {
+  display: flex;
+  gap: calc(var(--px) * 4);
+  justify-content: center;
+}
+
+/* Under the sign-in button, a little room above. */
+.home-screen form .lang-flags {
+  margin-top: calc(var(--px) * 4);
+}
+
+.lang-flag {
+  display: grid;
+  place-items: center;
+  padding: var(--px);
+  background: #1c120a;
+  border: calc(var(--px) * 2) solid #3a2608;
+  box-shadow: 0 calc(var(--px) * 2) 0 0 rgb(0 0 0 / 45%);
+  cursor: pointer;
+  filter: grayscale(0.55) brightness(0.7);
+  transition: filter 0.12s steps(2);
+}
+
+.lang-flag svg {
+  display: block;
+}
+
+.lang-flag:hover {
+  filter: grayscale(0.15) brightness(0.95);
+}
+
+.lang-flag.on {
+  border-color: #f2d16b;
+  box-shadow: 0 0 0 var(--px) #3a2608, 0 0 0 calc(var(--px) * 3) #d9aa3e, 0 calc(var(--px) * 4) 0 0 rgb(0 0 0 / 45%);
+  filter: none;
+  transform: translateY(calc(var(--px) * -2));
+  cursor: default;
+}
+
+.lang-flag:focus-visible {
+  outline: calc(var(--px) * 2) solid #fff4c0;
+  outline-offset: calc(var(--px) * 2);
 }
 
 @keyframes home-continue-glow {

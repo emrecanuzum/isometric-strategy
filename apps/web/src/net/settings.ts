@@ -17,6 +17,9 @@ export type Cut = 'pace' | 'detail' | 'birds' | 'clouds' | 'glow' | 'shadows' | 
 export interface Settings {
   // Sound (volumes 0..100), each kind with its own switch: the tavern music, the battle music while a battle is
   // watched, the cues (the envoy's news, the day's events), the buttons' clicks, the rain and thunder, the envoy's voice, the world's ambience (wind, water, birds, the village).
+  // The general volume over all of them (and its switch): every kind's level is multiplied by it.
+  master: boolean
+  masterVolume: number
   music: boolean
   musicVolume: number
   // Which of the music's pieces take turns (at least one).
@@ -51,6 +54,8 @@ export interface Settings {
 export const DEFAULT_CUTS: Record<Cut, boolean> = { pace: true, detail: true, birds: true, clouds: true, glow: true, shadows: false, weather: true, sharp: true }
 
 export const DEFAULT_SETTINGS: Settings = {
+  master: true,
+  masterVolume: 100,
   music: true,
   musicVolume: 70,
   tracks: { hearth: true, crusade: true, england: true, horizon: true, jig: true },
@@ -207,7 +212,8 @@ export function useMusic(settings: Settings, quiet = 1) {
     const events = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'] as const
     const unlock = () => {
       if (!music.current) {
-        music.current = startMusic(!current.current.music, (current.current.musicVolume / 100) * quietRef.current, chosen(current.current))
+        const c = current.current
+        music.current = startMusic(!(c.master && c.music), (c.musicVolume / 100) * (c.masterVolume / 100) * quietRef.current, chosen(c))
         setPlaying(music.current)
       }
       const sfx = unlockSfx()
@@ -221,17 +227,24 @@ export function useMusic(settings: Settings, quiet = 1) {
       music.current = null
     }
   }, [])
+  // Each kind as heard: its own switch and level under the general ones.
+  const on = (kind: boolean) => settings.master && kind
+  const level = (volume: number) => (volume / 100) * (settings.masterVolume / 100)
   useEffect(() => {
-    music.current?.setMuted(!settings.music)
-    music.current?.setVolume((settings.musicVolume / 100) * quiet * ducked)
-  }, [settings.music, settings.musicVolume, quiet, ducked])
+    music.current?.setMuted(!on(settings.music))
+    music.current?.setVolume(level(settings.musicVolume) * quiet * ducked)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.master, settings.masterVolume, settings.music, settings.musicVolume, quiet, ducked])
   const tracksKey = chosen(settings).join()
   useEffect(() => music.current?.setTracks(chosen(current.current)), [tracksKey])
-  useEffect(() => setBattleMusicLevel(settings.battle, settings.battleVolume / 100), [settings.battle, settings.battleVolume])
-  useEffect(() => setSfx(settings.sfx, settings.sfxVolume / 100, settings.clicks), [settings.sfx, settings.sfxVolume, settings.clicks])
-  useEffect(() => setVoice(settings.voice, settings.voiceVolume / 100), [settings.voice, settings.voiceVolume])
-  useEffect(() => setRain(settings.rain, settings.rainVolume / 100), [settings.rain, settings.rainVolume])
-  useEffect(() => setAmbience(settings.ambience, settings.ambienceVolume / 100), [settings.ambience, settings.ambienceVolume])
+  const m = [settings.master, settings.masterVolume]
+  /* eslint-disable react-hooks/exhaustive-deps */
+  useEffect(() => setBattleMusicLevel(on(settings.battle), level(settings.battleVolume)), [...m, settings.battle, settings.battleVolume])
+  useEffect(() => setSfx(on(settings.sfx), level(settings.sfxVolume), settings.clicks), [...m, settings.sfx, settings.sfxVolume, settings.clicks])
+  useEffect(() => setVoice(on(settings.voice), level(settings.voiceVolume)), [...m, settings.voice, settings.voiceVolume])
+  useEffect(() => setRain(on(settings.rain), level(settings.rainVolume)), [...m, settings.rain, settings.rainVolume])
+  useEffect(() => setAmbience(on(settings.ambience), level(settings.ambienceVolume)), [...m, settings.ambience, settings.ambienceVolume])
+  /* eslint-enable react-hooks/exhaustive-deps */
 }
 
 // Settings change at once on screen and are written to the profile a moment after the last change. `load` takes the

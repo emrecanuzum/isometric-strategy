@@ -598,7 +598,7 @@ function App({
     }
   }, [seed])
 
-  const muted = !settings.music
+  const muted = !settings.music || !settings.master
   // What the map draws: the picture settings, with what power saving turns down while on (CLAUDE.md §12).
   const saving = usePowerSave(settings.power)
   const phone = usePhone()

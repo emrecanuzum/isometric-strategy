@@ -45,6 +45,7 @@ import { loadProfile, useMusic, useSettings } from './net/settings'
 import type { Profile } from './net/settings'
 import { Icon } from './ui/icons'
 import { AuthScreen } from './ui/home/AuthScreen'
+import { LangFlags } from './ui/home/LangFlags'
 import { Lobbies } from './ui/home/Lobbies'
 import { SettingsPanel } from './ui/home/SettingsPanel'
 import { Tutorial } from './ui/home/Tutorial'
@@ -268,6 +269,7 @@ export default function Root() {
           <button className="btn" onClick={() => setSplash(false)}>
             {L('Devam et', 'Continue')}
           </button>
+          <LangFlags />
         </div>
       )}
       {phase.kind === 'home' && profile && !splash && (
