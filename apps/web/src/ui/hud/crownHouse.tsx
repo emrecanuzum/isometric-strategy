@@ -19,7 +19,9 @@ import {
   crownTraitSpec,
   crownYearOf,
   houseCrownRest,
+  isNewcomer,
   liegeSwitchError,
+  palaceLevel,
   relationBetween,
 } from '@game/shared'
 import type { CrownKey, CrownReign, CrownRivalry, CrownRoyal, CrownStance, Kingdom, World } from '@game/shared'
@@ -262,8 +264,15 @@ export const pctText = (v: number) => L(`%${(Math.round(v * 1000) / 10).toString
 export function tipPreview(kingdom: Kingdom, crown: number, online: Pick<Online, 'kingdoms'>, now: number) {
   const { share } = crownPower(online.kingdoms.map((k) => ({ liege: k.liege ?? null, score: k.score?.total ?? 0 })), 2)
   const favour = byPower(share[crown] ?? 0.5, balance.cities.crown.power.favour)
-  return Math.round(balance.cities.crown.patrol.tip * favour * patrolFavour(kingdom).tip * crownWays(crownKeyOf(kingdom), crown, now).tip)
+  const patrol = balance.cities.crown.patrol
+  const base = isNewcomer(palaceLevel(kingdom, now)) ? patrol.newcomer.tip : patrol.tip
+  return Math.round(base * favour * patrolFavour(kingdom).tip * crownWays(crownKeyOf(kingdom), crown, now).tip)
 }
+
+// A lord still on a level 1 palace (CLAUDE.md §7.8): the rival crown's collectors leave a purse instead of asking
+// tribute. Null once he has grown out of it.
+export const rivalPurse = (kingdom: Kingdom, crown: number, now: number) =>
+  isNewcomer(palaceLevel(kingdom, now)) ? Math.round(balance.cities.crown.patrol.newcomer.rivalGift * crownWays(crownKeyOf(kingdom), crown, now).tip) : null
 
 // The two crowns' stance now, how long it lasts, what it does, and the windows before.
 export function CrownRivalryPanel({ world, kingdom, now }: { world: World; kingdom: Kingdom; now: number }) {

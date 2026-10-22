@@ -18,7 +18,7 @@ import { netScene } from './minigames/net'
 import { Stage } from './minigames/Stage'
 import type { Scene } from './minigames/Stage'
 import { woodsplitScene } from './minigames/woodsplit'
-import { Section } from './primitives'
+import { Section, fmt } from './primitives'
 import type { HudData } from './tabs'
 import './minigames.css'
 import { usePlayingFlag } from './minigames/playing'
@@ -99,7 +99,7 @@ const swatch = (color: string | null) => KINGDOM_COLORS[color as KingdomColor]?.
 export const rewardText = (reward: Partial<Stock>) =>
   Object.entries(reward)
     .filter(([, v]) => (v ?? 0) > 0)
-    .map(([r, v]) => `${v} ${RESOURCE_NAMES[r as Resource].toLocaleLowerCase(locale())}`)
+    .map(([r, v]) => `${fmt(v ?? 0)} ${RESOURCE_NAMES[r as Resource].toLocaleLowerCase(locale())}`)
     .join(', ')
 
 // ---- The result of a run: the medal, the stars, the score -------------------------------------------------------------
@@ -180,7 +180,7 @@ export function RunResult({ game, score, best, children }: { game: MiniGame; sco
         </div>
       </div>
       <p className="minigame-score">
-        {L('Puan', 'Score')} <b>{score}</b>
+        {L('Puan', 'Score')} <b>{fmt(score)}</b>
         {top ? <small> / {top}</small> : null}
       </p>
       {best !== undefined && score > 0 && score >= best && <p className="minigame-record">{L('Yeni rekorun!', 'A new record!')}</p>}
@@ -238,14 +238,14 @@ export function GamePanel({ game, data }: { game: ArcadeGame; data: HudData }) {
   const cut = outcome?.earned && rewardText(outcome.earned) !== given
   return (
     <>
-      <Section title={GAME_NAMES[game]} icon={GAME_ICONS[game]} aside={best > 0 ? L(`en iyin ${best}`, `your best ${best}`) : undefined}>
+      <Section title={GAME_NAMES[game]} icon={GAME_ICONS[game]} aside={best > 0 ? L(`en iyin ${fmt(best)}`, `your best ${fmt(best)}`) : undefined}>
         <p className="hint">{GAME_RULES[game]}</p>
         <p className="hint">
           {L(
             `Puana göre ödül: en fazla ${most}. ${Math.round(MG.cooldownSeconds / 60)} dakikada bir oynanır. Bütün mini oyunlar birlikte saatte en fazla ${BUDGET_PER_WINDOW} altın değerinde ödül verir (mallar olağan fiyatından sayılır); bu saat kalan: `,
             `Reward by score: at most ${most}. Playable once every ${Math.round(MG.cooldownSeconds / 60)} minutes. All minigames together give at most ${BUDGET_PER_WINDOW} gold worth of rewards an hour (goods counted at their usual price); left this hour: `,
           )}
-          <b>{left}</b>
+          <b>{fmt(left)}</b>
           {left <= 0 && back ? L(`, ${secs(back - now)} sonra yeniden ödül verir`, `, rewards again in ${secs(back - now)}`) : ''}.
         </p>
         <div className="minigame-actions">
@@ -366,7 +366,7 @@ export function MiniBoard({ lobby, game, compact = false }: { lobby: string; gam
                     {scope === 'all' && r.lobby_name ? ` · ${r.lobby_name}` : ''}
                   </small>
                 </span>
-                <strong>{r.score.toLocaleString(locale())}</strong>
+                <strong>{fmt(r.score)}</strong>
               </div>
             </li>
           ))}

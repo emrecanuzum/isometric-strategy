@@ -3,7 +3,7 @@ import type { Kingdom, World } from '@game/shared'
 import { cityInfo } from '../../game/cities'
 import { Icon } from '../icons'
 import { L, locale } from '../../lib/i18n'
-import { crownKeyOf, pctText, tipPreview, tributeShareNow, waysText } from './crownHouse'
+import { crownKeyOf, pctText, rivalPurse, tipPreview, tributeShareNow, waysText } from './crownHouse'
 import type { Online } from './online'
 import { Section, Stat, fmt } from './primitives'
 
@@ -35,12 +35,15 @@ export function CrownColumnSheet({ world, kingdom, column, online, now, onCrown,
   const relation = Math.round(crownRelation(kingdom, column.crown))
   const ways = crownWays(key, column.crown, now)
   const title = column.kind === 'patrol' ? L(`${info.capital} devriyesi`, `${info.capital} patrol`) : L(`${info.capital} haraççıları`, `${info.capital} tribute collectors`)
+  // A lord still on a level 1 palace: tipped without a hall, courted with a purse instead of taxed.
+  const purse = rivalPurse(kingdom, column.crown, now)
+  const heading = column.kind === 'tribute' && toMe && purse !== null ? L(`${info.capital} elçileri`, `${info.capital} envoys`) : title
   return (
     <section className="sheet frame" aria-labelledby="column-title">
       <header className="sheet-head">
         <Icon name={column.kind === 'patrol' ? 'banner' : 'gold'} size={32} />
         <div>
-          <h2 id="column-title" style={{ color: info.ink }}>{title}</h2>
+          <h2 id="column-title" style={{ color: info.ink }}>{heading}</h2>
           <small>
             {info.name} · {info.ruler} ({L(trait.name, trait.nameEn ?? trait.name).toLocaleLowerCase(locale())})
           </small>
@@ -65,10 +68,14 @@ export function CrownColumnSheet({ world, kingdom, column, online, now, onCrown,
             <p className="hint">
               {toMe ? L('Senin sarayına gidiyorlar.', 'They are riding to your palace.') : L(`${column.lordName} sarayına gidiyorlar.`, `They are riding to ${column.lordName}'s palace.`)}{' '}
               {column.kind === 'patrol'
-                ? toMe
+                ? toMe && purse !== null
+                  ? L(`Sarayın henüz 1. seviyede: yeni lordlarına yaklaşık ${fmt(tipPreview(kingdom, column.crown, online, now))} altın bırakırlar.`, `Your palace is still at level 1: they leave their new lord about ${fmt(tipPreview(kingdom, column.crown, online, now))} gold.`)
+                  : toMe
                   ? L(`Eğlence merkezin varsa içip eğlenir, yaklaşık ${fmt(tipPreview(kingdom, column.crown, online, now))} altın bahşiş bırakırlar${waysText(key, column.crown, now, 'tip') ? ` (${waysText(key, column.crown, now, 'tip')})` : ''}.`, `If you have an entertainment hall they drink, make merry and leave a tip of about ${fmt(tipPreview(kingdom, column.crown, online, now))} gold${waysText(key, column.crown, now, 'tip') ? ` (${waysText(key, column.crown, now, 'tip')})` : ''}.`)
                   : L('Orada içer, eğlenir, lorda bahşiş bırakırlar.', 'There they drink, make merry and leave the lord a tip.')
-                : toMe
+                : toMe && purse !== null
+                  ? L(`Sarayın henüz 1. seviyede, haraç istemezler: seni kendi taraflarına çekmek için yaklaşık ${fmt(purse)} altın kese bırakırlar. Saray 2. seviyeye çıkınca haraç başlar.`, `Your palace is still at level 1, so they ask no tribute: to win you over they leave a purse of about ${fmt(purse)} gold. Once the palace reaches level 2 the tribute begins.`)
+                  : toMe
                   ? L(`Kapına gelince hazinenin payını isteyecekler: şimdiki hazinenle yaklaşık ${fmt(tributeDemand(kingdom.stock.gold, ways.tribute))} altın. Öde, reddet ya da konuş.`, `At your door they will ask for their share of the treasury: about ${fmt(tributeDemand(kingdom.stock.gold, ways.tribute))} gold with what you hold now. Pay, refuse or talk.`)
                   : L('Kapıda haraç isteyecek, cevabı bekleyecekler.', 'They will demand tribute at the door and wait for an answer.')}
             </p>

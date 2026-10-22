@@ -71,6 +71,11 @@
       "detour": 1.25
     }
   },
+  "newcomer": {
+    "note": "a lord whose palace is below belowPalace barely feels the outlaws: bands do not come down on his trade post, and the hold of bandits and pirates on him is scaled by factor",
+    "belowPalace": 2,
+    "factor": 0.1
+  },
   "road": {
     "radiusTiles": 70,
     "merchantCut": 0.25,

@@ -1258,7 +1258,9 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
     case 'patrol_ignored':
       return L('tribute', crown, 'bad', 'refused')
     case 'patrol_tip':
-      return L('tavern', crown, 'good')
+      return p.newcomer ? L('gift', crown, 'good') : L('tavern', crown, 'good')
+    case 'rival_gift':
+      return L('gift', crown, 'good')
     case 'patrol_visit':
       return L('envoy', crown, 'good')
     case 'crown_gift':
@@ -1375,6 +1377,7 @@ export function soundForNotice(n: Notice, online: Online): Cue {
     case 'patrol_visit':
       return 'greeting'
     case 'crown_gift':
+    case 'rival_gift':
       return 'crown'
     case 'king_command':
       return p.lead ? 'king' : 'courtesy'

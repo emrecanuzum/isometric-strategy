@@ -210,7 +210,7 @@ async function moveArmies(lobby: string, world: LobbyWorld, rows: Row[], pacts: 
         wasted = 0
         for (const [g, n] of Object.entries(cargo)) {
           if (!(g in stock) || !(n > 0)) continue
-          const fit = Math.max(0, Math.min(n, cap - stock[g]))
+          const fit = Math.floor(Math.max(0, Math.min(n, cap - stock[g])))
           stock[g] += fit
           stored[g] = fit
           wasted += n - fit

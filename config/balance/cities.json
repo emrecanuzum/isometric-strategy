@@ -32,7 +32,13 @@
         }
       },
       "refuseRelation": -8,
-      "tip": 60
+      "tip": 60,
+      "newcomer": {
+        "note": "a lord whose palace is below belowPalace is new to the land: his own crown's patrol tips him though he has no house of entertainment, and the rival crown's collectors leave a purse instead of asking tribute (each times the crowns' ways and power as usual)",
+        "belowPalace": 2,
+        "tip": 120,
+        "rivalGift": 80
+      }
     },
     "relation": {
       "restSworn": 15,

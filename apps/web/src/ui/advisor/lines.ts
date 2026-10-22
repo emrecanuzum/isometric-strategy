@@ -1,6 +1,6 @@
 import {
   ARCADE_GAMES, BUILDINGS, allShips, balance, countShips, buildingCount, clogsOf, fealtyOpen, fishError, gameError, goldCap, hasPalace,
-  hasTradePost, palaceLevel, popCapFor, population, queenError, questProgress, storageCap, upgradeError,
+  hasTradePost, isNewcomer, palaceLevel, popCapFor, population, queenError, questProgress, storageCap, upgradeError,
   campSoldiers, PROJECT_IDS, projectError, hasOpinion, ofAge, opinionOf, siblingsOf, crownHouseAt, crownWays, liegeSwitchError,
   bandRaid, bandsOf, outlawUp, havensOf, havenPop, havenStrength, navyOf, warships, shipyardLevel, expeditionsOut, maxExpeditions, clansOf, trailOf,
 } from '@game/shared'
@@ -945,7 +945,8 @@ export const TIPS: Tip[] = [
   // ---- The wilds: bandits coming down, pirates on the water, the havens, the year's sickness, a journey ----------
   {
     id: 'raid',
-    when: (c) => bandsOf(c.world, c.world.seed, c.online.outlaws).some((b) => outlawUp(b, c.now) && bandRaid(c.world, b, c.now)?.target === c.online.me),
+    // A lord still on a level 1 palace barely feels a raid (CLAUDE.md §7.9): no alarm for it.
+    when: (c) => !isNewcomer(palaceLevel(c.kingdom, c.now)) && bandsOf(c.world, c.world.seed, c.online.outlaws).some((b) => outlawUp(b, c.now) && bandRaid(c.world, b, c.now)?.target === c.online.me),
     say: (c) => {
       const band = bandsOf(c.world, c.world.seed, c.online.outlaws).find((b) => outlawUp(b, c.now) && bandRaid(c.world, b, c.now)?.target === c.online.me)!
       const leg = bandRaid(c.world, band, c.now)!.leg
@@ -1441,7 +1442,7 @@ export const STEPS: Step[] = [
   {
     id: 'fealty',
     title: L('Bir taca biat et', 'Swear fealty to a crown'),
-    say: ({ online }) => L(`Haritada iki taç krallığı var: ${online.crowns.join(' ve ')}. Oyuncular krallık değil lorddur; birine biat edersiniz. Sarayın ${balance.cities.crown.requiredForPalaceLevel}. seviyesi için şart, ve seçim sezon boyunca kalıcıdır. Kendi tacınızın devriyesi eğlence merkezinize bahşiş bırakır; rakip taç ise haraççı gönderir.`, `There are two crown kingdoms on the map: ${online.crowns.join(' and ')}. Players are lords, not kingdoms; you swear fealty to one. It is required for a level ${balance.cities.crown.requiredForPalaceLevel} palace, and the choice lasts the whole season. Your own crown's patrol leaves tips at your entertainment hall; the rival crown sends tribute collectors.`),
+    say: ({ online }) => L(`Haritada iki taç krallığı var: ${online.crowns.join(' ve ')}. Oyuncular krallık değil lorddur; birine biat edersiniz. Sarayın ${balance.cities.crown.requiredForPalaceLevel}. seviyesi için şart, ve seçim sezon boyunca kalıcıdır. Kendi tacınızın devriyesi bahşiş bırakır; rakip taç ise haraççı gönderir. Merak etmeyin: sarayınız 1. seviyedeyken ikisi de kapınıza kese bırakır, haraç sonra başlar.`, `There are two crown kingdoms on the map: ${online.crowns.join(' and ')}. Players are lords, not kingdoms; you swear fealty to one. It is required for a level ${balance.cities.crown.requiredForPalaceLevel} palace, and the choice lasts the whole season. Your own crown's patrol leaves tips; the rival crown sends tribute collectors. Fear not: while your palace is at level 1 both leave purses at your gate, and the tribute only starts later.`),
     quips: [
       L('Seçiminizi iyi yapın; sezon bitene kadar değişmez.', "Choose well; it won't change until the season ends."),
       L('Ben tarafsızım, lordum; yalnızca güçlü olanı severim. Bir de bana hediye gönderenleri. İkisi de aynı taçsa işimiz kolay.', "I am neutral, my lord; I only love the strong. And those who send me presents. If both are the same crown, it's easy."),

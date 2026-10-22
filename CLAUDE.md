@@ -1865,6 +1865,16 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     Reddet / Öde düğmeleri durur. Sunucuya cevaplar eskisi gibi konuşma
     bitince tek komutla gider.
   - Biat etmemiş lordlara ne devriye ne haraççı gelir.
+  - **Yeni lord** (sarayı 1. seviyede; `cities.json` → `crown.patrol.newcomer`,
+    `patrols.ts` → `isNewcomer`): taçlar onu tavlar. Kendi tacının devriyesi
+    eğlence merkezi aramadan kapıya gelip **120 altın** bırakır (taç gücü, huy
+    ve kardeş çarpanlarıyla; `patrol_tip`, `newcomer`). Rakip tacın adamları
+    haraç istemez, aynı anda gelip **80 altınlık kese** bırakır (`rival_gift`,
+    `patrol_visits.kind` `tip`; o taçla ilişki +1); haritada etiketleri "X
+    elçileri"dir. Haraç saray 2. seviyeye çıkınca başlar. Taç paneli, devriye
+    penceresi ve taçların tanıtımı bunu yazar.
+  - Devriye aynı uğrayışta hem bahşiş hem armağan getirirse elçi tek haber
+    getirir (`patrol_tip` → `gift`); yalnız armağanda `crown_gift`.
   - **Tıklayınca:** devriyeye ya da haraççılara (kolun herhangi bir
     bölüğüne; imlecin kılıç simgesi de her bölükte çıkar, `armies.ts` →
     `pick`) tıklamak küçük bir pencere açar
@@ -2067,6 +2077,11 @@ Değerler `config/balance/outlaws.json` → `bands`, `road`; mantık
   ya da yakından geçen çete) o lordun yağmacı payıdır (en fazla 1). Sunucu bunu her tick'te hesaplar ve değiştiğinde lordun
   durumuna yazar (`Kingdom.outlaws` → `road`, `bands`; `pressureOf`);
   `advance` oradan okur. Alanı olmayan eski kayıtlarda pay 0'dır.
+- **Yeni lord** (sarayı 1. seviyede; `outlaws.json` → `newcomer`):
+  yağmacıların ve korsanların payı ×0,1'dir (`pressureOf`; baskın da, yolu
+  tutmak da neredeyse hissedilmez, elçinin "yolu tuttular" haberi ve baskın
+  uyarısı gelmez). Baskın hedeflerinden çıkarılmaz: çıkarılsa çeteler öbür
+  lordlara daha sık inerdi.
 - **Etkileri** (`outlawEffects`): tüccarın her seferde getirdiği altının
   **yağmacı payı × %25**'ini keserler (yolun yarısı tutuluyorsa %12,5;
   `road.merchantCut`); kesilen altın defterde `books.outlaws` olarak yazar,
@@ -3636,6 +3651,9 @@ krallıkta birer tane olur ve 3 seviyelidir.
     bilgin, halk şenlik istiyor, kayıp soylu çocuğu, nadir mallar tüccarı,
     sahipsiz sürü, hasat panayırı, göçmen aileler.
   Gündüz/gece olayları o vakit başlar ve en geç o vakit bitince biter.
+  **Yeni lord** (sarayı 1. seviyede ya da henüz yok; `events.quietBelowPalace`)
+  olaylar için pencere görmez: haber günlüğe ve Halk şeridine yazılır, yalnızca
+  **krizler** (cevapsız kalınca zarar verir) pencereyle gelir.
   Olay başlayınca açılan pencere, günlük ve Halk sekmesindeki şerit olayın
   **lobi geneli mi krallığa özel mi** olduğunu yazar. Olaylar saklanmaz;
   zamandan ve tohumdan hesaplanır (lobi tohumu sunucunun krallığa yazdığı
@@ -3951,7 +3969,11 @@ krallıkta birer tane olur ve 3 seviyelidir.
   hastane → ilk sefer → 4. seviye saray → eğlence merkezi → hazine →
   tersane ve ilk gemi → 5. seviye saray → bir büyük yapı (hisar, anıt ya da
   lonca konağı). Beklenen adımın sekmesi alttaki
-  menüde yanıp söner. Her adımda **"Bu adımı geç"** cevabı o adımı atlar
+  menüde yanıp söner. Elçi süren adımı kendiliğinden (ve sayfa yenilenince) en
+  çok **12 dakikada bir** hatırlatır (`STEP_MINUTES`, `AdvisorMemory.stepAt`);
+  arada başka konulardan söz eder ve adımı tekrarlayan öğütleri (2. seviye
+  saraya geçince "sarayı yükselt", biat adımında "biat et"…; `STEP_TIPS`)
+  söylemez. Önce her 3 dakikada aynı adımı söylüyordu. Her adımda **"Bu adımı geç"** cevabı o adımı atlar
   (atlanan adım kutlanmaz); öğretici ayarlardan yeniden açılınca atlananlar
   da sıfırlanır. Ayarlardaki düğme Açık / Kapalı / Tamamlandı yazar. **"Bana oyunu anlat":** konular menüde beş başlık altında
   durur (menü panelin içinde kayar): **Lordluğun temelleri** (Zaman, İnşa,

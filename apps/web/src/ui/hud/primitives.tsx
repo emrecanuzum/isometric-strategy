@@ -8,7 +8,8 @@ import type { IconName } from '../icons'
 // Building blocks of the pixel interface. Everything is drawn on whole art pixels (see --px in index.css):
 // stepped frames, segmented meters, sprites shown at whole scales.
 
-export const fmt = (v: number) => Math.floor(v).toLocaleString(locale())
+// Whole numbers only; a hair of float error (34.9999999 or 35.000000001) never shows as 34 or with decimals.
+export const fmt = (v: number) => (Number.isFinite(v) ? Math.floor(v + 1e-6) : 0).toLocaleString(locale())
 // Short form for tight spaces: 1.390 → 1,4K, 2.500.000 → 2,5M.
 const one = (v: number) => (Math.floor(v * 10) / 10).toLocaleString(locale(), { maximumFractionDigits: 1 })
 export const short = (v: number) => (v < 1000 ? fmt(v) : v < 1_000_000 ? `${one(v / 1000)}K` : `${one(v / 1_000_000)}M`)

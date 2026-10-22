@@ -30,6 +30,8 @@ export interface AdvisorMemory {
   turns?: Record<string, number>
   // When he last brought up each tip (ms), so that he changes the subject.
   heard?: Record<string, number>
+  // When he last reminded the lord of each tutorial step on his own (ms).
+  stepAt?: Record<string, number>
 }
 
 const EVENT = 'advisor:memory'
@@ -213,12 +215,21 @@ const safe = <T,>(f: () => T, fallback: T): T => {
 // A tip said this recently is not said again (unless nothing else is true), and an urgent one comes back sooner.
 const HEARD_MINUTES = 20
 const URGENT_MINUTES = 5
+// A tutorial step under way is brought up on his own at most this often; in between he talks of other things (he
+// used to say the same step every few minutes, and a lord waiting on a palace upgrade heard of nothing else).
+const STEP_MINUTES = 12
+// Tips that only repeat a tutorial step: not brought up while that step is under way.
+const STEP_TIPS: Record<string, string[]> = {
+  fealty: ['liege'], palace2: ['palaceUp'], palace3: ['palaceUp'], palace4: ['palaceUp'], palace5: ['palaceUp'],
+  barracks: ['barracks'], queen: ['queen'], spy: ['spyHouse'], lumber: ['noLumber'], house: ['noHouse'], farm: ['noFarm'], trade: ['noGood'],
+}
 
 // What he brings up: anything urgent first; otherwise the subject he has talked about least lately (the economy, the
 // court, the crowns, the lords, spies, the army, the wilds…), and within it the first true tip in order of weight.
 // He does not harp on one thing: a tip heard in the last minutes waits while there is anything else to say.
-function chooseTip(c: AdvisorCtx, snoozed: Record<string, number>, heard: Record<string, number>): Tip | null {
-  const all = [...TIPS, ...GOSSIP].filter((t) => (snoozed[t.id] ?? 0) <= c.now && safe(() => t.when(c), false))
+function chooseTip(c: AdvisorCtx, snoozed: Record<string, number>, heard: Record<string, number>, step?: Step | null): Tip | null {
+  const except = step ? STEP_TIPS[step.id] ?? [] : []
+  const all = [...TIPS, ...GOSSIP].filter((t) => !except.includes(t.id) && (snoozed[t.id] ?? 0) <= c.now && safe(() => t.when(c), false))
   if (all.length === 0) return null
   const urgent = all.find((t) => tipKind(t.id) === 'urgent' && (heard[t.id] ?? 0) < c.now - URGENT_MINUTES * 60_000)
   if (urgent) return urgent
@@ -355,7 +366,11 @@ export function Advisor({
     lastStep.current = stepIndex
     if (prev === null) {
       // First look (or the tutorial just turned on): the step under way, at once.
-      if (stepIndex >= 0) setSpeech(stepSpeech(STEPS[stepIndex], stepIndex, ctxRef.current, pick))
+      // Not again on every reload: only if he has not brought this step up lately.
+      if (stepIndex >= 0 && (memory.stepAt?.[STEPS[stepIndex].id] ?? 0) < ctxRef.current.now - STEP_MINUTES * 60_000) {
+        update({ stepAt: { ...(memory.stepAt ?? {}), [STEPS[stepIndex].id]: ctxRef.current.now } })
+        setSpeech(stepSpeech(STEPS[stepIndex], stepIndex, ctxRef.current, pick))
+      }
       return
     }
     if (stepIndex !== prev && prev >= 0 && stepIndex >= 0) {
@@ -363,7 +378,7 @@ export function Advisor({
       const cheered = memory.cheered ?? []
       // A skipped step is not cheered.
       const cheer = cheered.includes(finished.id) || (memory.skipped ?? []).includes(finished.id) ? undefined : pick(`cheer:${finished.id}`, finished.cheers)
-      update({ cheered: [...cheered, finished.id] })
+      update({ cheered: [...cheered, finished.id], stepAt: { ...(memory.stepAt ?? {}), [STEPS[stepIndex].id]: ctxRef.current.now } })
       setSpeech(stepSpeech(STEPS[stepIndex], stepIndex, ctxRef.current, pick, cheer))
     }
     // memory.cheered and memory.skipped are read at the moment the step changes.
@@ -405,11 +420,12 @@ export function Advisor({
       played.current += 5
       if (played.current < ADVISOR_EVERY_MINUTES * 60 || blocked || busy) return
       const c = ctxRef.current
-      if (step) {
+      if (step && (memory.stepAt?.[step.id] ?? 0) < c.now - STEP_MINUTES * 60_000) {
         played.current = 0
+        update({ stepAt: { ...(memory.stepAt ?? {}), [step.id]: c.now } })
         return setSpeech(stepSpeech(step, stepIndex, c, pick))
       }
-      const tip = chooseTip(c, memory.snoozed ?? {}, memory.heard ?? {})
+      const tip = chooseTip(c, memory.snoozed ?? {}, memory.heard ?? {}, step)
       if (tip) {
         played.current = 0
         update({ snoozed: { ...(memory.snoozed ?? {}), [tip.id]: Math.max(memory.snoozed?.[tip.id] ?? 0, c.now + SHOWN_MINUTES * 60_000) }, heard: hear(memory.heard, tip.id, c.now) })
@@ -417,7 +433,7 @@ export function Advisor({
       } else played.current = ADVISOR_EVERY_MINUTES * 60 * 0.75
     }, 5000)
     return () => clearInterval(id)
-  }, [blocked, busy, speech, memory.muted, memory.snoozed, memory.heard, step, stepIndex, pick, update])
+  }, [blocked, busy, speech, memory.muted, memory.snoozed, memory.heard, memory.stepAt, step, stepIndex, pick, update])
 
   const reply = (r: Reply) => {
     if (r.snooze && r.id) update({ snoozed: { ...(memory.snoozed ?? {}), [r.id]: ctxRef.current.now + r.snooze * 60_000 } })

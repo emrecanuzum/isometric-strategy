@@ -1134,9 +1134,10 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         const given: Record<string, number> = {}
         for (const [r, v] of Object.entries(budgeted)) {
           const cap = caps[r] ?? game.storageCap(k, now)
-          const next = Math.max(stock[r], Math.min(cap, stock[r] + v))
-          if (next > stock[r]) given[r] = next - stock[r]
-          stock[r] = next
+          // Whole units only: the stock holds fractions, so (stock + v) − stock is not v again (35.000000001).
+          const add = Math.floor(Math.max(0, Math.min(v, cap - stock[r])) + 1e-6)
+          if (add > 0) given[r] = add
+          stock[r] += add
         }
         reward = given
         best = Math.max(mine?.best ?? 0, score)
@@ -1312,7 +1313,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
       if (owner !== null && owner !== me.id) {
         let got = 0
         await mutateKingdom(owner, now, (k) => {
-          got = Math.max(0, Math.min(cost, game.goldCap(k, now) - k.stock.gold))
+          got = Math.floor(Math.max(0, Math.min(cost, game.goldCap(k, now) - k.stock.gold)))
           return game.book({ ...k, stock: { ...k.stock, gold: k.stock.gold + got } }, { townSales: got, wastedGold: cost - got })
         }).catch(() => null)
         await notify(lobby, [owner], 'town_sale', { town: row.id, name: row.name, by: me.name ?? '?', good, units, gold: got, wasted: cost - got }, now)

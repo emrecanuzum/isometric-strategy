@@ -9,7 +9,7 @@ import { RESOURCE_ICONS, RESOURCE_NAMES } from '../names'
 import { Meter, Section, Stat, fmt } from './primitives'
 import type { Online } from './online'
 import { usePart } from './Subtabs'
-import { BetrayalCard, CrownCourt, CrownRivalryPanel, RoyalFamily, STANCE_NAMES, crownKeyOf, pctText, tipPreview, tributeShareNow, waysText } from './crownHouse'
+import { BetrayalCard, CrownCourt, CrownRivalryPanel, RoyalFamily, STANCE_NAMES, crownKeyOf, pctText, rivalPurse, tipPreview, tributeShareNow, waysText } from './crownHouse'
 import { Portrait } from '../DynastyArt'
 import { innReach, innUnitPrice, tradeInnIndex } from './inns'
 import { innInfo } from '../../game/innInfo'
@@ -773,7 +773,11 @@ function CrownPolicy({ world, kingdom, crown: i, online, market, now }: { world:
               value={sworn ? L('devriye', 'patrol') : kingdom.liege !== undefined && kingdom.liege !== null ? L('haraççı', 'tribute collectors') : L('gelmez', 'none come')}
               note={
                 sworn
-                  ? L(`devriyesi eğlence merkezine uğrar, ~${fmt(tipPreview(kingdom, i, online, now))} altın bahşiş bırakır${tipWhy ? ` (${tipWhy})` : ''}`, `its patrol calls at your entertainment hall and tips ~${fmt(tipPreview(kingdom, i, online, now))} gold${tipWhy ? ` (${tipWhy})` : ''}`)
+                  ? rivalPurse(kingdom, i, now) !== null
+                    ? L(`sarayın 1. seviyedeyken devriyesi kapına gelip ~${fmt(tipPreview(kingdom, i, online, now))} altın bırakır`, `while your palace is at level 1 its patrol comes to your gate and leaves ~${fmt(tipPreview(kingdom, i, online, now))} gold`)
+                    : L(`devriyesi eğlence merkezine uğrar, ~${fmt(tipPreview(kingdom, i, online, now))} altın bahşiş bırakır${tipWhy ? ` (${tipWhy})` : ''}`, `its patrol calls at your entertainment hall and tips ~${fmt(tipPreview(kingdom, i, online, now))} gold${tipWhy ? ` (${tipWhy})` : ''}`)
+                  : kingdom.liege !== undefined && kingdom.liege !== null && rivalPurse(kingdom, i, now) !== null
+                    ? L(`sarayın 1. seviyedeyken haraç istemez, ${Math.round(tribute.everySeconds / 60)} dakikada bir ~${fmt(rivalPurse(kingdom, i, now)!)} altın kese bırakır`, `while your palace is at level 1 it asks no tribute and leaves a purse of ~${fmt(rivalPurse(kingdom, i, now)!)} gold every ${Math.round(tribute.everySeconds / 60)} minutes`)
                   : kingdom.liege !== undefined && kingdom.liege !== null
                     ? L(`${Math.round(tribute.everySeconds / 60)} dakikada bir hazinenin ${pctText(tributeShareNow(key, i, now))}'ini (en az ${tribute.min} altın) ister${tributeWhy ? ` (${tributeWhy})` : ''}`, `asks for ${pctText(tributeShareNow(key, i, now))} of the treasury every ${Math.round(tribute.everySeconds / 60)} minutes (at least ${tribute.min} gold)${tributeWhy ? ` (${tributeWhy})` : ''}`)
                     : L('biat etmediğin için ne devriye ne haraççı gönderir', 'sends neither patrol nor collectors, since you are not sworn')

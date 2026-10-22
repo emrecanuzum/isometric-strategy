@@ -353,6 +353,7 @@
     }
   },
   "events": {
+    "quietBelowPalace": 2,
     "lobby": {
       "windowSeconds": 900,
       "chance": 0.55,

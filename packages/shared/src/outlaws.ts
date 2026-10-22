@@ -201,7 +201,16 @@ export interface RaidTarget {
   at: Point
 }
 
-export function raidTargetsOf(lords: { id: number; buildings: { kind: string; x: number; y: number; size: number; doneAt: number }[] }[], at: number): RaidTarget[] {
+// A lord still on a level 1 palace (CLAUDE.md §7.9): the bands' and pirates' hold on him is slight. He stays among the
+// raid targets (taking him out would send the bands to the other lords more often); a raid on him hardly tells.
+type Holding = { kind: string; x: number; y: number; size: number; doneAt: number; level?: number }
+function newcomerOf(buildings: Holding[], at: number) {
+  const palace = buildings.find((b) => b.kind === 'palace')
+  const level = palace ? Math.max(1, (palace.level ?? 1) - (palace.doneAt > at ? 1 : 0)) : 0
+  return level < balance.outlaws.newcomer.belowPalace
+}
+
+export function raidTargetsOf(lords: { id: number; buildings: Holding[] }[], at: number): RaidTarget[] {
   return lords
     .flatMap((l) => {
       const post = l.buildings.find((b) => b.kind === 'tradePost' && b.doneAt <= at)
@@ -736,7 +745,8 @@ export function pressureOf(world: Ground, seed: number, bands: Band[], boats: Bo
   const road = post ? roadHeld(world, seed, bands, centreOf(post), at) : { share: 0, bands: 0 }
   const sea = dock ? seaHeld(boats, centreOf(dock), at, strength) : { share: 0, boats: 0 }
   const round = (v: number) => Math.round(v * 100) / 100
-  return { road: round(road.share), sea: round(sea.share), bands: road.bands, boats: sea.boats, at }
+  const scale = newcomerOf(k.buildings, at) ? balance.outlaws.newcomer.factor : 1
+  return { road: round(road.share * scale), sea: round(sea.share * scale), bands: road.bands, boats: sea.boats, at }
 }
 
 // ---- Chasing ------------------------------------------------------------------------------------------------------

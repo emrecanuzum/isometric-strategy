@@ -41,6 +41,10 @@ export function patrolTarget(seed: number, crown: number, patrol: number, slot: 
   return sworn[used[patrol]].id
 }
 
+// A lord on a level 1 palace is new to the land (CLAUDE.md §7.8): his own crown's patrol tips him though he has no
+// house of entertainment, and a rival crown's collectors court him with a purse instead of asking tribute.
+export const isNewcomer = (palaceLevel: number) => palaceLevel < patrolSpec().newcomer.belowPalace
+
 // What a patrol does at a lord's: a tip from its own crown, tribute demanded by a rival one.
 export const visitKind = (crown: number, liege: number | null | undefined) => (liege === crown ? 'tip' : 'tribute')
 

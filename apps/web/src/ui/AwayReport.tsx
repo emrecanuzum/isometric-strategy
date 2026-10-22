@@ -829,7 +829,7 @@ interface Page {
 }
 
 const MILITARY = new Set(['king_fell', 'siege_people', 'naval_battle', 'blockade_lifted', 'fleet_turned', 'battle_start', 'battle_end', 'town_siege', 'town_taken', 'town_held', 'town_siege_lifted', 'town_revolt', 'town_lost_revolt', 'tower_losses', 'army_threat', 'trade_raided', 'raid_repelled', 'war_declared', 'peace_enforced', 'order_failed', 'cargo_lost', 'cargo_home', 'cave_trail', 'cave_found', 'cave_empty', 'cave_probe', 'clan_destroyed'])
-const TRIBUTE = new Set(['patrol_tribute', 'patrol_taken', 'patrol_tip', 'patrol_visit', 'patrol_ignored', 'tribute_ended', 'crown_gift'])
+const TRIBUTE = new Set(['patrol_tribute', 'patrol_taken', 'patrol_tip', 'patrol_visit', 'patrol_ignored', 'tribute_ended', 'crown_gift', 'rival_gift'])
 
 const duration = (ms: number) => {
   const minutes = Math.round(ms / 60_000)
@@ -1098,13 +1098,28 @@ export function AwayReport({ lobby, me, since, before, kingdom, online, now, onC
       tribute.push({
         icon: 'crown',
         text: L(
-          `Kendi tacının devriyesi ${tips.length + visits.length} kez uğradı${tips.length > 0 ? `; ${tips.length} kez eğlence merkezinde içip toplam ${fmt(sum(tips))} altın bahşiş bıraktı` : ''}.`,
-          `Your own crown's patrol called ${tips.length + visits.length === 1 ? 'once' : `${tips.length + visits.length} times`}${tips.length > 0 ? `; it drank at your entertainment hall ${tips.length === 1 ? 'once' : `${tips.length} times`} and left ${fmt(sum(tips))} gold in tips` : ''}.`,
+          `Kendi tacının devriyesi ${tips.length + visits.length} kez uğradı${tips.length > 0 ? `; ${tips.length} kez toplam ${fmt(sum(tips))} altın bahşiş bıraktı` : ''}.`,
+          `Your own crown's patrol called ${tips.length + visits.length === 1 ? 'once' : `${tips.length + visits.length} times`}${tips.length > 0 ? `; ${tips.length === 1 ? 'once' : `${tips.length} times`} it left a tip, ${fmt(sum(tips))} gold in all` : ''}.`,
         ),
         tone: 'up',
       })
     }
-    const gifts = of('crown_gift')
+    // The rival crown courting a lord still on a level 1 palace (CLAUDE.md §7.8).
+    const purses = of('rival_gift')
+    if (purses.length > 0)
+      tribute.push({
+        icon: 'gold',
+        text: L(
+          `Rakip tacın adamları ${purses.length} kez haraç yerine kese bıraktı: toplam ${fmt(sum(purses))} altın.`,
+          `The rival crown's men left a purse instead of asking tribute ${purses.length === 1 ? 'once' : `${purses.length} times`}: ${fmt(sum(purses))} gold in all.`,
+        ),
+        tone: 'up',
+      })
+    // A gift that came with the patrol's tip rides in that notice (CLAUDE.md §7.8).
+    const gifts = [...of('crown_gift'), ...tips.flatMap((n) => {
+      const g = (n.payload as { gift?: Record<string, unknown> | null }).gift
+      return g ? [{ ...n, payload: g }] : []
+    })]
     if (gifts.length > 0) {
       const goods: Record<string, number> = {}
       for (const n of gifts) for (const [g, v] of Object.entries(((n.payload as { goods?: Record<string, number> }).goods ?? {}))) goods[g] = (goods[g] ?? 0) + v

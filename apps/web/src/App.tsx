@@ -6,6 +6,7 @@ import {
   TileRule,
   advance,
   balance,
+  palaceLevel,
   townCenter,
   cityCenter,
   crisisDecideMs,
@@ -21,6 +22,7 @@ import {
   patrolSlotMs,
   patrolTarget,
   visitKind,
+  isNewcomer,
   tributeCrowns,
   tributeSlotAt,
   tributeVisitAt,
@@ -927,9 +929,13 @@ function App({
       const { kingdom: next, events } = advance(current, time, marketRef.current)
       if (next !== current) setKingdom(next)
       recordJournal(events, next, time)
+      // A lord on a level 1 palace is still finding his feet: the day's news goes to the journal and the people's tab
+      // without a dialog of its own; only a crisis (which harms if left unanswered) pops up (CLAUDE.md §9.8).
+      const quiet = palaceLevel(next, time) < balance.institutions.events.quietBelowPalace
+      const begun = events.filter((e): e is FortuneEvent => e.kind === 'fortune' && e.until > time && (!quiet || !!e.crisis))
       // A sound for what stands out (one per tick, the most important).
-      const cue: Cue | null = events.some((e) => e.kind === 'fortune')
-        ? FORTUNE_TEXTS[(events.find((e) => e.kind === 'fortune') as { fortune: string }).fortune]?.tone === 'bad'
+      const cue: Cue | null = begun.length > 0
+        ? FORTUNE_TEXTS[begun[0].fortune]?.tone === 'bad'
           ? 'omen'
           : 'fortune'
         : events.some((e) => e.kind === 'researched' || e.kind === 'trained' || e.kind === 'goal')
@@ -938,7 +944,6 @@ function App({
             ? 'build'
             : null
       if (cue) play(cue)
-      const begun = events.filter((e): e is FortuneEvent => e.kind === 'fortune' && e.until > time)
       // Waiting fortunes that have run their course meanwhile (behind a report or another dialog) are dropped: the
       // journal keeps them; only news still under way pops up.
       setFortunes((list) => {
@@ -1925,7 +1930,9 @@ function App({
           const back = t >= arrive + wait
           const [path, departAt, arriveAt] = back ? [[...route].reverse(), arrive + wait, arrive + wait + ride] : [route, arrive - ride, arrive]
           crownColumns.current.set(-(TRIBUTE_ID + lord.id * 8 + crown), { kind: 'tribute', crown, lord: back ? null : lord.id, lordName: back ? null : lordNameOf(lord.id) })
-          out.push({ id: -(TRIBUTE_ID + lord.id * 8 + crown), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 3, catapult: false, train: 2, size: 1.3, trainAhead: back, gather, tag: L(`${cityInfo(view.world, crown).capital} haraççıları`, `${cityInfo(view.world, crown).capital} tribute collectors`), tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
+          // To a lord still on a level 1 palace they come with a purse, not a demand (CLAUDE.md §7.8).
+          const tag = isNewcomer(palace.level ?? 1) ? L(`${cityInfo(view.world, crown).capital} elçileri`, `${cityInfo(view.world, crown).capital} envoys`) : L(`${cityInfo(view.world, crown).capital} haraççıları`, `${cityInfo(view.world, crown).capital} tribute collectors`)
+          out.push({ id: -(TRIBUTE_ID + lord.id * 8 + crown), color: crown % 2 === 0 ? 'crimson' : 'royal', own: false, soldiers: null, path, departAt, arriveAt, battle: false, selected: false, figures: 3, catapult: false, train: 2, size: 1.3, trainAhead: back, gather, tag, tagColor: parseInt(cityInfo(view.world, crown).color.slice(1), 16) })
         }
       }
     }

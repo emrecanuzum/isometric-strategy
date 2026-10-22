@@ -81,6 +81,16 @@ function tilt(crown: number, at: number) {
 // same every time it is drawn (and in the away report), while two notices of a kind rarely sound alike.
 const vary = (n: Notice, list: string[]) => list[Math.abs(Math.trunc(Number(n.id) || 0)) % list.length]
 
+// A crown's gift as the envoy tells it: on its own (`crown_gift`) or with the patrol's tip on the same visit.
+function giftText(g: Record<string, unknown>) {
+  const goods = Object.entries((g.goods ?? {}) as Record<string, number>).map(([k, v]) => `${fmt(v)} ${RESOURCE_NAMES[k as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? k}`)
+  const name = String(g.name)
+  return L(
+    `Devriye, hükümdarın sana duyduğu yakınlığın işareti olarak «${name}» getirdi: ${[...(Number(g.gold) > 0 ? [`${fmt(Number(g.gold))} altın`] : []), ...goods].join(', ')}. Paketi ben açtım, lordum; eksik yok, yemin ederim.`,
+    `As a token of the ruler's fondness for you, the patrol brought «${balance.cities.crown.gifts.find((x) => x.name === name)?.nameEn ?? name}»: ${[...(Number(g.gold) > 0 ? [`${fmt(Number(g.gold))} gold`] : []), ...goods].join(', ')}. I opened the package myself, my lord; nothing missing, I swear.`,
+  )
+}
+
 export function describe(n: Notice, online: Online): { icon: IconName; title: string; text: string } {
   const p = localPayload(n.payload as Record<string, unknown>) as Record<string, never>
   const kind = (k: unknown) => ENVOY_NAMES[k as EnvoyRow['kind']] ?? String(k)
@@ -482,6 +492,18 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       }
     }
     case 'patrol_tip':
+      // A lord still on a level 1 palace: no hall to drink in, the patrol tips him at the gate all the same.
+      if (p.newcomer)
+        return {
+          icon: 'gold',
+          title: L('Devriye yeni lorda uğradı', 'The patrol called on the new lord'),
+          text: vary(n, [
+            L(`${crown(p.crown)} devriyesi sarayının önünde durdu, yeni lordlarını görmeye gelmiş. Giderken ${fmt(Number(p.amount))} altın bıraktılar: "yolun açık olsun" demekmiş. Eğlence merkezin olsaydı içip şarkı da söylerlerdi; şimdilik kurtulduk.`, `The patrol of ${crown(p.crown)} stopped before your palace to see their new lord. As they left they dropped ${fmt(Number(p.amount))} gold: "for a good start", they said. Had you an entertainment hall they would have sung as well; we were spared, for now.`),
+            L(`Tacının askerleri kapıda selam verdi ve kesene ${fmt(Number(p.amount))} altın koydu. Yeni lordlara cömert davranırlarmış, lordum; büyüyünce bu cömertlik bahşişe döner, o da ancak eğlence merkezinde.`, `Your crown's soldiers saluted at the gate and put ${fmt(Number(p.amount))} gold in your purse. They are generous to new lords, my lord; once you grow it turns into tips, and only at an entertainment hall.`),
+            L(`${crown(p.crown)} devriyesi geldi, sarayını beğendi (küçük buldular ama kibarlar) ve ${fmt(Number(p.amount))} altın bıraktı. Ben de bir altın istedim; vermediler.`, `The patrol of ${crown(p.crown)} came, liked your palace (they found it small, but they are polite) and left ${fmt(Number(p.amount))} gold. I asked for a coin myself; they refused.`),
+            L(`Tacının devriyesi uğradı, lordum: "Yeni lordumuz aç kalmasın" deyip ${fmt(Number(p.amount))} altın bıraktılar. Aç kalmayacağız; ben zaten mutfaktaydım.`, `Your crown's patrol called, my lord: "Our new lord shall not go hungry", they said, and left ${fmt(Number(p.amount))} gold. We shan't; I was in the kitchen anyway.`),
+          ]) + (p.gift ? ` ${giftText(p.gift as Record<string, unknown>)}` : ''),
+        }
       return {
         icon: 'gold',
         title: L('Devriye eğlenip gitti', 'The patrol had its fun and left'),
@@ -490,6 +512,17 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
           L(`${crown(p.crown)} askerleri fıçıları boşalttı, ozanı alkışladı ve giderken masaya ${fmt(Number(p.amount))} altın bıraktı. Ozan alkışı hak etmemişti; ben söylesem daha iyi söylerdim.`, `The soldiers of ${crown(p.crown)} emptied the casks, applauded the bard and left ${fmt(Number(p.amount))} gold on the table. The bard did not deserve the applause; I would have sung it better.`),
           L(`${crown(p.crown)} devriyesi gece boyu şarkı söyledi; çavuşları biraz da dans etti. Bahşiş: ${fmt(Number(p.amount))} altın. Ayı daha zarif dans eder, lordum; ama ayı bahşiş bırakmaz.`, `The patrol of ${crown(p.crown)} sang all night; their sergeants even danced a little. Tips: ${fmt(Number(p.amount))} gold. A bear dances more gracefully, my lord; but a bear leaves no tip.`),
           L(`Eğlence merkezinde ${crown(p.crown)} devriyesi vardı: kadehler kalktı, zarlar atıldı ve ${fmt(Number(p.amount))} altın bahşiş kaldı. Zarda bana da kaybettiler; o kısmı deftere yazmadım.`, `The patrol of ${crown(p.crown)} was at the entertainment hall: glasses raised, dice rolled and ${fmt(Number(p.amount))} gold in tips left behind. They lost to me at dice too; that part I did not put in the ledger.`),
+        ]) + (p.gift ? ` ${giftText(p.gift as Record<string, unknown>)}` : ''),
+      }
+    case 'rival_gift':
+      return {
+        icon: 'gold',
+        title: L(`${crown(p.crown)} sana kese gönderdi`, `${crown(p.crown)} sent you a purse`),
+        text: vary(n, [
+          L(`Rakip taç ${crown(p.crown)} adamları kapına geldi ama haraç istemedi: sarayın daha küçük, lordum, onlar da gözünü boyamak istiyor. ${fmt(Number(p.amount))} altın bırakıp gittiler. Saray ${balance.cities.crown.patrol.newcomer.belowPalace}. seviyeye çıkınca bu keseler biter, haraç başlar; ben şimdiden kapıyı yağlatıyorum.`, `The men of the rival crown, ${crown(p.crown)}, came to your gate but asked for no tribute: your palace is still small, my lord, and they want to win you over. They left ${fmt(Number(p.amount))} gold and went. Once the palace reaches level ${balance.cities.crown.patrol.newcomer.belowPalace} the purses stop and the tribute begins; I am already oiling the gate.`),
+          L(`${crown(p.crown)} haraççıları geldi, sarayına baktı, güldü ve kesene ${fmt(Number(p.amount))} altın koydu. "Büyüyünce görüşürüz" dediler. Bu bir tehdit, lordum; ama altını tehditten saymıyorum.`, `The tribute collectors of ${crown(p.crown)} came, looked at your palace, laughed and put ${fmt(Number(p.amount))} gold in your purse. "We'll talk when you've grown", they said. It's a threat, my lord; but I don't count the gold as one.`),
+          L(`Rakip tacın adamları bugün cömertti: ${fmt(Number(p.amount))} altın. Küçük lordlardan haraç almaz, onları tavlarlarmış. Saray ${balance.cities.crown.patrol.newcomer.belowPalace}. seviyeye çıkınca kese yerine el uzatacaklar.`, `The rival crown's men were generous today: ${fmt(Number(p.amount))} gold. They take no tribute from small lords, they court them. Once the palace reaches level ${balance.cities.crown.patrol.newcomer.belowPalace} they'll hold out a hand instead of a purse.`),
+          L(`${crown(p.crown)} askerleri kapıda biraz dikildi, sonra ${fmt(Number(p.amount))} altın bıraktı. Düşmanın hediyesi tatlıdır, lordum; ben tadına baktım bile.`, `The soldiers of ${crown(p.crown)} loitered at the gate a while, then left ${fmt(Number(p.amount))} gold. An enemy's gift is sweet, my lord; I've already had a taste.`),
         ]),
       }
     case 'patrol_visit':
@@ -498,14 +531,12 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         title: L('Taç devriyesi uğradı', "The crown's patrol stopped by"),
         text: L(`${crown(p.crown)} devriyesi sarayının önüne geldi, selam verdi ve yoluna devam etti; tacınla ilişkin +${fmt(Number(p.relation ?? 1))}. Bir eğlence merkezin (4. seviye saray) olsaydı içip eğlenir ve bahşiş bırakırlardı. Kuru bir selamla gittiler; ben de kuru kuru el salladım.`, `The patrol of ${crown(p.crown)} came before your palace, saluted and went on its way; relations with your crown +${fmt(Number(p.relation ?? 1))}. Had you an entertainment hall (level 4 palace), they would have drunk, made merry and left tips. They left with a dry salute; I waved back, dryly.`),
       }
-    case 'crown_gift': {
-      const goods = Object.entries((p.goods ?? {}) as Record<string, number>).map(([g, v]) => `${fmt(v)} ${RESOURCE_NAMES[g as keyof typeof RESOURCE_NAMES]?.toLowerCase() ?? g}`)
+    case 'crown_gift':
       return {
         icon: 'chest',
         title: L(`${crown(p.crown)} armağan gönderdi`, `${crown(p.crown)} sent a gift`),
-        text: L(`Devriye, hükümdarın sana duyduğu yakınlığın işareti olarak «${p.name}» getirdi: ${[...(Number(p.gold) > 0 ? [`${fmt(Number(p.gold))} altın`] : []), ...goods].join(', ')}. Paketi ben açtım, lordum; eksik yok, yemin ederim.`, `As a token of the ruler's fondness for you, the patrol brought «${balance.cities.crown.gifts.find((g) => g.name === p.name)?.nameEn ?? p.name}»: ${[...(Number(p.gold) > 0 ? [`${fmt(Number(p.gold))} gold`] : []), ...goods].join(', ')}. I opened the package myself, my lord; nothing missing, I swear.`),
+        text: giftText(p),
       }
-    }
     case 'patrol_taken':
       return p.afk
         ? {
