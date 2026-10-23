@@ -38,7 +38,7 @@ class ChunkGuard extends Component<{ children: ReactNode }, { failed: boolean }>
 }
 import { supabase } from './lib/supabase'
 import { keepClockSynced, syncClock } from './net/clock'
-import { CommandError, createLobby, currentUser, getLobby, loadMine, lobbyRiverKeep, send, signOut } from './net/online'
+import { CommandError, createLobby, currentUser, getLobby, loadMine, lobbyRiverKeep, lobbyWaterLinks, send, signOut } from './net/online'
 import type { Lobby, LobbyListing, Mine } from './net/online'
 import { play as sound } from './audio/sfx'
 import { loadProfile, useMusic, useSettings } from './net/settings'
@@ -138,12 +138,14 @@ export default function Root() {
     return () => document.removeEventListener('click', tick, true)
   }, [])
 
-  // In the lobby now: what its widened rivers leave dry can be read (its own players only), then the map opens.
+  // In the lobby now: what its widened rivers leave dry and the channels joining its waters can be read (its own
+  // players only), then the map opens.
   const play = useCallback(async (lobby: Lobby, mine: Mine) => {
-    const keep = (lobby.world_rev ?? 1) >= 6 ? await lobbyRiverKeep(lobby.id) : null
+    const rev = lobby.world_rev ?? 1
+    const [keep, links] = await Promise.all([rev >= 6 ? lobbyRiverKeep(lobby.id) : null, rev === 7 ? lobbyWaterLinks(lobby.id) : null])
     sound('enter')
     setLobbyParam(lobby.id)
-    setPhase({ kind: 'game', lobby: { ...lobby, river_keep: keep }, mine })
+    setPhase({ kind: 'game', lobby: { ...lobby, river_keep: keep, water_links: links }, mine })
   }, [])
 
   // Signed in: the profile, then the lobby in the address if there is one, else the menu.

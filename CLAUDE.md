@@ -169,7 +169,7 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
 - **Nehir(ler):** Haritanın her bölgesinden dolanarak geçen bir **ana
   nehir** ve dağlardan doğup ona veya harita kenarına akan **dereler**.
   Amaç: hiçbir krallık suya uzak başlamasın.
-  - **Bütün sular birbirine bağlıdır** (dünya sürümü 7; `worldgen.ts` →
+  - **Bütün sular birbirine bağlıdır** (dünya sürümü 8; `worldgen.ts` →
     `linkLakes`): dereler bir nehre kavuşana kadar akar, harita kenarından
     çıkmaz; hiçbir nehrin ulaşmadığı, iskele kurulabilecek büyüklükteki
     (`territory.shoreMinWater`, 20 karo) her göle ortasından en yakın bağlı
@@ -177,8 +177,24 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
     iskeleden her korsan limanına ve her suya, uzun yoldan da olsa, gemiyle
     gidilir. Önce haritada 5–18 kopuk su kütlesi vardı (paralel akıp harita
     kenarından çıkan dereler, nehre değmeyen göller). Denetim:
-    `bun scripts/water-link-check.ts [tohumlar…]`. Sürüm 6 ve öncesindeki
-    lobiler eski dünyalarında kalır.
+    `bun scripts/water-link-check.ts [tohumlar…]`.
+  - **Açık lobiler** (sürüm 6 → 7; `scripts/link-waters.ts`): dünya olduğu
+    gibi kalır, kopuk her suya en son, her şeyin etrafından dolanan bir
+    **kanal** açılır (`carveLinks`, 3 karo genişliğinde, kıyısı 8 karoda suya
+    iner). Betik kanalları bir kez planlar (karo karo en ucuz yol: binalardan,
+    iskele arsalarından, kasabalardan 11 karo, sığmazsa 4 karo; hanlar ve taç
+    başkentleri dışında; önce yollardan 3 karo uzak, olmazsa yolu keserek, kesen
+    yol köprü olur; lordların son hududu çok pahalı; dağ pahalı) ve
+    `lobbies.water_links`'e yazar (yalnız lobinin oyuncuları okur:
+    `lobby_water_links`); istemci dünyayı tohum, sürüm, `river_keep` ve bu
+    kanallarla üretir, sunucunun `lobby_worlds` karoları yenilenir. Yol
+    geçmeyen her kanala bir taş köprü kurulur (ortadan dışa, sığan ilk yere;
+    yoksa iki kıyıda sağlam zemin bulan herhangi bir yere). Betik uygulamadan
+    önce denetler: saklanan karolar sürüm 6'yla aynı mı, korunan hiçbir karo
+    suya düşüyor mu, hiçbir yer ya da kara karosu ana karadan kopuyor mu, su
+    tek parça mı; ayrıca hangi korsan limanı, teknesi, mağarası ve çetesinin
+    yerinde kaldığını yazar (limanlar su büyüklüklerinden seçildiği için
+    taşınır; çeteler yollardan uzak kanallarla yerinde kalır).
   - Kıyısına **liman/iskele** kurulabilir → su yolu ticareti.
   - Nehir kenarı tarlalar daha verimli.
   - Köprü veya geçit noktaları stratejik önemdedir.
@@ -1658,8 +1674,9 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   krallıkların hududuna değen karo olmadığı denetlenir. **4**, 2'nin
   aynısıdır ama şehirler göl kıyısına ve birbirinden en uzağa kurulur.
   **5** her zaman iki şehir kurar, **6** 5'in nehirleri genişletilmiş
-  hâlidir (§4.2), **7** 6'nın bütün suları birbirine bağlanmış hâlidir
-  (§4.2); yeni lobiler 7'dir (`command` lobiyi açarken
+  hâlidir (§4.2), **7** 6'nın dünyasına en son kanallar açılmış hâlidir
+  (açık lobiler için), **8** 6'nın suları baştan bağlı hâlidir (§4.2); yeni
+  lobiler 8'dir (`command` lobiyi açarken
   `world_rev`'i yazar).
 - **İleride:** paralı asker kiralama, barış görüşmelerinde arabuluculuk,
   rehine/fidye takası, kara borsa, şehirden mal satın alma.
@@ -4690,7 +4707,7 @@ Sunucu **ilerlemeyi ve konumu saklamaz, zamanı saklar**; her şey
 | --- | --- |
 | `kingdoms.state.pretender` | taht davacısının karargâhı (§9.1.1); `lobby_kingdoms.pretender` herkese açar |
 | `kingdoms.state.liegeOffer` | davacıyı destekleyen tacı bırakıp öbür taca geçme teklifi (§9.1.1), bitiş anıyla |
-| `lobbies` | tohum, `world_rev` (dünya üretim sürümü), `river_keep` (genişleyen nehrin kuru bıraktığı alanlar), `season_start`, ayarlar |
+| `lobbies` | tohum, `world_rev` (dünya üretim sürümü), `river_keep` (genişleyen nehrin kuru bıraktığı alanlar), `water_links` (sürüm 7'nin kanalları), `season_start`, ayarlar |
 | `kingdoms` | `state jsonb`, `version`, `updated_at`, ad, renk |
 | `armies` | sahibi, birlikler, `path`, `depart_at`, `arrive_at` |
 | `orders` | elçi emirleri: `issued_at`, `effective_at`, içerik |

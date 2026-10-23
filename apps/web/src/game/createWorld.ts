@@ -17,7 +17,7 @@ import {
   caveSpots,
   snowCover,
 } from '@game/shared'
-import type { Point, Rect, RiverKeep, World } from '@game/shared'
+import type { Point, Polyline, Rect, RiverKeep, World } from '@game/shared'
 import type { Video } from '../net/settings'
 import { Application, BlurFilter, Container, Graphics, ImageSource, Rectangle, Sprite, Text, Texture, UPDATE_PRIORITY } from 'pixi.js'
 import { L, locale } from '../lib/i18n'
@@ -358,6 +358,8 @@ export async function createWorld(
   rev = WORLD_REV,
   // What its widened rivers leave dry, for a lobby that was running when they came.
   keep: RiverKeep[] = [],
+  // The channels joining its waters, for a lobby that was running when they came (revision 7).
+  links: Polyline[] = [],
 ): Promise<WorldView> {
   const app = new Application()
   await app.init({
@@ -409,7 +411,7 @@ export async function createWorld(
     flush()
   }
 
-  const world = generateWorld(seed, rev, keep)
+  const world = generateWorld(seed, rev, keep, links)
   const chunkSize = balance.map.chunkSize
   const chunkCount = world.size / chunkSize
 

@@ -1,4 +1,4 @@
-import type { AidKind, KinRoleKind, OutlawRow, PlanStep, Good, TradeLedger, Town, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, RiverKeep, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units, Ship, Ships, MissionOrder, NavyLook, Blockade, ArcadeGame } from '@game/shared'
+import type { AidKind, KinRoleKind, OutlawRow, PlanStep, Good, TradeLedger, Town, Army, BattlePlan, Building, Claim, Envoy, Fighter, Kingdom, Market, Operation, Pact, PeaceTerms, Point, Polyline, RiverKeep, Relation, Score, SpyMission, SpyTopic, TaxLevel, Unit, Units, Ship, Ships, MissionOrder, NavyLook, Blockade, ArcadeGame } from '@game/shared'
 import { supabase } from '../lib/supabase'
 import { busyWhile } from '../lib/busyButtons'
 
@@ -20,6 +20,9 @@ export interface Lobby {
   // The rectangles its widened rivers leave dry, for a lobby that was running when they came (worldgen RiverKeep);
   // read once the player is in the lobby (lobbyRiverKeep).
   river_keep?: RiverKeep[] | null
+  // The channels joining its waters, for a lobby that was running when they came (world revision 7; worldgen
+  // carveLinks); read once the player is in the lobby (lobbyWaterLinks).
+  water_links?: Polyline[] | null
 }
 
 // The player's row: the sites shown before founding, then the economy.
@@ -134,6 +137,13 @@ export async function lobbyRiverKeep(lobby: string): Promise<RiverKeep[] | null>
   const { data, error } = await supabase.rpc('lobby_river_keep', { lobby })
   if (error) throw error
   return (data as RiverKeep[] | null) ?? null
+}
+
+// The channels cut to join a lobby's waters (revision 7).
+export async function lobbyWaterLinks(lobby: string): Promise<Polyline[] | null> {
+  const { data, error } = await supabase.rpc('lobby_water_links', { lobby })
+  if (error) throw error
+  return (data as Polyline[] | null) ?? null
 }
 
 export async function loadMine(lobby: string): Promise<Mine | null> {

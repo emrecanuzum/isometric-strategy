@@ -11,3 +11,4 @@ supabase/.temp/
 .vercel
 .playwright-mcp/
 supabase/functions/_shared/game.js
+scripts/tmp/

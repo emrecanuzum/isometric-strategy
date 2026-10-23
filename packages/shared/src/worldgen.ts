@@ -27,11 +27,13 @@ export const Feature = {
 // farthest apart however close that is (one lakeside and the farthest open spot, or two open ones, when the lakes
 // have less room). 6: as 5, but the rivers are widened once everything else is laid (widenRivers), each bank drawn
 // back by a share of the river's width; next to whatever must stay dry (`keep`: a running lobby's buildings and plots
-// when it moved to this revision) that bank stays and the other is drawn back twice as far. 7: as 6, but all the water
-// is one: streams run until they join a river (never off the map's edge), and every lake a dock could stand on that no
-// river reaches gets a stream of its own down to the nearest water already joined (linkLakes), so a fleet can sail
-// from any dock to any other water, the long way round if need be.
-export const WORLD_REV = 7
+// when it moved to this revision) that bank stays and the other is drawn back twice as far. 7: the world of revision 6
+// left as it is, with the water joined into one by channels cut last (`links`, worked out once for a running lobby
+// round its lords' buildings and stored on it; carveLinks), each with a stone bridge over it. 8: as 6, but all the
+// water is one from the start: streams run until they join a river (never off the map's edge), and every lake a dock
+// could stand on that no river reaches gets a stream of its own down to the nearest water already joined (linkLakes),
+// so a fleet can sail from any dock to any other water, the long way round if need be.
+export const WORLD_REV = 8
 
 // A rectangle of tiles the widened rivers leave dry: [x, y, width, height].
 export type RiverKeep = [number, number, number, number]
@@ -245,7 +247,7 @@ function pickSpaced(
   return picked
 }
 
-export function generateWorld(seed: number, rev = WORLD_REV, keep: RiverKeep[] = []): World {
+export function generateWorld(seed: number, rev = WORLD_REV, keep: RiverKeep[] = [], waterLinks: Polyline[] = []): World {
   const cfg = balance.world
   const size = balance.map.chunkSize * balance.map.worldChunks
   const random = mulberry32(seed)
@@ -385,7 +387,7 @@ export function generateWorld(seed: number, rev = WORLD_REV, keep: RiverKeep[] =
     }
   }
 
-  // Revision 7: every lake big enough for a dock (balance.territory.shoreMinWater) is joined to the rivers. Water is a
+  // Revision 8: every lake big enough for a dock (balance.territory.shoreMinWater) is joined to the rivers. Water is a
   // lake tile or a tile inside a carved channel; what is joined is flooded (4-way, as a fleet sails) from the main
   // river. The largest lake not yet joined gets a stream from one of its tiles to the nearest joined water, and so on.
   const wetNow = (i: number) => terrain[i] === Terrain.Lake || riverDistance[i] <= 0
@@ -491,13 +493,13 @@ export function generateWorld(seed: number, rev = WORLD_REV, keep: RiverKeep[] =
   for (const source of sources) {
     const isMouth = (cell: number) => {
       if (riverCells[cell]) return true
-      if (rev >= 7) return false
+      if (rev >= 8) return false
       const p = center(cell)
       return onEdge(cell) && Math.hypot(p.x - source.x, p.y - source.y) >= size * cfg.riverMinLengthFraction
     }
     carve(findPath(side, toCell(source), isMouth, riverCost), cfg.riverWidth, true)
   }
-  if (rev >= 7) linkLakes()
+  if (rev >= 8) linkLakes()
 
   // Spread the bank distance over the whole map (chamfer transform) so valleys can be as wide as they need.
   const spread = (i: number, j: number, step: number) => {
@@ -768,7 +770,8 @@ export function generateWorld(seed: number, rev = WORLD_REV, keep: RiverKeep[] =
     const t = terrain[y * size + x]
     return t === Terrain.River || t === Terrain.Lake
   }
-  const tryCrossing = (p: Point, dx: number, dy: number): Crossing | null => {
+  // `loose`: anywhere a deck reaches firm ground on both banks (revision 7's channels, which must be crossed somewhere).
+  const tryCrossing = (p: Point, dx: number, dy: number, loose = false): Crossing | null => {
     if (terrain[Math.floor(p.y) * size + Math.floor(p.x)] !== Terrain.River) return null
     const length = Math.hypot(dx, dy) || 1
     const nx = -dy / length
@@ -787,14 +790,16 @@ export function generateWorld(seed: number, rev = WORLD_REV, keep: RiverKeep[] =
     const b = { x: p.x + nx * (sb + 0.75), y: p.y + ny * (sb + 0.75) }
     for (const q of [a, b]) {
       // Not in the gorges where rivers leave through the mountain ring.
-      if (Math.min(q.x, q.y, size - q.x, size - q.y) < cfg.borderTiles || wet(q)) return null
+      if ((!loose && Math.min(q.x, q.y, size - q.x, size - q.y) < cfg.borderTiles) || wet(q)) return null
       // On firm ground, not a lone tile in the water.
       if (rev >= 6 && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => wet({ x: q.x + dx, y: q.y + dy }))) return null
+      if (loose) continue
       const i = Math.floor(q.y) * size + Math.floor(q.x)
       if (terrain[i] === Terrain.Mountain || height[i] > cfg.stoneBridgeMaxRise * 2) return null
     }
     const ha = height[Math.floor(a.y) * size + Math.floor(a.x)]
     const hb = height[Math.floor(b.y) * size + Math.floor(b.x)]
+    if (loose) return { a, b }
     if (Math.abs(ha - hb) > cfg.stoneBridgeMaxRise) return null
     const near = (q: Point) => Math.hypot(q.x - p.x, q.y - p.y) < cfg.stoneBridgeClearance
     if (spans.some(near) || crossings.some((c) => near(c.a))) return null
@@ -821,6 +826,34 @@ export function generateWorld(seed: number, rev = WORLD_REV, keep: RiverKeep[] =
         if (t === Terrain.River || t === Terrain.Lake) feature[y * size + x] = Feature.Bridge
       })
     }
+  }
+
+  // Revision 7: the channels joining a running lobby's waters, cut through what is already laid, each crossed by a
+  // stone bridge (from its middle outward, the first place one fits; anywhere it reaches firm ground if none does) so
+  // no land is cut off from the rest. A channel a road already crosses (on a bridge now) needs none.
+  if (rev === 7 && waterLinks.length > 0) {
+    const roadOver = carveLinks({ seed, size, terrain, feature, elevation, height, lake: lakeLevel }, waterLinks)
+    waterLinks.forEach((link, n) => {
+      rivers.push(link)
+      if (roadOver[n]) return
+      const line = link.points
+      const mid = Math.floor(line.length / 2)
+      for (let k = 0; k < line.length * 2; k++) {
+        const loose = k >= line.length
+        const j = k % line.length
+        const i = mid + (j % 2 === 0 ? j / 2 : -(j + 1) / 2)
+        if (i < 1 || i >= line.length - 1) continue
+        const crossing = tryCrossing(line[i], line[i + 1].x - line[i - 1].x, line[i + 1].y - line[i - 1].y, loose)
+        if (!crossing) continue
+        crossings.push(crossing)
+        const tile = (q: Point) => ({ x: Math.floor(q.x), y: Math.floor(q.y) })
+        walkLine(tile(crossing.a), tile(crossing.b), (x, y) => {
+          const t = terrain[y * size + x]
+          if (t === Terrain.River || t === Terrain.Lake) feature[y * size + x] = Feature.Bridge
+        })
+        break
+      }
+    })
   }
 
   for (const inn of inns) {
@@ -877,6 +910,59 @@ export function generateWorld(seed: number, rev = WORLD_REV, keep: RiverKeep[] =
     rivers,
     crossings,
   }
+}
+
+// Cuts channels into a world laid out (revision 7, CLAUDE.md §4.2): every tile within half a channel's width of its
+// line (the edge wandering a little) turns to river water at the bottom of the bed, a road on it to a bridge; the land
+// within `riverWiden.slopeTiles` of the bank is lowered toward the water so the ground meets it. Lakes stay as they are.
+// Gives, per channel, whether a road crosses it (on a bridge now).
+export function carveLinks(
+  w: { seed: number; size: number; terrain: Uint8Array; feature: Uint8Array; elevation: Float32Array; height: Float32Array; lake: number },
+  links: Polyline[],
+): boolean[] {
+  const { seed, size, terrain, feature, elevation, height } = w
+  const slopeTiles = balance.world.riverWiden.slopeTiles
+  // Each wet tile's channel (+1), the last one to reach it.
+  const wet = new Uint16Array(size * size)
+  const lower = new Float32Array(size * size).fill(1)
+  links.forEach((link, n) => {
+    const line = link.points
+    const reach = Math.ceil(link.width + slopeTiles + 1)
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1]
+      const b = line[i]
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const lengthSq = dx * dx + dy * dy || 1
+      const xEnd = Math.min(size - 1, Math.floor(Math.max(a.x, b.x)) + reach)
+      const yEnd = Math.min(size - 1, Math.floor(Math.max(a.y, b.y)) + reach)
+      for (let y = Math.max(0, Math.floor(Math.min(a.y, b.y)) - reach); y <= yEnd; y++) {
+        for (let x = Math.max(0, Math.floor(Math.min(a.x, b.x)) - reach); x <= xEnd; x++) {
+          const t = Math.min(1, Math.max(0, ((x + 0.5 - a.x) * dx + (y + 0.5 - a.y) * dy) / lengthSq))
+          const d = Math.hypot(x + 0.5 - a.x - dx * t, y + 0.5 - a.y - dy * t)
+          const half = (link.width / 2) * (0.85 + 0.3 * valueNoise(x * 0.17, y * 0.17, seed + 87))
+          const index = y * size + x
+          if (d <= half) wet[index] = n + 1
+          else if (d < half + slopeTiles) lower[index] = Math.min(lower[index], 1 - (1 - (d - half) / slopeTiles) ** 2)
+        }
+      }
+    }
+  })
+  const roadOver = links.map(() => false)
+  for (let i = 0; i < size * size; i++) {
+    const t = terrain[i]
+    if (t === Terrain.Lake || t === Terrain.River) continue
+    if (wet[i]) {
+      terrain[i] = Terrain.River
+      elevation[i] = w.lake - 0.0015
+      height[i] = 0
+      if (feature[i] === Feature.Road) {
+        feature[i] = Feature.Bridge
+        roadOver[wet[i] - 1] = true
+      }
+    } else if (lower[i] < 1) height[i] *= lower[i]
+  }
+  return roadOver
 }
 
 // Widens the rivers of a world laid out (CLAUDE.md §4.2): each bank is drawn back by `bankShare` of the river's width
