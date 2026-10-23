@@ -518,7 +518,7 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   32/64, apple-touch ve 192/512 simgeler); yeniden üretmek için `bun scripts/brand-save.ts
   apps/web/public/brand` ile `bun run dev` açıkken `/brand.html?save=5199` açılır.
 - Arayüz yazı tipi Pixelify Sans'tır; ondaki 2 ve 5 zor okunduğu için
-  **rakamlar Tiny5** ile çizilir (`apps/web/src/fonts.ts`). Büyük sayılar
+  **rakamlar Jersey 10** ile çizilir (Tiny5'in 8'i 0 gibi okunuyordu) (`apps/web/src/fonts.ts`). Büyük sayılar
   1,2K / 3,4M diye kısaltılır.
 - Görseller şimdilik **kodla üretilir** (`apps/web/src/game/sprites.ts`,
   binalar `buildingSprites.ts`); ileride aynı ölçüde çizilmiş sprite'larla

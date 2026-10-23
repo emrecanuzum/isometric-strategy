@@ -252,7 +252,7 @@ export function glyph(ctx: CanvasRenderingContext2D, g: Glyph, x: number, y: num
   }
 }
 
-// Words in Pixelify Sans, numbers in Tiny5 (fonts.ts), with a dark outline so they read on any ground.
+// Words in Pixelify Sans, numbers in Jersey 10 (fonts.ts), with a dark outline so they read on any ground.
 export function text(
   ctx: CanvasRenderingContext2D,
   s: string,

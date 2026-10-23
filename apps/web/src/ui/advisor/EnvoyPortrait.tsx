@@ -31,11 +31,12 @@ function faceHalf(y: number) {
   return 8 * (1 - 0.45 * ((v - 0.62) / 0.38) ** 1.4)
 }
 
-function paint(): Uint32Array {
+// The portrait's pixels; without `ground` and `framed` the envoy stands on clear pixels (the brand art, src/brand).
+export function paintEnvoy({ ground = true, framed = true } = {}): Uint32Array {
   const px = new Uint32Array(PW * PH)
   const p = new Paint(px, PW, PH)
   // A damask ground, lit behind the head.
-  for (let y = 0; y < PH; y++) {
+  for (let y = 0; ground && y < PH; y++) {
     for (let x = 0; x < PW; x++) {
       const d = Math.hypot(x - c + 6, (y - 20) * 0.8) / 30
       let l = 3.1 - d * 2.6 + (noise(x * 0.2, y * 0.2, 7) - 0.5) * 0.5
@@ -193,9 +194,12 @@ function paint(): Uint32Array {
   p.set(12, 56, mix(SEAL, INK, 0.4))
   p.set(13, 57, SEAL)
   for (const [x, y, l] of [[18, 52, 3], [19, 52, 3], [20, 52, 2], [18, 53, 2], [19, 53, 2], [20, 53, 1], [19, 54, 1]] as const) p.set(x, y, SKIN[l])
-  frame(p)
+  if (framed) frame(p)
   return px
 }
+
+export const ENVOY_W = PW
+export const ENVOY_H = PH
 
 // The mouth under the moustache: 0 the wry smile, 1 a little open, 2 open wide.
 function mouth(p: Paint, k: number) {
@@ -257,7 +261,7 @@ export function EnvoyPortrait({ size = 96, talking = false, still = false }: { s
   useEffect(() => {
     const ctx = ref.current?.getContext('2d')
     if (!ctx) return
-    painted ??= paint()
+    painted ??= paintEnvoy()
     const image = ctx.createImageData(PW, PH)
     const out = new Uint32Array(image.data.buffer)
     const p = new Paint(out, PW, PH)
