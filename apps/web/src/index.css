@@ -3739,6 +3739,11 @@ button[data-busy]::after {
   }
 }
 
+/* Settings have long rows (a name, a slider, a percent and a switch): wider than the other dialogs. */
+.modal .dialog.settings-dialog {
+  width: min(640px, calc(100vw - var(--gap) * 2));
+}
+
 .settings-dialog .form {
   display: grid;
   gap: calc(var(--px) * 6);
@@ -7457,4 +7462,24 @@ input:not([type='range']):focus-visible {
 }
 .sheet-head .name-note {
   margin-top: calc(var(--px) * -1);
+}
+
+/* The house's news heard at once, in one dialog (dynasty.tsx → HouseDigest): a line per piece, the weightiest first. */
+.house-digest {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.house-digest li {
+  padding: 8px 10px;
+  border-left: 3px solid var(--gold);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.house-digest li p {
+  margin: 4px 0 0;
 }

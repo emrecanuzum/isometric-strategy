@@ -521,7 +521,8 @@ export function surveySite(world: World, site: Point): Survey {
   return {
     ...share,
     yields: {
-      food: clamp(y.base + share.water * y.foodPerWater + share.grass * y.foodPerGrass + share.desert * y.foodPerDesert + swamp),
+      // Food never below foodMin: a dry or rocky site is harder, not a famine for the whole season.
+      food: Math.max(y.foodMin, clamp(y.base + share.water * y.foodPerWater + share.grass * y.foodPerGrass + share.desert * y.foodPerDesert + swamp)),
       materials: clamp(y.base + share.forest * y.materialsPerForest + swamp),
       arms: clamp(y.base + share.mountain * y.armsPerMountain + swamp),
     },
@@ -1785,12 +1786,11 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       if (outbreak) {
         k.sickness = Math.min(balance.institutions.sickness.max, (k.sickness ?? 0) + outbreak.share)
         events.push({ kind: 'outbreak', share: outbreak.share })
+        // Each outbreak may reach the lord's house, once (CLAUDE.md §9.1).
+        if (k.dynasty) k.dynasty = sicknessStrikes(k, next, Math.floor(next / productionMs()), outbreak.share).dynasty
       }
-      // A few of the sick die (CLAUDE.md §9.1), and now and then the sickness reaches the lord's house.
-      if ((k.sickness ?? 0) > 0) {
-        if (k.people !== undefined) k.people = Math.max(0, k.people - k.people * k.sickness! * balance.dynasty.sickness.peoplePerSick)
-        if (k.dynasty) k.dynasty = sicknessStrikes(k, next, Math.floor(next / productionMs())).dynasty
-      }
+      // A few of the sick die (CLAUDE.md §9.1).
+      if ((k.sickness ?? 0) > 0 && k.people !== undefined) k.people = Math.max(0, k.people - k.people * k.sickness! * balance.dynasty.sickness.peoplePerSick)
       // The people's mood drifts toward what the taxes, the queen, the granary, the temple and the day make of it.
       const n = balance.society.night
       k.happiness = happinessStep(happinessOf(k), happinessFor(k, next))
@@ -1976,8 +1976,8 @@ export function sicknessStep(k: Kingdom, at: number) {
   const crew = hospital && done(hospital, at) ? (workerSlots(hospital) === 0 ? 1 : staffOf(hospital) / workerSlots(hospital)) * population(k, at).efficiency : 0
   const healing = share * (s.recoveryPerRound + hospitalHeal(levelOf(k, 'hospital', at)) * crew) * learnt.healing
   const next = Math.max(0, Math.min(s.max, share + falling - healing))
-  // Under half a sick villager left: the village is well again.
-  return next < 1e-4 || next * (k.people ?? 0) < 0.5 ? 0 : next
+  // Not a whole sick villager left: the village is well again (it used to linger at a percent or two).
+  return next < 1e-4 || next * (k.people ?? 0) < s.wellBelowVillagers ? 0 : next
 }
 
 const isWater = (world: World, x: number, y: number) =>

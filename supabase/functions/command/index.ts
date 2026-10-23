@@ -73,9 +73,11 @@ async function rollSite(world: World, lobby: string, seen: Point[]): Promise<Poi
     const land = game.territoryRect(site, 0)
     return !!game.findPlot(world, land, game.TileRule.TradePostOnly) && !!game.findPlot(world, land, game.TileRule.DockOnly)
   }
+  // The very first tries also ask for land that feeds its people (a food multiplier of at least 1).
+  const fed = (site: Point) => game.surveySite(world, site).yields.food >= 1
   for (let attempt = 0; attempt < 24; attempt++) {
     const site = game.assignStartSite(world, Math.random)
-    if (site && game.siteIsClear(site, taken) && game.siteClearOfTowns(site, towns) && !seen.some((s) => s.x === site.x && s.y === site.y) && (attempt >= 16 || reachable(site))) return site
+    if (site && game.siteIsClear(site, taken) && game.siteClearOfTowns(site, towns) && !seen.some((s) => s.x === site.x && s.y === site.y) && (attempt >= 16 || reachable(site)) && (attempt >= 8 || fed(site))) return site
   }
   return refuse('full')
 }

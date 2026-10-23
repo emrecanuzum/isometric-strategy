@@ -662,7 +662,13 @@ function App({
     for (const n of news) houseKnown.current.add(n.key)
     writeKnown(lobby.id, initial.id, houseKnown.current)
     const heard = serverNow()
-    setHouseQueue((q) => [...q, ...news.map((n) => ({ ...n, at: n.at ?? heard }))])
+    const dated = news.map((n) => ({ ...n, at: n.at ?? heard }))
+    // Several at once (back after a while): one dialog for them all; only the widowed queen's, which asks for an
+    // answer, keeps a dialog of its own.
+    const asks = dated.filter((n) => n.kind === 'regnant')
+    const told = dated.filter((n) => n.kind !== 'regnant')
+    const batch = told.length > 1 ? [{ key: `digest:${told.map((n) => n.key).join(',')}`, kind: 'digest' as const, person: told[0].person, items: told, at: Math.min(...told.map((n) => n.at)) }] : told
+    setHouseQueue((q) => [...q, ...batch, ...asks])
   }, [dynasty, lobby.id, initial.id])
   // The crowns' royal houses follow from the lobby's number and the season's start (CLAUDE.md §7.8): every ruler named
   // anywhere is the one reigning now.

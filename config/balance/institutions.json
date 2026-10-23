@@ -296,9 +296,10 @@
   },
   "sickness": {
     "perRound": 0,
-    "spread": 0.01,
-    "starvingFactor": 2,
-    "recoveryPerRound": 0.035,
+    "spread": 0.006,
+    "starvingFactor": 1.5,
+    "recoveryPerRound": 0.05,
+    "wellBelowVillagers": 1,
     "max": 0.6,
     "happinessPerShare": -40,
     "hospitalHealByLevel": [
@@ -307,7 +308,7 @@
       0.1
     ],
     "outbreak": {
-      "chance": 0.9,
+      "chance": 0.3,
       "share": [
         0.03,
         0.08

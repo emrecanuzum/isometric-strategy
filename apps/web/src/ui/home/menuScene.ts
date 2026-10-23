@@ -51,6 +51,10 @@ export interface Scene {
   lakeBottom: (x: number) => number
   mill: { x: number; y: number } | null
   fireflies: { x: number; y: number }[]
+  // The castle's keep (bats wheel round it), the lake's lane for the fisherman's boat, and the mist's rows.
+  keep: { x: number; y: number }
+  boat: { y: number; x0: number; x1: number } | null
+  mist: { y0: number; y1: number }
 }
 
 export function paintScene(W: number, H: number): Scene {
@@ -249,7 +253,9 @@ export function paintScene(W: number, H: number): Scene {
   const top = hy - 16
   const hillY = (x: number) => {
     const d = Math.abs(x - cx)
-    return top + Math.pow(Math.max(0, d - 50), 1.35) * 0.32 + (fbm(x * 0.07, 9, s + 71) - 0.5) * 5
+    // A plateau wide enough for the whole curtain wall and its corner towers (they reach ~60 out), then the slopes.
+    const flat = Math.max(0, d - 66)
+    return top + Math.pow(flat, 1.35) * 0.32 + (fbm(x * 0.07, 9, s + 71) - 0.5) * 5 * Math.min(1, flat / 8)
   }
   for (let x = Math.max(0, cx - 190); x < Math.min(W, cx + 190); x++) {
     const ry = Math.round(hillY(x))
@@ -259,7 +265,7 @@ export function paintScene(W: number, H: number): Scene {
       const slope = clamp((hillY(x + 2) - hillY(x - 2)) / 4, -1.5, 1.5)
       const left = slope < 0
       const ad = Math.abs(x - cx)
-      const steep = ad > 48 && ad < 82 && d < 3 + noise(x * 0.2, 0, s + 72) * 12 * (1 - (ad - 48) / 34)
+      const steep = ad > 64 && ad < 98 && d < 3 + noise(x * 0.2, 0, s + 72) * 12 * (1 - (ad - 64) / 34)
       let c: number
       if (steep) {
         const crack = noise(x * 0.5, y * 0.12, s + 73) > 0.66
@@ -301,7 +307,7 @@ export function paintScene(W: number, H: number): Scene {
     }
   }
   settle(cx - 175, cx - 70, nearShore(cx - 120) + 8, nearShore(cx - 120) + 34, 12, s + 91)
-  settle(W * 0.03, W * 0.3, nearShore(W * 0.15) + 14, nearShore(W * 0.15) + 40, 8, s + 92)
+  settle(W * 0.04, W * 0.2, nearShore(W * 0.12) + 14, nearShore(W * 0.12) + 40, 7, s + 92)
   homes.sort((a, b) => a.y - b.y)
   p.veil(NIGHT, 0.42, () => {
     for (const h of homes) {
@@ -309,19 +315,35 @@ export function paintScene(W: number, H: number): Scene {
       if (top2) chimneys.push(top2)
     }
   })
-  // The windmill: a stone tower on a knoll; its sails turn in `frame`.
+  // The windmill: a tapering stone tower on a grassy knoll in the open meadow (clear of the great pines in front, so
+  // tower and sails are seen together), a thatched cap with the sails' hub on it, a door, a lit window, a sack or two
+  // by the door; its sails turn in `frame`.
   let mill: Scene['mill'] = null
   if (W > 240) {
-    const mx = Math.round(W * 0.09)
-    const my = nearShore(mx) + 10
-    p.veil(NIGHT, 0.4, () => {
-      p.poly([mx - 7, my, mx + 7, my, mx + 4, my - 22, mx - 4, my - 22], (x, y) => tone(STONE_N, 4.2 - ((x - (mx - 7)) / 14) * 2.6 + (y % 4 === 0 ? -0.6 : 0), x, y))
-      p.poly([mx - 6, my - 22, mx + 6, my - 22, mx, my - 30], (x, y) => tone(THATCH, 3 - (x - mx + 6) / 6, x, y))
-      p.rect(mx - 1, my - 5, 3, 5, WOOD[1])
-      p.rect(mx, my - 15, 2, 2, LIT[1])
+    const mx = Math.round(W * 0.255)
+    const my = nearShore(mx) + 22
+    // The knoll.
+    p.disc(mx, my + 2, 17, 5, (x, y) => tone(GRASS_N, 3.2 - (x - mx) / 12 - (y - my) * 0.15 + (rnd(x, y, s + 95) - 0.5) * 0.6, x, y))
+    p.veil(NIGHT, 0.38, () => {
+      // Tower: lit on the moon's side (left), courses of stone, a plinth.
+      p.poly([mx - 8, my, mx + 8, my, mx + 5, my - 26, mx - 5, my - 26], (x, y) => {
+        const u = (x - (mx - 8)) / 16
+        const course = (my - y) % 4 === 0 || (x + Math.floor((my - y) / 4) * 3) % 6 === 0
+        return tone(STONE_N, 4.6 - u * 2.8 - (course ? 0.6 : 0) + (rnd(x, y, s + 96) - 0.5) * 0.4, x, y)
+      })
+      p.rect(mx - 9, my - 2, 18, 2, STONE_N[1])
+      // Cap: a thatched cone with a dark rim.
+      p.poly([mx - 7, my - 26, mx + 7, my - 26, mx + 1, my - 36], (x, y) => tone(THATCH, 3.4 - (x - mx + 7) / 5 + ((y + x) % 3 === 0 ? -0.5 : 0), x, y))
+      p.rect(mx - 7, my - 27, 15, 1, WOOD[1])
+      // Door, window and sacks.
+      p.rect(mx - 2, my - 7, 4, 7, WOOD[1])
+      p.set(mx - 2, my - 7, WOOD[0])
+      p.rect(mx - 1, my - 17, 2, 3, LIT[1])
+      p.disc(mx + 6, my - 1, 2, 2, (x, y) => tone(THATCH, 2.6 - (x - mx - 6) * 0.5, x, y))
+      p.disc(mx + 9, my, 2, 1.6, (x, y) => tone(THATCH, 2.2, x, y))
     })
-    glow(p, mx + 1, my - 14, 5, C(0xffa040), 0.35)
-    mill = { x: mx, y: my - 24 }
+    glow(p, mx, my - 15, 6, C(0xffa040), 0.35)
+    mill = { x: mx + 1, y: my - 28 }
   }
 
   // ---- The castle: a curtain wall between round towers, a gatehouse over the road, a tall keep and a chapel spire.
@@ -376,6 +398,11 @@ export function paintScene(W: number, H: number): Scene {
   const square = (x0: number, x1: number, yb: number, h: number, base = 4.4) => {
     p.box(x0, yb - h, x1, yb, (x, y) => masonry(x, y, x0, x1, base))
     crenels(x0, x1, yb - h)
+  }
+  // A footing of rough stone from the wall's foot down to the hill, so nothing of the castle stands in the air.
+  for (let x = cx - 62; x <= cx + 62; x++) {
+    const ground = Math.round(hillY(x))
+    for (let y = gy; y <= ground + 1; y++) p.set(x, y, tone(STONE_N, 2.4 - (x - cx) / 60 - (y - gy) * 0.08 + (rnd(x, y, s + 104) - 0.5) * 0.9, x, y))
   }
   // Behind: the keep, its corner turrets, the chapel spire.
   square(cx - 4, cx + 24, gy - 10, 44)
@@ -458,7 +485,13 @@ export function paintScene(W: number, H: number): Scene {
   const fireflies: Scene['fireflies'] = []
   for (let k = 0; k < Math.round(W / 30); k++) fireflies.push({ x: rnd(k, 1, s + 141) * W, y: hy + 30 + rnd(k, 2, s + 141) * (H * 0.3) })
 
-  return { w: W, h: H, base: px, sky, water, stars, windows, torches, chimneys, banners, clouds, moon, lakeTop: hy, lakeBottom: nearShore, mill, fireflies }
+  // A lane on the open lake for the boat (left of the river's mouth, clear of the moon's road).
+  const laneY = hy + 6
+  const wet = (x: number) => x >= 0 && x < W && water[laneY * W + x] === 1 && water[(laneY + 3) * W + x] === 1
+  const x0 = Math.round(W * 0.27)
+  const x1 = Math.round(W * 0.4)
+  const boat = W > 240 && wet(x0) && wet(x1) ? { y: laneY, x0, x1 } : null
+  return { w: W, h: H, base: px, sky, water, stars, windows, torches, chimneys, banners, clouds, moon, lakeTop: hy, lakeBottom: nearShore, mill, fireflies, keep: { x: cx + 10, y: gy - 62 }, boat, mist: { y0: hy - 8, y1: Math.round(hy + (H - hy) * 0.3) } }
 }
 
 // One frame of what moves, over a copy of the painting into `out`; `t` in seconds.
@@ -576,14 +609,71 @@ export function frame(sc: Scene, t: number, out: Uint32Array) {
       const a = a0 + (k * Math.PI) / 2
       const dx = Math.cos(a)
       const dy = Math.sin(a)
-      for (let r = 1; r < 15; r++) {
+      // A spar, and from a third of the way out a cloth-covered lattice two pixels wide on its trailing side.
+      for (let r = 1; r < 19; r++) {
         const x = sc.mill.x + dx * r
         const y = sc.mill.y + dy * r
         p.set(x, y, WOOD[1])
-        if (r > 4) p.set(x - dy * 2, y + dx * 2, r % 3 === 0 ? WOOD[1] : C(0x6a6478))
+        if (r > 5) {
+          const cloth = r % 3 === 0 ? WOOD[1] : C(0x8a8296)
+          p.set(x - dy * 1.5, y + dx * 1.5, cloth)
+          p.set(x - dy * 3, y + dx * 3, r % 3 === 0 ? WOOD[1] : C(0x6a6478))
+        }
       }
     }
     p.set(sc.mill.x, sc.mill.y, WOOD[0])
+  }
+  // Mist drifting low over the lake and the meadows: soft banks in ordered dither, never over the sky.
+  for (let y = sc.mist.y0; y < sc.mist.y1 && y < H; y++) {
+    const depth = (y - sc.mist.y0) / Math.max(1, sc.mist.y1 - sc.mist.y0)
+    const thick = Math.sin(depth * Math.PI) * 0.55
+    const row = y * W
+    for (let x = 0; x < W; x++) {
+      if (sc.sky[row + x]) continue
+      const n = noise(x * 0.022 + t * 0.035, y * 0.09, 21) * 0.7 + noise(x * 0.06 - t * 0.05, y * 0.2, 22) * 0.3
+      // In three soft steps (banded like the map's ramps), not speckled.
+      const a = Math.floor(Math.max(0, (n - 0.5) * 2.6 * thick) * 3) / 3
+      if (a <= 0) continue
+      out[row + x] = mix(out[row + x], C(0x8a86b4), Math.min(0.3, a * 0.3))
+    }
+  }
+  // A fisherman's boat crossing the lake slowly, his lantern lit, its light trembling on the water below.
+  if (sc.boat) {
+    const span = sc.boat.x1 - sc.boat.x0
+    const lap = 160
+    const u = (t % lap) / lap
+    const back = u > 0.5
+    const bx = Math.round(sc.boat.x0 + span * (back ? 2 - u * 2 : u * 2))
+    const by = sc.boat.y + Math.round(Math.sin(t * 1.4) * 0.6)
+    const hull = C(0x120c10)
+    for (let i = -4; i <= 4; i++) p.set(bx + i, by, hull)
+    for (let i = -3; i <= 3; i++) p.set(bx + i, by + 1, hull)
+    p.set(bx + (back ? -4 : 4), by - 1, hull)
+    // The fisherman, sitting, and his rod.
+    p.set(bx - 1, by - 1, C(0x1c1418))
+    p.set(bx - 1, by - 2, C(0x1c1418))
+    for (let k = 1; k <= 4; k++) p.set(bx - 1 + (back ? -k : k), by - 2 - k, C(0x3a3040))
+    // The lantern on the bow, flickering, and its reflection.
+    const lx = bx + (back ? -3 : 3)
+    const f = rnd(Math.floor(t * 8), 3, 17)
+    glow(p, lx, by - 2, 5 + f * 1.5, C(0xffa040), 0.32 + f * 0.1)
+    p.set(lx, by - 2, FIRE[f > 0.5 ? 4 : 3])
+    for (let k = 1; k < 9; k++) {
+      const ry = by + 1 + k
+      const rx = lx + Math.round(Math.sin(t * 3 + k * 1.7) * (k / 4))
+      if (ry < H && sc.water[ry * W + rx] && noise(k, t * 2.2, 5) > 0.35) p.dot(rx, ry, C(0xffb860), (1 - k / 9) * 0.6)
+    }
+  }
+  // Bats wheeling round the keep.
+  for (let k = 0; k < 4; k++) {
+    const a = t * (0.8 + k * 0.17) + k * 1.9
+    const bx = Math.round(sc.keep.x + Math.cos(a) * (16 + k * 5))
+    const by = Math.round(sc.keep.y + Math.sin(a * 1.6) * (5 + k) - k * 3)
+    const up = Math.floor(t * 9 + k * 3) % 2 === 0
+    const ink = C(0x08060c)
+    p.set(bx, by, ink)
+    p.set(bx - 1, by + (up ? -1 : 1), ink)
+    p.set(bx + 1, by + (up ? -1 : 1), ink)
   }
   // Fireflies over the meadows.
   sc.fireflies.forEach((f, i) => {

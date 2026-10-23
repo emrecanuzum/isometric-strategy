@@ -75,7 +75,9 @@
     "soonestYears": [8, 16]
   },
   "sickness": {
-    "royalPerShare": 0.001,
+    "royalPerOutbreak": 0.12,
+    "typicalShare": 0.055,
+    "hospitalCutPerLevel": 0.25,
     "peoplePerSick": 0.0006
   },
   "queenForPalaceLevel": 3,

@@ -773,10 +773,14 @@ export function moraleAt(army: Pick<Army, 'path' | 'depart_at' | 'arrive_at' | '
   const depart = Date.parse(army.depart_at)
   const arrive = Date.parse(army.arrive_at)
   const hours = (ms: number) => Math.max(0, ms) / 3_600_000
-  let value = army.morale + m.marchPerHour * hours(Math.min(at, arrive) - depart) * (army.path.length > 1 ? 1 : 0)
+  // Marching and camping in the open wear morale down only to wearFloor: a long campaign tires an army, it does not
+  // break it (battles still can). Morale already lower stays where it is.
+  const floor = Math.min(army.morale, m.wearFloor)
+  let value = Math.max(floor, army.morale + m.marchPerHour * hours(Math.min(at, arrive) - depart) * (army.path.length > 1 ? 1 : 0))
   if (at > arrive) {
     const place = rest(army.path[army.path.length - 1])
-    value += (place === 'home' ? m.homePerHour : place === 'inn' ? m.innPerHour : m.idlePerHour) * hours(at - Math.max(arrive, depart))
+    const change = (place === 'home' ? m.homePerHour : place === 'inn' ? m.innPerHour : m.idlePerHour) * hours(at - Math.max(arrive, depart))
+    value = change < 0 ? Math.max(Math.min(value, floor), value + change) : value + change
   }
   return Math.max(0, Math.min(100, value))
 }

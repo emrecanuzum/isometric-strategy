@@ -679,8 +679,10 @@ export function houseWaiting(d: Dynasty | undefined, now: number, pretender: boo
 
 export interface HouseNews {
   key: string
-  kind: 'birth' | 'death' | 'coronation' | 'council' | 'ofAge' | 'wedding' | 'passing' | 'regnant'
+  kind: 'birth' | 'death' | 'coronation' | 'council' | 'ofAge' | 'wedding' | 'passing' | 'regnant' | 'digest'
   person: Person
+  // A digest: several pieces of news heard at once (back after a while), told in one dialog.
+  items?: HouseNews[]
   heir?: Person | null
   // When it happened (a birth, a death), or when this browser first heard of it: how old the news is, for its shelf
   // life as a popup (CLAUDE.md §9.8).
@@ -754,16 +756,14 @@ export const TITLES: Record<HouseNews['kind'], string> = {
   wedding: L('Kraliçe saraya geldi', 'The queen has come to court'),
   passing: L('Hanedandan bir ölüm', 'A death in the house'),
   regnant: L('Kraliçe tek başına', 'The queen rules alone'),
+  digest: L('Sen yokken hanedanda olanlar', 'What befell the house while you were away'),
 }
 
-const HOUSE_CUES = { birth: 'birth', death: 'death', coronation: 'coronation', council: 'council', ofAge: 'ofAge', wedding: 'wedding', passing: 'death', regnant: 'council' } as const
+const HOUSE_CUES = { birth: 'birth', death: 'death', coronation: 'coronation', council: 'council', ofAge: 'ofAge', wedding: 'wedding', passing: 'death', regnant: 'council', digest: 'coronation' } as const
 
-export function HouseDialog({ news, kingdom, now, online, onClose }: { news: HouseNews; kingdom: Kingdom; now: number; online?: Online | null; onClose(): void }) {
+// What a piece of the house's news says (its dialog, or its line in a digest).
+export function houseText(news: HouseNews, kingdom: Kingdom, now: number) {
   const p = news.person
-  // The house's news, each with its own sound: a lullaby, the funeral bell, a coronation fanfare…
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => playOnce(`house:${news.key}`, HOUSE_CUES[news.kind]), [news.key])
-  const role = news.kind === 'wedding' || news.kind === 'regnant' ? 'queen' : news.kind === 'death' || news.kind === 'coronation' ? 'king' : roleOfPortrait(p)
   const d = kingdom.dynasty
   const sibling = !!d && siblingsOf(d).some((c) => c.id === p.id)
   // Followed by his son (or, with none, his brother).
@@ -813,6 +813,18 @@ export function HouseDialog({ news, kingdom, now, online, onClose }: { news: Hou
                       `Kraliçe ${p.name} saraya geldi. Halk düğünü günlerce kutladı; hükümdarın çocukları onunla doğacak.`,
                       `Queen ${p.name} has come to court. The people celebrated the wedding for days; the ruler's children will be born of her.`,
                     )
+  return text
+}
+
+export function HouseDialog({ news, kingdom, now, online, onClose }: { news: HouseNews; kingdom: Kingdom; now: number; online?: Online | null; onClose(): void }) {
+  const p = news.person
+  // The house's news, each with its own sound: a lullaby, the funeral bell, a coronation fanfare…
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => playOnce(`house:${news.key}`, HOUSE_CUES[news.kind]), [news.key])
+  const role = news.kind === 'wedding' || news.kind === 'regnant' ? 'queen' : news.kind === 'death' || news.kind === 'coronation' ? 'king' : roleOfPortrait(p)
+  const d = kingdom.dynasty
+  if (news.items) return <HouseDigest news={news} kingdom={kingdom} now={now} onClose={onClose} />
+  const text = houseText(news, kingdom, now)
   return (
     <div className="modal" role="dialog" aria-labelledby="house-title">
       <section className="dialog frame away house-dialog">
@@ -823,7 +835,7 @@ export function HouseDialog({ news, kingdom, now, online, onClose }: { news: Hou
             <h2 id="house-title">{TITLES[news.kind]}</h2>
           </div>
         </header>
-        <DynastyArt kind={news.kind === 'passing' ? 'death' : news.kind === 'regnant' ? 'coronation' : news.kind} seed={p.id} />
+        <DynastyArt kind={news.kind === 'passing' ? 'death' : news.kind === 'regnant' || news.kind === 'digest' ? 'coronation' : news.kind} seed={p.id} />
         <div className="person">
           <Portrait
             seed={p.id * 977 + (role === 'queen' ? kingdom.site.y : kingdom.site.x)}
@@ -859,6 +871,39 @@ export function HouseDialog({ news, kingdom, now, online, onClose }: { news: Hou
         ) : (
           <DialogFoot onNext={onClose} />
         )}
+      </section>
+    </div>
+  )
+}
+
+// Several pieces of the house's news heard at once (the lord back after a while): one dialog, the weightiest first, its
+// picture that of the weightiest (CLAUDE.md §9.1).
+const WEIGHT: Record<HouseNews['kind'], number> = { death: 0, coronation: 1, council: 2, regnant: 3, passing: 4, wedding: 5, birth: 6, ofAge: 7, digest: 8 }
+function HouseDigest({ news, kingdom, now, onClose }: { news: HouseNews; kingdom: Kingdom; now: number; onClose(): void }) {
+  const items = [...(news.items ?? [])].sort((a, b) => WEIGHT[a.kind] - WEIGHT[b.kind] || (a.at ?? 0) - (b.at ?? 0))
+  const top = items[0]
+  const unnamed = items.some((n) => n.kind === 'birth' && !n.person.named)
+  return (
+    <div className="modal" role="dialog" aria-labelledby="house-title">
+      <section className="dialog frame away house-dialog">
+        <header className="sheet-head">
+          <Icon name="crown" size={32} />
+          <div>
+            <small>{L(`Hanedandan ${items.length} haber`, `${items.length} pieces of news of the house`)}</small>
+            <h2 id="house-title">{TITLES.digest}</h2>
+          </div>
+        </header>
+        <DynastyArt kind={top.kind === 'passing' ? 'death' : top.kind === 'regnant' || top.kind === 'digest' ? 'coronation' : top.kind} seed={top.person.id} />
+        <ul className="house-digest">
+          {items.map((n) => (
+            <li key={n.key}>
+              <b>{TITLES[n.kind]}</b>
+              <p>{houseText(n, kingdom, now)}</p>
+            </li>
+          ))}
+        </ul>
+        {unnamed && <p className="hint">{L('Adı konmamış çocuklara Saray → Hanedan bölümünden ad koyabilirsin.', 'You can name the unnamed children under Palace → Dynasty.')}</p>}
+        <DialogFoot onNext={onClose} />
       </section>
     </div>
   )

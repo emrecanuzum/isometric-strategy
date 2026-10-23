@@ -294,6 +294,11 @@ export function SitePicker({
                     <b className={s.yields[good] >= 1 ? 'up' : 'down'}>{times(s.yields[good])}</b>
                   </span>
                 ))}
+                {s.yields.food < 1 && (
+                  <small className="down">
+                    <Icon name="warn" size={16} /> {L('Yemek kıt: tarlalar halkı zor doyurur, iskele ve pazar gerekir', 'Food is scarce: the fields will struggle to feed the people; you will need the dock and the market')}
+                  </small>
+                )}
                 {access[i] && <SiteDistances access={access[i]} />}
                 <small>
                   {LAND.filter(([k]) => s[k] >= 0.05)

@@ -1,7 +1,7 @@
 {
   "warrior": {
     "upkeep": {
-      "gold": 0.04,
+      "gold": 0.025,
       "food": 0.1
     }
   },
@@ -43,8 +43,9 @@
   },
   "morale": {
     "start": 100,
-    "marchPerHour": -30,
+    "marchPerHour": -20,
     "idlePerHour": -6,
+    "wearFloor": 45,
     "homePerHour": 120,
     "innPerHour": 240,
     "innTiles": 4

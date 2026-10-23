@@ -357,7 +357,8 @@ main.home-screen:has(> .menu-backdrop) {
 /* The languages as pixel flags under "Devam et": the one in use framed in gold and raised, the other dimmed. */
 .lang-flags {
   display: flex;
-  gap: calc(var(--px) * 4);
+  /* Room for the gold ring of the flag in use (its shadow reaches 3 pixels out). */
+  gap: calc(var(--px) * 7);
   justify-content: center;
 }
 
@@ -387,6 +388,9 @@ main.home-screen:has(> .menu-backdrop) {
 }
 
 .lang-flag.on {
+  /* Above its neighbour, so the ring is never painted over. */
+  position: relative;
+  z-index: 1;
   border-color: #f2d16b;
   box-shadow: 0 0 0 var(--px) #3a2608, 0 0 0 calc(var(--px) * 3) #d9aa3e, 0 calc(var(--px) * 4) 0 0 rgb(0 0 0 / 45%);
   filter: none;

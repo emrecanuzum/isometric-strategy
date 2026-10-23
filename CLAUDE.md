@@ -169,6 +169,16 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
 - **Nehir(ler):** Haritanın her bölgesinden dolanarak geçen bir **ana
   nehir** ve dağlardan doğup ona veya harita kenarına akan **dereler**.
   Amaç: hiçbir krallık suya uzak başlamasın.
+  - **Bütün sular birbirine bağlıdır** (dünya sürümü 7; `worldgen.ts` →
+    `linkLakes`): dereler bir nehre kavuşana kadar akar, harita kenarından
+    çıkmaz; hiçbir nehrin ulaşmadığı, iskele kurulabilecek büyüklükteki
+    (`territory.shoreMinWater`, 20 karo) her göle ortasından en yakın bağlı
+    suya inen bir dere açılır (en büyük gölden başlayarak). Böylece her
+    iskeleden her korsan limanına ve her suya, uzun yoldan da olsa, gemiyle
+    gidilir. Önce haritada 5–18 kopuk su kütlesi vardı (paralel akıp harita
+    kenarından çıkan dereler, nehre değmeyen göller). Denetim:
+    `bun scripts/water-link-check.ts [tohumlar…]`. Sürüm 6 ve öncesindeki
+    lobiler eski dünyalarında kalır.
   - Kıyısına **liman/iskele** kurulabilir → su yolu ticareti.
   - Nehir kenarı tarlalar daha verimli.
   - Köprü veya geçit noktaları stratejik önemdedir.
@@ -515,7 +525,9 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   gökte yıldızlar, başının ardında hâle, yaldızlı halka, omuzları halkanın alt kenarına taşar. Yazı
   Pixelify Sans'tan piksel piksel alınır, menünün başlığı gibi yaldız bantlı, mürekkep kenarlı ve kahverengi
   alt gölgelidir. Dosyalar `public/brand/` altındadır (yatay ve dikey logo, rozet, Instagram 1080, favicon
-  32/64, apple-touch ve 192/512 simgeler); yeniden üretmek için `bun scripts/brand-save.ts
+  32/64, apple-touch ve 192/512 simgeler; ana menünün gece manzarası üstünde iki kat büyük madalyon, ad ve
+  menünün şeridinde "Lordum, haberler var. Çoğu kötü." ile thumbnail'lar: `thumbnail-16x9` 1920×1080,
+  `thumbnail-1x1` 1080×1080, `thumbnail-9x16` 1080×1920; `brandArt.ts` → `thumbnail`); yeniden üretmek için `bun scripts/brand-save.ts
   apps/web/public/brand` çalıştırılır, `bun run dev` açıkken yazdırdığı `/brand.html?save=…&token=…` bağlantısı açılır
   (yalnızca 127.0.0.1'i dinler, bu token'ı ve bilinen PNG adlarını kabul eder).
 - Arayüz yazı tipi Pixelify Sans'tır; ondaki 2 ve 5 zor okunduğu için
@@ -597,7 +609,8 @@ Prosedürel (seed tabanlı), ama **adil başlangıç** kurallarıyla:
 her oyuncunun başlangıç bölgesinden bir ticaret yoluna veya nehre makul
 uzaklık olmalı; kimse tamamen dezavantajlı başlamamalı. Sunucu başlangıç
 yerini çekerken önce ticaret arsası **ve** iskele arsası bulunabilen yerleri
-dener (ilk 16 deneme); yalnızca hiçbiri çıkmazsa böyle bir yer verir
+dener (ilk 16 deneme), ilk 8 denemede de yemek çarpanı en az 1 olan yerleri;
+yalnızca hiçbiri çıkmazsa böyle bir yer verir
 (`command` → `rollSite`). Önceden ~%2 yerde ikisi de yoktu: tüccarsız lordluk.
 
 ---
@@ -921,7 +934,11 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 - **Biyom çarpanları:** Yerin çevresindeki araziye göre üretim çarpanı:
   nehir/göl (balık) ve çayır (tarım) → yemek; orman → yapı malzemesi;
   dağ → savaş malzemesi; bataklık hepsini biraz düşürür, kurak yemeği
-  düşürür. Çarpanlar kuruluşta sabitlenir.
+  düşürür. Çarpanlar kuruluşta sabitlenir. Yemek çarpanı **0,8'in altına
+  inmez** (`yield.foodMin`; önce 0,5'e kadar iniyordu: 0,6'lık bir yerde
+  tarlalar halkı hiç doyuramıyor, lordluk bütün sezon açlık sarmalında
+  kalıyordu; eski lordluklar `20261024120000_food_floor.sql` ile tabana
+  çekildi). Yer kartı yemeği 1'in altındaki yerde "Yemek kıt" uyarısı yazar.
 - **Yemek üretimi** (tur başına, arazi çarpanından önce): tarla 0,6 / 0,9 /
   1,4, iskele 0,6 / 1,2 / 1,8 (seviye 1/2/3); oduncu kampı 1,2 / 2 / 3, silah
   atölyesi (demir) 0,8 / 1,2 / 2. Köylü tur başına 0,1, asker 0,1 yemek
@@ -1179,8 +1196,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
     barınak (inşaattakiler ve yükseltilenler hedef seviyesiyle sayılır)
     sınırı aşacaksa yeni ev kurulmaz, ev yükseltilmez (ör. 23/24'te 3
     köylülük ev kurulamaz); sarayı yükseltmek gerekir.
-  - **Yapı sınırları** saray seviyesiyle artar (saray 1→5): tarla 3 / 4 /
-    6 / 8 / 10, oduncu kampı 2 / 3 / 4 / 5 / 6, silah atölyesi 1 / 2 / 3 /
+  - **Yapı sınırları** saray seviyesiyle artar (saray 1→5): tarla 4 / 5 /
+    6 / 8 / 10 (önce 3 / 4), oduncu kampı 2 / 3 / 4 / 5 / 6, silah atölyesi 1 / 2 / 3 /
     3 / 4, gözcü kulesi 2 / 2 / 3 / 4 / 6, sur kapısı 2 / 2 / 3 / 4 / 5;
     pazar, kışla, casus evi, hapishane, üniversite, hastane, tapınak, tersane,
     iskele ve 5. seviye sarayın üç büyük yapısı (hisar, hanedan anıtı, lonca
@@ -1641,7 +1658,8 @@ Değerler `config/balance/cities.json`; üretim `worldgen.ts`, ticaret
   krallıkların hududuna değen karo olmadığı denetlenir. **4**, 2'nin
   aynısıdır ama şehirler göl kıyısına ve birbirinden en uzağa kurulur.
   **5** her zaman iki şehir kurar, **6** 5'in nehirleri genişletilmiş
-  hâlidir (§4.2); yeni lobiler 6'dır (`command` lobiyi açarken
+  hâlidir (§4.2), **7** 6'nın bütün suları birbirine bağlanmış hâlidir
+  (§4.2); yeni lobiler 7'dir (`command` lobiyi açarken
   `world_rev`'i yazar).
 - **İleride:** paralı asker kiralama, barış görüşmelerinde arabuluculuk,
   rehine/fidye takası, kara borsa, şehirden mal satın alma.
@@ -2835,7 +2853,8 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
   aynı pahada olduğu için yine geçilir. Sonra yol suyun izin verdiği yerde
   düzleştirilir, ama düz çizgi kestiği karolardan kıyıya daha yakın geçemez
   (uçlarına bir buçuk karo kalana dek); yol ortadan birkaç yüzde uzar, süre
-  yine yolun boyundan hesaplanır;
+  yine yolun boyundan hesaplanır (düzleştirme bir noktadan en çok 80 karo
+  ileriye bakar; uzun bir seyir böylece ~1 sn yerine ~0,1 sn'de bulunur);
   filo karo başına 0,5 sn'de yol alır (`navy.json` → `sail`) ve vardığı
   yerde demirler. Hedef dar ya da kıyıya yapışık bir su karosuysa filo
   4 karo içindeki en yakın açık suya (çevresi de su olan karoya) demirler,
@@ -2997,10 +3016,16 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   (Önce 18–30 yaşında ya da 0,5–3 yıl içinde ölüyorlardı: kardeş taht davacısı
   olacak kadar yaşamıyordu, isyan sim testlerinde hiç görülmedi.)
 - **Salgın hanedanı ve halkı öldürür** (`dynasty.json` → `sickness`;
-  `sicknessStrikes`, `economy.ts` üretim turu): her üretim turunda hasta payı
-  kadar bir olasılıkla (pay × 0,001) hanedandan biri (hükümdar, çocuklar,
-  kardeşler, akrabalar, kraliçe ana; kraliçe değil) hastalıktan ölür; bir
-  turda en fazla biri. **Ardılı olmayan hükümdar** (heirOf boş) hastalıktan
+  `sicknessStrikes`, `economy.ts` üretim turu): **her salgında bir kez**
+  zar atılır: %12 × (salgının payı / %5,5) olasılıkla hanedandan biri
+  (hükümdar, çocuklar, kardeşler, akrabalar, kraliçe ana; kraliçe değil)
+  hastalıktan ölür; şifahanenin her seviyesi olasılığı %25 düşürür
+  (`royalPerOutbreak`, `typicalShare`, `hospitalCutPerLevel`). Sezonda lord
+  başına ~100 salgından şifahanesiz ~12, 3. seviye şifahaneyle ~3 hanedan
+  ölümü çıkar. (Önce her tur pay × 0,001'di: salgın başına ~%0,14, kural
+  pratikte ölüydü.) **Hanedandan biri her zaman hayatta kalır:** ölüm, kanı
+  taşıyan son kişiyi (hükümdar, çocuklar, kardeşler, akrabalar) seçmez.
+  **Ardılı olmayan hükümdar** (heirOf boş) hastalıktan
   ölmez (zaten ordunun başına da geçemez). Hastaların küçük bir payı da ölür:
   tur başına köylü × hasta payı × 0,0006 (100 köylü, %10 hasta: saatte ~2).
 - **Kraliçe tek başına** (`Dynasty.regnant`): hükümdar ölür, ne oğlu ne reşit
@@ -3014,7 +3039,12 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   Kraliçe evlenmeden ölürse naipler yönetir, 3 yıl sonra bir akraba çağrılır.
 - **Haberler:** doğum, reşit olma (çocuklar ve kardeşler), ölüm, hanedandan
   birinin ölümü, tahta çıkış, naipler konseyi ve kraliçenin gelişi, oyundaki
-  olay pencereleri gibi çizimli birer pencereyle duyurulur. Haberler hanedanın
+  olay pencereleri gibi çizimli birer pencereyle duyurulur. **Bir anda birden çok
+  haber** birikmişse (lord bir süre yoktu) hepsi **tek bir pencerede**
+  ("Sen yokken hanedanda olanlar") en önemlisi başta sıralanır, resmi en
+  önemlisinin resmidir (`dynasty.tsx` → `HouseDigest`); yalnızca cevap isteyen
+  "Kraliçe tek başına" ayrı pencerede kalır, adı konmamış çocuklar Saray →
+  Hanedan'dan adlandırılır. Haberler hanedanın
   o anki hâlinden çıkarılır ve tarayıcıda hatırlanır (sunucu olayı önce işlese
   de duyurulur); "Sen yokken" raporunda da bir Hanedan sayfası vardır.
   Entrikanın haberleri (§9.1.1) elçinin pencereleriyle gelir.
@@ -3244,7 +3274,9 @@ mertebesindedir.
   hazinesi ~%70–90'a çıkar, sıradan bir lordunki ~%55–65'e; hiçbir seviyede
   dolmaz, çünkü haraççılar saatte bir hazinenin %3'ünü alır (hazine büyüdükçe
   haraç da büyür ve bir dengede durur). Mallar da birikir (tüccar iş stoğunu
-  bırakır, yokken yarım yük götürür). Asker maaşı tur başına 0,04 altın,
+  bırakır, yokken yarım yük götürür). Asker maaşı tur başına 0,025 altın
+  (önce 0,04: bir asker iki köylünün vergisini yiyor, küçük lordluk garnizon
+  besleyemiyordu; normal vergide köylü 0,02 öder),
   lordlar arası haraç saatte 20–150 altındır.
 - **Mal dengesi:** Tüccar **daha az birim, daha pahalıya** satar: 3. seviye
   ticaret noktası seferde 70 birim (önce 140), tur başına ~23 birim; en iyi
@@ -3485,9 +3517,14 @@ mertebesindedir.
   meydan muharebesinde iki taraf için de geçerlidir. Garnizonu boş saray
   kuşatılırsa kuleler birkaç tur direnir ve saldırana kayıp verdirir, sonra
   saray düşer.
-- **Moral** (0–100, ordu başına): yürürken düşer; durunca kendi
+- **Moral** (0–100, ordu başına): yürürken düşer (saatte −20); durunca kendi
   topraklarında toparlanır, bir **hanın** yakınında çok daha hızlı
-  toparlanır, açık arazide yavaşça sarkar.
+  toparlanır, açık arazide yavaşça sarkar (saatte −6). Yürüyüş ve bekleme
+  morali **45'in altına indirmez** (`morale.wearFloor`; morali zaten daha
+  düşük olan ordu olduğu yerde kalır); onu yalnızca muharebe kırar. Önce taban
+  yoktu ve yürüyüş saatte −30'du: 87 kişilik ordu uzun bir seferden sonra moral
+  4,8 ile vardı ve 30 kişilik garnizona tek turda yenildi, uzak sefer pratikte
+  imkânsızdı.
 - **Saha bilgisi** (0–100): ordu bir yerde durdukça artar, kamptan
   uzaklaştıkça azalır; zara en fazla +1,5 ekler.
 - **Muharebe turları** (EU4 gibi): her tur (30 sn) iki taraf da d10 atar,
@@ -3669,13 +3706,17 @@ krallıkta birer tane olur ve 3 seviyelidir.
   çalışmaz, vergi vermez ve mutluluğu düşürür. Hastalık kendiliğinden
   çıkmaz (`sickness.perRound` 0): **yılın salgını** (`sickness.outbreak`;
   `economy.ts` → `outbreakOf`, `outbreakBetween`) her oyun yılında (gerçek
-  saatte) %90 olasılıkla bir kez gelir ve halkın %3–8'ini yatağa düşürür;
+  saatte) %30 olasılıkla bir kez gelir ve halkın %3–8'ini yatağa düşürür;
   anı lordun yeri, lobi ve yıldan çekilir, ay ağırlıklıdır (kış ×3, sonbahar
-  ×1,5, ilkbahar ×1, yaz ×0,5; 336 yılın ~30'u sağlıklı geçer). Günlüğe
-  Önemli olarak yazar. Hastalık hasta çoksa, açlıkta ve soğukta daha hızlı
-  yayılır; hastalar kendiliğinden iyileşir (tur başına %3,5) ve hasta sayısı
-  yarım kişinin altına inince hastalık biter (önce her tur %0,1 temel
-  hastalanma vardı, iyileşmeyle %2'de dengelenip hiç sıfıra inmiyordu).
+  ×1,5, ilkbahar ×1, yaz ×0,5; sezonda ~100 salgın). Günlüğe
+  Önemli olarak yazar. Hastalık hasta çoksa (tur başına pay × 0,006), açlıkta
+  (×1,5) ve soğukta daha hızlı yayılır; hastalar kendiliğinden iyileşir (tur
+  başına %5) ve tek bir hasta köylü bile kalmayınca hastalık biter
+  (`wellBelowVillagers`). Bir salgın ~10 dakikada geçer, lordluk zamanın ~%4'ünde
+  hastadır. (Önce salgın %90 olasılıkla her saat geliyordu, yayılma %1, açlıkta ×2,
+  iyileşme %3,5 ve son hasta yarım kişiydi: hastalık geçmeden yenisi geliyor,
+  halkın hep ~%2'si hasta görünüyordu; daha önce de her tur %0,1 temel hastalanma
+  vardı.)
   **Hastane** doktorlarıyla (işçi) her tur hastaların bir payını daha
   iyileştirir. Krizlerin salgınları (§9.8 günün olayları) ayrıca gelir.
 - **Tapınak:** Mutluluk hedefini yükseltir; askerler **iman gücüyle** zara
@@ -4305,15 +4346,19 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   ay (ışık oradan gelir), karlı iki sıradağ (aya bakan yüzler aydınlık, yarıklar
   boyunca inen kar, eteklerde pus), çam ormanı, hepsini yansıtan bir göl ve
   çayırlardan inen bir dere; sağda tepede surlu bir kale (yuvarlak kuleler,
-  kırmızı külahlar, burç, şapel kulesi, yanan pencereler, sancaklar), altında
-  köy, solda yel değirmeni, meşalelerle kapıya tırmanan yol; önde karanlık
+  kırmızı külahlar, burç, şapel kulesi, yanan pencereler, sancaklar; tepenin
+  düzlüğü bütün surları taşır, surun dibinde kaba taş temel vardır), altında
+  köy, açık çayırda bir tepecik üstünde yel değirmeni (taş gövde, sazdan külah,
+  kapı, yanan pencere; ön plandaki çamların dışında), meşalelerle kapıya tırmanan yol; önde karanlık
   tepeler ve ulu çamlar. Resim ekranın sanat pikseli boyundadır (~290 piksel
   yüksek, cihaz pikseli başına tam sayı katla en yakın komşuyla büyütülür;
   kırpılır, gerilmez), tohumu sabittir, yalnız boyut değişince yeniden boyanır.
   Üstünde saniyede 12 kare kıpırdayanlar çizilir: göz kırpan yıldızlar, kayan
   bulutlar (karanın arkasında), ara sıra kayan yıldız, kuş sürüsü, gölde ayın
   yolu, derede parıltılar, titreyen pencere ve meşaleler, baca dumanı, dalgalanan
-  sancaklar, dönen değirmen kanatları, ateş böcekleri; sekme gizliyken durur,
+  sancaklar, dönen değirmen kanatları, ateş böcekleri, gölün ve kıyının üstünde
+  üç tonlu katmanlar hâlinde süzülen sis, gölde ağır ağır gidip gelen, feneri suya
+  yansıyan bir balıkçı kayığı, şatonun kulesinin çevresinde dönen yarasalar; sekme gizliyken durur,
   "hareketi azalt" tercihinde tek kare kalır. Başlıkta kodla çizilmiş taç
   (kadife başlık, inciler, yakut ve safirler; ara sıra parlar), altın bantlı ve
   mürekkep kenarlı "Crownherald", ortasında baklava olan altın çizgi ve uçları
@@ -4541,6 +4586,11 @@ Sezon sonunda sıralama birden fazla kategoride yapılır:
   (işaretli değilse işaretler), çalan parça altın renkte "Şimdi çalıyor" yazar.
   Çalan parçanın işareti kaldırılırsa bir sonraki ölçüde başka parçaya geçilir.
   Geliştirmede `?music=0..4` ilk parçayı seçer.
+  **Kayıtlar:** parçaların birer çalınışı `apps/web/public/music/` altında MP3'tür (`01-ocak-basinda.mp3` …
+  `05-sarhos-ejder-hani.mp3`, 128–190 kbps VBR, tepe −0,9 dB). Oyunun çaldığı notaların aynısıdır, çevrimdışı
+  kaydedilir (`music.ts` → `renderPiece`: `OfflineAudioContext`, barlar oyundaki gibi bir saniye önden kurulur);
+  parçalar rastgele çalındığı için her kayıt biraz farklıdır. Yeniden kaydetmek için `bun scripts/music-export.ts`
+  çalıştırılır, `bun run dev` açıkken yazdırdığı `/music.html?save=…&token=…` açılır (ffmpeg gerekir).
   Kapatılan müzik sessizce çalmaya devam etmez: sesi kısıldıktan sonra ses
   motoru durdurulur, açılınca yeniden başlar (`music.ts` → `setMuted`). Efekt
   ses motoru da 4 saniye bir şey çalmayınca uyutulur, ilk seste uyanır (yağmur

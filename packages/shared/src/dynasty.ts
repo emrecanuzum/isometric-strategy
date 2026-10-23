@@ -651,15 +651,25 @@ export function educate(k: Kingdom, id: number, focus: Skill, at: number): Kingd
 // share of the people who are sick (balance.dynasty.sickness.royalPerShare a round per share sick). The lady is
 // spared (she is the ruler's), and so is a ruler with nobody to follow him. One at a time; dynastyStep then lays the
 // dead to rest and crowns the heir at that moment.
-export function sicknessStrikes(k: Kingdom, at: number, round: number): Kingdom {
+// An outbreak reaching the lord's house (CLAUDE.md §9.1): once per outbreak, a chance that grows with how hard it struck
+// (royalPerOutbreak at typicalShare) and shrinks with the hospital, that one of the house dies of it. Never the last of
+// the blood: someone of the house (the ruler, his children, brothers and sisters, kin) always lives on, and a ruler
+// with no heir is spared.
+export function sicknessStrikes(k: Kingdom, at: number, round: number, share = k.sickness ?? 0): Kingdom {
   const d = k.dynasty
-  const share = k.sickness ?? 0
   if (!d || share <= 0) return k
-  const chance = share * D().sickness.royalPerShare
+  const s = D().sickness
+  const hospital = k.buildings.filter((b) => b.kind === 'hospital' && b.doneAt <= at).reduce((n, b) => Math.max(n, b.level ?? 1), 0)
+  const chance = s.royalPerOutbreak * (share / s.typicalShare) * Math.max(0, 1 - s.hospitalCutPerLevel * hospital)
+  if (roll(k, round, 94) >= chance) return k
+  const living = (p: Person) => p.deathAt > at
+  const blood = [...(d.king ? [d.king] : []), ...d.children, ...siblingsOf(d), ...kinOf(d)].filter(living)
   const ruler = d.king && !d.council && heirOf(d, at) ? [d.king] : []
-  const exposed = [...ruler, ...d.children, ...siblingsOf(d), ...kinOf(d), ...(d.mother ? [d.mother] : [])]
-  const struck = exposed.find((p) => p.deathAt > at && roll(k, round, p.id, 95) < chance)
-  if (!struck) return k
+  const exposed = [...ruler, ...d.children, ...siblingsOf(d), ...kinOf(d), ...(d.mother ? [d.mother] : [])].filter(living)
+  // Whoever it takes, at least one of the blood must be left.
+  const spared = exposed.filter((p) => blood.some((b) => b.id !== p.id))
+  if (spared.length === 0) return k
+  const struck = spared[Math.floor(roll(k, round, 95) * spared.length) % spared.length]
   return { ...k, dynasty: mapHouse(d, (p) => (p.id === struck.id ? { ...p, deathAt: at, cause: 'sickness' } : p)) }
 }
 
