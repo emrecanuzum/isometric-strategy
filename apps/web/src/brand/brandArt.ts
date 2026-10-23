@@ -1,6 +1,7 @@
 import { ENVOY_H, ENVOY_W, paintEnvoy } from '../ui/advisor/EnvoyPortrait'
 import { ramp } from '../game/sprites'
 import { C, GOLD, Paint, noise, rnd, tone } from '../ui/artKit'
+import { frame as sceneFrame, paintScene } from '../ui/home/menuScene'
 
 // The game's brand art (logo, profile picture, favicon), painted in code like everything else: the envoy (Elçi), the
 // mascot the game is named after, in a gilt medallion against the menu's twilight. Every picture is a small buffer of
@@ -237,4 +238,91 @@ export function logoStacked(): Art {
   blit(a, word, Math.round((w - word.w) / 2), b.h + 2)
   rule(a, Math.round(w * 0.18), Math.round(w * 0.82), b.h + word.h + 7)
   return crop(a)
+}
+
+// A line of plain text (the tagline): Pixelify Sans in parchment with an ink edge, crisp.
+function textLine(text: string, em: number, color = C(0xf2e2b8)): Art {
+  const c = document.createElement('canvas')
+  const ctx = c.getContext('2d')!
+  const font = `400 ${em}px "Pixelify Sans"`
+  ctx.font = font
+  const w = Math.ceil(ctx.measureText(text).width) + 6
+  const h = Math.ceil(em * 1.4) + 4
+  c.width = w
+  c.height = h
+  ctx.font = font
+  ctx.fillStyle = '#fff'
+  ctx.fillText(text, 3, Math.round(em * 1.05) + 1)
+  const data = ctx.getImageData(0, 0, w, h).data
+  const a = art(w, h)
+  for (let i = 0; i < w * h; i++) if (data[i * 4 + 3] > 127) a.px[i] = color
+  outline(a)
+  return crop(a)
+}
+
+// The tagline on the menu's ribbon: a dark band with gilt lips and notched ends.
+function ribbon(text: string, em: number): Art {
+  const t = textLine(text, em)
+  const w = t.w + 22
+  const h = t.h + 6
+  const a = art(w, h)
+  const p = new Paint(a.px, w, h)
+  for (let y = 0; y < h; y++) {
+    const notch = Math.round(5 * (1 - Math.abs(y - (h - 1) / 2) / ((h - 1) / 2)))
+    for (let x = notch; x < w - notch; x++) {
+      const edge = x === notch || x === w - notch - 1 || y === 0 || y === h - 1
+      p.set(x, y, edge ? INK : y === 1 ? C(0xd9aa3e) : y === h - 2 ? C(0x6b4a12) : C(0x1a120e))
+    }
+  }
+  blit(a, t, 11, 3)
+  return a
+}
+
+// Nearest-neighbour enlargement by a whole number.
+function grow(a: Art, k: number): Art {
+  const out = art(a.w * k, a.h * k)
+  for (let y = 0; y < out.h; y++) for (let x = 0; x < out.w; x++) out.px[y * out.w + x] = a.px[Math.floor(y / k) * a.w + Math.floor(x / k)]
+  return out
+}
+
+// Darkens the scene towards the night colour where the words sit, in dithered quarter steps (no blur).
+function shade(a: Art, k: (x: number, y: number) => number) {
+  const p = new Paint(a.px, a.w, a.h)
+  for (let y = 0; y < a.h; y++) for (let x = 0; x < a.w; x++) p.tint(x, y, C(0x05060e), k(x, y))
+}
+
+export type Shape = 'square' | 'wide' | 'tall'
+
+// The thumbnail: the menu's dusk panorama, the envoy's medallion at twice the art pixel, the name and the tagline on
+// its ribbon. 270 art pixels on the short side (the panorama is drawn for about that height), exported at 4×.
+export function thumbnail(shape: Shape, tagline: string): Art {
+  const [w, h] = shape === 'wide' ? [480, 270] : shape === 'tall' ? [270, 480] : [270, 270]
+  const sc = paintScene(w, h)
+  const a = art(w, h)
+  sceneFrame(sc, 3.2, a.px)
+  const b = grow(badge(64), 2)
+  if (shape === 'wide') {
+    const word = crop(wordmark('Crownherald', 40))
+    const rib = ribbon(tagline, 12)
+    const bx = 28
+    const by = Math.round((h - b.h) / 2) - 18
+    const tx = bx + b.w + 14
+    const ty = by + 30
+    shade(a, (x, y) => 0.75 - Math.hypot((x - (tx + word.w / 2 - 50)) / 300, (y - ty - 20) / 120))
+    blit(a, b, bx, by)
+    blit(a, word, tx, ty)
+    rule(a, tx + 4, tx + word.w - 4, ty + word.h + 5)
+    blit(a, rib, tx + Math.round((word.w - rib.w) / 2), ty + word.h + 14)
+  } else {
+    const word = crop(wordmark('Crownherald', shape === 'tall' ? 38 : 36))
+    const rib = ribbon(tagline, shape === 'tall' ? 11 : 10)
+    const by = shape === 'tall' ? 64 : 14
+    const wy = by + b.h + 6
+    shade(a, (x, y) => 0.7 - Math.hypot((x - w / 2) / 220, (y - wy - 10) / (shape === 'tall' ? 200 : 120)))
+    blit(a, b, Math.round((w - b.w) / 2), by)
+    blit(a, word, Math.round((w - word.w) / 2), wy)
+    rule(a, Math.round(w / 2 - word.w / 2 + 6), Math.round(w / 2 + word.w / 2 - 6), wy + word.h + 5)
+    blit(a, rib, Math.round((w - rib.w) / 2), wy + word.h + 14)
+  }
+  return a
 }

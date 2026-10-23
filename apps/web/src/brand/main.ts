@@ -1,5 +1,7 @@
+import '@fontsource/pixelify-sans/latin-400.css'
+import '@fontsource/pixelify-sans/latin-ext-400.css'
 import '@fontsource/pixelify-sans/latin-600.css'
-import { type Art, badge, favicon, logoStacked, logoWide } from './brandArt'
+import { type Art, badge, favicon, logoStacked, logoWide, thumbnail } from './brandArt'
 
 // A dev-only page (/brand.html) that paints the brand art and, with ?save=<port>&token=<token>, posts every export as a PNG to a
 // local helper that writes it under public/brand (see CLAUDE.md §4.2.1 for the art's rules).
@@ -36,8 +38,13 @@ function squareOf(a: Art, size: number, fill?: string) {
 }
 
 await document.fonts.load('600 26px "Pixelify Sans"')
+await document.fonts.load('400 12px "Pixelify Sans"', 'Çğışöü')
 
+const TAGLINE = 'Lordum, haberler var. Çoğu kötü.'
 const exports: [string, HTMLCanvasElement][] = [
+  ['thumbnail-16x9.png', canvasOf(thumbnail('wide', TAGLINE), 4)],
+  ['thumbnail-1x1.png', canvasOf(thumbnail('square', TAGLINE), 4)],
+  ['thumbnail-9x16.png', canvasOf(thumbnail('tall', TAGLINE), 4)],
   ['logo-wide.png', canvasOf(logoWide(), 4)],
   ['logo-wide@2x.png', canvasOf(logoWide(), 8)],
   ['logo-stacked.png', canvasOf(logoStacked(), 6)],

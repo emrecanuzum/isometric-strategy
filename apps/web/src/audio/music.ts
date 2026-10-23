@@ -64,7 +64,7 @@ const weighted = <T>(items: [T, number, number][]) => {
 
 // The reverb's impulse: one channel (a stereo impulse makes the convolver do four convolutions instead of two, and
 // it runs for as long as the music plays; CLAUDE.md §12).
-function impulse(ctx: AudioContext, seconds: number) {
+function impulse(ctx: BaseAudioContext, seconds: number) {
   const length = Math.floor(ctx.sampleRate * seconds)
   const buffer = ctx.createBuffer(1, length, ctx.sampleRate)
   const data = buffer.getChannelData(0)
@@ -89,13 +89,56 @@ export interface Music {
 }
 
 export function startMusic(muted: boolean, volume = 1, tracks: TrackId[] = TRACKS.map((t) => t.id)): Music {
+  return engine(new AudioContext(), muted, volume, tracks) as Music
+}
+
+// One pass of a piece, bounced offline to a buffer (the recordings in public/music; see scripts/music-export.ts): the
+// same notes the game plays, ending where the game would move on to the next piece, with the reverb's tail and a short
+// fade. Normalised to a peak of 0.9. Bars are scheduled a second ahead of the render, as the live timer does: scheduled
+// all at once, every note's nodes would stay alive for the whole render and it would crawl.
+export async function renderPiece(track: TrackId, sampleRate = 44100): Promise<AudioBuffer> {
+  const piece = TRACKS.find((t) => t.id === track)
+  if (!piece) throw new Error(`no piece ${track}`)
+  // Long enough for any piece; the buffer is cut where it ends.
+  const ctx = new OfflineAudioContext(2, sampleRate * 420, sampleRate)
+  const ahead = engine(ctx, false, 1, [track], track) as (until: number) => number | null
+  let end: number | null = ahead(1)
+  for (let t = 0.5; t < 419; t += 0.5) {
+    void ctx.suspend(t).then(() => {
+      end ??= ahead(t + 1)
+      void ctx.resume()
+    })
+  }
+  const rendered = await ctx.startRendering()
+  if (end === null) throw new Error(`${track} did not end`)
+  const tail = 3.5
+  const length = Math.min(rendered.length, Math.ceil((end + tail) * sampleRate))
+  const out = new AudioBuffer({ numberOfChannels: 2, length, sampleRate })
+  let peak = 0
+  for (let c = 0; c < 2; c++) {
+    const data = rendered.getChannelData(Math.min(c, rendered.numberOfChannels - 1)).subarray(0, length)
+    for (const v of data) peak = Math.max(peak, Math.abs(v))
+    out.copyToChannel(data, c)
+  }
+  const k = peak > 0 ? 0.9 / peak : 1
+  const fade = Math.floor(tail * sampleRate)
+  for (let c = 0; c < 2; c++) {
+    const data = out.getChannelData(c)
+    for (let i = 0; i < length; i++) data[i] *= k * Math.min(1, (length - i) / fade)
+  }
+  return out
+}
+
+// The music's graph and its turns on a context: live (an AudioContext driven by a timer; returns the Music handle) or
+// offline (`only` set: that piece alone; returns a function that schedules its bars up to a time and, once the piece
+// is over, gives the time it ends).
+function engine(ctx: BaseAudioContext, muted: boolean, volume: number, tracks: TrackId[], only?: TrackId): Music | ((until: number) => number | null) {
   let allowed = new Set(tracks)
   const listeners = new Set<(track: TrackId) => void>()
   let level = VOLUME * Math.min(1, Math.max(0, volume))
   // iOS 17+: play through the ringer/silent switch like a media player instead of being muted by it.
   const session = (navigator as { audioSession?: { type: string } }).audioSession
-  if (session) session.type = 'playback'
-  const ctx = new AudioContext()
+  if (session && !only) session.type = 'playback'
   const master = ctx.createGain()
   master.gain.value = 0
   master.connect(ctx.destination)
@@ -460,7 +503,7 @@ export function startMusic(muted: boolean, volume = 1, tracks: TrackId[] = TRACK
   // development, to hear one).
   const asked = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get('music') ?? NaN) : NaN
   const choices = () => pieces.filter((p) => allowed.has(p.name))
-  let piece = pieces[asked] ?? choices()[0] ?? tavern
+  let piece = (only && pieces.find((p) => p.name === only)) || (pieces[asked] ?? choices()[0] ?? tavern)
   let wanted: Piece | null = null // asked for by the player: plays from the next bar
   out.gain.value = piece.loud ?? 1
   let pieceStart = ctx.currentTime + 0.2
@@ -541,13 +584,31 @@ export function startMusic(muted: boolean, volume = 1, tracks: TrackId[] = TRACK
       bar++
     }
   }
+  if (only) {
+    // Offline: the piece's bars up to where it would give way, at full level.
+    master.gain.value = level
+    return (until: number) => {
+      while (barStart < until) {
+        if (bar > 0 && bar % piece.progression.length === 0 && barStart - pieceStart >= piece.seconds) {
+          stopDrone(barStart)
+          breath.stop(barStart + 3)
+          return barStart
+        }
+        scheduleBar(barStart)
+        barStart += piece.bar * piece.stepS
+        bar++
+      }
+      return null
+    }
+  }
+  const live = ctx as AudioContext
   const timer = setInterval(tick, TICK_MS)
   tick()
 
   // Hidden tabs stay silent. Muted music is not played at all (CLAUDE.md §12): the audio is held once it has faded out,
   // rather than playing on at no volume.
   let hold = 0
-  const onVisibility = () => void (document.hidden || muted ? ctx.suspend() : ctx.resume())
+  const onVisibility = () => void (document.hidden || muted ? live.suspend() : live.resume())
   document.addEventListener('visibilitychange', onVisibility)
 
   if (!muted) fadeTo(level, FADE_IN_S)
@@ -563,11 +624,11 @@ export function startMusic(muted: boolean, volume = 1, tracks: TrackId[] = TRACK
         silent.start()
         unlocked = true
       }
-      if (ctx.state !== 'running') void ctx.resume()
+      if (ctx.state !== 'running') void live.resume()
       // Unlocked inside the gesture all the same, then held again while muted.
       if (muted) {
         clearTimeout(hold)
-        hold = window.setTimeout(() => muted && void ctx.suspend(), 600)
+        hold = window.setTimeout(() => muted && void live.suspend(), 600)
         return true
       }
       return ctx.state === 'running'
@@ -575,9 +636,9 @@ export function startMusic(muted: boolean, volume = 1, tracks: TrackId[] = TRACK
     setMuted(value) {
       muted = value
       clearTimeout(hold)
-      if (!value && !document.hidden && ctx.state !== 'running') void ctx.resume()
+      if (!value && !document.hidden && ctx.state !== 'running') void live.resume()
       fadeTo(value ? 0 : level, value ? 0.4 : 1.5)
-      if (value) hold = window.setTimeout(() => muted && void ctx.suspend(), 600)
+      if (value) hold = window.setTimeout(() => muted && void live.suspend(), 600)
     },
     setVolume(value) {
       level = VOLUME * Math.min(1, Math.max(0, value))
@@ -605,7 +666,7 @@ export function startMusic(muted: boolean, volume = 1, tracks: TrackId[] = TRACK
       document.removeEventListener('visibilitychange', onVisibility)
       breath.stop()
       for (const o of drone?.oscs ?? []) o.stop()
-      ctx.close()
+      live.close()
     },
   }
 }
