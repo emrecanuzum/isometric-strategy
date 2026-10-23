@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { balance, overreachOf, tributeTalk, tributeTalkReact, tributeTalkScript } from '@game/shared'
+import { balance, overreachOf, tributeTalk, tributeTalkReact, tributeTalkScript, unansweredTribute } from '@game/shared'
 import { supabase } from '../lib/supabase'
 import { L, locale, localPayload } from '../lib/i18n'
 import type { Envoy as EnvoyRow, Operation, PeaceTerms, SpyTopic, TrailMark } from '@game/shared'
@@ -103,7 +103,7 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         title: L(`${p.from} elçisi geldi`, `An envoy from ${p.from} has arrived`),
         text:
           p.kind === 'tribute'
-            ? L(`${p.from} elçisi kapıda, lordum; yüzü de pek pişkin. Her üretim turunda ${p.gold} altın haraç istiyor. Kabul edersen ilişkiniz ${balance.diplomacy.tribute.accept} düşer; reddedersen ${balance.diplomacy.tribute.reject} düşer. Yani iki yol da yokuş aşağı; ben olsam bugün hiç kalkmazdım yataktan.`, `The envoy of ${p.from} is at the gate, my lord, with a rather brazen face. He demands ${p.gold} gold in tribute every production round. Accept and your relations drop by ${balance.diplomacy.tribute.accept}; refuse and they drop by ${balance.diplomacy.tribute.reject}. Both roads run downhill; were I you, I would not have got out of bed today.`)
+            ? L(`${p.from} elçisi kapıda, lordum; yüzü de pek pişkin. Saatte ${p.gold} altın haraç istiyor. Kabul edersen ilişkiniz ${balance.diplomacy.tribute.accept} düşer; reddedersen ${balance.diplomacy.tribute.reject} düşer. Yani iki yol da yokuş aşağı; ben olsam bugün hiç kalkmazdım yataktan.`, `The envoy of ${p.from} is at the gate, my lord, with a rather brazen face. He demands ${p.gold} gold in tribute an hour. Accept and your relations drop by ${balance.diplomacy.tribute.accept}; refuse and they drop by ${balance.diplomacy.tribute.reject}. Both roads run downhill; were I you, I would not have got out of bed today.`)
             : p.kind === 'alliance'
               ? L(`${p.from} seninle ittifak kurmak istiyor, lordum. Müttefik orduları birbirini korur; yani bir dahaki savaşta arkasına saklanacağımız bir ordu daha olur.`, `${p.from} wishes to form an alliance with you, my lord. Allied armies protect one another; which is to say, next war we will have one more army to hide behind.`)
               : p.kind === 'marriage'
@@ -138,7 +138,7 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
         title: L(`${p.by}: ${kind(p.kind)} ${p.accepted ? 'kabul edildi' : p.expired ? 'cevapsız kaldı' : 'reddedildi'}`, `${p.by}: ${kind(p.kind)} ${p.accepted ? 'accepted' : p.expired ? 'went unanswered' : 'refused'}`),
         text: p.accepted
           ? p.kind === 'tribute'
-            ? L(`${p.by} artık her turda ${p.gold} altın ödeyecek. Yüzlerini görmeliydin, lordum; limon yemiş gibiydiler.`, `${p.by} will now pay ${p.gold} gold every round. You should have seen their faces, my lord; as if they had bitten a lemon.`)
+            ? L(`${p.by} artık saatte ${p.gold} altın ödeyecek. Yüzlerini görmeliydin, lordum; limon yemiş gibiydiler.`, `${p.by} will now pay ${p.gold} gold an hour. You should have seen their faces, my lord; as if they had bitten a lemon.`)
             : p.kind === 'alliance'
               ? vary(n, [
                   L(`${p.by} artık müttefikin. Sırtımız sağlam, lordum; en azından kâğıt üstünde.`, `${p.by} is now your ally. Our backs are covered, my lord; on paper, at least.`),
@@ -488,7 +488,7 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
       return {
         icon: 'banner',
         title: L(`${crown(p.crown)} haraççıları kapında`, `Tribute collectors of ${crown(p.crown)} at your gate`),
-        text: L(`Lordum, yine onlar. Rakip taç ${crown(p.crown)} haraççıları sarayına dayandı (her ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelirler; keşke tüccarımız bu kadar dakik olsa) ve ${fmt(Number(p.amount))} altın${share} haraç istiyor. Ödersen yollarına giderler. Reddedersen o tacın lordlarıyla ilişkin ${-balance.cities.crown.patrol.refuseRelation} düşer. ${Math.round(balance.cities.crown.patrol.answerSeconds / 60)} dakika içinde cevap vermezsen haraç kendiliğinden ödenir, ama oyundaysan %${Math.round((balance.cities.crown.patrol.tribute.afkFactor - 1) * 100)} fazlasıyla: ${fmt(Math.round(Number(p.amount) * balance.cities.crown.patrol.tribute.afkFactor))} altın. Başlarıyla konuşmak da bir yol; tatlı dil bazen haracı bile indirir.`, `My lord, it is them again. The tribute collectors of the rival crown, ${crown(p.crown)}, are at your palace (they come every ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} minutes; if only our merchant were so punctual) and demand ${fmt(Number(p.amount))} gold${share} in tribute. Pay and they go on their way. Refuse and your relations with that crown's lords drop by ${-balance.cities.crown.patrol.refuseRelation}. If you do not answer within ${Math.round(balance.cities.crown.patrol.answerSeconds / 60)} minutes, the tribute is paid automatically, but if you are in the game, with ${Math.round((balance.cities.crown.patrol.tribute.afkFactor - 1) * 100)}% extra: ${fmt(Math.round(Number(p.amount) * balance.cities.crown.patrol.tribute.afkFactor))} gold. Talking to their captain is another way; a sweet tongue sometimes even lowers the tribute.`),
+        text: L(`Lordum, yine onlar. Rakip taç ${crown(p.crown)} haraççıları sarayına dayandı (her ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelirler; keşke tüccarımız bu kadar dakik olsa) ve ${fmt(Number(p.amount))} altın${share} haraç istiyor. Ödersen yollarına giderler. Reddedersen o tacın lordlarıyla ilişkin ${-balance.cities.crown.patrol.refuseRelation} düşer. ${Math.round(balance.cities.crown.patrol.answerSeconds / 60)} dakika içinde cevap vermezsen haraç kendiliğinden ödenir, ama oyundaysan %${Math.round((balance.cities.crown.patrol.tribute.afkFactor - 1) * 100)} fazlasıyla: ${fmt(unansweredTribute(Number(p.amount), 1, 1, Number(p.gold) > 0 ? Number(p.gold) : Infinity).amount)} altın. Başlarıyla konuşmak da bir yol; tatlı dil bazen haracı bile indirir.`, `My lord, it is them again. The tribute collectors of the rival crown, ${crown(p.crown)}, are at your palace (they come every ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} minutes; if only our merchant were so punctual) and demand ${fmt(Number(p.amount))} gold${share} in tribute. Pay and they go on their way. Refuse and your relations with that crown's lords drop by ${-balance.cities.crown.patrol.refuseRelation}. If you do not answer within ${Math.round(balance.cities.crown.patrol.answerSeconds / 60)} minutes, the tribute is paid automatically, but if you are in the game, with ${Math.round((balance.cities.crown.patrol.tribute.afkFactor - 1) * 100)}% extra: ${fmt(unansweredTribute(Number(p.amount), 1, 1, Number(p.gold) > 0 ? Number(p.gold) : Infinity).amount)} gold. Talking to their captain is another way; a sweet tongue sometimes even lowers the tribute.`),
       }
     }
     case 'patrol_tip':
@@ -795,6 +795,28 @@ export function describe(n: Notice, online: Online): { icon: IconName; title: st
           L(`Suyun üstünde ${p.name} adına yalnızca bir kırık direk yüzüyor; filon takibi bıraktı.`, `All that floats where ${p.name} was is a broken mast; your fleet gave up the chase.`),
         ]),
       }
+    case 'ship_lost': {
+      // A ship sunk by pirates on a sea-trade voyage or a pirate hunt (CLAUDE.md §8.5).
+      const ship = ({ galley: L('kadırga', 'galley'), cog: L('koka', 'cog'), corsair: L('çektiri', 'raider') } as Record<string, string>)[String(p.ship)] ?? L('gemi', 'ship')
+      const fleet = L(`${p.fleet}. filo`, `Fleet ${p.fleet}`)
+      const cargo = Number(p.lost) > 0 && p.good ? L(` ve ${fmt(Number(p.lost))} ${RESOURCE_NAMES[p.good as keyof typeof RESOURCE_NAMES].toLocaleLowerCase(locale())}`, ` and ${fmt(Number(p.lost))} ${RESOURCE_NAMES[p.good as keyof typeof RESOURCE_NAMES].toLocaleLowerCase(locale())}`) : ''
+      return {
+        icon: 'ship',
+        title: L(`Bir ${ship} battı`, `A ${ship} was sunk`),
+        text:
+          p.cause === 'hunt'
+            ? vary(n, [
+                L(`${fleet} korsan avında bir ${ship} kaybetti, lordum. Korsanları kovalarken korsanlar da bizi kovalamış; deniz iki yönlü bir yoldur.`, `${fleet} lost a ${ship} hunting pirates, my lord. While we chased the pirates, the pirates chased us; the sea is a two-way road.`),
+                L(`Korsan avından acı haber: ${fleet} bir ${ship} kaybetti. Daha büyük bir filo daha az gemi kaybeder; bunu ben söylemedim, amiral söyledi.`, `Bitter news from the pirate hunt: ${fleet} lost a ${ship}. A bigger fleet loses fewer ships; I did not say that, the admiral did.`),
+                L(`${fleet} korsanların peşindeyken bir ${ship} dalgalara gömüldü. Tayfadan kurtulanlar yüzerek döndü; ben olsam hâlâ yüzüyor olurdum.`, `${fleet} lost a ${ship} to the waves while after the pirates. The survivors swam back; I would still be swimming.`),
+              ])
+            : vary(n, [
+                L(`Korsanlar ${fleet} filosunu yolda bastı: bir ${ship}${cargo} gitti, lordum. Eskort koymayan kervan da gemi de sonunda bunu yaşar.`, `Pirates fell on ${fleet} on the way: a ${ship}${cargo} lost, my lord. A voyage without an escort meets this sooner or later.`),
+                L(`Deniz ticaretinden kara haber: korsanlar bir ${ship}${cargo} aldı. Filoya kadırga ya da çektiri katarsak bir dahakine onlar ağlar.`, `Black news from the sea trade: pirates took a ${ship}${cargo}. Add a galley or a raider to the fleet and next time they will be the ones weeping.`),
+                L(`${fleet} korsanlara yenildi; bir ${ship}${cargo} battı. Kaptan "sis vardı" diyor; ben de vardı diyorum, gözlerinde.`, `${fleet} was beaten by pirates; a ${ship}${cargo} went down. The captain says "there was fog"; I say there was, in his eyes.`),
+              ]),
+      }
+    }
     case 'pirate_escaped':
       return {
         icon: 'warn',

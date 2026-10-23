@@ -262,6 +262,7 @@ const REFUSALS: Record<string, string> = {
   fleets: L('En fazla 2 filon olabilir', 'You can have at most 2 fleets'),
   ships: L('Önce gemi seç', 'Pick ships first'),
   away: L('Filo uzakta; önce geri çağır', 'The fleet is away; recall it first'),
+  offDock: L('Filo iskeleden uzakta; önce iskeleye yüzdür', 'The fleet is far from the dock; sail it back first'),
   dock: L('Önce iskeleni kur', 'Build your dock first'),
   cargo: L('Filoda yük taşıyacak gemi yok', 'The fleet has no ship to carry cargo'),
   warships: L('Bunun için savaş gemisi (kadırga ya da çektiri) gerekir', 'This needs warships (galleys or raiders)'),
@@ -314,7 +315,7 @@ const refusal = (e: unknown) => {
 }
 
 // News that goes against the player: kept under the journal's "Önemli" tab.
-const HURTFUL = new Set(['king_fell', 'siege_people', 'fleet_turned', 'town_revolt', 'town_lost_revolt', 'patrol_tribute', 'patrol_ignored', 'patrol_taken', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed', 'cargo_lost', 'outlaw_road', 'pirate_waters', 'outlaw_escaped', 'pirate_escaped', 'haven_turned'])
+const HURTFUL = new Set(['king_fell', 'siege_people', 'fleet_turned', 'town_revolt', 'town_lost_revolt', 'patrol_tribute', 'patrol_ignored', 'patrol_taken', 'army_threat', 'war_declared', 'trade_raided', 'raid_repelled', 'operation_struck', 'spy_caught', 'spy_lost', 'tower_losses', 'alliance_broken', 'envoy_insult', 'peace_enforced', 'order_failed', 'cargo_lost', 'outlaw_road', 'pirate_waters', 'outlaw_escaped', 'pirate_escaped', 'haven_turned', 'ship_lost'])
 // War news keeps longer as a popup (CLAUDE.md §9.8: the popups' shelf life).
 const WAR_NEWS = new Set(['battle_start', 'battle_end', 'war_declared', 'peace_enforced', 'king_fell', 'king_command', 'siege_people', 'town_siege', 'town_taken', 'town_held', 'town_siege_lifted', 'naval_battle'])
 function noticeHurts(n: Notice, me: string | undefined) {
@@ -2260,22 +2261,32 @@ function App({
 
   // The envoy's dialogs, one at a time, once their moment has come.
   // A tribute demand still waiting for an answer comes before older news: it is paid on its own when its time runs out.
+  // Routine news marked `quiet` by the server (a patrol passing, a tribute paid while away) is journaled, not shown.
+  const loud = (n: Notice) => !(n.payload as { quiet?: boolean }).quiet
   const notice =
-    layer.notices.find((n) => n.kind === 'patrol_tribute' && Date.parse(n.show_at) <= now && Number((n.payload as { expiresAt?: number }).expiresAt) > now) ??
-    layer.notices.find((n) => Date.parse(n.show_at) <= now) ??
+    layer.notices.find((n) => loud(n) && n.kind === 'patrol_tribute' && Date.parse(n.show_at) <= now && Number((n.payload as { expiresAt?: number }).expiresAt) > now) ??
+    layer.notices.find((n) => loud(n) && Date.parse(n.show_at) <= now) ??
     null
   // Every piece of news is also written in the journal, on the envoy's paper (its sound plays as its dialog opens:
   // Envoy.tsx → soundForNotice).
   // (Each once: this runs every render, and describing every notice each second was wasted work, CLAUDE.md §12.)
   const journaled = useRef(new Set<number>())
   useEffect(() => {
+    const quiet: number[] = []
     for (const n of layer.notices) {
       if (journaled.current.has(n.id)) continue
       const at = Date.parse(n.show_at)
       if (at > now) continue
       journaled.current.add(n.id)
+      if (!loud(n)) quiet.push(n.id)
+      // A ship lost at sea is already in the journal, from the same events on this side (journal.ts).
+      if (n.kind === 'ship_lost') continue
       const { icon, title, text } = describeNotice(n, online)
       noteJournal(n.id, at, { icon, title, text: text || undefined, important: noticeHurts(n, kingdom?.name), src: n })
+    }
+    if (quiet.length > 0) {
+      markSeen(quiet)
+      dropNotices(quiet)
     }
   })
   // The liege's royal envoy (CLAUDE.md §7.8): the request of the hour opens its dialog once (remembered in this
@@ -2324,7 +2335,7 @@ function App({
   }, [away])
   const [lineSeen, setLineSeen] = useState(0)
   const [closedTitles, setClosedTitles] = useState<SummaryItem[] | null>(null)
-  const dueNotices = layer.notices.filter((n) => Date.parse(n.show_at) <= now)
+  const dueNotices = layer.notices.filter((n) => loud(n) && Date.parse(n.show_at) <= now)
   const waiting = dueNotices.length + houseQueue.length + fortunes.length + crownQueue.length
   useEffect(() => {
     if (waiting === 0 && lineSeen !== 0) setLineSeen(0)

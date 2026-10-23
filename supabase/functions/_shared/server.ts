@@ -153,6 +153,7 @@ export async function mutateKingdom(
       .maybeSingle()
     if (written) {
       await applySold(row.lobby_id, settled.sold, at, settled.innSold)
+      await tellEvents(row.lobby_id, id, settled.events, at)
       return written as Row
     }
   }
@@ -255,6 +256,17 @@ export async function notify(lobby: string, kingdoms: number[], kind: string, pa
 }
 
 export const nameOf = (rows: Row[], id: number) => rows.find((r) => r.id === id)?.name ?? '?'
+
+// What a lordship lived through while it was settled on the server that the envoy should come and tell (the rest is in
+// the journal the client writes from the same events): a ship lost to pirates (CLAUDE.md §8.5). Each event is met once,
+// when the state it belongs to is written.
+// deno-lint-ignore no-explicit-any
+export async function tellEvents(lobby: string, kingdom: number, events: any[], at: number) {
+  for (const e of events ?? []) {
+    if (e.kind === 'voyage' && e.pirates && !e.pirates.won && e.pirates.sunk) await notify(lobby, [kingdom], 'ship_lost', { cause: 'voyage', ship: e.pirates.sunk, good: e.good, lost: e.pirates.lost ?? 0, fleet: e.fleet }, at)
+    if (e.kind === 'hunt' && e.sunk) await notify(lobby, [kingdom], 'ship_lost', { cause: 'hunt', ship: e.sunk, fleet: e.fleet }, at)
+  }
+}
 
 // ---- The world's people -------------------------------------------------------------------------------------------
 

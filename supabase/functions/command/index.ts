@@ -32,6 +32,7 @@ import {
   rememberWorld,
   seasonStartOf,
   syncWarFlags,
+  tellEvents,
   worldOf,
 } from '../_shared/server.ts'
 import type { Kingdom, Point, Row, World } from '../_shared/server.ts'
@@ -564,9 +565,9 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
           break
         }
         case 'dock': {
-          const error = game.dockFleetError(k, id)
+          const error = game.dockFleetError(k, id, now)
           if (error) refuse(error)
-          next = changed(game.dockFleet(k, id))
+          next = changed(game.dockFleet(k, id, now))
           break
         }
         case 'mission': {
@@ -673,6 +674,7 @@ async function own(user: string, lobby: string, cmd: any): Promise<Row> {
   if (error) throw error
   if (!data) refuse('conflict')
   if (settled) await applySold(lobby, settled.sold, now, settled.innSold)
+  if (settled) await tellEvents(lobby, row.id, settled.events, now)
   if (bought) await applySold(lobby, { [bought.good]: -bought.units }, now)
   return data as Row
 }

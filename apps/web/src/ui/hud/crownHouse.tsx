@@ -265,7 +265,8 @@ export function tipPreview(kingdom: Kingdom, crown: number, online: Pick<Online,
   const { share } = crownPower(online.kingdoms.map((k) => ({ liege: k.liege ?? null, score: k.score?.total ?? 0 })), 2)
   const favour = byPower(share[crown] ?? 0.5, balance.cities.crown.power.favour)
   const patrol = balance.cities.crown.patrol
-  const base = isNewcomer(palaceLevel(kingdom, now)) ? patrol.newcomer.tip : patrol.tip
+  const tavern = kingdom.buildings.some((b) => b.kind === 'tavern' && b.doneAt <= now)
+  const base = isNewcomer(palaceLevel(kingdom, now)) ? patrol.newcomer.tip : tavern ? patrol.tip : patrol.plainTip
   return Math.round(base * favour * patrolFavour(kingdom).tip * crownWays(crownKeyOf(kingdom), crown, now).tip)
 }
 

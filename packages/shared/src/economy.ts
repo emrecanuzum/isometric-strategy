@@ -160,7 +160,7 @@ export interface Building {
   moving?: boolean
 }
 
-// Gold that changes hands every production round under an accepted tribute (CLAUDE.md §9.7).
+// Gold an hour that changes hands under an accepted tribute (CLAUDE.md §9.7).
 export interface Tribute {
   // The other kingdom (its id and name as it was when agreed).
   other: number
@@ -972,7 +972,8 @@ export function ledger(kingdom: Kingdom, at: number) {
     tax: healthy * taxSpec(kingdom.tax).goldPerVillager * (1 + researchEffects(kingdom, at).tax) * ruler.tax * idleFactor(kingdom, at),
     soldiersGold: paid * upkeep.gold,
     soldiersFood: paid * upkeep.food,
-    tributes: (kingdom.tributes ?? []).map((t) => ({ ...t, gold: t.dir === 'in' ? t.gold : -t.gold })),
+    // A tribute is gold an hour; the ledger shows it a round.
+    tributes: (kingdom.tributes ?? []).map((t) => ({ ...t, gold: ((t.dir === 'in' ? 1 : -1) * t.gold * balance.economy.productionSeconds) / 3600 })),
   }
 }
 
@@ -1099,12 +1100,19 @@ export function setTradeAmount(kingdom: Kingdom, units: number, now: number): Ki
   return { ...kingdom, trade: { ...kingdom.trade, amount, amountAt: now } }
 }
 
-// What the merchant leaves in the stores: of food, what the people and the soldiers eat in a few minutes, so selling
-// it never starves the lordship (CLAUDE.md §6.4).
+// What the merchant leaves in the stores (CLAUDE.md §6.4): of food, what the people and the soldiers eat in a few
+// minutes, so selling it never starves the lordship; of building and war materials, a working stock (keepGoods) or what
+// the next palace level asks of it if more, but never more than maxShare of the store, so selling never stops the
+// builders.
 export function tradeReserve(kingdom: Kingdom, good: Good, at: number) {
-  if (good !== 'food') return 0
-  const eaten = population(kingdom, at).villagers * balance.economy.foodPerVillager + ledger(kingdom, at).soldiersFood
-  return Math.max(0, eaten * balance.economy.trade.foodReserveRounds)
+  const t = balance.economy.trade
+  if (good === 'food') {
+    const eaten = population(kingdom, at).villagers * balance.economy.foodPerVillager + ledger(kingdom, at).soldiersFood
+    return Math.max(0, eaten * t.foodReserveRounds)
+  }
+  const palace = kingdom.buildings.find((b) => b.kind === 'palace')
+  const next = palace ? (upgradeSpec(palace)?.cost?.[good] ?? 0) : 0
+  return Math.min(storageCap(kingdom, at) * t.keepGoods.maxShare, Math.max(t.keepGoods[good], next))
 }
 
 export const hasTradePost = (kingdom: Kingdom) => kingdom.buildings.some((b) => b.kind === 'tradePost')

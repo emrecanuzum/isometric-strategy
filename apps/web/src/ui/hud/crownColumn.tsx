@@ -1,4 +1,4 @@
-import { balance, crownRelation, crownTraitAt, crownWays, tributeDemand } from '@game/shared'
+import { balance, crownRelation, crownTraitAt, crownWays, palaceLevel, tributeDemand } from '@game/shared'
 import type { Kingdom, World } from '@game/shared'
 import { cityInfo } from '../../game/cities'
 import { Icon } from '../icons'
@@ -57,7 +57,7 @@ export function CrownColumnSheet({ world, kingdom, column, online, now, onCrown,
           <p className="hint">
             {column.kind === 'patrol'
               ? L(`${info.name}'nın tek büyük devriyesi: her ${Math.round(balance.cities.crown.patrol.slotSeconds / 60)} dakikada bir, tacın lordlarından birinin sarayına uğrar, orada biraz kalıp başkente döner.`, `The one great patrol of the ${info.name}: every ${Math.round(balance.cities.crown.patrol.slotSeconds / 60)} minutes it calls at the palace of one of the crown's lords, lingers a while and rides back to the capital.`)
-              : L(`${info.name}'nın haraççıları: öbür taca bağlı lordların kapısına ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelir, hazineden ${pctText(tributeShareNow(key, column.crown, now))} pay (en az ${balance.cities.crown.patrol.tribute.min} altın) ister.`, `The tribute collectors of the ${info.name}: every ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} minutes they knock at the door of a lord sworn to the other crown and ask for ${pctText(tributeShareNow(key, column.crown, now))} of the treasury (at least ${balance.cities.crown.patrol.tribute.min} gold).`)}
+              : L(`${info.name}'nın haraççıları: öbür taca bağlı lordların kapısına ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} dakikada bir gelir, hazineden ${pctText(tributeShareNow(key, column.crown, now))} pay (en az saray seviyesi × ${balance.cities.crown.patrol.tribute.minPerPalaceLevel} altın) ister.`, `The tribute collectors of the ${info.name}: every ${Math.round(balance.cities.crown.patrol.tribute.everySeconds / 60)} minutes they knock at the door of a lord sworn to the other crown and ask for ${pctText(tributeShareNow(key, column.crown, now))} of the treasury (at least ${balance.cities.crown.patrol.tribute.minPerPalaceLevel} × palace level gold).`)}
           </p>
           <Stat label={L('Tahtta', 'On the throne')} value={`${info.ruler} · ${L(trait.name, trait.nameEn ?? trait.name).toLocaleLowerCase(locale())}`} />
           <Stat label={L('Seninle ilişkisi', 'Relations with you')} value={`${relation > 0 ? '+' : ''}${relation}`} />
@@ -76,7 +76,7 @@ export function CrownColumnSheet({ world, kingdom, column, online, now, onCrown,
                 : toMe && purse !== null
                   ? L(`Sarayın henüz 1. seviyede, haraç istemezler: seni kendi taraflarına çekmek için yaklaşık ${fmt(purse)} altın kese bırakırlar. Saray 2. seviyeye çıkınca haraç başlar.`, `Your palace is still at level 1, so they ask no tribute: to win you over they leave a purse of about ${fmt(purse)} gold. Once the palace reaches level 2 the tribute begins.`)
                   : toMe
-                  ? L(`Kapına gelince hazinenin payını isteyecekler: şimdiki hazinenle yaklaşık ${fmt(tributeDemand(kingdom.stock.gold, ways.tribute))} altın. Öde, reddet ya da konuş.`, `At your door they will ask for their share of the treasury: about ${fmt(tributeDemand(kingdom.stock.gold, ways.tribute))} gold with what you hold now. Pay, refuse or talk.`)
+                  ? L(`Kapına gelince hazinenin payını isteyecekler: şimdiki hazinenle yaklaşık ${fmt(tributeDemand(kingdom.stock.gold, ways.tribute, palaceLevel(kingdom, now)))} altın. Öde, reddet ya da konuş.`, `At your door they will ask for their share of the treasury: about ${fmt(tributeDemand(kingdom.stock.gold, ways.tribute, palaceLevel(kingdom, now)))} gold with what you hold now. Pay, refuse or talk.`)
                   : L('Kapıda haraç isteyecek, cevabı bekleyecekler.', 'They will demand tribute at the door and wait for an answer.')}
             </p>
           ) : (

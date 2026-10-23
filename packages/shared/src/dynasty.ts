@@ -49,6 +49,8 @@ export interface Person {
   // Warned of as unhappy (told once, until he is content again), and when he was last given a gift.
   warned?: boolean
   giftAt?: number
+  // A brother or sister of the ruler since then (the last succession): a brother left without a post grows sour.
+  kinSince?: number
 }
 
 export type KinRole = { kind: 'governor'; town: number; since: number } | { kind: 'commander'; since: number } | { kind: 'treasurer'; since: number }
@@ -368,7 +370,7 @@ export function dynastyEffects(k: Pick<Kingdom, 'dynasty'>) {
 }
 
 // A new ruler's brothers are a little sour at first: they too were born to the throne.
-const soured = (p: Person, at: number): Person => (p.sex === 'm' ? { ...p, op: { off: (p.op?.off ?? 0) + D().intrigue.opinion.succession, crown: p.op?.crown ?? 0, at } } : p)
+const soured = (p: Person, at: number): Person => (p.sex === 'm' ? { ...p, kinSince: at, op: { off: (p.op?.off ?? 0) + D().intrigue.opinion.succession, crown: p.op?.crown ?? 0, at } } : p)
 // The new ruler (or one who dies) leaves his post and his grudges behind.
 const crowned = (p: Person): Person => {
   const { role: _role, op: _op, warned: _warned, ...rest } = p

@@ -102,7 +102,7 @@ export const describeTerms = (t: PeaceTerms | null | undefined) =>
     : t.kind === 'gold'
       ? L(`onlara ${t.gold} altın ödemen karşılığında`, `in return for you paying them ${t.gold} gold`)
       : t.kind === 'tribute'
-        ? L(`onlara her turda ${t.gold} altın haraç vermen karşılığında`, `in return for you paying them ${t.gold} gold tribute every round`)
+        ? L(`onlara saatte ${t.gold} altın haraç vermen karşılığında`, `in return for you paying them ${t.gold} gold tribute an hour`)
         : L(`sana ${t.gold} altın vermeleri karşılığında`, `in return for them giving you ${t.gold} gold`)
 
 export function Dot({ color }: { color: string | null | undefined }) {
@@ -290,8 +290,8 @@ const LORD_PARTS: LordPart[] = ['relation', 'envoy', 'pacts', 'hostile', 'spies'
 function KingdomDetail({ data, online, target }: { data: HudData; online: Online; target: KingdomInfo }) {
   const { now, kingdom } = data
   const [gift, setGift] = useState(50)
-  // A tribute may ask at most tribute.maxGold a round: start there or below, or the envoy is refused.
-  const [tribute, setTribute] = useState(() => Math.min(5, balance.diplomacy.tribute.maxGold))
+  // A tribute is gold an hour, between tribute.minGold and maxGold in steps; outside that the envoy is refused.
+  const [tribute, setTribute] = useState(() => Math.min(60, balance.diplomacy.tribute.maxGold))
   const [confirmWar, setConfirmWar] = useState(false)
   const [terms, setTerms] = useState<PeaceTerms['kind']>('white')
   const [termsGold, setTermsGold] = useState(100)
@@ -484,13 +484,13 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
             )}
             {!war && !ally && !theyPay && (
               <span className="stepper">
-                <button className="btn icon-only" disabled={tribute <= d.tribute.minGold} data-why={L(`Haraç en az ${d.tribute.minGold} altın/tur`, `Tribute must be at least ${d.tribute.minGold} gold/round`)} onClick={() => setTribute(tribute - 1)} aria-label={L('Azalt', 'Decrease')}>
+                <button className="btn icon-only" disabled={tribute <= d.tribute.minGold} data-why={L(`Haraç en az saatte ${d.tribute.minGold} altın`, `Tribute must be at least ${d.tribute.minGold} gold an hour`)} onClick={() => setTribute(Math.max(d.tribute.minGold, tribute - d.tribute.step))} aria-label={L('Azalt', 'Decrease')}>
                   <Icon name="minus" size={16} />
                 </button>
                 <span className="stepper-value">
-                  <b>{tribute}</b> {L('altın/tur', 'gold/round')}
+                  <b>{tribute}</b> {L('altın/saat', 'gold/hour')}
                 </span>
-                <button className="btn icon-only" disabled={tribute >= d.tribute.maxGold} data-why={L(`Haraç en fazla ${d.tribute.maxGold} altın/tur`, `Tribute can be at most ${d.tribute.maxGold} gold/round`)} onClick={() => setTribute(tribute + 1)} aria-label={L('Artır', 'Increase')}>
+                <button className="btn icon-only" disabled={tribute >= d.tribute.maxGold} data-why={L(`Haraç en fazla saatte ${d.tribute.maxGold} altın`, `Tribute can be at most ${d.tribute.maxGold} gold an hour`)} onClick={() => setTribute(Math.min(d.tribute.maxGold, tribute + d.tribute.step))} aria-label={L('Artır', 'Increase')}>
                   <Icon name="plus" size={16} />
                 </button>
                 <button className="btn small" disabled={sending('tribute')} data-why={L('Haraç elçin zaten yolda', 'Your tribute envoy is already on the road')} onClick={() => envoy('tribute', { gold: tribute })}>
@@ -513,24 +513,24 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
               <div className="peace">
                 <div className="segmented choices" role="radiogroup" aria-label={L('Barış şartları', 'Peace terms')}>
                   {(Object.keys(TERMS_NAMES) as PeaceTerms['kind'][]).map((k) => (
-                    <button key={k} className="btn small" role="radio" aria-checked={terms === k} onClick={() => (setTerms(k), k === 'tribute' && setTermsGold((g) => Math.min(g, balance.diplomacy.tribute.maxGold)))}>
+                    <button key={k} className="btn small" role="radio" aria-checked={terms === k} onClick={() => (setTerms(k), k === 'tribute' && setTermsGold((g) => Math.max(balance.diplomacy.tribute.minGold, Math.min(g, balance.diplomacy.tribute.maxGold))))}>
                       {TERMS_NAMES[k]}
                     </button>
                   ))}
                 </div>
                 {terms !== 'white' && (
                   <span className="stepper">
-                    <button className="btn icon-only" disabled={termsGold <= (terms === 'tribute' ? 1 : 10)} data-why={L('Daha az istenemez', 'Cannot ask for less')} onClick={() => setTermsGold(Math.max(1, termsGold - (terms === 'tribute' ? 1 : 50)))} aria-label={L('Azalt', 'Decrease')}>
+                    <button className="btn icon-only" disabled={termsGold <= (terms === 'tribute' ? balance.diplomacy.tribute.minGold : 10)} data-why={L('Daha az istenemez', 'Cannot ask for less')} onClick={() => setTermsGold(Math.max(terms === 'tribute' ? balance.diplomacy.tribute.minGold : 1, termsGold - (terms === 'tribute' ? balance.diplomacy.tribute.step : 50)))} aria-label={L('Azalt', 'Decrease')}>
                       <Icon name="minus" size={16} />
                     </button>
                     <span className="stepper-value">
-                      <b>{termsGold}</b> {terms === 'tribute' ? L('altın/tur', 'gold/round') : L('altın', 'gold')}
+                      <b>{termsGold}</b> {terms === 'tribute' ? L('altın/saat', 'gold/hour') : L('altın', 'gold')}
                     </span>
                     <button
                       className="btn icon-only"
                       disabled={terms === 'tribute' && termsGold >= balance.diplomacy.tribute.maxGold}
-                      data-why={L(`Haraç en fazla ${balance.diplomacy.tribute.maxGold} altın/tur`, `Tribute can be at most ${balance.diplomacy.tribute.maxGold} gold/round`)}
-                      onClick={() => setTermsGold(termsGold + (terms === 'tribute' ? 1 : 50))}
+                      data-why={L(`Haraç en fazla saatte ${balance.diplomacy.tribute.maxGold} altın`, `Tribute can be at most ${balance.diplomacy.tribute.maxGold} gold an hour`)}
+                      onClick={() => setTermsGold(terms === 'tribute' ? Math.min(balance.diplomacy.tribute.maxGold, termsGold + balance.diplomacy.tribute.step) : termsGold + 50)}
                       aria-label={L('Artır', 'Increase')}
                     >
                       <Icon name="plus" size={16} />
@@ -542,8 +542,8 @@ function KingdomDetail({ data, online, target }: { data: HudData; online: Online
                     ? L(`Her ${balance.diplomacy.peace.goldPerScore} altın 1 savaş puanı ister.`, `Every ${balance.diplomacy.peace.goldPerScore} gold costs 1 war score.`)
                     : terms === 'tribute'
                       ? L(
-                          `Haraç için en az ${balance.diplomacy.peace.tributeMinScore} savaş puanı gerekir; tur başına en fazla ${balance.diplomacy.tribute.maxGold} altın istenebilir.`,
-                          `Tribute needs a war score of at least ${balance.diplomacy.peace.tributeMinScore}; at most ${balance.diplomacy.tribute.maxGold} gold a round can be asked.`,
+                          `Haraç için en az ${balance.diplomacy.peace.tributeMinScore} savaş puanı gerekir; saatte en fazla ${balance.diplomacy.tribute.maxGold} altın istenebilir.`,
+                          `Tribute needs a war score of at least ${balance.diplomacy.peace.tributeMinScore}; at most ${balance.diplomacy.tribute.maxGold} gold an hour can be asked.`,
                         )
                       : terms === 'offer'
                         ? L('Altını sen ödersin; kabul etmeleri kolaylaşır.', 'You pay the gold; that makes them likelier to accept.')

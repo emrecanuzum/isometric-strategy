@@ -28,6 +28,7 @@ import {
   allShips,
   PIRATE_SEASON_FACTOR,
   recallError,
+  dockFleetError,
 } from '@game/shared'
 import type { Fleet, Good, MissionOrder, NavyError, NavyLook, Ship, Ships } from '@game/shared'
 import { useState } from 'react'
@@ -80,6 +81,7 @@ export const WHY: Partial<Record<NavyError, string>> = {
   fleets: L('En fazla 2 filo', '2 fleets at most'),
   ships: L('Gemi seç', 'Choose ships'),
   away: L('Filo uzakta', 'The fleet is away'),
+  offDock: L('Filo iskeleden uzakta; önce iskeleye yüzdür', 'The fleet is far from the dock; sail it back first'),
   dock: L('Önce iskele kur', 'Build a dock first'),
   cargo: L('Yük taşıyan gemi yok', 'No ship that carries cargo'),
   warships: L('Savaş gemisi (kadırga ya da çektiri) gerekir', 'Needs a warship (galley or raider)'),
@@ -328,7 +330,12 @@ function FleetCard({ index, fleet, others, data, online }: { index: number; flee
                 {L('Diğer filoyla birleş', 'Merge with the other fleet')}
               </button>
             )}
-            <button className="btn small" onClick={() => online.act({ type: 'fleet', action: 'dock', fleet: fleet.id })}>
+            <button
+              className="btn small"
+              disabled={!!dockFleetError(kingdom, fleet.id, now)}
+              data-why={WHY[dockFleetError(kingdom, fleet.id, now) ?? 'fleet']}
+              onClick={() => online.act({ type: 'fleet', action: 'dock', fleet: fleet.id })}
+            >
               <Icon name="anchor" size={16} /> {L('Limana bağla', 'Dock in harbour')}
             </button>
           </div>

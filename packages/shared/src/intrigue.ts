@@ -39,14 +39,14 @@ const closeOf = (d: Dynasty, id: number) => d.children.find((c) => c.id === id) 
 export const hasOpinion = (p: Person, at: number) => p.sex === 'm' && ofAge(p, at)
 
 export interface OpinionPart {
-  key: 'base' | 'ruler' | 'happiness' | 'role' | 'elder' | 'council' | 'mother' | 'ambition' | 'commander' | 'military' | 'marriage' | 'recent'
+  key: 'base' | 'ruler' | 'happiness' | 'role' | 'elder' | 'council' | 'mother' | 'ambition' | 'neglect' | 'commander' | 'military' | 'marriage' | 'recent'
   value: number
 }
 
 type HouseKingdom = Pick<Kingdom, 'dynasty' | 'happiness' | 'liege' | 'site' | 'foundedAt'>
 
 // What a man of the house thinks of the ruler, part by part (where it rests), and the liege crown of him.
-export function opinionParts(k: HouseKingdom, p: Person): { ruler: OpinionPart[]; crown: OpinionPart[] } {
+export function opinionParts(k: HouseKingdom, p: Person, at = 0): { ruler: OpinionPart[]; crown: OpinionPart[] } {
   const d = k.dynasty
   const o = O()
   const kin = kinshipOf(d, p.id) ?? 'kin'
@@ -62,6 +62,11 @@ export function opinionParts(k: HouseKingdom, p: Person): { ruler: OpinionPart[]
   if (kin === 'sibling' && d?.king && p.bornAt < d.king.bornAt) ruler.push({ key: 'elder', value: o.elder })
   if (kin === 'sibling' && d?.council) ruler.push({ key: 'council', value: o.council })
   if (kin === 'sibling' && d?.mother) ruler.push({ key: 'mother', value: o.mother })
+  // A brother left without a post since the last succession grows sourer by the hour (CLAUDE.md §9.1.1).
+  if (kin === 'sibling' && !p.role && p.kinSince !== undefined && at > p.kinSince) {
+    const neglect = Math.min(o.neglect.max, ((at - p.kinSince) / 3_600_000) * o.neglect.perHour)
+    if (neglect >= 0.5) ruler.push({ key: 'neglect', value: -round1(neglect) })
+  }
   const crown: OpinionPart[] = []
   if (k.liege !== undefined && k.liege !== null) {
     const b = I().crownBond
@@ -79,7 +84,7 @@ const fade = (op: Person['op'], at: number) => (op ? 0.5 ** (Math.max(0, at - op
 // What a man of the house thinks of the ruler now (−100…100), and how the liege crown thinks of him; `recent`: what
 // gifts, slights and the like still add (fading).
 export function opinionOf(k: HouseKingdom, p: Person, at: number) {
-  const parts = opinionParts(k, p)
+  const parts = opinionParts(k, p, at)
   const f = fade(p.op, at)
   const recent = (p.op?.off ?? 0) * f
   const crownRecent = (p.op?.crown ?? 0) * f

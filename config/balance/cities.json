@@ -13,10 +13,11 @@
       "stay": 0.075,
       "answerSeconds": 300,
       "tribute": {
-        "everySeconds": 1800,
-        "share": 0.08,
+        "everySeconds": 3600,
+        "share": 0.03,
         "min": 150,
-        "maxShare": 0.25,
+        "minPerPalaceLevel": 40,
+        "maxShare": 0.12,
         "afkFactor": 1.5,
         "onlineMinutes": 7,
         "lateSeenSeconds": 90,
@@ -34,11 +35,12 @@
       },
       "refuseRelation": -8,
       "tip": 60,
+      "plainTip": 20,
       "newcomer": {
         "note": "a lord whose palace is below belowPalace is new to the land: his own crown's patrol tips him though he has no house of entertainment, and the rival crown's collectors leave a purse instead of asking tribute (each times the crowns' ways and power as usual)",
         "belowPalace": 2,
-        "tip": 120,
-        "rivalGift": 80
+        "tip": 40,
+        "rivalGift": 25
       }
     },
     "relation": {
@@ -103,10 +105,10 @@
     "orders": {
       "windowSeconds": 3600,
       "units": [
-        240,
-        960
+        120,
+        480
       ],
-      "step": 40,
+      "step": 20,
       "payFactor": 1.25,
       "swornBonus": 0.2,
       "relation": {

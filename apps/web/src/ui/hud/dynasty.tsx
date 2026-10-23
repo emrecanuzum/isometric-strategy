@@ -57,6 +57,7 @@ const PART_NAMES: Record<OpinionPart['key'], string> = {
   council: L('Naipler yönetiyor', 'The regents rule'),
   mother: L('Kraliçe ana yatıştırıyor', 'The queen mother soothes him'),
   ambition: L('Hırsı', 'Ambition'),
+  neglect: L('Görevsiz bırakıldı: kırgın', 'Left without a post: resentful'),
   commander: L('Tacın devriyesini yönetiyor', "Leads the crown's patrol"),
   military: L('Askerlik yeteneği', 'Military skill'),
   marriage: L('Hanedanla akrabalık', 'Kin by marriage'),

@@ -510,6 +510,13 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   kasabanın (8×8) üstündeyse, binalarının üstünde de olsa, o yerin **bütün
   alanı** araziye yatırılmış bir çerçeveyle vurgulanır.
   Hudut içinde parsel çizgileri çok silik gösterilir.
+- **Marka** (`apps/web/src/brand/brandArt.ts`): logo, profil resmi ve favicon da kodla boyanır; maskot
+  elçidir (portresi `EnvoyPortrait.tsx` → `paintEnvoy`, zeminsiz ve çerçevesiz). Madalyon: alacakaranlık
+  gökte yıldızlar, başının ardında hâle, yaldızlı halka, omuzları halkanın alt kenarına taşar. Yazı
+  Pixelify Sans'tan piksel piksel alınır, menünün başlığı gibi yaldız bantlı, mürekkep kenarlı ve kahverengi
+  alt gölgelidir. Dosyalar `public/brand/` altındadır (yatay ve dikey logo, rozet, Instagram 1080, favicon
+  32/64, apple-touch ve 192/512 simgeler); yeniden üretmek için `bun scripts/brand-save.ts
+  apps/web/public/brand` ile `bun run dev` açıkken `/brand.html?save=5199` açılır.
 - Arayüz yazı tipi Pixelify Sans'tır; ondaki 2 ve 5 zor okunduğu için
   **rakamlar Tiny5** ile çizilir (`apps/web/src/fonts.ts`). Büyük sayılar
   1,2K / 3,4M diye kısaltılır.
@@ -859,8 +866,11 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   kenarında, ayarlar ve ana menü düğmelerinin hemen altından başlar,
   yakınlaştırma düğmelerinin üstünde biter, sığmazsa kendi içinde kayar
   (telefonda üst çubuğun altından başlar).
-- **Hazine sınırı:** Altının da sınırı vardır: saray seviyesiyle 1000 /
-  2000 / 3500 / 5500 / 7000, ve 4. seviye sarayda açılan **Hazine** binası
+- **Hazine sınırı:** Altının da sınırı vardır: saray seviyesiyle 1500 /
+  12000 / 16000 / 22000 / 28000 (önce 1000 / 2000 / 3500 / 5500 / 7000: hazine
+  birkaç saatte doluyordu, bir gece uyuyan oyuncunun geliri boşa gidiyordu;
+  sınırlar, iyi oynanmış bir lordun 10 saatlik uykuda hazinesini üçte birden
+  ~%70–90'a çıkaracağı, doldurmayacağı şekilde seçildi: `bun scripts/offline-balance.ts`), ve 4. seviye sarayda açılan **Hazine** binası
   ekler (seviye 1/2/3: +4000 / +8000 / +14000; 4. seviyede bir, 5.de iki
   hazine). Sığmayan altın boşa gider. **Hazine doluyken tüccar mal
   götürmez**, evde bekler (mallar depoda kalır, lobi fiyatı düşmez); yer
@@ -868,7 +878,12 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   hazine yer açınca yeniden satmaya başlar (Ticaret sekmesinde "Hazine
   dolu" uyarısı). Vergi gibi diğer gelirler dolu hazinede boşa gider. Tüccar yemek satarken
   halkın ve askerin 30 turluk (5 dakikalık) yemeğini depoda bırakır, satış
-  krallığı aç bırakmaz (`trade.foodReserveRounds`). Depo
+  krallığı aç bırakmaz (`trade.foodReserveRounds`). Yapı ve savaş malzemesi
+  satarken de bir **iş stoğu** bırakır: 120 yapı / 60 savaş malzemesi ya da
+  sarayın bir sonraki seviyesinin o maldan istediği, hangisi büyükse, ama
+  ambarın yarısından fazla değil (`trade.keepGoods`; `tradeReserve`). Önce
+  tüccar yapı malzemesini sıfıra kadar satıyordu; yeni lord ilk dakikalarda
+  evini kuracak malzemeyi kaybediyordu (bütün testlerde tekrarlandı). Depo
   ve hazine doluluğu Depo sekmesinde ve üst çubuğun kartlarında
   "stok / sınır" olarak görünür.
 - **Kuruluş:** Hazır şehir düzeni yoktur. Krallık kurulunca oyuncu önce
@@ -1178,7 +1193,8 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
 - **Ticaret noktası:** satılacak mal yerine **hiçbir şey satma** da
   seçilebilir (tüccar evde bekler). **Sefer başına satış** miktarı
   ayarlanabilir: 5'er birimlik adımlarla, en fazla seviyenin sınırı kadar
-  (40 / 80 / 140); değiştirildikten sonra 2 dakika yeniden değiştirilemez
+  (20 / 40 / 70; önce 40 / 80 / 140: tüccar **daha az birim, daha pahalıya**
+  satar, mallar depoda birikir; §9.7 "Mal dengesi"); değiştirildikten sonra 2 dakika yeniden değiştirilemez
   (`economy.json` → `trade.amountStep`, `amountCooldownSeconds`). Tam yük
   seçiliyse ticaret noktası yükselince yük de büyür. Sefer başına kazanç lobinin anlık
   fiyatından gösterilir. Ticaret menüsünde satış seçimi en üsttedir;
@@ -1196,9 +1212,9 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   görülmeyi uzatır (`economy.json` → `away.seenGraceMinutes`;
   `presenceAt`): açık bırakılan sekme ya da bir betik, başında olmayan
   lordu "burada" tutamaz.
-- **Yokluk cezası:** Oyuncunun son görülmesinden 1 saat sonra, geçen her saat binaların
-  üretimi, vergi ve tüccarın altını %10 azalır (en az %50'ye kadar;
-  `economy.json` → `idle`). (Önce %20'ye iniyordu: bir gün yokken gelir
+- **Yokluk cezası:** Oyuncunun son görülmesinden 2 saat sonra, geçen her saat binaların
+  üretimi, vergi ve tüccarın altını %7 azalır (en az %60'a kadar;
+  `economy.json` → `idle`; önce 1 saat sonra %10, en az %50'ydi: bir gecelik uyku geliri yarıya indiriyordu). (Daha önce %20'ye iniyordu: bir gün yokken gelir
   %20'ye düşerken asker maaşı, kasaba bakımı ve haraç tam sürüyor, hazine
   birkaç saatte boşalıp öyle kalıyordu.) Yemek üretimi bundan etkilenmez: halk kendi
   yiyeceğini yetiştirir, lord uzun süre yokken açlık çekmez. Diğer oyuncular Krallıklar sekmesinde
@@ -1670,7 +1686,7 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     hükümdarın huyu tacın **haraççılarının istediği payı** ve **devriyesinin
     bahşişini** çarpar: açgözlü ×1,2 / ×0,8, cömert ×0,85 / ×1,25, sert ×1,1 /
     ×0,9, dindar ×0,95 / ×1,1, adil ×1 / ×1 (sunucuda `patrols.ts` →
-    `crownTraitAt`, `tributeDemand(gold, factor)`; %8'lik haraç 6,8–9,6 arası
+    `crownTraitAt`, `tributeDemand(gold, factor, palaceLevel)`; %3'lük haraç 2,6–3,6 arası
     olur). Bütün bu çarpanlar (taçların rekabetiyle birlikte, `crownWays`)
     Politika bölümünde (beklenen bahşiş ve haraç payı), taç panelinde, eğlence
     merkezinin menüsünde ve haraççıların haberinde ("hükümdarı açgözlü ×1,2 ·
@@ -1800,14 +1816,15 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   - **Kendi tacının devriyesi** lordun **eğlence merkezine** uğrar, içer,
     eğlenir ve **60 altın bahşiş** bırakır (lordun bir kardeşi devriyenin
     başındaysa daha fazla; §9.1.1). Eğlence merkezi yoksa sarayın
-    önüne gelip geçer, bahşiş bırakmaz; ama elçi "Taç devriyesi uğradı"
-    haberini getirir (`patrol_visit`), lord kapısındaki askerleri sessizce
-    izlemez.
+    önüne gelip **20 altınlık** küçük bir bahşiş bırakır (`patrol.plainTip`;
+    önce hiçbir şey bırakmıyordu ve saray 2–3 boyunca taçlar yalnızca haraç
+    alıyordu). Bu küçük bahşiş rutindir: elçi pencere açmaz, günlüğe yazılır
+    (haberin `quiet` işareti; aşağıda "Sessiz haberler").
   - **Haraççılar** (haritada görünür: tacın renginde küçük bir kol, rakip
     başkentten lordun sarayına haraç isteme anında varacak şekilde yola
     çıkar, cevap süresince kapıda bekler, sonra döner; herkes görür): Rakip taç, öbür taca bağlı her
-    lordun kapısına **30 dakikada bir** haraççı gönderir (`patrol.tribute`
-    → `everySeconds`); her lordun geliş anı tohumdan çekilir, dilimin ilk
+    lordun kapısına **saatte bir** haraççı gönderir (`patrol.tribute`
+    → `everySeconds`; önce 30 dakikada bir); her lordun geliş anı tohumdan çekilir, dilimin ilk
     üçte ikisindedir (`tributeVisitAt`). **İki tacın askerleri bir sarayda
     buluşmaz:** haraççıların kapıdaki kalışı (varıştan 1 dk önce, cevap
     süresi ve dönüşün ilk 1 dk'sı, iki yanda 30 sn pay) lordun kendi tacının
@@ -1816,14 +1833,21 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
     çakışmasız ilk ana 15 saniyelik adımlarla kaydırılır (yoksa en az
     çakışana; `tribute.clearSeconds`, `marginSeconds`, `stepSeconds`).
     Lordların listesiyle (kimin kime bağlı olduğu) hesaplanır; sunucu ve
-    istemci aynı anı bulur. Haraççı **hazinenin %8'ini, en az 150 altın**
-    ister (`share`, `min`; 7000 altında 560, 1000 altında 150), ama hiçbir
-    zaman hazinenin **%25'inden** fazlasını değil (`maxShare`; 400 altında 100;
-    önce en az 150'yi, yoksa hepsini alıyordu ve yokken hazine sıfırda kalıyordu); ilişki ve güç bunu değiştirmez. **Taçlar lorda kazandırmaz,
+    istemci aynı anı bulur. Haraççı **hazinenin %3'ünü, en az saray seviyesi ×
+    40 altın** ister (`share`, `minPerPalaceLevel`; 10.000 altında 300, 2. seviye
+    sarayın küçük hazinesinde 80), ama hiçbir zaman hazinenin **%12'sinden**
+    fazlasını değil (`maxShare`); oyundayken cevapsız kalan haracın %50 fazlası
+    da bu tavanı aşmaz (`unansweredTribute`); ilişki ve güç bunu değiştirmez.
+    (Önce 30 dakikada bir %8, en az 150, en çok %25'ti: sim testlerinde
+    sezonun brüt gelirinin %69'u haraca gidiyor, 8 saatlik yoklukta saray 2, 3 ve
+    4'te hazine eksiliyordu; saray 3'ün 1200 altını haracı ödeyen bir lordda hiç
+    birikmiyordu, hazine ~600'de dengeleniyordu. Haraç hazineyle oranlı
+    kaldığı için hazine hiçbir zaman sınıra yapışmaz, ama artık bir gecede
+    ciddi büyür; `docs/SIM-TEST-2-RAPORU.md`, `scripts/offline-balance.ts`.)
+    **Taçlar lorda kazandırmaz,
     kaybettirir:** kendi tacının saatte en çok 2 devriyesi bahşiş ve armağanla en
-    çok ~150–250 altın ve ~100 birim mal bırakır (bahşiş 25'ken ~100–160 idi;
-    devriye hiç hissedilmiyordu, 60'a çıktı), rakip tacın saatte 2 haraççısı ise en az 300 altın
-    (7.000'lik hazinede ~1.100) götürür. Lord parasını tüccarla, kasabalarla,
+    çok ~40–250 altın ve ~100 birim mal bırakır, rakip tacın saatte bir haraççısı ise
+    hazinenin %3'ünü (10.000'lik hazinede ~300) götürür. Lord parasını tüccarla, kasabalarla,
     seferlerle ve ganimetle kazanır. (Önce bahşiş 120, armağanlar 60/150/300
     altın, haraç %5'ti; orta hazineli bir lord taçtan haraçtan fazla alıyordu.
     Sonra bahşiş 30, armağanlar 15/35/70 altın ve devriye saatte 4 kez geliyordu:
@@ -1874,9 +1898,11 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
   - Biat etmemiş lordlara ne devriye ne haraççı gelir.
   - **Yeni lord** (sarayı 1. seviyede; `cities.json` → `crown.patrol.newcomer`,
     `patrols.ts` → `isNewcomer`): taçlar onu tavlar. Kendi tacının devriyesi
-    eğlence merkezi aramadan kapıya gelip **120 altın** bırakır (taç gücü, huy
+    eğlence merkezi aramadan kapıya gelip **40 altın** bırakır (taç gücü, huy
     ve kardeş çarpanlarıyla; `patrol_tip`, `newcomer`). Rakip tacın adamları
-    haraç istemez, aynı anda gelip **80 altınlık kese** bırakır (`rival_gift`,
+    haraç istemez, aynı anda gelip **25 altınlık kese** bırakır (`rival_gift`;
+    önce 120 ve 80'di: saray 1'de kalan lord taçlardan saatte ~370 altın alıyordu,
+    saray 2'ye çıkmak gelir kaybıydı,
     `patrol_visits.kind` `tip`; o taçla ilişki +1); haritada etiketleri "X
     elçileri"dir. Haraç saray 2. seviyeye çıkınca başlar. Taç paneli, devriye
     penceresi ve taçların tanıtımı bunu yazar.
@@ -1920,7 +1946,8 @@ renkler `apps/web/src/game/cities.ts`, panel `apps/web/src/ui/hud/cities.tsx`.
 - **Taç siparişleri** (`crown.orders`; `crowns.ts` → `crownOrder`,
   `fulfilOrder`, `settleOrderTrips`; sunucuda `order` komutu; Ticaret →
   Siparişler): her taç her saat bir mal siparişi verir (lobi tohumundan: bir
-  mal, 240–960 birim). Lord "Kervanla gönder" der: mallar depodan hemen çıkar
+  mal, 120–480 birim; tüccarın yükü yarıya inip fiyatlar arttığından önceki
+  240–960'ın yarısı). Lord "Kervanla gönder" der: mallar depodan hemen çıkar
   ve bir **kervanla** tacın başkentine gider; ödeme ve ilişki **kervan dönünce**
   gelir. Sefer, tüccarın o şehre gidip dönmesi kadar sürer (`cityTripMs`:
   30 sn + ticaret noktası ile başkent arasındaki her karo için 0,36 sn;
@@ -2654,7 +2681,12 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
 - **Liman ve filolar:** Yapılan gemiler limana bağlanır. Limandaki
   gemilerden **en çok 2 filo** çıkarılır (ordular gibi). Evdeki bir filo
   ikiye **bölünebilir**, iki filo **birleşebilir**, filo limana geri
-  bağlanabilir. Limandaki gemiler ve limanda bekleyen filolar iskeleyi savunur.
+  bağlanabilir. Limana bağlamak ve deniz ticaretine çıkmak için filo
+  iskelenin yakınında olmalıdır: "Hareket et" ile uzağa yüzdürülmüş (ya da hâlâ
+  yolda olan) filo iskeleye 8 karodan uzaksa önce geri yüzdürülür
+  (`navy.ts` → `offDock`, `navy.json` → `dockReachTiles`; hata `offDock`).
+  Önce görevi "limanda bekle" olan filo nerede olursa olsun evde sayılıyor,
+  "Limana bağla" onu yol süresi olmadan ışınlıyordu. Limandaki gemiler ve limanda bekleyen filolar iskeleyi savunur.
 - **Görevler** (evdeyken anında değişir):
   - **Limanda bekle:** iskeleyi savunur.
   - **Deniz ticareti:** filo seçilen malı bir taç başkentinin limanına
@@ -2701,7 +2733,11 @@ türü, maliyet, kızak) ve **Defter** (deniz ticareti sonuçları).
   birinde 30–50 dk) olasılığı ×2,5 yapar ve Donanma bölümünde yazar. Eskort
   korsanları yenerse yük güvende ve 35 altın ödül; yenemezse yük gider ve
   bir gemi batabilir (eskortsuz %20, eskortlu %15).
-  Seferler, saldırılar, av ve dönüşler günlükte yazar.
+  Seferler, saldırılar, av ve dönüşler günlükte yazar. **Batan gemi** ayrıca
+  elçiyle haber olur (`ship_lost`: deniz ticaretinde korsanlara ya da korsan
+  avında; sunucu durumu ilerletirken `advance` olaylarından bir kez üretir,
+  `server.ts` → `tellEvents`). Önce son gemisini kaybeden oyuncuya hiçbir pencere
+  açılmıyordu.
 - **Korsan kayıkları** (yağmacılarla aynı düzen, §7.9; `outlaws.json` →
   `boats`, `sea`): lobi başına 7 kara yelkenli korsan teknesi göllerde ve
   nehirlerde dolaşır. Her biri tohumdan, en az 500 karoluk bir suyun açık
@@ -2953,11 +2989,12 @@ portreler ve sahneler `apps/web/src/ui/DynastyArt.tsx`):
   hanedandan bir **akraba** (26–38 yaşında, yeni yetenekler) tahta çağrılır
   (`Dynasty.kinsmanAt`); hanedan bitmez, yeni hükümdar kendi kraliçesini alır. Eski kraliçe
   kraliçe ana olur: yeni hükümdar kendi kraliçesini almalıdır.
-- **Kardeşler genç ölür:** Tahta geçmeyen kardeşler (hükümdarın kardeşleri)
-  genç yaşta bir hastalıktan ölür: 18–30 yaşında, kardeş olduklarında bu
-  yaşı geçmişlerse 0,5–3 yıl içinde (`siblingFate`; `cause: 'sickness'`).
+- **Kardeşler orta yaşta ölür:** Tahta geçmeyen kardeşler (hükümdarın kardeşleri)
+  bir hastalıktan ölür: 34–46 yaşında, kardeş olduklarında bu
+  yaşı geçmişlerse 8–16 yıl içinde (`siblingFate`; `cause: 'sickness'`).
   Kardeşlerden biri tahta çıkarsa doğumda çekilen ömrüne döner (`fullLife`).
-  Böylece hükümdar ölünce saray birkaç yıl içinde kalabalıktan kurtulur.
+  (Önce 18–30 yaşında ya da 0,5–3 yıl içinde ölüyorlardı: kardeş taht davacısı
+  olacak kadar yaşamıyordu, isyan sim testlerinde hiç görülmedi.)
 - **Salgın hanedanı ve halkı öldürür** (`dynasty.json` → `sickness`;
   `sicknessStrikes`, `economy.ts` üretim turu): her üretim turunda hasta payı
   kadar bir olasılıkla (pay × 0,001) hanedandan biri (hükümdar, çocuklar,
@@ -3037,9 +3074,16 @@ Değerler `config/balance/dynasty.json` → `intrigue`; mantık
     kabul ederse prenses onun hanedanının **Gelinler** listesine geçer, ilişki
     +30 artar; ikisine de elçi haber getirir.
   Evlenen prenses saraydan ayrılır ve **Evlendirilenler** listesinde kalır.
+- **Görevsiz kardeş kırılır:** tahta geçişten (`Person.kinSince`) bu yana
+  görevi olmayan her kardeşin bakışı saatte 3 puan düşer, en çok −30
+  (`opinion.neglect`; kartta "Görevsiz bırakıldı: kırgın"). Görev vermek bunu
+  siler, hediye bir süre telafi eder. Lord bir şey yapmazsa kardeşli bir tahta
+  geçişin ~%79'unda, ortalama ~8 saat sonra isyan çıkar (bun ile ölçüldü);
+  görevli ya da hediyeli kardeş isyan etmez. Böylece taht davacısı sezonda
+  birkaç kez karşılaşılan bir durumdur, kardeşe görev vermek gerçek bir karardır.
 - **Taht davacısı:** 2. seviye ve üstü sarayda, her 15 dakikalık yoklamada
-  bakışı **−35**'in altındaki her reşit erkek kardeş için isyan çekilir
-  (olasılık %15 + eşiğin altındaki her puan %1, en çok %50; kardeşin ve yoklamanın
+  bakışı **−20**'nin altındaki her reşit erkek kardeş için isyan çekilir
+  (olasılık %20 + eşiğin altındaki her puan %1,5, en çok %50; önce −35, %15 ve %1; kardeşin ve yoklamanın
   tohumundan; sunucu yoklamayı `Dynasty.revoltSlot`'ta bir kez yazar).
   Bir davacı dışarıdayken ve bastırılınca 2 saat boyunca yeni isyan olmaz
   (`quietUntil`). İsyan eden kardeş hanedandan çıkar, garnizonun %15'i (en
@@ -3193,18 +3237,24 @@ mertebesindedir.
   başına 0,008 / 0,02 / 0,036 / 0,056 altın getirir.
 - **Altın dengesi** (hedef, `economy.json`, `society.json`): gelişmiş bir
   lord (4–5. seviye saray, ~100 köylü, 3. seviye ticaret noktası) çevrimiçi
-  saatte ~2.000–2.500 altın (lobi fiyatı düştükçe daha az), yeni kurulmuş
-  bir lord ~700 altın kazanır. Boş bir 7.000'lik hazine çevrimdışıyken
-  ~4–5 saatte dolar; dolunca tüccar bekler, haraççılar 30 dakikada bir %8 (en az 150)
-  alır. Asker maaşı tur başına 0,04 altın, lordlar arası haraç tur başına
-  en fazla 4 altındır.
-- **Mal dengesi:** Tüccar bir malı tam yükle satıyorsa, o malın en yüksek
-  üretimi (en çok yapı, 3. seviye, en iyi arazi) bile satışa yetmez; stok
-  azalır. 3. seviye ticaret noktası seferde 140 birim, tur başına ~47
-  birim satar; en iyi arazide en çok oduncu kampı tur başına ~44 yapı
-  malzemesi, silah atölyeleri ~19 savaş malzemesi, tarlalar halkı
-  doyurduktan sonra ~27 yemek üretir. Bu yüzden mal fiyatları düşüktür
-  (yemek 0,2, yapı 0,3, savaş 0,4) ve tüccarın geliri ürettiğin kadardır.
+  saatte ~2.500–4.500 altın (lobi fiyatı düştükçe daha az), yeni kurulmuş
+  bir lord ~700 altın kazanır. **Bir gece uyuyan lord** (10 saat, hazine
+  üçte bir dolu, `bun scripts/offline-balance.ts`): iyi oynanmış bir lordun
+  hazinesi ~%70–90'a çıkar, sıradan bir lordunki ~%55–65'e; hiçbir seviyede
+  dolmaz, çünkü haraççılar saatte bir hazinenin %3'ünü alır (hazine büyüdükçe
+  haraç da büyür ve bir dengede durur). Mallar da birikir (tüccar iş stoğunu
+  bırakır, yokken yarım yük götürür). Asker maaşı tur başına 0,04 altın,
+  lordlar arası haraç saatte 20–150 altındır.
+- **Mal dengesi:** Tüccar **daha az birim, daha pahalıya** satar: 3. seviye
+  ticaret noktası seferde 70 birim (önce 140), tur başına ~23 birim; en iyi
+  arazide en çok oduncu kampı tur başına ~44 yapı malzemesi, silah atölyeleri
+  ~19 savaş malzemesi, tarlalar halkı doyurduktan sonra ~27 yemek üretir. Yani
+  büyük üretici artık her şeyini satamaz, mallar depoda birikir; fiyatlar ise
+  ×1,5'tir (yemek 0,3, yapı 0,45, savaş 0,6), tüccarın altını küçük üreticide
+  ×1,5, büyük üreticide ~×0,75–1 olur. (Önce seferde 140 birim, fiyatlar 0,2 /
+  0,3 / 0,4'tü: tüccar ne üretilirse satıyor, depolar sıfırda kalıyor, hazine
+  birkaç saatte doluyordu. Saklanan lobi fiyatları
+  `20261024090000_economy_rebalance.sql` ile ×1,5 taşındı, `market.priceRev` = 3.)
   (Önce 0,13 / 0,2 / 0,27 idi; o fiyatlarla yeni ve orta lordun altını
   ölçekleme öncesine göre %35–55 düşmüş, 4. seviye saray 8,6 saatten 10,2
   saate uzamıştı. Saklanan lobi fiyatları `20261015180000_goods_reprice.sql`
@@ -3239,8 +3289,8 @@ mertebesindedir.
   düşmesinden zordur:** satılan her birim fiyatı %0,0375 düşürür, alınan her
   birim yalnızca %0,02 yükseltir; tabanın altına düşmüş fiyat yarı yolunu
   40 dakikada toplar, tabanın üstüne çıkmış fiyat yarı yolunu 15 dakikada
-  iner (`market.json`). Taban fiyatlar: yemek 0,2, yapı malzemesi 0,3,
-  savaş malzemesi 0,4 (`economy.json` → `trade.price`); pazarın alış
+  iner (`market.json`). Taban fiyatlar: yemek 0,3, yapı malzemesi 0,45,
+  savaş malzemesi 0,6 (`economy.json` → `trade.price`); pazarın alış
   fiyatı lobi fiyatının 1,4 katıdır.
 - Fiyat **olağan fiyatının %30'unun** altına inmez (`minFactor`); oraya inen
   malın kutusunda "en dipte" yazar ve satış onu daha fazla düşürmez.
@@ -3281,10 +3331,13 @@ mertebesindedir.
   dolunca reddedilmiş sayılır.
   - **İlişki geliştir:** altın karşılığı ilişki artar (bekleme süresiyle).
   - **Hediye:** altın gönderilir, miktarla orantılı ilişki artar.
-  - **Haraç iste:** Kabul edilirse ilişki −5 düşer ve her üretim turunda
-    haraç ödeyenden isteyene altın akar. Akışı **sunucu** yürütür
+  - **Haraç iste:** Kabul edilirse ilişki −5 düşer ve haraç ödeyenden
+    isteyene **saatte 20–150 altın** (10'luk adımlarla; `diplomacy.json` →
+    `tribute`) akar. (Önce tur başına 1–4 altındı, yani saatte 360–1.440:
+    yeni bir lordun bütün gelirinden fazla; eski anlaşmalar ve yoldaki istekler
+    `20261024090000_economy_rebalance.sql` ile ×36 taşındı.) Akışı **sunucu** yürütür
     (`settleTributes`, tick'te): haraç anlaşmasının son ödendiği andan bu
-    yana geçen turların haracı ödeyenin hazinesinden **ne kadar varsa** alınır
+    yana birikmiş tam altınlar ödeyenin hazinesinden **ne kadar varsa** alınır
     ve alana **yalnızca ödenen kadar** (hazinesine sığdığı kadar) geçer; boş
     kasadan haraç yoktan altın basmaz (önce alan taraf her turda koşulsuz
     alıyordu). Anlaşma `pacts.paid_at`'te son ödemeyi tutar; iki tarafın gelir/gider
@@ -3438,14 +3491,25 @@ mertebesindedir.
   uzaklaştıkça azalır; zara en fazla +1,5 ekler.
 - **Muharebe turları** (EU4 gibi): her tur (30 sn) iki taraf da d10 atar,
   zara saha bilgisi (kuşatılan saray için kule ve sur bonusu) eklenir;
-  sonuca göre karşı taraf asker ve moral kaybeder. Morali ya da askeri
+  sonuca göre karşı taraf asker ve moral kaybeder. Öldürülen asker kesirli
+  çıkar (asker × güç × 0,008 × zar); kesir, muharebenin tohumundan ayrı bir
+  zarla bir asker daha olasılığıdır (0,48 ölü %48 olasılıkla 1). Önce en yakına
+  yuvarlanıyordu: eşit ordularda 1–6 asker hiçbir zaman kimseyi öldüremiyor,
+  10 asker muharebelerin %5'inde sıfır öldürüyordu; yağmacı çeteleri ve asiler
+  bu aralıktadır (`military.ts` → `planBattle`). Morali ya da askeri
   biten taraf yenilir; son turda (14.) saldıran çekilir. Savaşlar ~8 tur sürer
   ve tur tur izlenebilir (zarlar, bonuslar, moral, kayıplar). Zar bonusunun
   altında kalemleri yazar: saha bilgisi, birlik üstünlüğü, iman ve kral, kuleler,
   hisar ve surlar. **Birlik üstünlüğü sayıya değil karışıma bakar** (iki ordunun
   birlik paylarının çarpımı, `units.ts` → `counterBonus`); asker sayısı zarda değil,
   öldürülen düşmanda ve moral kaybında sayılır. Yenilen ordu
-  eve çekilir ve eve varana kadar yeniden yakalanamaz.
+  eve çekilir ve eve varana kadar yeniden yakalanamaz. **Yolda kazanan ordu
+  yoluna devam eder:** muharebe başlarken yürüyen ordunun gittiği yer
+  saklanır (`goal.resume`); kazanırsa aynı hedefle (kuşatma, kasaba, kamp,
+  mağara, ev) oraya yürümeyi sürdürür. Önce hedefi sıradan yürüyüşe dönüyor,
+  kasaba kuşatması kayboluyor, ordu kapıya varmadan duruyordu. **Sarayı alan
+  ordu ganimetle eve döner:** kuşatma kalkanı boyunca kapıda, kulelerin
+  altında beklemez (önce bekliyor, kulelere 16 dakikada 48 asker kaybediyordu).
 - Savaştayken elçiler yalnızca barış götürür (ilişki geliştirme, hediye ve
   haraç isteği olmaz).
 - Ordu yolu iki adımda aranır: önce 4×4 karoluk hücrelerin **yürünebilir
@@ -3747,6 +3811,13 @@ krallıkta birer tane olur ve 3 seviyelidir.
   cevap verilmezse olay yalnızca kendi etkisiyle sürer. Cevap `responses`
   içinde `'a'`/`'b'` olarak saklanır; sunucu `choose` komutuyla
   (`dilemmaError`, `answerDilemma`) doğrular ve uygular.
+- **Sessiz haberler** (`notices.payload.quiet`): sunucunun rutin saydığı
+  haberler pencere açmaz, yalnızca günlüğe yazılır ve okundu sayılır
+  (`App.tsx` → `loud`): bahşişsiz ya da küçük bahşişli devriye uğrayışı, lord
+  yokken gelen haraç isteği (cevap veremez; süresi dolunca ödenir) ve lord yokken
+  kendiliğinden ödenen haraç. "Sen yokken" raporu ve defter bunları toplar. Sim
+  testlerinde lord başına saatte 4–6 haber geliyordu, ~%60–85'i bu rutin haraç ve
+  devriye haberleriydi; şimdi pencere olan haberler saatte ~1'e iner.
 - **Art arda gelen pencereler** (`apps/web/src/ui/DialogQueue.tsx`):
   elçi haberleri, hanedan haberleri ve günün olayları bir sıra gibidir.
   Her pencerenin altında aynı alt çubuk durur: solda pencerenin kendi
@@ -4073,7 +4144,7 @@ içerik. Değerler `config/balance/expeditions.json`, `goals.json` ve
     seviyesine göre 1 / 1 / 2 / 2 / 3 sefer, toplamda halkın en çok %34'ü
     yolda olabilir. **Geri çağır**: kafile hemen döner, eli boş (erzak
     gitmiştir).
-  - **Yolda olanlar:** her seferin 2–3 olayı vardır (iyi: sürü, mağara,
+  - **Yolda olanlar:** her seferin 2–3 olayı vardır, aynı olay bir seferde iki kez gelmez (önce aynı havuzdan bağımsız çekiliyordu; iyi: sürü, mağara,
     panayır, harita…; kötü: ayı, kaya çığı, haydut, tuzak…). Kötü olay
     şansı türün `danger` değeridir; her muhafız onu %15 azaltır (en az
     %35'ine kadar). Olaylar ganimeti artırır/azaltır, bir köylü ya da
@@ -4811,6 +4882,15 @@ bun run lobby:create "Ad" [tohum] [--private] [--players n]
 bun run dev          İstemciyi başlat (http://localhost:5173)
 bun run typecheck    Tüm paketlerde tip denetimi
 bun run build        İstemciyi derle
+SIM_DIR=<klasör> scripts/sim/run <komut>
+                     Sanal saatli lobi: gerçek `command` ve `tick` yerel Supabase'e karşı
+                     (önce db:start). setup, status, news, wait, cmd, grant, patch, sql;
+                     her şey SIM_DIR/events.md ve snapshots.csv'ye yazılır (docs/SIM-TEST-2-RAPORU.md)
+bun scripts/offline-balance.ts [saat] [tohum]
+                     Her saray seviyesinde tipik bir lordun çevrimdışı gecesi ve çevrimiçi saati
+                     (BAL='{"yol.anahtar":değer}' ile denge denemesi)
+bun scripts/playtest.ts <kayıt.json> <komut>
+                     Yalnızca paylaşılan kurallarla (sunucusuz) tek lordluk denemesi
 ```
 
 Bulut projesi: `jafnaqdiukfmkefcjsqo` (CLI ile `supabase link` yapılmış).

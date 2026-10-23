@@ -111,22 +111,25 @@ export const tributeCrowns = (crowns: number, liege: number | null | undefined) 
 // demand running out) but let it pass pays it with a surcharge; one who was away pays the plain tribute, no harm done.
 // Seen only well after the demand ran out (the server settled it late), the lord is not taken to have let it pass
 // while playing: what he did at that moment is not known, so no surcharge.
-export function unansweredTribute(amount: number, lastSeenAt: number | undefined, at: number) {
+export function unansweredTribute(amount: number, lastSeenAt: number | undefined, at: number, gold = Infinity) {
   const t = patrolSpec().tribute
   const seen = lastSeenAt ?? 0
   const afk = seen >= at - t.onlineMinutes * 60_000 && seen <= at + t.lateSeenSeconds * 1000
-  return { afk, amount: afk ? Math.round(amount * t.afkFactor) : amount }
+  // The surcharge too stays within the share of the treasury the collectors may ever take.
+  return { afk, amount: afk ? Math.max(amount, Math.min(Math.round(amount * t.afkFactor), Math.floor(Math.max(0, gold) * t.maxShare))) : amount }
 }
 
 // The tribute demanded of a lord with `gold` in the treasury: a fixed share of it, tilted by the asking crown's ruler
 // (`factor`: the reigning ruler's trait, crownHouse.ts → crownTraitAt).
 // What the rival crown's collectors ask: a share of the treasury, never less than a floor (all there is, if the
 // treasury holds less), so the crowns cost a lord more than they give (CLAUDE.md §7.8).
-export const tributeDemand = (gold: number, factor = 1) => {
+export const tributeDemand = (gold: number, factor = 1, palaceLevel?: number) => {
   const t = patrolSpec().tribute
   const have = Math.max(0, gold)
-  // At least `min`, but never more than `maxShare` of the treasury: a lean one (a lord long away) is not emptied.
-  return Math.floor(Math.min(have * t.maxShare, Math.max(have * t.share, t.min) * factor))
+  // At least a floor that grows with the palace (a small lord pays little), but never more than `maxShare` of the
+  // treasury: a lean one (a lord long away) is not emptied.
+  const floor = palaceLevel === undefined ? t.min : t.minPerPalaceLevel * palaceLevel
+  return Math.floor(Math.min(have * t.maxShare, Math.max(have * t.share, floor) * factor))
 }
 
 // Where a crown's patrols ride out from: just outside the capital's front wall.

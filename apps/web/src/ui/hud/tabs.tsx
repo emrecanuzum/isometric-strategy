@@ -702,8 +702,8 @@ function TradePost(data: HudData) {
         <p className="alert">
           <Icon name="warn" size={16} />{' '}
           {L(
-            `Ambarda satılacak ${RESOURCE_NAMES[trade.good].toLocaleLowerCase(locale())} kalmadı: tüccar eli boş bekliyor. Başka bir mal seç ya da bu malın üretimini artır.`,
-            `No ${RESOURCE_NAMES[trade.good].toLocaleLowerCase(locale())} left in store to sell: the merchant waits empty-handed. Pick another good or make more of this one.`,
+            `Ambarda satılacak ${RESOURCE_NAMES[trade.good].toLocaleLowerCase(locale())} kalmadı: tüccar inşaat ve yemek için ${fmt(tradeReserve(kingdom, trade.good, now))} birimi depoda bırakıp eli boş bekliyor. Başka bir mal seç ya da bu malın üretimini artır.`,
+            `No ${RESOURCE_NAMES[trade.good].toLocaleLowerCase(locale())} left to sell: the merchant keeps ${fmt(tradeReserve(kingdom, trade.good, now))} in store for building and the table, and waits empty-handed. Pick another good or make more of this one.`,
           )}
         </p>
       )}

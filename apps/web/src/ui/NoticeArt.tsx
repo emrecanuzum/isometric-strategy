@@ -1308,6 +1308,8 @@ export function noticeLook(n: Notice, online: Online): NoticeLook {
       return L('naval', BANDIT_HEX, 'good', 'calm')
     case 'pirate_escaped':
       return L('naval', own, 'bad', 'calm')
+    case 'ship_lost':
+      return L('naval', BANDIT_HEX, 'bad')
     case 'pirate_battle':
     case 'haven_battle':
       return L('naval', BANDIT_HEX, p.won ? 'good' : 'bad')
@@ -1439,6 +1441,8 @@ export function soundForNotice(n: Notice, online: Online): Cue {
     case 'pirate_battle':
     case 'haven_battle':
       return p.won ? 'victory' : 'sorrow'
+    case 'ship_lost':
+      return 'sorrow'
     case 'haven_turned':
       return 'lost'
     case 'haven_empty':

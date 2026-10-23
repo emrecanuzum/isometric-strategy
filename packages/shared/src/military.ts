@@ -899,6 +899,10 @@ export function planBattle(attackers: Fighter[], defenders: Fighter[], seed: num
   const aTowers = defense.attackerTowers ?? 0
   const dTowers = defense.towers
   const random = mulberry32(seed)
+  // Kills come in fractions: the fraction is a chance of one more, drawn from its own stream so the dice stay as they
+  // were. Rounded to the nearest, a small army (under a dozen) could never kill anyone.
+  const fraction = mulberry32(seed ^ 0x5bd1e995)
+  const whole = (x: number) => Math.floor(x) + (fraction() < x - Math.floor(x) ? 1 : 0)
   const unitsOf = (side: Fighter[]) =>
     side.reduce<Units>((all, f) => {
       const u = f.units ?? { spear: f.soldiers }
@@ -939,8 +943,8 @@ export function planBattle(attackers: Fighter[], defenders: Fighter[], seed: num
     // Towers shoot every round, with or without soldiers beside them.
     const towersA = Math.min(d.soldiers, aTowers * tower.killsPerRound)
     const towersD = Math.min(a.soldiers, dTowers * tower.killsPerRound)
-    const killsByA = Math.min(d.soldiers, Math.round(a.soldiers * aWeight * b.killRate * sa) + towersA)
-    const killsByD = Math.min(a.soldiers, Math.round(d.soldiers * dWeight * b.killRate * sd) + towersD)
+    const killsByA = Math.min(d.soldiers, whole(a.soldiers * aWeight * b.killRate * sa) + towersA)
+    const killsByD = Math.min(a.soldiers, whole(d.soldiers * dWeight * b.killRate * sd) + towersD)
     const hitByA = sa * b.moraleHit * Math.sqrt(Math.max(1, a.soldiers) / Math.max(1, d.soldiers))
     const hitByD = sd * b.moraleHit * Math.sqrt(Math.max(1, d.soldiers) / Math.max(1, a.soldiers))
     a.soldiers -= killsByD

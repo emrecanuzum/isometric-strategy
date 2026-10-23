@@ -24,8 +24,10 @@ export function foodDemandFor(people: number) {
   return Number((1 + Math.round((t * d.maxRise) / d.step) * d.step).toFixed(4))
 }
 
+// The revision of the base prices in config (bumped with a migration that moves the stored prices).
+export const PRICE_REV = 3
 export const freshMarket = (now: number): Market =>
-  Object.fromEntries(GOODS.map((g) => [g, { price: basePrice(g), at: now }])) as unknown as Market
+  ({ ...Object.fromEntries(GOODS.map((g) => [g, { price: basePrice(g), at: now }])), priceRev: PRICE_REV }) as unknown as Market
 
 // The crown kingdoms buy (CLAUDE.md §7.8): in each window of the clock each crown wants one good, drawn from the
 // window and the crown, and takes so many units of it off the lobby's market every step. Like everything else it

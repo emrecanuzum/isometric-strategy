@@ -165,6 +165,7 @@ export type NavyError =
   | 'city'
   | 'good'
   | 'engaged'
+  | 'offDock'
 
 const scaled = (cost: Cost, n: number): Cost => Object.fromEntries(Object.entries(cost).map(([r, v]) => [r, (v ?? 0) * n]))
 
@@ -224,6 +225,15 @@ export function voyageMs(from: Rect | null | undefined, to: Rect | null | undefi
 
 export const HOME_MISSIONS: MissionKind[] = ['port', 'trade', 'fish', 'hunt']
 export const atHome = (f: Fleet) => HOME_MISSIONS.includes(f.mission.kind)
+// A fleet sailed off somewhere (seaways.ts) is not at its dock: still under way, or anchored more than dockReachTiles
+// from the dock plot. It must sail back before it moors in the harbour or sets out with cargo from the dock.
+export function offDock(k: Pick<Kingdom, 'dockPlot'>, f: Fleet, at: number) {
+  if (!f.sail || !k.dockPlot) return false
+  if (at < f.sail.arriveAt) return true
+  const end = f.sail.path[f.sail.path.length - 1]
+  const dock = plotCenter(k.dockPlot)
+  return !!end && Math.hypot(end.x - dock.x, end.y - dock.y) > N.dockReachTiles
+}
 export const fleetOf = (k: Pick<Kingdom, 'navy'>, id: number) => navyOf(k).fleets.find((f) => f.id === id) ?? null
 const putFleets = (k: Kingdom, n: Navy, fleets: Fleet[], harbour = n.harbour): Kingdom => ({ ...k, navy: { ...n, fleets, harbour } })
 
@@ -278,14 +288,15 @@ export function mergeFleets(k: Kingdom, a: number, b: number): Kingdom {
 }
 
 // A fleet at home is stood down: its ships moor in the harbour.
-export function dockFleetError(k: Kingdom, id: number): NavyError | null {
+export function dockFleetError(k: Kingdom, id: number, at = Infinity): NavyError | null {
   const f = fleetOf(k, id)
   if (!f) return 'fleet'
   if (!atHome(f)) return 'away'
+  if (offDock(k, f, at)) return 'offDock'
   return null
 }
-export function dockFleet(k: Kingdom, id: number): Kingdom {
-  if (dockFleetError(k, id)) return k
+export function dockFleet(k: Kingdom, id: number, at = Infinity): Kingdom {
+  if (dockFleetError(k, id, at)) return k
   const n = navyOf(k)
   const f = fleetOf(k, id)!
   return putFleets(k, n, n.fleets.filter((x) => x.id !== id), addShips(n.harbour, f.ships))
@@ -320,6 +331,8 @@ export function missionError(k: Kingdom, id: number, order: MissionOrder, at: nu
       return null
     case 'trade': {
       if (!hasDock(k, at)) return 'dock'
+      // Cargo is loaded at the dock: a fleet anchored far off sails back first.
+      if (offDock(k, f, at)) return 'offDock'
       if (blockaded) return 'blockaded'
       if (!GOOD_KINDS.includes(order.good)) return 'good'
       if (!Number.isInteger(order.city) || !ctx.cities[order.city]) return 'city'

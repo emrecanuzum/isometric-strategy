@@ -71,8 +71,8 @@
     "brotherInherits": true
   },
   "siblingFate": {
-    "age": [18, 30],
-    "soonestYears": [0.5, 3]
+    "age": [34, 46],
+    "soonestYears": [8, 16]
   },
   "sickness": {
     "royalPerShare": 0.001,
@@ -325,7 +325,8 @@
       "succession": -10,
       "roleRemoved": -20,
       "warn": -15,
-      "calm": -5
+      "calm": -5,
+      "neglect": { "perHour": 3, "max": 30 }
     },
     "crownBond": {
       "commander": 35,
@@ -373,9 +374,9 @@
     "revolt": {
       "minPalaceLevel": 2,
       "checkMinutes": 15,
-      "below": -35,
-      "baseChance": 0.15,
-      "chancePerPoint": 0.01,
+      "below": -20,
+      "baseChance": 0.2,
+      "chancePerPoint": 0.015,
       "maxChance": 0.5,
       "quietMinutes": 120,
       "deserterShare": 0.15,

@@ -69,13 +69,16 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
         const settled = game.advance(row.state, arrive).kingdom
         // A lord still on a level 1 palace is tipped all the same, and more (CLAUDE.md §7.8).
         const fresh = game.isNewcomer(game.palaceLevel(settled, arrive))
-        const tip = fresh || hasTavern(settled, arrive)
+        const tavern = hasTavern(settled, arrive)
+        // Without a house of entertainment the patrol still leaves a little at the gate (plainTip).
+        const tip = fresh || tavern || spec.plainTip > 0
         const favour = game.byPower(share[crown] ?? 0.5, game.balance.cities.crown.power.favour)
         // A brother of the lord at the patrol's head: a bigger tip, a warmer crown (CLAUDE.md §9.1.1).
         const kin = game.patrolFavour(settled)
         // The reigning ruler's ways and the crowns' rivalry: a generous ruler, a crown at war tips more (CLAUDE.md §7.8).
         const ways = game.crownWays(row.state, crown, arrive)
-        const amount = tip ? Math.round((fresh ? spec.newcomer.tip : spec.tip) * favour * kin.tip * ways.tip) : 0
+        const base = fresh ? spec.newcomer.tip : tavern ? spec.tip : spec.plainTip
+        const amount = tip ? Math.round(base * favour * kin.tip * ways.tip) : 0
         const written = await claim({ crown, patrol, slot, kingdom_id: target, kind: tip ? 'tip' : 'visit', amount, status: 'done', visit_at: iso(arrive), expires_at: null })
         if (!written) continue
         const gift = game.giftAt(game.crownRelation(settled, crown))
@@ -89,10 +92,11 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
         })
         // A tip and a gift on one visit are one piece of news, not two dialogs.
         const giftNews = gift ? { name: gift.name, gold: giftGold, goods } : null
-        if (tip) await notify(lobby, [target], 'patrol_tip', { crown, amount, newcomer: fresh, gift: giftNews }, arrive)
+        // A small tip at the gate with no gift is routine: written in the journal, no dialog (`quiet`).
+        if (tip) await notify(lobby, [target], 'patrol_tip', { crown, amount, newcomer: fresh, gift: giftNews, ...(!fresh && !tavern && !giftNews && { quiet: true }) }, arrive)
         else if (giftNews) await notify(lobby, [target], 'crown_gift', { crown, ...giftNews }, arrive)
         // With neither a tip nor a gift, the patrol still says it came (no lord sees soldiers at his gate in silence).
-        if (!tip && !gift) await notify(lobby, [target], 'patrol_visit', { crown, relation: game.balance.cities.crown.relation.visit + kin.relation }, arrive)
+        if (!tip && !gift) await notify(lobby, [target], 'patrol_visit', { crown, relation: game.balance.cities.crown.relation.visit + kin.relation, quiet: true }, arrive)
       }
     }
   }
@@ -125,12 +129,13 @@ export async function settlePatrols(lobby: string, world: LobbyWorld, rows: Row[
           continue
         }
         const gold = Math.floor(then.stock?.gold ?? 0)
-        const amount = game.tributeDemand(gold, game.crownWays(row.state, crown, arrive).tribute)
+        const amount = game.tributeDemand(gold, game.crownWays(row.state, crown, arrive).tribute, game.palaceLevel(then, arrive))
         if (amount < 1) continue
         const written = await claim({ crown, patrol: -1, slot, kingdom_id: row.id, kind: 'tribute', amount, status: late ? 'done' : 'pending', visit_at: iso(arrive), expires_at: iso(expires) })
         if (!written) continue
         if (late) await takeTribute(lobby, row.id, crown, amount, expires, false)
-        else await notify(lobby, [row.id], 'patrol_tribute', { visit: written.id, crown, amount, gold, expiresAt: expires }, arrive)
+        // A lord away from the game cannot answer: the demand goes in the journal only, and is paid when it runs out.
+        else await notify(lobby, [row.id], 'patrol_tribute', { visit: written.id, crown, amount, gold, expiresAt: expires, ...(game.isAway(row.state, arrive) && { quiet: true }) }, arrive)
       }
     }
   }
@@ -154,10 +159,11 @@ async function takeTribute(lobby: string, kingdom: number, crown: number, amount
   let taken = 0
   let afk = false
   await mutateKingdom(kingdom, at, (k) => {
-    const due = asked ? game.unansweredTribute(amount, k.lastSeenAt, at) : { amount, afk: false }
+    const due = asked ? game.unansweredTribute(amount, k.lastSeenAt, at, k.stock.gold) : { amount, afk: false }
     afk = due.afk
     taken = Math.min(due.amount, Math.max(0, Math.floor(k.stock.gold)))
     return game.book({ ...k, stock: { ...k.stock, gold: k.stock.gold - taken } }, { crownPaid: taken })
   })
-  await notify(lobby, [kingdom], 'patrol_taken', { crown, amount: taken, afk, asked: amount }, at)
+  // Paid plainly by a lord who was away: the journal and the report on coming back tell of it, no dialog.
+  await notify(lobby, [kingdom], 'patrol_taken', { crown, amount: taken, afk, asked: amount, ...(!afk && { quiet: true }) }, at)
 }

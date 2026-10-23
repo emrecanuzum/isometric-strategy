@@ -425,14 +425,18 @@ async function startBattle(
     })
     .select('id')
     .single()
-  // The armies stop where they stand for the length of the battle.
+  // The armies stop where they stand for the length of the battle. One caught on the march keeps where it was going
+  // (`resume`): if it wins it marches on, to the siege or the town it was sent to.
   for (const l of [...a, ...b]) {
     l.engaged = true
     const here = game.armyAt(l.army, t) as Point
     const f = fighter(l)
+    const end = l.army.path[l.army.path.length - 1] as Point | undefined
+    const marching = ms(l.army.arrive_at) > t && !!end && dist(end, here) > 1
+    const goal = marching ? { ...l.army.goal, resume: end } : l.army.goal
     await admin
       .from('armies')
-      .update({ path: [here], depart_at: iso(t), arrive_at: iso(t), status: 'battle', morale: f.morale, familiarity: f.familiarity, camp: here })
+      .update({ path: [here], depart_at: iso(t), arrive_at: iso(t), status: 'battle', morale: f.morale, familiarity: f.familiarity, camp: here, goal })
       .eq('id', l.army.id)
   }
   const kingdoms = [...new Set([...att, ...def].map((f) => f.kingdom))]
@@ -483,14 +487,25 @@ async function finishBattle(battle: { id: number; lobby_id: string; kind: string
       }
       const here = army.path[army.path.length - 1]
       const familiarity = army.familiarity
-      if (won) {
+      const owner = states.get(f.kingdom)
+      const blocker = game.buildingBlocker([...states].map(([id, st]) => ({ id, buildings: st.buildings })), f.kingdom)
+      const still = { ...army, soldiers, units, morale, status: 'idle' as const, path: [here], depart_at: iso(at), arrive_at: iso(at) }
+      const { resume, ...goal } = army.goal
+      if (won && battle.kind === 'siege' && side === battle.attackers) {
+        // A palace taken: the victors carry the loot home rather than stand under its towers through the shield.
+        const door = owner && doorOf(owner)
+        const home = owner && door ? march(world, still, owner, at, door, { kind: 'home' }, blocker) : null
+        await admin.from('armies').update({ ...(home ?? { ...standing(here, at, morale, familiarity), goal: { kind: 'move' } }), soldiers, units, morale }).eq('id', army.id)
+      } else if (won && resume && goal.kind !== 'move' && goal.kind !== 'chase') {
+        // Won on the way: on to the siege, the town or the camp it was sent to.
+        const on = owner ? march(world, still, owner, at, resume, goal, blocker) : null
+        await admin.from('armies').update({ ...(on ?? { ...standing(here, at, morale, familiarity), goal }), soldiers, units, morale }).eq('id', army.id)
+      } else if (won) {
         await admin.from('armies').update({ ...standing(here, at, morale, familiarity), soldiers, units, goal: { kind: 'move' } }).eq('id', army.id)
       } else {
         // The beaten army falls back home.
-        const owner = states.get(f.kingdom)
         const door = owner && doorOf(owner)
-        const still = { ...army, soldiers, units, morale, status: 'idle' as const, path: [here], depart_at: iso(at), arrive_at: iso(at) }
-        const retreat = owner && door ? march(world, still, owner, at, door, { kind: 'home', retreat: true }, game.buildingBlocker([...states].map(([id, st]) => ({ id, buildings: st.buildings })), f.kingdom)) : null
+        const retreat = owner && door ? march(world, still, owner, at, door, { kind: 'home', retreat: true }, blocker) : null
         // With no way home it stays where it is, still out of the fight until it is given a new order.
         const fallback = { ...standing(here, at, morale, familiarity), goal: { kind: 'home', retreat: true } }
         await admin.from('armies').update({ ...(retreat ?? fallback), soldiers, units, morale, cargo: null }).eq('id', army.id)

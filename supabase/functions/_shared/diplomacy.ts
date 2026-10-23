@@ -239,19 +239,20 @@ export async function intel(lobby: string, me: number, targetId: number, now: nu
 // pact from before this rule starts counting from now.
 // deno-lint-ignore no-explicit-any
 export async function settleTributes(lobby: string, pacts: any[], now: number) {
-  const round = game.balance.economy.productionSeconds * 1000
   for (const p of pacts) {
     if (p.kind !== 'tribute' || p.ended_at) continue
     if (!p.paid_at) {
       await admin.from('pacts').update({ paid_at: iso(now) }).eq('id', p.id).is('paid_at', null)
       continue
     }
+    // The tribute is gold an hour (CLAUDE.md §9.7), paid in whole coins as they fall due.
+    const perHour = p.gold ?? 0
+    if (perHour <= 0) continue
     const from = ms(p.paid_at)
-    const rounds = Math.floor((now - from) / round)
-    if (rounds < 1) continue
-    const { data: claimed } = await admin.from('pacts').update({ paid_at: iso(from + rounds * round) }).eq('id', p.id).eq('paid_at', p.paid_at).select('id').maybeSingle()
+    const owed = Math.floor(((now - from) * perHour) / 3_600_000)
+    if (owed < 1) continue
+    const { data: claimed } = await admin.from('pacts').update({ paid_at: iso(from + Math.round((owed * 3_600_000) / perHour)) }).eq('id', p.id).eq('paid_at', p.paid_at).select('id').maybeSingle()
     if (!claimed) continue
-    const owed = rounds * (p.gold ?? 0)
     let paid = 0
     await mutateKingdom(p.to_id, now, (k) => {
       paid = Math.max(0, Math.min(owed, Math.floor(k.stock.gold)))

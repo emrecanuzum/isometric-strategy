@@ -26,7 +26,7 @@ export interface ArmyRow {
   // siege to that town (CLAUDE.md §8.4).
   // `chase`: after a band of bandits (CLAUDE.md §7.9), since `since` (ms). `camp`: sent against its own lord's
   // pretender's camp (CLAUDE.md §9.1.1).
-  goal: { kind: 'move' | 'home' | 'siege' | 'town' | 'chase' | 'camp' | 'cave'; kingdom?: number; town?: number; retreat?: boolean; band?: number; since?: number; slot?: number; gen?: number }
+  goal: { kind: 'move' | 'home' | 'siege' | 'town' | 'chase' | 'camp' | 'cave'; kingdom?: number; town?: number; retreat?: boolean; band?: number; since?: number; slot?: number; gen?: number; resume?: Point }
   morale: number
   familiarity: number
   camp: Point

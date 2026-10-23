@@ -175,7 +175,7 @@ export function peaceTermsError(terms: PeaceTerms, score: number): PeaceError | 
   if (terms.kind === 'white' || terms.kind === 'offer') return null
   if (!(terms.gold > 0)) return 'terms'
   if (terms.kind === 'gold' && score < terms.gold / p.goldPerScore) return 'score'
-  if (terms.kind === 'tribute' && (score < p.tributeMinScore || terms.gold > balance.diplomacy.tribute.maxGold)) return 'score'
+  if (terms.kind === 'tribute' && (score < p.tributeMinScore || terms.gold > balance.diplomacy.tribute.maxGold || terms.gold < balance.diplomacy.tribute.minGold)) return 'score'
   return null
 }
 

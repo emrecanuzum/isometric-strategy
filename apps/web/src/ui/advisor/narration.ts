@@ -2424,8 +2424,8 @@ export function narrate(c: Cmd, k?: Kingdom | null): string | null {
         case 'tribute':
           return any([
             L(
-              `Haraç isteğimiz yolda, lordum${c.gold ? `: turda ${c.gold} altın` : ''}. Kabul ederlerse hazine her tur dolar; etmezlerse elçimiz kaçmayı bilir.`,
-              `Our tribute demand is on its way, my lord${c.gold ? `: ${c.gold} gold a round` : ''}. If they accept, the treasury fills every round; if not, our envoy knows how to run.`,
+              `Haraç isteğimiz yolda, lordum${c.gold ? `: saatte ${c.gold} altın` : ''}. Kabul ederlerse hazine saat saat dolar; etmezlerse elçimiz kaçmayı bilir.`,
+              `Our tribute demand is on its way, my lord${c.gold ? `: ${c.gold} gold an hour` : ''}. If they accept, the treasury fills hour by hour; if not, our envoy knows how to run.`,
             ),
             L(
               'Elçimiz haraç istemeye gitti, lordum. Kaşlarını çatmayı biliyor; ben öğrettim, aynada saatlerce çalıştık.',

@@ -109,8 +109,10 @@ function random(seed: number) {
   }
 }
 
-function pick(pool: Record<string, Incident>, roll: number) {
-  const entries = Object.entries(pool)
+// One incident from the pool by weight, leaving out those the party has already met (unless none are left).
+function pick(pool: Record<string, Incident>, roll: number, met: string[] = []) {
+  const fresh = Object.entries(pool).filter(([id]) => !met.includes(id))
+  const entries = fresh.length > 0 ? fresh : Object.entries(pool)
   let left = roll * entries.reduce((n, [, i]) => n + i.weight, 0)
   for (const [id, i] of entries) {
     left -= i.weight
@@ -251,7 +253,7 @@ export function expeditionOutcome(k: Seeded, e: Pick<Expedition, 'id' | 'kind' |
   let rumour: number | undefined
   for (let i = 0; i < spec.incidents; i++) {
     const bad = r() < danger
-    const [id, inc] = pick(bad ? spec.bad : spec.good, r())
+    const [id, inc] = pick(bad ? spec.bad : spec.good, r(), incidents.map((x) => x.id))
     // Rolled every time, so one draw never shifts the next.
     const lostVillager = r()
     const lostSoldier = r()
