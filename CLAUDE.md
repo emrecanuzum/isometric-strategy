@@ -516,7 +516,8 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   Pixelify Sans'tan piksel piksel alınır, menünün başlığı gibi yaldız bantlı, mürekkep kenarlı ve kahverengi
   alt gölgelidir. Dosyalar `public/brand/` altındadır (yatay ve dikey logo, rozet, Instagram 1080, favicon
   32/64, apple-touch ve 192/512 simgeler); yeniden üretmek için `bun scripts/brand-save.ts
-  apps/web/public/brand` ile `bun run dev` açıkken `/brand.html?save=5199` açılır.
+  apps/web/public/brand` çalıştırılır, `bun run dev` açıkken yazdırdığı `/brand.html?save=…&token=…` bağlantısı açılır
+  (yalnızca 127.0.0.1'i dinler, bu token'ı ve bilinen PNG adlarını kabul eder).
 - Arayüz yazı tipi Pixelify Sans'tır; ondaki 2 ve 5 zor okunduğu için
   **rakamlar Jersey 10** ile çizilir (Tiny5'in 8'i 0 gibi okunuyordu) (`apps/web/src/fonts.ts`). Büyük sayılar
   1,2K / 3,4M diye kısaltılır.

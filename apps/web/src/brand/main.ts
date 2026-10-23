@@ -1,7 +1,7 @@
 import '@fontsource/pixelify-sans/latin-600.css'
 import { type Art, badge, favicon, logoStacked, logoWide } from './brandArt'
 
-// A dev-only page (/brand.html) that paints the brand art and, with ?save=<port>, posts every export as a PNG to a
+// A dev-only page (/brand.html) that paints the brand art and, with ?save=<port>&token=<token>, posts every export as a PNG to a
 // local helper that writes it under public/brand (see CLAUDE.md §4.2.1 for the art's rules).
 
 function canvasOf(a: Art, scale: number) {
@@ -66,11 +66,13 @@ for (const [name, c] of exports) {
 }
 out.className = 'row'
 
-const port = new URLSearchParams(location.search).get('save')
+const query = new URLSearchParams(location.search)
+const port = query.get('save')
+const token = query.get('token') ?? ''
 if (port) {
   for (const [name, c] of exports) {
     const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), 'image/png'))
-    await fetch(`http://localhost:${port}/${name}`, { method: 'POST', body: blob })
+    await fetch(`http://127.0.0.1:${port}/${name}?token=${encodeURIComponent(token)}`, { method: 'POST', body: blob })
   }
   document.title = 'saved'
 }
