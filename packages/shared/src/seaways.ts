@@ -95,6 +95,8 @@ function clear(world: World, a: Point, b: Point, room = 0) {
   return true
 }
 
+const STRAIGHT_RUN = 80
+
 // The way over water from one water point to another (tile centres, then straightened where the water allows), or
 // null when no water joins them within the search's reach.
 export function waterPath(world: World, from: Point, to: Point, maxNodes = S.maxNodes): Point[] | null {
@@ -107,52 +109,66 @@ export function waterPath(world: World, from: Point, to: Point, maxNodes = S.max
   const start = sy * size + sx
   const goal = ty * size + tx
   const field = shoreClearance(world)
-  const came = new Map<number, number>([[start, -1]])
-  const cost = new Map<number, number>([[start, 0]])
-  // A binary heap of [priority, node].
-  const heap: [number, number][] = [[0, start]]
+  const came = new Int32Array(size * size).fill(-1)
+  const cost = new Float64Array(size * size).fill(Infinity)
+  cost[start] = 0
+  // A binary heap of nodes by priority, kept in two flat arrays.
+  const keys: number[] = [0]
+  const nodes: number[] = [start]
   const push = (p: number, n: number) => {
-    heap.push([p, n])
-    let i = heap.length - 1
+    let i = keys.length
+    keys.push(p)
+    nodes.push(n)
     while (i > 0) {
       const j = (i - 1) >> 1
-      if (heap[j][0] <= heap[i][0]) break
-      ;[heap[i], heap[j]] = [heap[j], heap[i]]
+      if (keys[j] <= p) break
+      keys[i] = keys[j]
+      nodes[i] = nodes[j]
       i = j
     }
+    keys[i] = p
+    nodes[i] = n
   }
+  // Takes the top node off the heap; its priority is left in `topKey`.
+  let topKey = 0
   const pop = () => {
-    const top = heap[0]
-    const last = heap.pop()!
-    if (heap.length > 0) {
-      heap[0] = last
+    const top = nodes[0]
+    topKey = keys[0]
+    const p = keys.pop()!
+    const n = nodes.pop()!
+    const len = keys.length
+    if (len > 0) {
       let i = 0
       for (;;) {
         const l = i * 2 + 1
+        if (l >= len) break
         const r = l + 1
-        let m = i
-        if (l < heap.length && heap[l][0] < heap[m][0]) m = l
-        if (r < heap.length && heap[r][0] < heap[m][0]) m = r
-        if (m === i) break
-        ;[heap[i], heap[m]] = [heap[m], heap[i]]
+        const m = r < len && keys[r] < keys[l] ? r : l
+        if (keys[m] >= p) break
+        keys[i] = keys[m]
+        nodes[i] = nodes[m]
         i = m
       }
+      keys[i] = p
+      nodes[i] = n
     }
     return top
   }
   const h = (n: number) => Math.hypot((n % size) - tx, Math.floor(n / size) - ty)
   let seen = 0
   let found = start === goal
-  while (heap.length > 0 && !found) {
-    const [, n] = pop()
+  while (keys.length > 0 && !found) {
+    const n = pop()
     if (n === goal) {
       found = true
       break
     }
+    // An entry left behind by a cheaper way to the same node.
+    if (topKey > cost[n] + h(n) + 1e-9) continue
     if (++seen > maxNodes) return null
     const x = n % size
     const y = Math.floor(n / size)
-    const base = cost.get(n)!
+    const base = cost[n]
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
       const nx = x + dx
       const ny = y + dy
@@ -161,15 +177,15 @@ export function waterPath(world: World, from: Point, to: Point, maxNodes = S.max
       if (dx && dy && (!isWaterTile(world, x + dx, y) || !isWaterTile(world, x, y + dy))) continue
       const m = ny * size + nx
       const c = base + (dx && dy ? Math.SQRT2 : 1) * (1 + shoreCost(field[m]))
-      if (c >= (cost.get(m) ?? Infinity)) continue
-      cost.set(m, c)
-      came.set(m, n)
+      if (c >= cost[m]) continue
+      cost[m] = c
+      came[m] = n
       push(c + h(m), m)
     }
   }
   if (!found) return null
   const tiles: Point[] = []
-  for (let n = goal; n !== -1; n = came.get(n)!) tiles.push({ x: (n % size) + 0.5, y: Math.floor(n / size) + 0.5 })
+  for (let n = goal; n !== -1; n = came[n]) tiles.push({ x: (n % size) + 0.5, y: Math.floor(n / size) + 0.5 })
   tiles.reverse()
   tiles[0] = { x: from.x, y: from.y }
   tiles[tiles.length - 1] = { x: to.x, y: to.y }
@@ -180,12 +196,15 @@ export function waterPath(world: World, from: Point, to: Point, maxNodes = S.max
   let i = 0
   while (i < tiles.length - 1) {
     // The least clearance of the tiles a run from i to each j would cut out.
+    // (A run reaches at most STRAIGHT_RUN tiles ahead: a longer straight stretch is kept as a few straight runs, and
+    // a long voyage does not try every later tile from every point.)
+    const far = Math.min(tiles.length - 1, i + STRAIGHT_RUN)
     const least: number[] = []
-    for (let k = i + 1, m = CLEAR_CAP; k < tiles.length; k++) {
+    for (let k = i + 1, m = CLEAR_CAP; k <= far; k++) {
       least[k] = m
       m = Math.min(m, room[k])
     }
-    let j = tiles.length - 1
+    let j = far
     while (j > i + 1 && !clear(world, tiles[i], tiles[j], least[j])) j--
     path.push(tiles[j])
     i = j

@@ -27,8 +27,11 @@ export const Feature = {
 // farthest apart however close that is (one lakeside and the farthest open spot, or two open ones, when the lakes
 // have less room). 6: as 5, but the rivers are widened once everything else is laid (widenRivers), each bank drawn
 // back by a share of the river's width; next to whatever must stay dry (`keep`: a running lobby's buildings and plots
-// when it moved to this revision) that bank stays and the other is drawn back twice as far.
-export const WORLD_REV = 6
+// when it moved to this revision) that bank stays and the other is drawn back twice as far. 7: as 6, but all the water
+// is one: streams run until they join a river (never off the map's edge), and every lake a dock could stand on that no
+// river reaches gets a stream of its own down to the nearest water already joined (linkLakes), so a fleet can sail
+// from any dock to any other water, the long way round if need be.
+export const WORLD_REV = 7
 
 // A rectangle of tiles the widened rivers leave dry: [x, y, width, height].
 export type RiverKeep = [number, number, number, number]
@@ -340,9 +343,12 @@ export function generateWorld(seed: number, rev = WORLD_REV, keep: RiverKeep[] =
   const rivers: Polyline[] = []
   // Distance from each tile to the nearest river bank: negative inside the channel, positive on land.
   const riverDistance = new Float32Array(size * size).fill(Infinity)
-  const carve = (path: number[], width: number, spring = false) => {
+  // `from`, `to`: exact ends for the line (tile centres), in place of the end cells' route points.
+  const carve = (path: number[], width: number, spring = false, from?: Point, to?: Point) => {
     for (const cell of path) riverCells[cell] = 1
     let line = path.map(routePoint).map((p) => ({ x: p.x + 0.5, y: p.y + 0.5 }))
+    if (from) line[0] = from
+    if (to) line[line.length - 1] = to
     // Corner cutting rounds the bends of the route.
     for (let pass = 0; pass < 2 && line.length > 2; pass++) {
       const smooth = [line[0]]
@@ -376,6 +382,67 @@ export function generateWorld(seed: number, rev = WORLD_REV, keep: RiverKeep[] =
           if (d - half < riverDistance[index]) riverDistance[index] = d - half
         }
       }
+    }
+  }
+
+  // Revision 7: every lake big enough for a dock (balance.territory.shoreMinWater) is joined to the rivers. Water is a
+  // lake tile or a tile inside a carved channel; what is joined is flooded (4-way, as a fleet sails) from the main
+  // river. The largest lake not yet joined gets a stream from one of its tiles to the nearest joined water, and so on.
+  const wetNow = (i: number) => terrain[i] === Terrain.Lake || riverDistance[i] <= 0
+  const joined = new Uint8Array(size * size)
+  const flood = (from: number) => {
+    if (joined[from] || !wetNow(from)) return
+    joined[from] = 1
+    const stack = [from]
+    while (stack.length > 0) {
+      const j = stack.pop()!
+      const x = j % size
+      const y = (j - x) / size
+      for (const k of [x > 0 ? j - 1 : -1, x < size - 1 ? j + 1 : -1, y > 0 ? j - size : -1, y < size - 1 ? j + size : -1]) {
+        if (k < 0 || joined[k] || !wetNow(k)) continue
+        joined[k] = 1
+        stack.push(k)
+      }
+    }
+  }
+  const linkLakes = () => {
+    for (const cell of mainRiver) {
+      const p = routePoint(cell)
+      flood(p.y * size + p.x)
+    }
+    // The lakes, each as its tiles.
+    const seen = new Uint8Array(size * size)
+    const lakes: number[][] = []
+    for (let i = 0; i < size * size; i++) {
+      if (seen[i] || terrain[i] !== Terrain.Lake) continue
+      const tiles = [i]
+      seen[i] = 1
+      for (let n = 0; n < tiles.length; n++) {
+        const j = tiles[n]
+        const x = j % size
+        const y = (j - x) / size
+        for (const k of [x > 0 ? j - 1 : -1, x < size - 1 ? j + 1 : -1, y > 0 ? j - size : -1, y < size - 1 ? j + size : -1]) {
+          if (k < 0 || seen[k] || terrain[k] !== Terrain.Lake) continue
+          seen[k] = 1
+          tiles.push(k)
+        }
+      }
+      if (tiles.length >= balance.territory.shoreMinWater) lakes.push(tiles)
+    }
+    lakes.sort((a, b) => b.length - a.length)
+    const tileCentre = (i: number): Point => ({ x: (i % size) + 0.5, y: Math.floor(i / size) + 0.5 })
+    for (const tiles of lakes) {
+      if (tiles.some((i) => joined[i])) continue
+      // From the lake's tile nearest its middle, so the stream leaves from well inside it.
+      const mx = tiles.reduce((n, i) => n + (i % size), 0) / tiles.length
+      const my = tiles.reduce((n, i) => n + Math.floor(i / size), 0) / tiles.length
+      const start = tiles.reduce((best, i) =>
+        Math.hypot((i % size) - mx, Math.floor(i / size) - my) < Math.hypot((best % size) - mx, Math.floor(best / size) - my) ? i : best,
+      )
+      const path = findPath(side, toCell(tileCentre(start)), (cell) => joined[tileIndex(cell)] === 1, riverCost)
+      if (path.length === 0) continue
+      carve(path, cfg.riverWidth, false, tileCentre(start), tileCentre(tileIndex(path[path.length - 1])))
+      flood(start)
     }
   }
 
@@ -424,11 +491,13 @@ export function generateWorld(seed: number, rev = WORLD_REV, keep: RiverKeep[] =
   for (const source of sources) {
     const isMouth = (cell: number) => {
       if (riverCells[cell]) return true
+      if (rev >= 7) return false
       const p = center(cell)
       return onEdge(cell) && Math.hypot(p.x - source.x, p.y - source.y) >= size * cfg.riverMinLengthFraction
     }
     carve(findPath(side, toCell(source), isMouth, riverCost), cfg.riverWidth, true)
   }
+  if (rev >= 7) linkLakes()
 
   // Spread the bank distance over the whole map (chamfer transform) so valleys can be as wide as they need.
   const spread = (i: number, j: number, step: number) => {
