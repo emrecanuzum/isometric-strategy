@@ -6,6 +6,9 @@
 //
 //   bun scripts/link-waters.ts          dry run: checks every lobby and writes a picture of each one's new channels
 //   bun scripts/link-waters.ts --apply  writes the tiles, the channels and the revision
+//   --redo                              plans the channels again for lobbies already moved (revision 7), after the
+//                                       channels changed: the stored tiles must differ from revision 6 only round the
+//                                       old channels
 //   --local                             against the local Supabase instead of the linked project
 //   --seed <n> [--keep file.json]       no database: plans one world of revision 6 (for trying it out)
 //
@@ -21,12 +24,17 @@ const arg = (name: string) => {
   return i >= 0 ? process.argv[i + 1] : undefined
 }
 const apply = process.argv.includes('--apply')
+const redo = process.argv.includes('--redo')
 const wet = (t: number) => t === Terrain.River || t === Terrain.Lake
-const LINK_WIDTH = 3
+const LINK_WIDTH = 5
 // How near the channel may come to what must stay as it is: far enough that its lowered banks do not reach it, or if
 // no way is found so, near enough that only the bank's last slope does.
 const GAPS = [balance.world.riverWiden.slopeTiles + LINK_WIDTH, 4]
 const STEP = 4
+// The channel's bends: how far it swings to either side of the cheapest way (tried from the widest down, until no new
+// water comes near what is kept), and about how long one bend is.
+const SWINGS = [6, 4, 2.5, 1, 0]
+const BEND_TILES = 34
 
 // The water bodies (4-way, as a fleet sails), each tile labelled with its body, and each body's size.
 function bodies(size: number, terrain: Uint8Array) {
@@ -152,6 +160,17 @@ function planLinks(world: World, hard: RiverKeep[], soft: RiverKeep[]): Plan {
   const softAt = new Uint8Array(size * size)
   for (const r of soft) mark(softAt, r, 2)
   // Tried in turn: off the roads (a road cut by a channel moves the bandits who walk it), then over them.
+  // What new water may never touch: what is kept (and a tile round it), and, while keeping off the roads, the roads.
+  const near = [false, true].map((overRoads) => {
+    const out = new Uint8Array(size * size)
+    for (const r of rects) mark(out, r, 1)
+    for (let i = 0; i < size * size; i++) {
+      const f = world.feature[i]
+      if (f === Feature.Inn || f === Feature.City) out[i] = 1
+      if (!overRoads && (f === Feature.Road || f === Feature.Bridge)) mark(out, [i % size, Math.floor(i / size), 1, 1], 1)
+    }
+    return out
+  })
   const blocked = [false, true].flatMap((overRoads) =>
     GAPS.map((gap) => {
       const out = new Uint8Array(size * size)
@@ -176,7 +195,7 @@ function planLinks(world: World, hard: RiverKeep[], soft: RiverKeep[]): Plan {
     if (softAt[i]) c += 40
     if (Math.min(x, y, size - 1 - x, size - 1 - y) < border) c += 4
     // Broad patches of cheaper and dearer ground, so the channel winds.
-    return c * (0.6 + 0.8 * valueNoise(x / 23, y / 23, world.seed + 977))
+    return c * (0.35 + 0.9 * valueNoise(x / 23, y / 23, world.seed + 977) + 0.5 * valueNoise(x / 8, y / 8, world.seed + 979))
   }
 
   const links: Polyline[] = []
@@ -197,7 +216,8 @@ function planLinks(world: World, hard: RiverKeep[], soft: RiverKeep[]): Plan {
     if (pick < 0) break
     const firstTile = label.indexOf(pick)
     let path: number[] | null = null
-    for (const block of blocked) {
+    let tier = 0
+    for (const [t, block] of blocked.entries()) {
       // Dijkstra from every tile of the body to the nearest tile of the main water.
       const cost = new Float64Array(size * size).fill(Infinity)
       const came = new Int32Array(size * size).fill(-1)
@@ -237,6 +257,7 @@ function planLinks(world: World, hard: RiverKeep[], soft: RiverKeep[]): Plan {
       for (let n = goal; n !== -1; n = came[n]) tiles.push(n)
       tiles.reverse()
       path = tiles
+      tier = t
       break
     }
     if (!path) {
@@ -251,19 +272,55 @@ function planLinks(world: World, hard: RiverKeep[], soft: RiverKeep[]): Plan {
     while (b - 1 > a && wet(terrain[path[b - 1]])) b--
     const run = path.slice(a, b + 1)
     const centre = (i: number): Point => ({ x: (i % size) + 0.5, y: Math.floor(i / size) + 0.5 })
-    let line = run.filter((_, k) => k % STEP === 0 || k === run.length - 1).map(centre)
-    for (let pass = 0; pass < 2 && line.length > 2; pass++) {
-      const smooth = [line[0]]
-      for (let i = 0; i < line.length - 1; i++) {
-        const p = line[i]
-        const q = line[i + 1]
-        smooth.push({ x: p.x * 0.75 + q.x * 0.25, y: p.y * 0.75 + q.y * 0.25 })
-        smooth.push({ x: p.x * 0.25 + q.x * 0.75, y: p.y * 0.25 + q.y * 0.75 })
+    const base = run.filter((_, k) => k % STEP === 0 || k === run.length - 1).map(centre)
+    const mayNotTouch = near[tier < GAPS.length ? 0 : 1]
+    // The line swung into bends: each point pushed sideways by a wave that wanders in length and height and fades out
+    // at both ends, then the corners rounded.
+    const bent = (swing: number) => {
+      let line = base
+      if (swing > 0 && base.length > 2) {
+        const along = [0]
+        for (let i = 1; i < base.length; i++) along.push(along[i - 1] + Math.hypot(base[i].x - base[i - 1].x, base[i].y - base[i - 1].y))
+        const total = along[along.length - 1]
+        const salt = world.seed + links.length * 131
+        let phase = valueNoise(links.length * 7.3, 0.5, salt) * Math.PI * 2
+        line = base.map((p, i) => {
+          if (i === 0 || i === base.length - 1) return p
+          const q = base[Math.min(base.length - 1, i + 1)]
+          const o = base[Math.max(0, i - 1)]
+          const len = Math.hypot(q.x - o.x, q.y - o.y) || 1
+          const fade = Math.min(1, along[i] / 10, (total - along[i]) / 10)
+          const wave = BEND_TILES * (0.7 + 0.6 * valueNoise(along[i] / 40, 1.5, salt + 3))
+          phase += ((along[i] - along[i - 1]) / wave) * Math.PI * 2
+          const off = swing * fade * (0.6 + 0.8 * valueNoise(along[i] / 25, 2.5, salt + 5)) * Math.sin(phase)
+          return { x: p.x - ((q.y - o.y) / len) * off, y: p.y + ((q.x - o.x) / len) * off }
+        })
       }
-      smooth.push(line[line.length - 1])
-      line = smooth
+      for (let pass = 0; pass < 3 && line.length > 2; pass++) {
+        const smooth = [line[0]]
+        for (let i = 0; i < line.length - 1; i++) {
+          const p = line[i]
+          const q = line[i + 1]
+          smooth.push({ x: p.x * 0.75 + q.x * 0.25, y: p.y * 0.75 + q.y * 0.25 })
+          smooth.push({ x: p.x * 0.25 + q.x * 0.75, y: p.y * 0.25 + q.y * 0.75 })
+        }
+        smooth.push(line[line.length - 1])
+        line = smooth
+      }
+      return { points: line.map((p) => ({ x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 })), width: LINK_WIDTH }
     }
-    const link = { points: line.map((p) => ({ x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 })), width: LINK_WIDTH }
+    let link = bent(0)
+    for (const swing of SWINGS) {
+      const tryLink = bent(swing)
+      const t = terrain.slice()
+      carveLinks({ seed: world.seed, size, terrain: t, feature: feature.slice(), elevation: elevation.slice(), height: height.slice(), lake: world.levels.lake }, [tryLink])
+      let ok = true
+      for (let i = 0; i < size * size && ok; i++) if (t[i] !== terrain[i] && mayNotTouch[i]) ok = false
+      if (ok) {
+        link = tryLink
+        break
+      }
+    }
     carveLinks({ seed: world.seed, size, terrain, feature, elevation, height, lake: world.levels.lake }, [link])
     if (bodies(size, terrain).label[firstTile] !== bodies(size, terrain).label[path[path.length - 1]]) {
       // (Should not happen: the channel is wider than a tile all along.)
@@ -365,6 +422,7 @@ if (seedArg) {
   const result = check(before, after, keep, [...before.inns, ...before.cities])
   console.log(`seed ${seed}: ${plan.links.length} channels (${after.crossings.length - before.crossings.length} stone bridges over them), left cut off: [${plan.left.join(', ')}], ${(performance.now() - t0).toFixed(0)} ms`, result)
   picture(`scripts/tmp/links/seed-${seed}.ppm`, before, after, keep)
+  writeFileSync(`scripts/tmp/links/seed-${seed}.json`, JSON.stringify(plan.links))
   process.exit(0)
 }
 
@@ -381,7 +439,7 @@ const connect = () => {
 }
 const db = connect()
 
-const { data: lobbies, error } = await db.from('lobbies').select('id, name, seed, world_rev, river_keep').eq('world_rev', 6)
+const { data: lobbies, error } = await db.from('lobbies').select('id, name, seed, world_rev, river_keep, water_links').eq('world_rev', redo ? 7 : 6)
 if (error) throw error
 for (const lobby of lobbies ?? []) {
   const { data: kingdoms } = await db.from('kingdoms').select('id, name, state').eq('lobby_id', lobby.id)
@@ -412,8 +470,20 @@ for (const lobby of lobbies ?? []) {
   const old = gunzipSync(Buffer.from((stored!.tiles as string).replace(/^\\x/, ''), 'hex'))
   const before = generateWorld(lobby.seed, 6, keep)
   const n = before.size * before.size
+  // (Moved already: only round its old channels may the stored tiles differ.)
+  const oldReach = new Uint8Array(n)
+  if (redo) {
+    const r = LINK_WIDTH + balance.world.riverWiden.slopeTiles + 4
+    for (const link of (lobby.water_links ?? []) as Polyline[]) {
+      for (const p of link.points) {
+        for (let y = Math.max(0, Math.floor(p.y - r)); y < Math.min(before.size, p.y + r); y++) {
+          for (let x = Math.max(0, Math.floor(p.x - r)); x < Math.min(before.size, p.x + r); x++) oldReach[y * before.size + x] = 1
+        }
+      }
+    }
+  }
   let mismatch = 0
-  for (let i = 0; i < n; i++) if (old[i] !== before.terrain[i] || old[n + i] !== before.feature[i]) mismatch++
+  for (let i = 0; i < n; i++) if (!oldReach[i] && (old[i] !== before.terrain[i] || old[n + i] !== before.feature[i])) mismatch++
   const plan = planLinks(before, hard, soft)
   const world = generateWorld(lobby.seed, 7, keep, plan.links)
   const result = check(before, world, hard, [...places, ...before.inns, ...before.cities])

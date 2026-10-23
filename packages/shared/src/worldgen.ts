@@ -925,6 +925,8 @@ export function carveLinks(
   // Each wet tile's channel (+1), the last one to reach it.
   const wet = new Uint16Array(size * size)
   const lower = new Float32Array(size * size).fill(1)
+  // How far inside the bed each wet tile lies, so the water deepens toward the middle like a river's.
+  const depth = new Float32Array(size * size)
   links.forEach((link, n) => {
     const line = link.points
     const reach = Math.ceil(link.width + slopeTiles + 1)
@@ -940,9 +942,13 @@ export function carveLinks(
         for (let x = Math.max(0, Math.floor(Math.min(a.x, b.x)) - reach); x <= xEnd; x++) {
           const t = Math.min(1, Math.max(0, ((x + 0.5 - a.x) * dx + (y + 0.5 - a.y) * dy) / lengthSq))
           const d = Math.hypot(x + 0.5 - a.x - dx * t, y + 0.5 - a.y - dy * t)
-          const half = (link.width / 2) * (0.85 + 0.3 * valueNoise(x * 0.17, y * 0.17, seed + 87))
+          // The bed swells and narrows along its course.
+          const half = (link.width / 2) * (0.7 + 0.35 * valueNoise(x * 0.05, y * 0.05, seed + 89) + 0.3 * valueNoise(x * 0.17, y * 0.17, seed + 87))
           const index = y * size + x
-          if (d <= half) wet[index] = n + 1
+          if (d <= half) {
+            wet[index] = n + 1
+            depth[index] = Math.max(depth[index], half - d)
+          }
           else if (d < half + slopeTiles) lower[index] = Math.min(lower[index], 1 - (1 - (d - half) / slopeTiles) ** 2)
         }
       }
@@ -954,13 +960,31 @@ export function carveLinks(
     if (t === Terrain.Lake || t === Terrain.River) continue
     if (wet[i]) {
       terrain[i] = Terrain.River
-      elevation[i] = w.lake - 0.0015
+      elevation[i] = w.lake - 0.0015 - Math.min(0.012, depth[i] * 0.01)
       height[i] = 0
       if (feature[i] === Feature.Road) {
         feature[i] = Feature.Bridge
         roadOver[wet[i] - 1] = true
       }
     } else if (lower[i] < 1) height[i] *= lower[i]
+  }
+  // Scraps of land a channel leaves (a tile with water on three or four sides) go under too, as widenRivers does.
+  const isWet = (j: number) => terrain[j] === Terrain.River || terrain[j] === Terrain.Lake
+  for (let pass = 0; pass < 3; pass++) {
+    let sunk = 0
+    for (let y = 1; y < size - 1; y++) {
+      for (let x = 1; x < size - 1; x++) {
+        const i = y * size + x
+        if (isWet(i) || lower[i] === 1 || feature[i] === Feature.Inn || feature[i] === Feature.City) continue
+        if (+isWet(i - 1) + +isWet(i + 1) + +isWet(i - size) + +isWet(i + size) < 3) continue
+        terrain[i] = Terrain.River
+        elevation[i] = w.lake - 0.0015
+        height[i] = 0
+        if (feature[i] === Feature.Road) feature[i] = Feature.Bridge
+        sunk++
+      }
+    }
+    if (sunk === 0) break
   }
   return roadOver
 }
