@@ -12,3 +12,6 @@ supabase/.temp/
 .playwright-mcp/
 supabase/functions/_shared/game.js
 scripts/tmp/
+
+# Rendered music videos (scripts/music-video.sh); large, kept out of git
+media/

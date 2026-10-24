@@ -543,7 +543,10 @@ tarafsız arazi (dağ, orman, göl, nehir, ticaret yolu, han) kalmalıdır.
   alt gölgelidir. Dosyalar `public/brand/` altındadır (yatay ve dikey logo, rozet, Instagram 1080, favicon
   32/64, apple-touch ve 192/512 simgeler; ana menünün gece manzarası üstünde iki kat büyük madalyon, ad ve
   menünün şeridinde "Lordum, haberler var. Çoğu kötü." ile thumbnail'lar: `thumbnail-16x9` 1920×1080,
-  `thumbnail-1x1` 1080×1080, `thumbnail-9x16` 1080×1920; `brandArt.ts` → `thumbnail`); yeniden üretmek için `bun scripts/brand-save.ts
+  `thumbnail-1x1` 1080×1080, `thumbnail-9x16` 1080×1920; `brandArt.ts` → `thumbnail`; YouTube kanal kapağı
+  `youtube-banner` 2560×1440, her cihazda görünen ortadaki 1546×423'lük bantta madalyon, ad ve şerit, `banner`); müzik kapakları `cover-*` (her parçaya bir oyun sahnesi, elçinin bir sözü
+  ve parçanın İngilizce adı, `cover`) ve albüm kapağı `album-cover` 3000×3000 (ortada elçi, çevresinde beş parçanın
+  sahnelerinden vitray dilimleri, `album`); `/brand.html?…&only=album-cover` yalnızca adı verilenleri kaydeder; yeniden üretmek için `bun scripts/brand-save.ts
   apps/web/public/brand` çalıştırılır, `bun run dev` açıkken yazdırdığı `/brand.html?save=…&token=…` bağlantısı açılır
   (yalnızca 127.0.0.1'i dinler, bu token'ı ve bilinen PNG adlarını kabul eder).
 - Arayüz yazı tipi Pixelify Sans'tır; ondaki 2 ve 5 zor okunduğu için

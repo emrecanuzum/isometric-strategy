@@ -6,7 +6,7 @@ if (!dir) throw new Error('usage: bun scripts/brand-save.ts <output dir>')
 const port = 5199
 const token = crypto.randomUUID()
 const origin = process.env.BRAND_ORIGIN ?? 'http://localhost:5173'
-const NAME = /^(thumbnail-(16x9|1x1|9x16)|logo-wide(@2x)?|logo-stacked|badge|instagram-1080|favicon-(32|64)|apple-touch-icon|icon-(192|512))\.png$/
+const NAME = /^(album-cover|cover-(hearth|crusade|england|horizon|jig)|youtube-banner|thumbnail-(16x9|1x1|9x16)|logo-wide(@2x)?|logo-stacked|badge|instagram-1080|favicon-(32|64)|apple-touch-icon|icon-(192|512))\.png$/
 const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
 
 Bun.serve({

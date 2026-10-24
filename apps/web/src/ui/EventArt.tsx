@@ -2379,3 +2379,6 @@ export function EventArt({ kind }: { kind: string }) {
   const known = kind in SCENES
   return <SceneCanvas id={known ? `event:${kind}` : 'event:'} scene={known ? SCENES[kind] : fallback} />
 }
+
+// A day's event's scene by its kind, for pictures made outside the game (the music videos' covers, src/brand).
+export const eventScene = (kind: string): Scene | undefined => SCENES[kind]

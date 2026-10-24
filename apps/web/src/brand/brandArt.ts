@@ -1,6 +1,6 @@
 import { ENVOY_H, ENVOY_W, paintEnvoy } from '../ui/advisor/EnvoyPortrait'
 import { ramp } from '../game/sprites'
-import { C, GOLD, Paint, noise, rnd, tone } from '../ui/artKit'
+import { C, GOLD, Paint, mix, noise, rnd, tone } from '../ui/artKit'
 import { frame as sceneFrame, paintScene } from '../ui/home/menuScene'
 
 // The game's brand art (logo, profile picture, favicon), painted in code like everything else: the envoy (Elçi), the
@@ -146,7 +146,7 @@ export function favicon(): Art {
 
 // The wordmark, rasterised from Pixelify Sans and re-coloured in gilt bands with an ink edge and a brown drop, as the
 // menu's title. Drawn at `cap` art pixels per em; crisp (alpha thresholded), never blurred.
-export function wordmark(text: string, em = 22): Art {
+export function wordmark(text: string, em = 22, flat = false): Art {
   const c = document.createElement('canvas')
   const ctx = c.getContext('2d')!
   ctx.font = `600 ${em}px "Pixelify Sans"`
@@ -171,7 +171,8 @@ export function wordmark(text: string, em = 22): Art {
     for (let x = 0; x < w; x++) {
       if (data[(y * w + x) * 4 + 3] <= 127) continue
       const v = (y - top) / span
-      p.set(x, y, tone(WORD, 4.4 - v * 4.2, x, y))
+      // Flat gilt (the covers): one colour, so small letters keep their shapes.
+      p.set(x, y, flat ? WORD[3] : tone(WORD, 4.4 - v * 4.2, x, y))
     }
   }
   // Brown drop under the letters, then the ink edge round both.
@@ -324,5 +325,203 @@ export function thumbnail(shape: Shape, tagline: string): Art {
     rule(a, Math.round(w / 2 - word.w / 2 + 6), Math.round(w / 2 + word.w / 2 - 6), wy + word.h + 5)
     blit(a, rib, Math.round((w - rib.w) / 2), wy + word.h + 14)
   }
+  return a
+}
+
+// The YouTube channel banner: 2560 × 1440 at 5× (512 × 288 art pixels). Everything that matters sits in the band every
+// device shows, 1546 × 423 in the middle (309 × 85 art pixels); TVs show the whole panorama around it.
+export function banner(tagline: string): Art {
+  const w = 512
+  const h = 288
+  const sc = paintScene(w, h)
+  const a = art(w, h)
+  sceneFrame(sc, 3.2, a.px)
+  const b = badge(64)
+  const word = crop(wordmark('Crownherald', 34))
+  const rib = ribbon(tagline, 10)
+  const gap = 8
+  const block = b.w + gap + Math.max(word.w, rib.w)
+  const bx = Math.round((w - block) / 2)
+  const by = Math.round((h - b.h) / 2)
+  const tx = bx + b.w + gap
+  const ty = Math.round(h / 2 - (word.h + 12 + rib.h) / 2)
+  shade(a, (x, y) => 0.8 - Math.hypot((x - w / 2) / 230, (y - h / 2) / 70))
+  blit(a, b, bx, by)
+  blit(a, word, tx, ty)
+  rule(a, tx + 4, tx + word.w - 4, ty + word.h + 4)
+  blit(a, rib, tx + Math.round((word.w - rib.w) / 2), ty + word.h + 11)
+  return a
+}
+
+// A music video's cover: one of the game's event or news scenes at twice the art pixel (512 × 256) under the name and
+// one of the envoy's quips on the menu's ribbon, with the piece's title on a band below in the piece's own colours, the
+// envoy's medallion at its left end. 512 × 288 art pixels, exported at 5× (2560 × 1440).
+export function cover(scene: { draw: (p: Paint) => void; fx?: (p: Paint, t: number) => void }, title: string, quip: string, band: [number, number, number], t = 2.4): Art {
+  const w = 512
+  const h = 288
+  const small = art(256, 128)
+  small.px.fill(C(0x000000)) // as the game's still layer: a scene may leave a seam unpainted
+  const sp = new Paint(small.px, 256, 128)
+  scene.draw(sp)
+  scene.fx?.(sp, t)
+  const a = art(w, h)
+  blit(a, scale2x(soften(small)), 0, 0)
+  const word = crop(wordmark('Crownherald', 34, true))
+  const rib = ribbon(quip, 10)
+  const wy = 10
+  // The scene a little darker overall, and a smooth veil behind the words (no dither, so no grille over the scene).
+  for (let y = 0; y < 256; y++) {
+    for (let x = 0; x < w; x++) {
+      const k = Math.max(0.22, Math.min(0.72, 0.85 - Math.hypot((x - w / 2) / 260, (y - wy - 24) / 46)))
+      if (k > 0) a.px[y * w + x] = mix(a.px[y * w + x], C(0x05060e), k)
+    }
+  }
+  blit(a, word, Math.round((w - word.w) / 2), wy)
+  rule(a, Math.round(w / 2 - word.w / 2 + 6), Math.round(w / 2 + word.w / 2 - 6), wy + word.h + 4)
+  blit(a, rib, Math.round((w - rib.w) / 2), wy + word.h + 12)
+  // The band: dark ground of the piece's colour, gilt lips, the title in gilt letters.
+  const p = new Paint(a.px, w, h)
+  const [dark, mid, lip] = band.map((c) => C(c))
+  for (let y = 256; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (y === 256 || y === h - 1) p.set(x, y, INK)
+      else if (y === 257) p.set(x, y, C(0xd9aa3e))
+      else if (y === 258) p.set(x, y, lip)
+      else if (y === h - 2) p.set(x, y, C(0x6b4a12))
+      else p.set(x, y, mix(mid, dark, 0.35 + ((y - 259) / 26) * 0.5))
+    }
+  }
+  const name = crop(wordmark(title, 27, true))
+  blit(a, name, Math.round((w - name.w) / 2), 272 - Math.round(name.h / 2))
+  const b = badge(64)
+  blit(a, b, 6, h - b.h - 4)
+  return a
+}
+
+// Scale2x (EPX): doubles a picture and rounds its diagonal steps instead of making each pixel a 2 × 2 block, so a
+// 256 × 128 scene sits at the covers' finer pixel without looking blown up.
+function scale2x(a: Art): Art {
+  const out = art(a.w * 2, a.h * 2)
+  const at = (x: number, y: number) => a.px[Math.min(a.h - 1, Math.max(0, y)) * a.w + Math.min(a.w - 1, Math.max(0, x))]
+  for (let y = 0; y < a.h; y++) {
+    for (let x = 0; x < a.w; x++) {
+      const P = at(x, y)
+      const A = at(x, y - 1)
+      const B = at(x + 1, y)
+      const Cc = at(x - 1, y)
+      const D = at(x, y + 1)
+      const e0 = Cc === A && Cc !== D && A !== B ? A : P
+      const e1 = A === B && A !== Cc && B !== D ? B : P
+      const e2 = D === Cc && D !== B && Cc !== A ? Cc : P
+      const e3 = B === D && B !== A && D !== Cc ? D : P
+      const o = y * 2 * out.w + x * 2
+      out.px[o] = e0
+      out.px[o + 1] = e1
+      out.px[o + out.w] = e2
+      out.px[o + out.w + 1] = e3
+    }
+  }
+  return out
+}
+
+// Where two colours meet in a checkerboard (the scenes' 50 % dither), each pixel takes their mean, so a large cover
+// shows the tone instead of a grille. Sparser dither (scattered dots, the edges of a glow) is kept.
+function soften(a: Art): Art {
+  const out = art(a.w, a.h)
+  out.px.set(a.px)
+  for (let y = 1; y < a.h - 1; y++) {
+    for (let x = 1; x < a.w - 1; x++) {
+      const i = y * a.w + x
+      const P = a.px[i]
+      const Q = a.px[i - 1]
+      if (Q === P || a.px[i + 1] !== Q || a.px[i - a.w] !== Q || a.px[i + a.w] !== Q) continue
+      if (a.px[i - a.w - 1] !== P || a.px[i + a.w + 1] !== P) continue
+      out.px[i] = mix(P, Q, 0.5)
+    }
+  }
+  return out
+}
+
+type SceneLike = { draw: (p: Paint) => void; fx?: (p: Paint, t: number) => void }
+
+// One of the game's scenes at the covers' pixel: painted at 256 × 128, its checkerboards evened, doubled by Scale2x.
+function sceneArt(scene: SceneLike, t = 2.4): Art {
+  const small = art(256, 128)
+  small.px.fill(C(0x000000))
+  const sp = new Paint(small.px, 256, 128)
+  scene.draw(sp)
+  scene.fx?.(sp, t)
+  return scale2x(soften(small))
+}
+
+// The soundtrack's album cover (3000 × 3000 at 10×; 300 × 300 art pixels): a rose window. The envoy's medallion at its
+// heart, round it five panes of lead and gilt, each a glimpse of one piece's scene (`panes`: the scene and the point
+// of it to show, in its 512 × 256 pixels), clockwise from the top; gilt rays on a night sky behind, the name above and
+// the ribbon below.
+export function album(panes: [SceneLike, number, number][], subtitle: string): Art {
+  const S = 300
+  const cx = 150
+  const cy = 160
+  const r0 = 68
+  const r1 = 114
+  const a = art(S, S)
+  const p = new Paint(a.px, S, S)
+  sky(p, S, S, cx, cy, 23)
+  // Gilt rays fanning out from the window, smooth (no dither).
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const d = Math.hypot(x - cx, y - cy)
+      if (d < r1) continue
+      const ang = Math.atan2(y - cy, x - cx)
+      const ray = Math.max(0, Math.cos(ang * 12)) ** 6
+      const k = ray * Math.max(0, 1 - (d - r1) / 120) * 0.42
+      if (k > 0.01) a.px[y * S + x] = mix(a.px[y * S + x], C(0xf2b84a), k)
+    }
+  }
+  const scenes = panes.map(([sc]) => sceneArt(sc))
+  const n = panes.length
+  const step = (Math.PI * 2) / n
+  const start = -Math.PI / 2 - step / 2
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy)
+      if (d < r0 || d > r1) continue
+      let ang = Math.atan2(y + 0.5 - cy, x + 0.5 - cx) - start
+      ang = ((ang % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)
+      const i = Math.floor(ang / step)
+      const mid = start + (i + 0.5) * step
+      const px0 = cx + Math.cos(mid) * (r0 + r1) / 2
+      const py0 = cy + Math.sin(mid) * (r0 + r1) / 2
+      const [, fx, fy] = panes[i]
+      const sx = Math.round(x - px0 + fx)
+      const sy = Math.round(y - py0 + fy)
+      const sc = scenes[i]
+      const c = sc.px[Math.min(sc.h - 1, Math.max(0, sy)) * sc.w + Math.min(sc.w - 1, Math.max(0, sx))]
+      // Old glass: a touch darker towards the lead.
+      const edge = Math.min(d - r0, r1 - d, Math.abs(ang - (i + 0.5) * step) < step / 2 ? (step / 2 - Math.abs(ang - (i + 0.5) * step)) * d : 99)
+      a.px[y * S + x] = mix(c, C(0x05060e), edge < 4 ? 0.35 - edge * 0.06 : 0.1)
+    }
+  }
+  // The lead between the panes: ink with a gilt core.
+  for (let i = 0; i < n; i++) {
+    const ang = start + i * step
+    for (let d = r0; d <= r1; d += 0.25) {
+      const x = cx + Math.cos(ang) * d
+      const y = cy + Math.sin(ang) * d
+      const nx = -Math.sin(ang)
+      const ny = Math.cos(ang)
+      for (const o of [-1.5, -0.75, 0.75, 1.5]) p.set(x + nx * o, y + ny * o, INK)
+      p.set(x, y, tone(RING, 3.2 - Math.cos(ang + 0.8) * 1.2, Math.round(x), Math.round(y)))
+    }
+  }
+  ring(p, cx, cy, r1 + 4, 5)
+  ring(p, cx, cy, r0 + 1, 3)
+  // The envoy at the heart, at the covers' pixel.
+  const b = scale2x(badge(64))
+  blit(a, b, Math.round(cx - b.w / 2), Math.round(cy - b.h / 2))
+  const word = crop(wordmark('Crownherald', 36, true))
+  blit(a, word, Math.round((S - word.w) / 2), 6)
+  const rib = ribbon(subtitle, 11)
+  blit(a, rib, Math.round((S - rib.w) / 2), S - rib.h - 6)
   return a
 }
