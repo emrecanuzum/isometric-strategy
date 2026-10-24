@@ -1137,7 +1137,7 @@ async function act(user: string, lobby: string, cmd: any): Promise<unknown> {
         const caps: Record<string, number> = { gold: game.goldCap(k, now) }
         const given: Record<string, number> = {}
         for (const [r, v] of Object.entries(budgeted)) {
-          const cap = caps[r] ?? game.storageCap(k, now)
+          const cap = caps[r] ?? game.storageCap(k, now, r)
           // Whole units only: the stock holds fractions, so (stock + v) − stock is not v again (35.000000001).
           const add = Math.floor(Math.max(0, Math.min(v, cap - stock[r])) + 1e-6)
           if (add > 0) given[r] = add

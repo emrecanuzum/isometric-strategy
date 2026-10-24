@@ -298,7 +298,7 @@ export function settleExpeditions(kingdom: Kingdom, at: number): { kingdom: King
     for (const [r, v] of Object.entries(o.haul)) {
       if (!v) continue
       const res = r as Resource
-      const room = Math.max(0, Math.floor((res === 'gold' ? goldCap(k, at) : storageCap(k, at)) - k.stock[res]))
+      const room = Math.max(0, Math.floor((res === 'gold' ? goldCap(k, at) : storageCap(k, at, res)) - k.stock[res]))
       const kept = Math.min(v, room)
       if (kept > 0) gains[res] = kept
       if (v > kept) wasted[res] = v - kept

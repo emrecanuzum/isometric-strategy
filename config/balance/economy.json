@@ -780,6 +780,13 @@
     "farm"
   ],
   "demolishRefund": 0.5,
+  "forest": {
+    "note": "the woods round a lordship thin as its lumber camps fell them: their yield is 1 / (1 + felled / (halfAtPerYield x the site's materials yield)), never under floor; what was felled grows back by half every regrowHalfLifeHours. warnAt: the shares the journal tells of on the way down",
+    "halfAtPerYield": 20000,
+    "floor": 0.3,
+    "regrowHalfLifeHours": 12,
+    "warnAt": [0.75, 0.5, 0.35]
+  },
   "away": {
     "afterMinutes": 10,
     "merchantLoad": 0.5,
@@ -800,7 +807,9 @@
       1900,
       2600
     ],
-    "note": "per good (food, materials, arms) and, separately, gold",
+    "note": "per good (food, materials, arms) and, separately, gold; war materials hold armsShare of the room, never less than the next palace level asks of them (armsSpare more)",
+    "armsShare": 0.4,
+    "armsSpare": 1.1,
     "goldByPalaceLevel": [
       1500,
       12000,

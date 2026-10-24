@@ -392,7 +392,7 @@ export function royalRequest(kingdom: Kingdom, at: number, market: Market | null
   } else {
     item = GOODS_ORDER[(h >>> 4) % GOODS_ORDER.length]
     const g = r.goods
-    units = Math.min(roundTo(storageCap(kingdom, arriveAt) * g.storeShare, g.step), roundTo(level(g.byPalaceLevel) * factor, g.step))
+    units = Math.min(roundTo(storageCap(kingdom, arriveAt, item as Good) * g.storeShare, g.step), roundTo(level(g.byPalaceLevel) * factor, g.step))
   }
   return { n, crown, item, units, gold: royalGold(item, units, palaceLevel(kingdom, at), market, at), arriveAt, endsAt }
 }

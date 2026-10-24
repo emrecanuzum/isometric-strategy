@@ -147,7 +147,7 @@ export function flows(kingdom: Kingdom, now: number, market?: Market | null) {
     const made = r === 'gold' ? (round.gold ?? 0) + l.soldiersGold + tributesOut + tradeGold : (round[r] ?? 0) + (r === 'food' ? eaten : 0) + (worked[r] ?? 0)
     const used = (worked[r] ?? 0) + (r === 'food' ? eaten : 0) + (r === kingdom.trade.good ? sold : 0) + (r === 'gold' ? l.soldiersGold + tributesOut : 0)
     // What does not fit in the stores (or the treasury) is lost, so a full store gains nothing.
-    const room = Math.max(0, (r === 'gold' ? goldCap(kingdom, now) : storageCap(kingdom, now)) - kingdom.stock[r])
+    const room = Math.max(0, (r === 'gold' ? goldCap(kingdom, now) : storageCap(kingdom, now, r)) - kingdom.stock[r])
     const net = made - used
     result[r] = { made, used, net: Math.min(net, room), wasted: Math.max(0, net - room) }
   }
@@ -320,8 +320,7 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
   const flow = flows(kingdom, now, online?.market)
   const armory = armoryOf(kingdom)
   const { weapons } = roundOutcome(kingdom, now)
-  const cap = storageCap(kingdom, now)
-  const room = (r: Resource) => (r === 'gold' ? goldCap(kingdom, now) : cap)
+  const room = (r: Resource) => (r === 'gold' ? goldCap(kingdom, now) : storageCap(kingdom, now, r))
   const full = RESOURCES.some((r) => kingdom.stock[r] >= room(r))
   const armsRoom = armoryCap(kingdom, now)
   const armsFull = WEAPONS.some((w) => armory[w] >= armsRoom)
@@ -374,8 +373,8 @@ export function StoreTab({ kingdom, now, journal, online }: HudData) {
         <>
       <p className="hint">
         {L(
-          `Her mal için depo yeri ${fmt(cap)} (saray seviyesi ve ambarlarla artar); hazinede ${fmt(goldCap(kingdom, now))} altın yeri var (saray seviyesi ve hazine binasıyla artar). Sığmayan boşa gider. Her ${balance.economy.productionSeconds} saniyede bir üretim turu işler; rakamlar tur başınadır.`,
-          `Storage for each good: ${fmt(cap)} (rises with the palace level and storehouses); the treasury holds ${fmt(goldCap(kingdom, now))} gold (rises with the palace level and the treasury building). Whatever does not fit is lost. A production round runs every ${balance.economy.productionSeconds} seconds; figures are per round.`,
+          `Yemek ve yapı malzemesi için depo yeri ${fmt(storageCap(kingdom, now))}, savaş malzemesi için ${fmt(storageCap(kingdom, now, 'arms'))} (saray seviyesi ve ambarlarla artar); hazinede ${fmt(goldCap(kingdom, now))} altın yeri var (saray seviyesi ve hazine binasıyla artar). Sığmayan boşa gider. Her ${balance.economy.productionSeconds} saniyede bir üretim turu işler; rakamlar tur başınadır.`,
+          `Storage for food and building materials: ${fmt(storageCap(kingdom, now))}, for war materials ${fmt(storageCap(kingdom, now, 'arms'))} (rises with the palace level and storehouses); the treasury holds ${fmt(goldCap(kingdom, now))} gold (rises with the palace level and the treasury building). Whatever does not fit is lost. A production round runs every ${balance.economy.productionSeconds} seconds; figures are per round.`,
         )}
       </p>
       {RESOURCES.map((r) => {

@@ -84,11 +84,11 @@ export function projectRemaining(k: Pick<Kingdom, 'projects'>, id: ProjectId): C
 // room back so that a delivery never leaves the people hungry or the treasury bare.
 export function projectGift(k: Kingdom, id: ProjectId, at: number): Cost {
   const keep = W().keep
-  const room = storageCap(k, at)
+  const room = (r: Resource) => storageCap(k, at, r)
   const vault = goldCap(k, at)
   const out: Cost = {}
   for (const [r, need] of Object.entries(projectRemaining(k, id)) as [Resource, number][]) {
-    const reserve = r === 'gold' ? vault * keep.gold : room * keep.goods
+    const reserve = r === 'gold' ? vault * keep.gold : room(r) * keep.goods
     const v = Math.floor(Math.min(need, Math.max(0, k.stock[r] - reserve)))
     if (v > 0) out[r] = v
   }

@@ -182,8 +182,8 @@ export async function settleOutlawBattle(
   if (lord) {
     await mutateKingdom(lord, at, (k) => {
       const stock = { ...k.stock }
-      const cap = game.storageCap(k, at)
       for (const g of ['arms', 'materials']) {
+        const cap = game.storageCap(k, at, g)
         loot[g] = Math.max(0, Math.min(want[g] ?? 0, Math.floor(cap - stock[g])))
         stock[g] += loot[g]
       }
@@ -338,8 +338,8 @@ async function pirateBattle(lobby: string, row: Row, f: Fleet, boat: Boat, t: nu
     let next = game.takeFleetLosses(game.dropChase(k, f.id), f.id, fight.attackerLoss)
     if (won) {
       const stock = { ...next.stock }
-      const cap = game.storageCap(next, now)
       for (const g of ['arms', 'materials']) {
+        const cap = game.storageCap(next, now, g)
         loot[g] = Math.max(0, Math.min(want[g] ?? 0, Math.floor(cap - stock[g])))
         stock[g] += loot[g]
       }
@@ -429,8 +429,8 @@ async function havenStrike(lobby: string, row: Row, f: Fleet, haven: Haven, now:
     if (!game.fleetOf(next, f.id)) won = false
     if (won) {
       const stock = { ...next.stock }
-      const cap = game.storageCap(next, now)
       for (const g of ['arms', 'materials']) {
+        const cap = game.storageCap(next, now, g)
         loot[g] = Math.max(0, Math.min(want[g] ?? 0, Math.floor(cap - stock[g])))
         stock[g] += loot[g]
       }

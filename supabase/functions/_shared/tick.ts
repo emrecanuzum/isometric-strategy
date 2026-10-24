@@ -206,11 +206,10 @@ async function moveArmies(lobby: string, world: LobbyWorld, rows: Row[], pacts: 
       await mutateKingdom(a.kingdom_id, at, (k) => {
         const units = game.addUnits(game.garrisonOf(k), unitsOf(a))
         const stock = { ...k.stock }
-        const cap = game.storageCap(k, at)
         wasted = 0
         for (const [g, n] of Object.entries(cargo)) {
           if (!(g in stock) || !(n > 0)) continue
-          const fit = Math.floor(Math.max(0, Math.min(n, cap - stock[g])))
+          const fit = Math.floor(Math.max(0, Math.min(n, game.storageCap(k, at, g) - stock[g])))
           stock[g] += fit
           stored[g] = fit
           wasted += n - fit

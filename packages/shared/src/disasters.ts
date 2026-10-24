@@ -20,11 +20,11 @@ export function crisisToll(k: Kingdom, kind: string, choice: CrisisChoice, at: n
   const shares = (t.kinds as Record<string, Partial<Record<Resource, number>>>)[kind]
   if (!shares) return {}
   const factor = (t.choice as Record<CrisisChoice, number>)[choice] ?? 1
-  const room = storageCap(k, at)
+  const room = (r: Resource) => storageCap(k, at, r)
   const vault = goldCap(k, at)
   const out: Partial<Stock> = {}
   for (const [r, share] of Object.entries(shares) as [Resource, number][]) {
-    const cap = r === 'gold' ? vault : room
+    const cap = r === 'gold' ? vault : room(r)
     const stock = k.stock[r] ?? 0
     const fill = cap > 0 ? stock / cap : 0
     // Brimming stores feed a fire better: up to twice the share once a store is full.
@@ -75,12 +75,12 @@ export function hoardsBetween(k: Pick<Kingdom, 'site' | 'foundedAt'>, from: numb
 // the fuller it is). Nothing if no store is that full.
 export function hoardStrike(k: Kingdom, roll: number, at: number): { kind: HoardKind; good: Good; lost: number } | null {
   const h = H()
-  const room = storageCap(k, at)
-  if (room <= 0) return null
-  const full = (Object.entries(HOARD_GOOD) as [HoardKind, Good][]).filter(([, g]) => k.stock[g] >= room * h.fullAt)
+  if (storageCap(k, at) <= 0) return null
+  const room = (g: Good) => storageCap(k, at, g)
+  const full = (Object.entries(HOARD_GOOD) as [HoardKind, Good][]).filter(([, g]) => k.stock[g] >= room(g) * h.fullAt)
   if (full.length === 0) return null
   const [kind, good] = full[Math.min(full.length - 1, Math.floor(roll * full.length))]
-  const fill = clamp01((k.stock[good] / room - h.fullAt) / (1 - h.fullAt))
+  const fill = clamp01((k.stock[good] / room(good) - h.fullAt) / (1 - h.fullAt))
   const lost = Math.floor(k.stock[good] * (h.minShare + (h.maxShare - h.minShare) * fill))
   return lost > 0 ? { kind, good, lost } : null
 }

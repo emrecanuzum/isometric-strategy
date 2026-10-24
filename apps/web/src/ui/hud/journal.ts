@@ -172,6 +172,18 @@ export function record(j: Journal, events: EconomyEvent[], kingdom: Kingdom, at:
         title: L('Yılın salgını', "The year's sickness"),
         text: L(`Köyde ateşli bir hastalık baş gösterdi: halkın %${Math.round(event.share * 100)} kadarı yatağa düştü. Hastalar çalışmaz, vergi vermez; şifahane onları daha çabuk ayağa kaldırır.`, `A fever broke out in the village: about ${Math.round(event.share * 100)}% of the people took to their beds. The sick neither work nor pay tax; a hospital gets them back on their feet sooner.`),
       })
+    } else if (event.kind === 'forest') {
+      // The woods round the lordship thinned past a mark (CLAUDE.md §6.4).
+      j = write(j, seasonStart, at, {
+        important: true,
+        tone: 'bad',
+        icon: 'axe',
+        title: L('Çevrede odun azaldı', 'The woods are thinning'),
+        text: L(
+          `Oduncular her gün biraz daha uzağa yürüyor: çevredeki ağaçlar seyreldi, kamplar artık eskisinin %${Math.round(event.share * 100)}'i kadar odun kesiyor. Orman zamanla kendini toplar; yapı malzemesi için keten tarlalarına da güvenmek gerek.`,
+          `The woodcutters walk a little further every day: the trees round the lordship have thinned, and the camps now cut ${Math.round(event.share * 100)}% of what they did. The woods grow back in time; for building materials, lean on flax fields as well.`,
+        ),
+      })
     } else if (event.kind === 'spoiled') {
       const h = HOARD_TEXTS[event.hoard]
       j = write(j, seasonStart, at, {

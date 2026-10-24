@@ -162,15 +162,22 @@ function ResourceCard({ resource: r, kingdom, now, history, market }: { resource
   if (worked > 0.05) lines.push({ name: L('Atölyede işleniyor', 'Used by the forges'), value: -worked })
   const scale = Math.max(made, used, 0.01)
   const runsOut = net < -0.01 ? Math.floor(kingdom.stock[r] / -net) : null
+  // As time, not rounds (thousands of rounds say nothing; and the digits' font draws "~" like a minus sign).
+  const runsFor = (rounds: number, en = false) => {
+    const min = Math.round((rounds * balance.economy.productionSeconds) / 60)
+    if (min < 60) return en ? `${Math.max(1, min)} min` : `${Math.max(1, min)} dakika`
+    const h = Math.round(min / 60)
+    return en ? `${h} hour${h === 1 ? '' : 's'}` : `${h} saat`
+  }
   const series = history.map((s) => s[r])
   return (
     <>
       <header className="pop-head">
         <Icon name={RESOURCE_ICONS[r]} size={24} />
         <b>{RESOURCE_NAMES[r]}</b>
-        <strong className={kingdom.stock[r] >= (r === 'gold' ? goldCap(kingdom, now) : storageCap(kingdom, now)) ? 'down' : undefined}>
+        <strong className={kingdom.stock[r] >= (r === 'gold' ? goldCap(kingdom, now) : storageCap(kingdom, now, r)) ? 'down' : undefined}>
           {fmt(kingdom.stock[r])}
-          <small> / {fmt(r === 'gold' ? goldCap(kingdom, now) : storageCap(kingdom, now))}</small>
+          <small> / {fmt(r === 'gold' ? goldCap(kingdom, now) : storageCap(kingdom, now, r))}</small>
         </strong>
       </header>
       <div className="flowbars" aria-label={L('Tur başına gelen ve giden', 'In and out per round')}>
@@ -205,7 +212,7 @@ function ResourceCard({ resource: r, kingdom, now, history, market }: { resource
       <p className="pop-foot">
         {runsOut !== null ? (
           <span className="down">
-            <Icon name="warn" size={8} /> {runsOut < 1 ? L('Tükendi: ambar boş', 'Run out: the storehouse is empty of it') : L(`~${runsOut} tur sonra tükenir`, `Runs out in ~${runsOut} rounds`)}
+            <Icon name="warn" size={8} /> {runsOut < 1 ? L('Tükendi: ambar boş', 'Run out: the storehouse is empty of it') : L(`Yaklaşık ${runsFor(runsOut)} sonra tükenir`, `Runs out in about ${runsFor(runsOut, true)}`)}
           </span>
         ) : wasted > 0.05 ? (
           <span className="down">

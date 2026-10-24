@@ -258,6 +258,8 @@ export interface Kingdom {
   // sick, and the temple's sermon on taxes.
   researches?: { id: string; doneAt: number }[]
   sickness?: number
+  // What the lumber camps have felled round the lordship (growing back with time, see forestFactor), as it was at `at`.
+  felled?: { amount: number; at: number }
   sermonUntil?: number
   lastSermonAt?: number
   // When the player last gave a command or had the game open (an absent ruler's lands give less, see idleFactor).
@@ -453,6 +455,8 @@ export type EconomyEvent =
   | { kind: 'spoiled'; hoard: HoardKind; good: Good; lost: number }
   // The year's wave of sickness (CLAUDE.md §9.8): this share of the people fell ill.
   | { kind: 'outbreak'; share: number }
+  // The woods round the lordship thinned past a mark: the lumber camps' yield is now `share`.
+  | { kind: 'forest'; share: number }
   // A stage of a great work built (CLAUDE.md §9.10).
   | { kind: 'project'; id: ProjectId; stage: number; finished: boolean }
   // A party back from its journey (CLAUDE.md §9.9), and a goal of the season reached.
@@ -708,7 +712,7 @@ export interface Clog {
 export function clogsOf(kingdom: Kingdom, at: number): Clog[] {
   const out: Clog[] = []
   const cut = cutOff(kingdom.buildings, kingdom.site, at)
-  const room = storageCap(kingdom, at)
+  const room = (g: Good) => storageCap(kingdom, at, g)
   const arms = armoryCap(kingdom, at)
   const armory = armoryOf(kingdom)
   for (const b of kingdom.buildings) {
@@ -716,7 +720,7 @@ export function clogsOf(kingdom: Kingdom, at: number): Clog[] {
     const makes = productMakes(kingdom, b, at)
     if (!makes) continue
     if (isWeapon(makes) && armory[makes] >= arms) out.push({ id: b.id, kind: b.kind, makes, reason: 'armory' })
-    else if (isGood(makes) && kingdom.stock[makes] >= room - 0.5) out.push({ id: b.id, kind: b.kind, makes, reason: 'store' })
+    else if (isGood(makes) && kingdom.stock[makes] >= room(makes) - 0.5) out.push({ id: b.id, kind: b.kind, makes, reason: 'store' })
   }
   return out
 }
@@ -742,8 +746,16 @@ const storesOf = (kingdom: Kingdom, at: number) =>
     return room
   })
 
-export function storageCap(kingdom: Kingdom, at: number) {
-  return Math.round(storesOf(kingdom, at).goods * (1 + researchEffects(kingdom, at).storage))
+// The room for one good (food and building materials alike; with no good, theirs). War materials get only a share of
+// it (they are for arms and the great works, not for hoarding), though always enough for what the next palace level
+// asks of them.
+export function storageCap(kingdom: Kingdom, at: number, good?: Resource) {
+  const room = Math.round(storesOf(kingdom, at).goods * (1 + researchEffects(kingdom, at).storage))
+  if (good !== 'arms') return room
+  const s = balance.economy.storage
+  const palace = kingdom.buildings.find((b) => b.kind === 'palace')
+  const next = palace ? (upgradeSpec(palace)?.cost?.arms ?? 0) : 0
+  return Math.round(Math.min(room, Math.max(room * s.armsShare, next * s.armsSpare)))
 }
 
 // How much gold the treasury holds: a palace-level amount and what treasuries add. Gold beyond it is lost.
@@ -980,9 +992,23 @@ export function ledger(kingdom: Kingdom, at: number) {
 
 const isGood = (v: string): v is Good => (GOODS as readonly string[]).includes(v)
 
+// The woods round the lordship (CLAUDE.md §6.4): what has been felled, grown back by half every regrowHalfLifeHours.
+export function felledAt(kingdom: Pick<Kingdom, 'felled'>, at: number) {
+  const f = kingdom.felled
+  if (!f) return 0
+  return f.amount * 0.5 ** (Math.max(0, at - f.at) / (balance.economy.forest.regrowHalfLifeHours * 3_600_000))
+}
+// The share of their yield the lumber camps still get: the more felled (against how wooded the site is), the less.
+export function forestFactor(kingdom: Pick<Kingdom, 'felled' | 'yields'>, at: number) {
+  const f = balance.economy.forest
+  const wood = f.halfAtPerYield * Math.max(0.5, kingdom.yields.materials)
+  return Math.max(f.floor, 1 / (1 + felledAt(kingdom, at) / wood))
+}
+
 // What holds for every building of a kingdom in a round at `at`; worked out once per round, not once per building.
 export function roundContext(kingdom: Kingdom, at: number) {
   return {
+    forest: forestFactor(kingdom, at),
     cut: cutOff(kingdom.buildings, kingdom.site, at),
     output: fortuneEffects(kingdom, at).output,
     learnt: researchEffects(kingdom, at).output,
@@ -1026,7 +1052,7 @@ export function buildingOutput(kingdom: Kingdom, b: Building, at: number, round?
   const pirates = b.kind === 'dock' ? outlawEffects(kingdom).fishFactor : 1
   return {
     makes: product.makes,
-    units: spec.amount * product.rate * land * fortune * learnt * crew * pirates * (product.makes === 'food' ? r.foodPace * r.season : r.pace * r.idle),
+    units: spec.amount * product.rate * land * fortune * learnt * crew * pirates * (b.kind === 'lumberCamp' ? r.forest : 1) * (product.makes === 'food' ? r.foodPace * r.season : r.pace * r.idle),
     uses: product.uses,
   }
 }
@@ -1041,9 +1067,12 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
   const worked: Partial<Stock> = {}
   const left = { ...stock }
   const round = roundContext(kingdom, at)
+  // What the lumber camps cut this round (the woods thin with it).
+  let felled = 0
   for (const b of kingdom.buildings) {
     const out = buildingOutput(kingdom, b, at, round)
     if (!out) continue
+    if (b.kind === 'lumberCamp') felled += out.units
     let units = out.units
     for (const [r, per] of Object.entries(out.uses ?? {})) units = Math.min(units, left[r as Resource] / (per ?? 1))
     units = Math.max(0, units)
@@ -1074,7 +1103,7 @@ export function roundOutcome(kingdom: Kingdom, at: number, stock: Stock = kingdo
   for (const r of ['gold', 'food', 'materials', 'arms'] as const) if (sends[r]) delta[r] = (delta[r] ?? 0) + sends[r] * idle
   const towns = townUpkeep(kingdom.towns, stock.gold + (delta.gold ?? 0), at)
   if (towns.cost > 0) delta.gold = (delta.gold ?? 0) - towns.cost
-  return { delta, weapons, worked, towns, navy }
+  return { delta, weapons, worked, towns, navy, felled }
 }
 
 // What one production round adds to (and eats from) the stores.
@@ -1113,7 +1142,7 @@ export function tradeReserve(kingdom: Kingdom, good: Good, at: number) {
   }
   const palace = kingdom.buildings.find((b) => b.kind === 'palace')
   const next = palace ? (upgradeSpec(palace)?.cost?.[good] ?? 0) : 0
-  return Math.min(storageCap(kingdom, at) * t.keepGoods.maxShare, Math.max(t.keepGoods[good], next))
+  return Math.min(storageCap(kingdom, at, good) * t.keepGoods.maxShare, Math.max(t.keepGoods[good], next))
 }
 
 export const hasTradePost = (kingdom: Kingdom) => kingdom.buildings.some((b) => b.kind === 'tradePost')
@@ -1721,7 +1750,15 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
           events.push({ kind: 'spoiled', hoard: strike.kind, good: strike.good, lost: strike.lost })
         }
       }
-      const { delta, weapons, towns: upkept, navy: shipsKept } = roundOutcome(k, next)
+      const { delta, weapons, towns: upkept, navy: shipsKept, felled } = roundOutcome(k, next)
+      // The woods thin with what was cut; the journal is told when they pass a mark (CLAUDE.md §6.4).
+      if (felled > 0) {
+        const before = forestFactor(k, next)
+        k.felled = { amount: felledAt(k, next) + felled, at: next }
+        const after = forestFactor(k, next)
+        const mark = balance.economy.forest.warnAt.find((w) => before > w && after <= w)
+        if (mark !== undefined) events.push({ kind: 'forest', share: after })
+      }
       // Fleets hunting pirates: now and then a crew caught for its bounty, now and then a ship lost.
       let bounties = 0
       for (const f of navyOf(k).fleets) {
@@ -1746,17 +1783,16 @@ export function advance(kingdom: Kingdom, now: number, market?: Market | null): 
       // While the lord is away the storehouses are not filled to the brim: what is made slows as a store nears the
       // top of its room and stops short of it (CLAUDE.md §6.4).
       if (isAway(k, next)) {
-        const room = storageCap(k, next)
         for (const g of GOODS) {
           const v = delta[g] ?? 0
-          if (v > 0) delta[g] = v * awayStoreFactor(k.stock[g], room)
+          if (v > 0) delta[g] = v * awayStoreFactor(k.stock[g], storageCap(k, next, g))
         }
       }
       for (const [r, v] of Object.entries(delta)) k.stock[r as Resource] = Math.max(0, k.stock[r as Resource] + (v ?? 0))
       // Full stores: what does not fit is lost.
-      const space = storageCap(k, next)
       const lost: Partial<Record<Resource, number>> = {}
       for (const g of GOODS) {
+        const space = storageCap(k, next, g)
         if (k.stock[g] <= space) continue
         lost[g] = k.stock[g] - space
         k.stock[g] = space

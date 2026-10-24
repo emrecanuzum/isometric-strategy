@@ -876,7 +876,21 @@ Yüksek vergi → daha çok altın, ama moral ve nüfus artışı düşer.
   800 / 1300 / 1900 / 2600) ve her **Ambar** ekler (seviye 1/2/3: +400 /
   +800 / +1400; saray seviyesine göre 1–3 ambar). Sığmayan üretim boşa
   gider; günlükte bir kez "Ambar dolu" yazar (depo yer açılana kadar
-  tekrarlanmaz, yeniden dolarsa yine yazar).
+  tekrarlanmaz, yeniden dolarsa yine yazar). **Savaş malzemesi** bu yerin
+  yalnızca **%40'ını** tutar (`storage.armsShare`; o silah, sur ve büyük işler
+  içindir, istif için değil), ama hiçbir zaman sarayın bir sonraki seviyesinin
+  istediğinin 1,1 katından az değil (`armsSpare`; ilerleme kilitlenmesin).
+  `storageCap(kingdom, at, good)` malı alır; mal verilmezse yemek ve yapı
+  malzemesinin yeridir. (Önce üç mal aynı yeri tutuyordu: bütün yapıları kurmuş
+  lordun binlerce savaş malzemesi satmaktan başka işe yaramıyordu.)
+- **Orman tükenir** (`economy.json` → `forest`; `economy.ts` → `forestFactor`,
+  `felledAt`, `Kingdom.felled`): oduncu kamplarının kestiği her birim çevrenin
+  ormanından düşer; kampların verimi 1 / (1 + kesilen / (20.000 × yerin yapı
+  malzemesi çarpanı)), en az %30. Kesilen zamanla geri gelir (12 saatte yarısı).
+  6 tane 3. seviye kamp verimi 2 saatte ~%67'ye, 6 saatte ~%49'a indirir, kamplar
+  ~%36'da dengelenir: uzun vadede yapı malzemesi için **keten tarlası** gerekir.
+  Verim %75, %50 ve %35'in altına inerken günlüğe "Çevrede odun azaldı" yazılır
+  (olay `forest`); oduncu kampının menüsü ormanın durumunu yazar.
 - **Cephanelik sınırı:** Cephanelik her silahtan (kılıç, kalkan, yay ve ok)
   sınırlı tutar: saray seviyesine göre 60 / 120 / 200 / 300 / 400, her ambar
   seviyesi +40 (`economy.json` → `armory`). Bir silahın yeri dolunca o silahı

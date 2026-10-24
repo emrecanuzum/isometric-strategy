@@ -132,14 +132,14 @@ export function badge(size = 60, bleed = false): Art {
   return a
 }
 
-// The favicon: his head alone, hat to beard, 32 art pixels on clear ground.
+// The favicon: his head alone, 32 art pixels on clear ground. The head is 32 rows from the hat's crown to the chin, so
+// it takes the whole height (crown on the top row, chin on the bottom); only the tips of the brim and the plume reach
+// past the sides. (It was cut at (-7, -4) and lost the crown and the beard.)
 export function favicon(): Art {
   const e = envoy()
-  const a = art(32, 32)
-  blit(a, e, -7, -4)
-  // Trim what the crop cut through the frame's edge so the silhouette keeps its ink line.
   const out = art(32, 32)
-  blit(out, a, 0, 0, (x, y) => x > 0 && y > 0 && x < 31 && y < 31)
+  // The portrait's head spans rows 6–37 and columns 9–40 (the envoy art adds a pixel of margin all round).
+  blit(out, e, -10, -7)
   outline(out)
   return out
 }

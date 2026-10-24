@@ -1,5 +1,5 @@
 import { NavyTab } from './navy'
-import { BUILDINGS, armoryCap, balance, clogsOf, movable, moveCost, moveSeconds, buildingOutput, cutOff, goldCap, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
+import { BUILDINGS, armoryCap, balance, clogsOf, forestFactor, movable, moveCost, moveSeconds, buildingOutput, cutOff, goldCap, storageCap, demolishRefund, productAllowed, levelSpec, maxLevel, population, productOf, staffOf, upgradeError, upgradeSpec, workerSlots } from '@game/shared'
 import type { Building, BuildingKind, Good, Product, Resource } from '@game/shared'
 import { looksOf } from '../../game/buildingSprites'
 import { L, locale } from '../../lib/i18n'
@@ -107,6 +107,7 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
             {!building && b.kind === 'fisherHut' && <FisherPanel data={data} />}
             {!building && b.kind === 'barracks' && <GamePanel game="archery" data={data} />}
             {!building && b.kind === 'forge' && <GamePanel game="anvil" data={data} />}
+            {!building && b.kind === 'lumberCamp' && <ForestNote data={data} />}
             {!building && b.kind === 'lumberCamp' && <GamePanel game="woodsplit" data={data} />}
             {!building && b.kind === 'farm' && <GamePanel game="harvest" data={data} />}
             {!building && b.kind === 'dock' && <GamePanel game="net" data={data} />}
@@ -124,6 +125,23 @@ export function BuildingSheet({ building: b, data, commands }: { building: Build
   )
 }
 
+
+// The woods round the lordship (CLAUDE.md §6.4): how much of their yield the lumber camps still get, and what to do.
+function ForestNote({ data }: { data: HudData }) {
+  const { kingdom, now } = data
+  const share = forestFactor(kingdom, now)
+  if (share > 0.97) return null
+  return (
+    <p className={share < 0.6 ? 'alert' : 'hint'}>
+      <Icon name="axe" size={16} />{' '}
+      {L(
+        `Çevredeki orman seyreldi: kamplar ${Math.round(share * 100)}% verimle kesiyor (en az %${Math.round(balance.economy.forest.floor * 100)}). Ağaçlar zamanla geri gelir; daha az kesmek ormanı çabuk toparlar. Yapı malzemesi için keten tarlası ek.`,
+        `The woods round about have thinned: the camps cut at ${Math.round(share * 100)}% (never below ${Math.round(balance.economy.forest.floor * 100)}%). The trees grow back in time, faster if you cut less. Sow flax fields for building materials.`,
+      )}
+    </p>
+  )
+}
+
 // "Üretim ağı tıkandı" (CLAUDE.md §6.4): the store or the armory this building fills has no room, so its work is
 // thrown away (a full store) or stands still (a full armory). What is full, what it costs and what to do about it.
 function Clogged({ building: b, data }: { building: Building; data: HudData }) {
@@ -134,7 +152,7 @@ function Clogged({ building: b, data }: { building: Building; data: HudData }) {
   const name = nameOf(clog.makes).toLowerCase()
   const out = buildingOutput(kingdom, { ...b }, now)
   const lost = !weapon && out ? out.units : 0
-  const cap = weapon ? armoryCap(kingdom, now) : storageCap(kingdom, now)
+  const cap = weapon ? armoryCap(kingdom, now) : storageCap(kingdom, now, clog.makes as Good)
   const others = Object.keys(BUILDINGS[b.kind].products ?? {}).filter((p) => p !== productOf(b) && productAllowed(kingdom, b.kind, p, now))
   return (
     <div className="clog-box" role="alert">
@@ -208,7 +226,7 @@ function Output({ building: b, data }: { building: Building; data: HudData }) {
         <b className="output">
           <Icon name="chest" size={24} /> {L(`+${spec.storage} depo yeri`, `+${spec.storage} storage space`)}
         </b>
-        <small className="hint">{L(`Yemek, yapı malzemesi ve savaş malzemesinin her biri için. Toplam depo: ${storageCap(kingdom, now)}.`, `For each of food, building materials and war materials. Total storage: ${storageCap(kingdom, now)}.`)}</small>
+        <small className="hint">{L(`Yemek, yapı malzemesi ve savaş malzemesinin her biri için. Toplam depo: ${storageCap(kingdom, now)}; savaş malzemesi bunun yalnızca %${Math.round(balance.economy.storage.armsShare * 100)}'ini tutar (${storageCap(kingdom, now, 'arms')}).`, `For each of food, building materials and war materials. Total storage: ${storageCap(kingdom, now)}; war materials hold only ${Math.round(balance.economy.storage.armsShare * 100)}% of it (${storageCap(kingdom, now, 'arms')}).`)}</small>
       </>
     )
   }

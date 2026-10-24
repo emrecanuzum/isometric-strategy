@@ -364,7 +364,7 @@ export const TIPS: Tip[] = [
     id: 'greatWorks',
     when: ({ kingdom: k, now }) =>
       hasPalace(k) &&
-      ((['food', 'materials', 'arms'] as const).some((g) => k.stock[g] >= storageCap(k, now) * 0.85) || k.stock.gold >= goldCap(k, now) * 0.9) &&
+      ((['food', 'materials', 'arms'] as const).some((g) => k.stock[g] >= storageCap(k, now, g) * 0.85) || k.stock.gold >= goldCap(k, now) * 0.9) &&
       PROJECT_IDS.some((id) => projectError(k, id, now) === null),
     say: () => [
       L('Lordum, ambarlar tıka basa dolu; dolu ambar fareyi, pası ve yangını çeker. Fareler şimdiden sendika kurdu, talepleri var. Saray → Projeler\'de büyük işler bekliyor: katedral, çarşı, şövalye tarikatı. Malı taşa ve şana çevirelim.', 'My lord, the storehouses are crammed; a full storehouse draws rats, rust and fire. The rats have already formed a guild and have demands. Great works await in Palace → Projects: a cathedral, a bazaar, a knightly order. Let us turn goods into stone and glory.'),
@@ -383,9 +383,9 @@ export const TIPS: Tip[] = [
   },
   {
     id: 'storeFull',
-    when: ({ kingdom: k, now }) => hasPalace(k) && (['food', 'materials', 'arms'] as const).some((g) => k.stock[g] >= storageCap(k, now) * 0.97),
+    when: ({ kingdom: k, now }) => hasPalace(k) && (['food', 'materials', 'arms'] as const).some((g) => k.stock[g] >= storageCap(k, now, g) * 0.97),
     say: ({ kingdom: k, now }) => {
-      const full = (['food', 'materials', 'arms'] as const).filter((g) => k.stock[g] >= storageCap(k, now) * 0.97)
+      const full = (['food', 'materials', 'arms'] as const).filter((g) => k.stock[g] >= storageCap(k, now, g) * 0.97)
       const list = full.map((g) => GOOD_NAMES[g]).join(', ')
       return [
         L(`Ambarlar dolup taşıyor, lordum: ${list}. Kapıyı açan ambarcı çığ altında kaldı, çıkardık, iyi. Sığmayan mal boşa gider. Ya tüccara sattırın, ya bir ambar kurun ya da bir şeyler inşa edip harcayın.`, `The storehouses are overflowing, my lord: ${list}. The storekeeper who opened the door was buried in an avalanche; we dug him out, he's fine. What won't fit is wasted. Have the merchant sell it, build a storehouse, or build something and spend it.`),
@@ -2256,7 +2256,7 @@ export const TOPICS: Topic[] = [
 // Whether the stores or the treasury are filling up enough for the lord to ask what to do with them.
 export function wellStocked({ kingdom: k, now }: AdvisorCtx): boolean {
   if (!hasPalace(k)) return false
-  return (['food', 'materials', 'arms'] as const).some((g) => k.stock[g] >= storageCap(k, now) * 0.6) || k.stock.gold >= goldCap(k, now) * 0.7
+  return (['food', 'materials', 'arms'] as const).some((g) => k.stock[g] >= storageCap(k, now, g) * 0.6) || k.stock.gold >= goldCap(k, now) * 0.7
 }
 
 // "How do we put our goods to use?": the envoy weighs what the lord has and what he may do with it (CLAUDE.md §9.10).

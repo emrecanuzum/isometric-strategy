@@ -298,8 +298,8 @@ export async function settleCaveBattle(
   if (lord) {
     await mutateKingdom(lord, at, (k) => {
       const stock = { ...k.stock }
-      const cap = game.storageCap(k, at)
       for (const g of ['arms', 'materials', 'food']) {
+        const cap = game.storageCap(k, at, g)
         loot[g] = Math.max(0, Math.min(hoard[g] ?? 0, Math.floor(cap - stock[g])))
         stock[g] += loot[g]
       }
